@@ -1,6 +1,6 @@
 # Feature Specification: Optional Package Loading
 
-**Feature Branch**: `001-phase3-assembly-loading`  
+**Feature Branch**: `003-phase3-assembly-loading`  
 **Created**: 2026-03-02  
 **Status**: Draft  
 **Input**: User description: "Create a new spec based on the roadmap Phase 3"
