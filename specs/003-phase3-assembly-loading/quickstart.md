@@ -11,6 +11,13 @@ Validate optional package loading, strong-identity shared assembly behavior, bou
 - Shared assembly policy configured with strong identity (`name`, `publicKeyToken`, `majorVersion`) for `Nuplane.Abstractions` (or equivalent contract assembly).
 - Deactivation timeout configured to a finite value.
 
+## Validation Profile
+
+- Profile name: `phase3-loading-baseline`.
+- Dataset: 20 active packages with valid dependencies, including 5 with overlapping dependency names and 2 with shared-contract references.
+- Cycle window: 10 consecutive reconciliation cycles with identical desired/active inputs.
+- Failure injection: at least 5 controlled failures spanning load failures, unload failures, and deactivation timeouts.
+
 ## Verification command set
 
 Run from repository root:
@@ -65,3 +72,7 @@ dotnet test nuplane.sln
 - All targeted test commands pass with 0 failed tests.
 - Full solution test pass (`dotnet test nuplane.sln`).
 - Secret validation script reports no committed credentials.
+
+## Success Criteria Validation Checks
+1. Calculate per-cycle load success ratio under `phase3-loading-baseline` and verify `SC-001` threshold (>=99%) is met.
+2. For injected failures, verify observer callbacks and correlation-linked logs/metrics/health identify package and failure cause for 100% of cases (`SC-004`).

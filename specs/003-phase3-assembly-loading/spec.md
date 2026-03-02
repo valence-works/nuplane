@@ -77,7 +77,7 @@ As an operator, I want explicit unload outcome reporting when packages are remov
 - **FR-004**: The system MUST support a configurable shared assembly policy to reuse designated host contract assemblies across packages, matched by strong identity (name, public key token, and major version).
 - **FR-005**: The system MUST process package removals with the sequence: host deactivation request (bounded by a configurable timeout), unload attempt, and unload outcome reporting.
 - **FR-006**: If unload does not complete, the system MUST mark the package as unload-pending, preserve that status for operator action, and retry unload on every reconciliation cycle until success.
-- **FR-007**: The system MUST expose load and unload outcomes to observers/operators without requiring host process termination.
+- **FR-007**: The system MUST expose load and unload outcomes to observers/operators via observer callbacks and operator telemetry (structured logs, metrics, and health) without requiring host process termination.
 - **FR-008**: Failure in one package load or unload operation MUST NOT block processing of other packages in the same cycle.
 - **FR-009**: If host deactivation times out, the system MUST continue removal processing by attempting unload and MUST record the deactivation-timeout outcome for operators.
 
@@ -103,9 +103,17 @@ As an operator, I want explicit unload outcome reporting when packages are remov
 
 ## Success Criteria *(mandatory)*
 
+### Validation Profile (for measurable outcomes)
+
+- Profile name: `phase3-loading-baseline`
+- Package set: 20 active packages with valid dependencies, including 5 packages with overlapping dependency names and 2 packages with shared-contract references.
+- Cycle window: 10 consecutive reconciliation cycles with identical desired/active inputs for idempotence checks.
+- Failure injection set: at least 5 controlled failing operations distributed across load failures, unload failures, and deactivation timeout events.
+- Evidence sources: observer callback records plus correlation-linked logs/metrics/health snapshots captured per cycle.
+
 ### Measurable Outcomes
 
-- **SC-001**: In validation runs, at least 99% of active packages with valid dependencies are loaded successfully within one reconciliation cycle.
+- **SC-001**: Under `phase3-loading-baseline`, at least 99% of active packages with valid dependencies are loaded successfully within one reconciliation cycle.
 - **SC-002**: 100% of package removal events trigger an unload attempt and publish an explicit unload outcome (success or unload-pending).
 - **SC-003**: For repeated identical desired state across 10 consecutive cycles, observed load-session states remain stable with zero unintended duplicate active load registrations.
-- **SC-004**: Operators can identify load/unload failure cause and affected package from logs/metrics for 100% of failed operations without enabling additional diagnostic modes.
+- **SC-004**: Under `phase3-loading-baseline`, operators can identify load/unload failure cause and affected package from observer callbacks and correlation-linked logs/metrics/health for 100% of injected failed operations without enabling additional diagnostic modes.
