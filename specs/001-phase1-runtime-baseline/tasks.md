@@ -45,20 +45,20 @@
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T013 [P] [US1] Add unit tests for deterministic diff and duplicate resolution in test/Nuplane.Runtime.Tests/Reconciliation/DesiredActualDiffEngineTests.cs
-- [ ] T014 [P] [US1] Add contract tests for desired-source ordering/allowlist behavior in test/Nuplane.Integration.Tests/Contracts/DesiredSourceContractTests.cs
-- [ ] T015 [US1] Add integration tests for manual trigger + idempotent repeat cycle in test/Nuplane.Integration.Tests/Reconciliation/DesiredStateReconciliationTests.cs
-- [ ] T016 [US1] Add integration test for overlapping triggers to verify single-flight skip/log behavior in test/Nuplane.Integration.Tests/Reconciliation/SingleFlightOverlapTests.cs
+- [x] T013 [P] [US1] Add unit tests for deterministic diff and duplicate resolution in test/Nuplane.Runtime.Tests/Reconciliation/DesiredActualDiffEngineTests.cs
+- [x] T014 [P] [US1] Add contract tests for desired-source ordering/allowlist behavior in test/Nuplane.Integration.Tests/Contracts/DesiredSourceContractTests.cs
+- [x] T015 [US1] Add integration tests for manual trigger + idempotent repeat cycle in test/Nuplane.Integration.Tests/Reconciliation/DesiredStateReconciliationTests.cs
+- [x] T016 [US1] Add integration test for overlapping triggers to verify single-flight skip/log behavior in test/Nuplane.Integration.Tests/Reconciliation/SingleFlightOverlapTests.cs
 
 ### Implementation for User Story 1
 
-- [ ] T017 [P] [US1] Implement desired-state aggregation pipeline in src/Nuplane.Runtime/Reconciliation/DesiredStateAggregator.cs
-- [ ] T018 [P] [US1] Implement deterministic desired-vs-actual diff engine in src/Nuplane.Runtime/Reconciliation/DesiredActualDiffEngine.cs
-- [ ] T019 [P] [US1] Implement single-feed package resolution adapter in src/Nuplane.NuGet/Resolution/NuGetPackageResolver.cs
-- [ ] T020 [P] [US1] Implement directory `.nupkg` desired source in src/Nuplane.Sources.Directory/DirectoryNupkgDesiredSource.cs
-- [ ] T021 [US1] Implement reconciliation loop with manual trigger entrypoint in src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
-- [ ] T022 [US1] Persist active-state outcomes after successful apply in src/Nuplane.Store/State/StoreRegistry.cs
-- [ ] T023 [US1] Wire runtime/source/nuget DI registration in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
+- [x] T017 [P] [US1] Implement desired-state aggregation pipeline in src/Nuplane.Runtime/Reconciliation/DesiredStateAggregator.cs
+- [x] T018 [P] [US1] Implement deterministic desired-vs-actual diff engine in src/Nuplane.Runtime/Reconciliation/DesiredActualDiffEngine.cs
+- [x] T019 [P] [US1] Implement single-feed package resolution adapter in src/Nuplane.NuGet/Resolution/NuGetPackageResolver.cs
+- [x] T020 [P] [US1] Implement directory `.nupkg` desired source in src/Nuplane.Sources.Directory/DirectoryNupkgDesiredSource.cs
+- [x] T021 [US1] Implement reconciliation loop with manual trigger entrypoint in src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
+- [x] T022 [US1] Persist active-state outcomes after successful apply in src/Nuplane.Store/State/StoreRegistry.cs
+- [x] T023 [US1] Wire runtime/source/nuget DI registration in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
 
 **Checkpoint**: User Story 1 is independently functional and testable (MVP).
 
