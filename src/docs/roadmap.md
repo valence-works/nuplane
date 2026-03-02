@@ -15,6 +15,18 @@ It does **not** define a plugin programming model.
 It does **not** impose activation semantics.
 It is infrastructure only.
 
+## Phase 1 Implementation Status (2026-03-02)
+
+Current repository behavior aligns with the Phase 1 runtime baseline:
+- deterministic desired-vs-actual reconciliation with idempotent repeat cycles
+- per-package transactional apply flow with last-known-good preservation on failures
+- snapshot fallback for desired-source outages with explicit degraded cycle outcomes
+- bounded retry/backoff execution and strict allowlist gating before resolution
+- observer callbacks (`Changing -> Failed* -> Changed`) with correlation propagation and exception isolation
+- baseline observability via structured cycle logging, metrics facade, and degraded/healthy evaluation
+
+Release-readiness checks completed in Phase 1 include central package version verification and secret-scan policy/script coverage.
+
 ---
 
 ## Naming & Packages
@@ -74,6 +86,12 @@ Directory.Packages.props
 Notes:
 - Keep `Nuplane.Abstractions` minimal: options-free contracts and pure models only.
 - No Elsa/CShells references anywhere in `src/`. Host integrations live in their own repos/packages.
+
+### Dependency Management Policy
+
+- The repository uses NuGet Central Package Management via `Directory.Packages.props`.
+- Project files MUST reference shared dependencies without inline `Version` attributes unless explicitly justified.
+- Shared package versions are managed centrally to keep package graphs consistent across all Nuplane modules.
 
 ---
 
@@ -259,61 +277,413 @@ Implementation foundation:
 
 # Phase 2 — Advanced Feeds & Governance
 
-## Outcomes
+## Strategic Goal
 
-* multiple feeds + priority/fallback
-* feed trust policies
-* lock-file mode
-* cleanup policies
-* optional rule-based feed discovery (controlled “wildcards”)
+Phase 2 transforms Nuplane from a single-feed runtime engine into a **multi-source, policy-aware package control plane** suitable for production environments with internal + external feeds.
 
-## Specs to extract
+This phase focuses on:
 
-* `nuplane-multi-feed.md`
-* `nuplane-lockfile.md`
-* `nuplane-cleanup.md`
-* `nuplane-feed-rules.md`
+* Deterministic resolution across multiple feeds
+* Governance controls to prevent accidental mass ingestion
+* Reproducibility (lock mode)
+* Safe cleanup of historical versions
 
-### Feed rule-based desired source (opt-in)
+---
 
-* prefix includes (no regex by default)
-* max package count
-* version pinning (e.g., pin major)
-* dry-run mode (produce diff without apply)
+## 2.1 Multi-Feed Support
+
+### Objectives
+
+* Support multiple NuGet v3 feeds
+* Support feed priority and fallback
+* Support feed-level trust classification
+* Resolve packages deterministically when multiple feeds contain the same ID
+
+---
+
+### Feed Resolution Model
+
+Each `PackageRequest` may:
+
+* Specify a specific feed
+* Allow resolution across all feeds (in priority order)
+
+Resolution rules:
+
+1. If `FeedName` specified → only query that feed
+2. If not specified:
+
+   * Iterate feeds in priority order
+   * First feed returning a matching version wins
+3. If multiple feeds contain matching versions:
+
+   * Highest version wins within priority constraints
+   * Feed priority breaks ties
+
+FeedDefinition extended:
+
+```csharp
+public record FeedDefinition(
+    string Name,
+    Uri ServiceIndex,
+    FeedTrustLevel TrustLevel,
+    int Priority = 0,
+    FeedCredentials? Credentials = null
+);
+```
+
+---
+
+### Failure Semantics
+
+* If highest-priority feed is unavailable:
+
+  * Fail if strict mode enabled
+  * Fallback if fallback policy allows
+* Feed availability must not corrupt state
+* Feed failures recorded in reconciliation diagnostics
+
+---
+
+### Acceptance Criteria
+
+* Multiple feeds can be configured
+* Resolution is deterministic and reproducible
+* Feed outage does not corrupt store
+* Feed priority is respected
+
+---
+
+## 2.2 Feed Trust Policies
+
+### Objective
+
+Introduce governance controls per feed.
+
+FeedTrustLevel:
+
+```csharp
+public enum FeedTrustLevel
+{
+    Trusted,
+    Restricted,
+    Untrusted
+}
+```
+
+Policies:
+
+* Trusted: no extra validation required
+* Restricted: requires validator pipeline success
+* Untrusted: disallowed unless explicitly overridden
+
+---
+
+### Validator Pipeline Enforcement
+
+Validators may enforce:
+
+* Signature requirement
+* Publisher allowlist
+* Hash verification
+* Metadata checks
+
+---
+
+### Acceptance Criteria
+
+* Restricted feed packages must pass validators
+* Untrusted feeds cannot install without explicit override
+* Violations emit failure events
+
+---
+
+## 2.3 Lock File Mode (Deterministic Reproducibility)
+
+### Objective
+
+Support reproducible deployments.
+
+Lock file records:
+
+* Package ID
+* Resolved Version
+* Feed source
+* Hash
+* Timestamp
+
+Example:
+
+```json
+{
+  "packages": [
+    {
+      "id": "My.Plugin",
+      "version": "1.2.3",
+      "feed": "Internal",
+      "hash": "sha512-..."
+    }
+  ]
+}
+```
+
+---
+
+### Modes
+
+* Generate: write lock file from current resolved state
+* Enforce: ignore version ranges and use lock file versions
+* Strict: fail if lock file missing packages
+
+---
+
+### Acceptance Criteria
+
+* Lock file can reproduce identical store
+* Enforce mode ignores feed version changes
+* Hash mismatch fails installation
+
+---
+
+## 2.4 Cleanup Policies
+
+### Objective
+
+Prevent unbounded disk growth.
+
+Policies:
+
+* Retain last N versions per package
+* Retain versions younger than N days
+* Manual-only cleanup mode
+* Protect LKG versions
+
+Cleanup runs:
+
+* After successful reconciliation
+* As background maintenance job
+
+---
+
+### Acceptance Criteria
+
+* Old versions are safely removed
+* LKG is never deleted
+* Cleanup failures do not break runtime
+
+---
+
+## 2.5 Feed Rule-Based Desired Source (Controlled Wildcards)
+
+### Objective
+
+Allow rule-based discovery from feeds while preventing runaway ingestion.
+
+Example configuration:
+
+```csharp
+options.Desired.FromFeedRules(r =>
+{
+    r.Feed = "Internal";
+    r.IncludeIdPrefix("Company.");
+    r.MaxPackages = 50;
+    r.PinMajorVersions = true;
+});
+```
+
+---
+
+### Constraints
+
+* Prefix-only matching (no regex in Phase 2)
+* Hard max package limit required
+* Must define version policy (latest, pinned major, etc.)
+* Must support dry-run mode
+
+---
+
+### Dry-Run Mode
+
+Produces:
+
+* ChangeSet without applying
+* Intended for operator validation
+
+---
+
+### Acceptance Criteria
+
+* Rule-based desired state produces deterministic results
+* Hard limits enforced
+* Dry-run reports accurate diff
 
 ---
 
 # Phase 3 — Nuplane.Loading (Optional Assembly Loading)
 
-## Outcomes
+## Strategic Goal
 
-* optional ALC loader module
-* unload attempt + reporting (best-effort)
-* shared contract assemblies
+Provide optional in-process assembly loading for hosts that do not wish to implement their own loader.
 
-## Spec to extract
+This module is entirely optional and isolated.
 
-* `nuplane-loading.md`
+---
 
-Important: unload is not guaranteed; runtime must report unload outcome.
+## 3.1 Module Responsibilities
+
+* Load assemblies from active package folder
+* Use unloadable AssemblyLoadContext
+* Support shared contract assemblies
+* Attempt unload when package removed
+* Report unload success/failure
+
+---
+
+## 3.2 Loading Model
+
+Each active package:
+
+* Gets its own AssemblyLoadContext
+* Uses AssemblyDependencyResolver for dependency resolution
+* May share specific host assemblies
+
+Shared assembly policy:
+
+```csharp
+options.Loading.SharedAssemblies.Add("Nuplane.Abstractions");
+```
+
+---
+
+## 3.3 Unload Semantics
+
+When package removed:
+
+1. Deactivate (host-driven)
+2. Dispose load context
+3. Force GC attempt
+4. Report unload result
+
+Unload is:
+
+* Best-effort
+* Not guaranteed
+* Explicitly reported
+
+---
+
+## 3.4 Failure Handling
+
+If unload fails:
+
+* Package marked `UnloadPending`
+* Host may choose to restart
+* Failure logged
+
+---
+
+## Acceptance Criteria
+
+* Assemblies load correctly from package store
+* Shared assemblies respected
+* Unload attempt executed
+* Outcome observable
 
 ---
 
 # Phase 4 — Operational Enhancements
 
-* channels (prod/staging/canary)
-* staged rollouts
-* advanced integrity (signatures, strict trust requirements)
-* richer admin endpoints (optional package)
+## Strategic Goal
+
+Elevate Nuplane to production-grade operational maturity.
 
 ---
 
-## Cross-Cutting Guarantees
+## 4.1 Channels (Environment Segmentation)
 
-1. Deterministic store layout
-2. Atomic activation per package
-3. Per-package transactional updates
-4. Last-known-good fallback
-5. Host-neutral change events (no plugin model)
-6. Polling-based observation (no push assumptions)
-7. Clear diagnostics on failure
+Support multiple package channels:
+
+* prod
+* staging
+* canary
+
+Configuration example:
+
+```csharp
+options.Channel = "staging";
+```
+
+Feeds or rules may be channel-scoped.
+
+---
+
+## 4.2 Staged Rollouts
+
+Allow staged promotion:
+
+1. Download new version
+2. Do not activate immediately
+3. Wait for manual promotion or readiness condition
+4. Activate atomically
+
+---
+
+## 4.3 Canary Mode
+
+Allow:
+
+* Activation only on subset of nodes
+* Gradual rollout percentage
+
+Cluster integration optional.
+
+---
+
+## 4.4 Advanced Integrity
+
+Support:
+
+* Signature verification (NuGet signing)
+* Strict trust enforcement
+* Mandatory hash verification
+* Feed-level required validator configuration
+
+---
+
+## 4.5 Admin API (Optional Package)
+
+Separate package:
+
+* `Nuplane.Admin.AspNetCore`
+
+Endpoints:
+
+* GET /nuplane/packages
+* GET /nuplane/state
+* POST /nuplane/reconcile
+* GET /nuplane/health
+
+Authentication left to host.
+
+---
+
+## Acceptance Criteria
+
+* Channels enforce separation
+* Staged activation works
+* Canary activation limited correctly
+* Admin endpoints expose accurate state
+* Advanced validation enforced
+
+---
+
+# Phase 2–4 Completion Definition
+
+Nuplane becomes:
+
+* Multi-feed aware
+* Governance-capable
+* Reproducible
+* Operationally mature
+* Optionally self-loading
+* Safe in production environments
