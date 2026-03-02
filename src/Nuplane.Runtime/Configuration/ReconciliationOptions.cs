@@ -4,15 +4,15 @@ namespace Nuplane.Runtime.Configuration;
 
 public sealed class ReconciliationOptions
 {
-    public TimeSpan PollInterval { get; init; } = TimeSpan.FromSeconds(60);
+    public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(60);
 
-    public bool EnableSingleFlight { get; init; } = true;
+    public bool EnableSingleFlight { get; set; } = true;
 
-    public int MaxRetryAttempts { get; init; } = 3;
+    public int MaxRetryAttempts { get; set; } = 3;
 
-    public TimeSpan InitialRetryBackoff { get; init; } = TimeSpan.FromSeconds(2);
+    public TimeSpan InitialRetryBackoff { get; set; } = TimeSpan.FromSeconds(2);
 
-    public TimeSpan MaxRetryBackoff { get; init; } = TimeSpan.FromSeconds(30);
+    public TimeSpan MaxRetryBackoff { get; set; } = TimeSpan.FromSeconds(30);
 
     public bool IsValid() =>
         PollInterval > TimeSpan.Zero &&

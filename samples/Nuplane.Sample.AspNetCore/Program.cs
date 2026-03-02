@@ -1,6 +1,7 @@
 using Nuplane.Abstractions;
 using Nuplane.Hosting;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Store.State;
 
 var builder = WebApplication.CreateBuilder(args);
 
