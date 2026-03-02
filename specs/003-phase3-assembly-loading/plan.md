@@ -82,14 +82,12 @@ src/
 
 test/
 ├── Nuplane.Runtime.Tests/
-│   ├── Reconciliation/
-│   └── Observability/
+│   └── Reconciliation/
 ├── Nuplane.Store.Tests/
 ├── Nuplane.NuGet.Tests/
 └── Nuplane.Integration.Tests/
     ├── Contracts/
-    ├── Reconciliation/
-    └── Observability/
+    └── Reconciliation/
 ```
 
 **Structure Decision**: Continue the existing multi-package .NET architecture and implement Phase 3 capabilities across `Nuplane.Loading` and runtime integration boundaries, with contract/integration coverage in existing test projects.

@@ -26,7 +26,7 @@
 
 - [ ] T005 Define loading options model (enable flag, deactivation timeout, shared policy entries) in src/Nuplane.Runtime/Configuration/LoadingOptions.cs
 - [ ] T006 [P] Add loading abstractions for session and unload outcomes in src/Nuplane.Abstractions/LoadingContracts.cs
-- [ ] T007 [P] Add shared assembly identity validation (name/token/major) in src/Nuplane.Runtime/Configuration/FeedCredentialOptionsValidator.cs
+- [ ] T007 [P] Add shared assembly identity validation (name/token/major) in src/Nuplane.Runtime/Configuration/LoadingOptionsValidator.cs
 - [ ] T008 [P] Add trusted-source loading boundary validation for active-store-only assembly paths in src/Nuplane.Runtime/Reconciliation/AllowlistGate.cs
 - [ ] T009 Add non-mutating transactional safety guard for loading failures (preserve active/LKG) in src/Nuplane.Runtime/Reconciliation/PackageApplyExecutor.cs
 - [ ] T010 Add baseline loading observability contracts (load/unload/timeout/pending) in src/Nuplane.Runtime/Observability/ReconciliationTelemetry.cs
