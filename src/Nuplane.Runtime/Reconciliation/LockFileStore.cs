@@ -4,7 +4,7 @@ using Nuplane.Abstractions;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-public sealed class LockFileStore
+public sealed class LockFileStore(string path)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -13,12 +13,7 @@ public sealed class LockFileStore
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    private readonly string path;
-
-    public LockFileStore(string path)
-    {
-        this.path = path ?? throw new ArgumentNullException(nameof(path));
-    }
+    private readonly string path = path ?? throw new ArgumentNullException(nameof(path));
 
     public async Task<PackageLockFile?> ReadAsync(CancellationToken cancellationToken)
     {

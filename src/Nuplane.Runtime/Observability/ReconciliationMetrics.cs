@@ -4,14 +4,9 @@ using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Observability;
 
-public sealed class ReconciliationMetrics
+public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
 {
-    private readonly ReconciliationTelemetry telemetry;
-
-    public ReconciliationMetrics(ReconciliationTelemetry telemetry)
-    {
-        this.telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
-    }
+    private readonly ReconciliationTelemetry telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
 
     public void RecordCycle(PackageChangeSet changeSet, int failedPackages, TimeSpan duration, int activePackages)
     {

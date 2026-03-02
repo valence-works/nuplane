@@ -4,6 +4,10 @@
     <ProjectReference Include="..\Nuplane.Abstractions\Nuplane.Abstractions.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="JetBrains.Annotations" />
+  </ItemGroup>
+
 </Project>
 
 

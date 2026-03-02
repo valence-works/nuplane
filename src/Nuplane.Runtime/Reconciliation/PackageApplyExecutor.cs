@@ -14,24 +14,16 @@ public sealed record PackageApplyExecutionResult(
     IReadOnlyList<ResolvedPackage> AppliedPackages,
     IReadOnlyList<string> FailedPackageIds);
 
-public sealed class PackageApplyExecutor
+public sealed class PackageApplyExecutor(
+    INuGetPackageResolver packageResolver,
+    PackageTransactionCoordinator transactionCoordinator,
+    ReconciliationRetryPolicy retryPolicy,
+    FailureRecorder failureRecorder)
 {
-    private readonly INuGetPackageResolver packageResolver;
-    private readonly PackageTransactionCoordinator transactionCoordinator;
-    private readonly ReconciliationRetryPolicy retryPolicy;
-    private readonly FailureRecorder failureRecorder;
-
-    public PackageApplyExecutor(
-        INuGetPackageResolver packageResolver,
-        PackageTransactionCoordinator transactionCoordinator,
-        ReconciliationRetryPolicy retryPolicy,
-        FailureRecorder failureRecorder)
-    {
-        this.packageResolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver));
-        this.transactionCoordinator = transactionCoordinator ?? throw new ArgumentNullException(nameof(transactionCoordinator));
-        this.retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
-        this.failureRecorder = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
-    }
+    private readonly INuGetPackageResolver packageResolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver));
+    private readonly PackageTransactionCoordinator transactionCoordinator = transactionCoordinator ?? throw new ArgumentNullException(nameof(transactionCoordinator));
+    private readonly ReconciliationRetryPolicy retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
+    private readonly FailureRecorder failureRecorder = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
 
     public async Task<PackageResolutionResult> ResolveAsync(
         IReadOnlyList<PackageRequest> desiredRequests,

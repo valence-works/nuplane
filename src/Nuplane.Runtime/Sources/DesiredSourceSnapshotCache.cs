@@ -4,15 +4,10 @@ using System.Collections.Concurrent;
 
 namespace Nuplane.Runtime.Sources;
 
-public sealed class DesiredSourceSnapshotCache
+public sealed class DesiredSourceSnapshotCache(StoreRegistry storeRegistry)
 {
     private readonly ConcurrentDictionary<string, IReadOnlyList<PackageRequest>> snapshots = new(StringComparer.OrdinalIgnoreCase);
-    private readonly StoreRegistry storeRegistry;
-
-    public DesiredSourceSnapshotCache(StoreRegistry storeRegistry)
-    {
-        this.storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
-    }
+    private readonly StoreRegistry storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
 
     public async Task SaveAsync(string sourceName, IReadOnlyList<PackageRequest> requests, CancellationToken cancellationToken)
     {

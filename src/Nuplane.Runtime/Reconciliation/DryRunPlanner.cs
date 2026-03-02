@@ -4,14 +4,9 @@ namespace Nuplane.Runtime.Reconciliation;
 
 public sealed record DryRunPlan(PackageChangeSet ChangeSet, bool MutatedState);
 
-public sealed class DryRunPlanner
+public sealed class DryRunPlanner(DesiredActualDiffEngine diffEngine)
 {
-    private readonly DesiredActualDiffEngine diffEngine;
-
-    public DryRunPlanner(DesiredActualDiffEngine diffEngine)
-    {
-        this.diffEngine = diffEngine ?? throw new ArgumentNullException(nameof(diffEngine));
-    }
+    private readonly DesiredActualDiffEngine diffEngine = diffEngine ?? throw new ArgumentNullException(nameof(diffEngine));
 
     public Task<DryRunPlan> BuildPlanAsync(
         IReadOnlyCollection<ResolvedPackage> desired,

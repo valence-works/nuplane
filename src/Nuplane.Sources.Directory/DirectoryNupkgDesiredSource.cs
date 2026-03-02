@@ -3,24 +3,17 @@ using Nuplane.Abstractions;
 
 namespace Nuplane.Sources.Directory;
 
-public sealed class DirectoryNupkgDesiredSource : IDesiredPackageSource
+public sealed class DirectoryNupkgDesiredSource(string sourceName, string directoryPath, IEnumerable<string>? allowlistedPackageIds = null) : IDesiredPackageSource
 {
     private static readonly Regex PackageFileNamePattern = new(
         "^(?<id>.+)\\.(?<version>\\d+\\.\\d+\\.\\d+(?:[-+][A-Za-z0-9\\.-]+)?)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    private readonly string sourceName;
-    private readonly string directoryPath;
-    private readonly HashSet<string> allowlistedPackageIds;
-
-    public DirectoryNupkgDesiredSource(string sourceName, string directoryPath, IEnumerable<string>? allowlistedPackageIds = null)
-    {
-        this.sourceName = string.IsNullOrWhiteSpace(sourceName) ? throw new ArgumentException("Source name is required.", nameof(sourceName)) : sourceName;
-        this.directoryPath = string.IsNullOrWhiteSpace(directoryPath) ? throw new ArgumentException("Directory path is required.", nameof(directoryPath)) : directoryPath;
-        this.allowlistedPackageIds = allowlistedPackageIds is null
-            ? new(StringComparer.OrdinalIgnoreCase)
-            : new HashSet<string>(allowlistedPackageIds, StringComparer.OrdinalIgnoreCase);
-    }
+    private readonly string sourceName = string.IsNullOrWhiteSpace(sourceName) ? throw new ArgumentException("Source name is required.", nameof(sourceName)) : sourceName;
+    private readonly string directoryPath = string.IsNullOrWhiteSpace(directoryPath) ? throw new ArgumentException("Directory path is required.", nameof(directoryPath)) : directoryPath;
+    private readonly HashSet<string> allowlistedPackageIds = allowlistedPackageIds is null
+        ? new(StringComparer.OrdinalIgnoreCase)
+        : new HashSet<string>(allowlistedPackageIds, StringComparer.OrdinalIgnoreCase);
 
     public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
     {

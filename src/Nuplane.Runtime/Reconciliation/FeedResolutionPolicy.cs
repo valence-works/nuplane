@@ -3,14 +3,9 @@ using Nuplane.Runtime.Configuration;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-public sealed class FeedResolutionPolicy
+public sealed class FeedResolutionPolicy(FeedResolutionOptions options)
 {
-    private readonly FeedResolutionOptions options;
-
-    public FeedResolutionPolicy(FeedResolutionOptions options)
-    {
-        this.options = options ?? throw new ArgumentNullException(nameof(options));
-    }
+    private readonly FeedResolutionOptions options = options ?? throw new ArgumentNullException(nameof(options));
 
     public IReadOnlyList<FeedDefinition> OrderCandidates(PackageRequest request)
     {

@@ -9,16 +9,10 @@ public sealed record LockFileEvaluationResult(
     ResolvedPackage? EffectivePackage,
     string? ExpectedHash);
 
-public sealed class LockFileCoordinator
+public sealed class LockFileCoordinator(LockFileStore store, LockFileOptions options)
 {
-    private readonly LockFileStore store;
-    private readonly LockFileOptions options;
-
-    public LockFileCoordinator(LockFileStore store, LockFileOptions options)
-    {
-        this.store = store ?? throw new ArgumentNullException(nameof(store));
-        this.options = options ?? throw new ArgumentNullException(nameof(options));
-    }
+    private readonly LockFileStore store = store ?? throw new ArgumentNullException(nameof(store));
+    private readonly LockFileOptions options = options ?? throw new ArgumentNullException(nameof(options));
 
     public async Task<LockFileEvaluationResult> EvaluateAsync(ResolvedPackage resolved, CancellationToken cancellationToken)
     {

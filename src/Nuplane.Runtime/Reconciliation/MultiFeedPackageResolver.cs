@@ -13,18 +13,12 @@ public sealed class FeedUnavailableException(string feedName, string packageId)
     public string PackageId { get; } = packageId;
 }
 
-public sealed class MultiFeedPackageResolver : INuGetPackageResolver
+public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, FeedResolutionPolicy policy) : INuGetPackageResolver
 {
-    private readonly FeedResolutionOptions options;
-    private readonly FeedResolutionPolicy policy;
+    private readonly FeedResolutionOptions options = options ?? throw new ArgumentNullException(nameof(options));
+    private readonly FeedResolutionPolicy policy = policy ?? throw new ArgumentNullException(nameof(policy));
     private readonly ConcurrentDictionary<string, FeedResolutionDecision> decisions = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, int> attempts = new(StringComparer.OrdinalIgnoreCase);
-
-    public MultiFeedPackageResolver(FeedResolutionOptions options, FeedResolutionPolicy policy)
-    {
-        this.options = options ?? throw new ArgumentNullException(nameof(options));
-        this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
-    }
 
     public Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)
     {

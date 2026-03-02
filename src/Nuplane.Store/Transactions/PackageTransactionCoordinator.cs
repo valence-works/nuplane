@@ -33,16 +33,10 @@ public sealed record PackageTransactionResult(
     string? FailureMessage,
     bool LastKnownGoodPreserved);
 
-public sealed class PackageTransactionCoordinator
+public sealed class PackageTransactionCoordinator(AtomicPointerSwitcher pointerSwitcher, FailureRecorder failureRecorder)
 {
-    private readonly AtomicPointerSwitcher pointerSwitcher;
-    private readonly FailureRecorder failureRecorder;
-
-    public PackageTransactionCoordinator(AtomicPointerSwitcher pointerSwitcher, FailureRecorder failureRecorder)
-    {
-        this.pointerSwitcher = pointerSwitcher ?? throw new ArgumentNullException(nameof(pointerSwitcher));
-        this.failureRecorder = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
-    }
+    private readonly AtomicPointerSwitcher pointerSwitcher = pointerSwitcher ?? throw new ArgumentNullException(nameof(pointerSwitcher));
+    private readonly FailureRecorder failureRecorder = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
 
     public Task<PackageTransactionResult> ExecuteAsync(
         PackageTransactionRequest request,

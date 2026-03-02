@@ -1,13 +1,8 @@
 namespace Nuplane.Store.State;
 
-public sealed class PackageCleanupService
+public sealed class PackageCleanupService(CleanupPolicyEvaluator evaluator)
 {
-    private readonly CleanupPolicyEvaluator evaluator;
-
-    public PackageCleanupService(CleanupPolicyEvaluator evaluator)
-    {
-        this.evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
-    }
+    private readonly CleanupPolicyEvaluator evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
 
     public Task<IReadOnlyList<CleanupDecision>> ExecuteAutomaticAsync(
         IReadOnlyList<PackageVersionEntry> packageVersions,

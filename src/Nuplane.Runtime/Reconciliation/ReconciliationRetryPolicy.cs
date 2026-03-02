@@ -2,14 +2,9 @@ using Nuplane.Runtime.Configuration;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-public sealed class ReconciliationRetryPolicy
+public sealed class ReconciliationRetryPolicy(ReconciliationOptions options)
 {
-    private readonly ReconciliationOptions options;
-
-    public ReconciliationRetryPolicy(ReconciliationOptions options)
-    {
-        this.options = options ?? throw new ArgumentNullException(nameof(options));
-    }
+    private readonly ReconciliationOptions options = options ?? throw new ArgumentNullException(nameof(options));
 
     public async Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
     {

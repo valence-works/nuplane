@@ -3,16 +3,10 @@ using Nuplane.Runtime.Observability;
 
 namespace Nuplane.Runtime.Events;
 
-public sealed class ObserverNotifier
+public sealed class ObserverNotifier(IEnumerable<INuplaneObserver> observers, ReconciliationLogger? logger = null)
 {
-    private readonly IReadOnlyList<INuplaneObserver> observers;
-    private readonly ReconciliationLogger logger;
-
-    public ObserverNotifier(IEnumerable<INuplaneObserver> observers, ReconciliationLogger? logger = null)
-    {
-        this.observers = observers?.ToArray() ?? throw new ArgumentNullException(nameof(observers));
-        this.logger = logger ?? new ReconciliationLogger();
-    }
+    private readonly IReadOnlyList<INuplaneObserver> observers = observers?.ToArray() ?? throw new ArgumentNullException(nameof(observers));
+    private readonly ReconciliationLogger logger = logger ?? new ReconciliationLogger();
 
     public async Task NotifyPackageFailedAsync(
         string packageId,

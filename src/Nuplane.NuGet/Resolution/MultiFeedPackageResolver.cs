@@ -1,27 +1,12 @@
+using JetBrains.Annotations;
 using Nuplane.Abstractions;
 
 namespace Nuplane.NuGet.Resolution;
 
-public sealed class MultiFeedResolverOptions
+[UsedImplicitly]
+public sealed class MultiFeedPackageResolver(MultiFeedResolverOptions options) : INuGetPackageResolver
 {
-    public List<string> OrderedFeeds { get; } = [];
-
-    public HashSet<string> UnavailableFeeds { get; } = new(StringComparer.OrdinalIgnoreCase);
-
-    public bool StopOnFirstUnavailable { get; set; }
-}
-
-public sealed class MultiFeedResolutionException(string packageId, string message)
-    : InvalidOperationException($"Multi-feed resolution failed for '{packageId}': {message}");
-
-public sealed class MultiFeedPackageResolver : INuGetPackageResolver
-{
-    private readonly MultiFeedResolverOptions options;
-
-    public MultiFeedPackageResolver(MultiFeedResolverOptions options)
-    {
-        this.options = options ?? throw new ArgumentNullException(nameof(options));
-    }
+    private readonly MultiFeedResolverOptions options = options ?? throw new ArgumentNullException(nameof(options));
 
     public Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)
     {

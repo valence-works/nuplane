@@ -2,20 +2,12 @@ using System.Collections.ObjectModel;
 
 namespace Nuplane.Store.State;
 
-public sealed class StoreRegistry
+public sealed class StoreRegistry(StoreStateSerializer serializer, string? stateFilePath)
 {
     private readonly SemaphoreSlim gate = new(1, 1);
-    private readonly StoreStateSerializer serializer;
-    private readonly string? stateFilePath;
-    private StoreStateRecord currentState;
+    private readonly StoreStateSerializer serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+    private StoreStateRecord currentState = StoreStateRecord.Empty();
     private bool loaded;
-
-    public StoreRegistry(StoreStateSerializer serializer, string? stateFilePath)
-    {
-        this.serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-        this.stateFilePath = stateFilePath;
-        currentState = StoreStateRecord.Empty();
-    }
 
     public async Task<IReadOnlyDictionary<string, string>> GetActiveVersionsAsync(CancellationToken cancellationToken)
     {

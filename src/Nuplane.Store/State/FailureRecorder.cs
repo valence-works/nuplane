@@ -1,13 +1,8 @@
 namespace Nuplane.Store.State;
 
-public sealed class FailureRecorder
+public sealed class FailureRecorder(StoreRegistry storeRegistry)
 {
-    private readonly StoreRegistry storeRegistry;
-
-    public FailureRecorder(StoreRegistry storeRegistry)
-    {
-        this.storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
-    }
+    private readonly StoreRegistry storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
 
     public Task RecordAsync(
         string packageId,
