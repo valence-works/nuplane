@@ -77,7 +77,7 @@ As an operator, I want explicit unload outcome reporting when packages are remov
 - **FR-004**: The system MUST support a configurable shared assembly policy to reuse designated host contract assemblies across packages, matched by strong identity (name, public key token, and major version).
 - **FR-005**: The system MUST process package removals with the sequence: host deactivation request (bounded by a configurable timeout), unload attempt, and unload outcome reporting.
 - **FR-006**: If unload does not complete, the system MUST mark the package as unload-pending, preserve that status for operator action, and retry unload on every reconciliation cycle until success.
-- **FR-007**: The system MUST expose load and unload outcomes to observers/operators via observer callbacks and operator telemetry (structured logs, metrics, and health) without requiring host process termination.
+- **FR-007**: The system MUST expose load and unload outcomes to observers via callbacks and to operators via runtime-visible status/outcome surfaces without requiring host process termination.
 - **FR-008**: Failure in one package load or unload operation MUST NOT block processing of other packages in the same cycle.
 - **FR-009**: If host deactivation times out, the system MUST continue removal processing by attempting unload and MUST record the deactivation-timeout outcome for operators.
 
