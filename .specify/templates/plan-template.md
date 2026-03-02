@@ -31,7 +31,14 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- Deterministic reconciliation: design proves idempotent apply behavior and bounded retry/backoff.
+- Transactional store safety: design preserves stage/validate/publish/atomic-switch semantics and
+  explicit LKG fallback behavior.
+- Source integrity: trusted source boundaries, validation steps, and secret handling are specified.
+- Observability: cycle correlation ID, structured logs, baseline metrics, and health states are
+  explicitly defined.
+- Test discipline: unit + boundary (integration/contract) test approach is defined for affected
+  components and includes regression coverage for bug fixes.
 
 ## Project Structure
 

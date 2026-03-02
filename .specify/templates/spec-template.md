@@ -90,6 +90,17 @@
 - **FR-004**: System MUST [data requirement, e.g., "persist user preferences"]
 - **FR-005**: System MUST [behavior, e.g., "log all security events"]
 
+### Operational & Safety Requirements *(mandatory)*
+
+- **OSR-001**: Reconciliation/apply flows MUST be idempotent for repeated identical inputs.
+- **OSR-002**: Update flows MUST define transactional/rollback behavior (or explicit LKG policy).
+- **OSR-003**: Source trust and validation requirements MUST be explicit (allowed sources,
+  integrity checks, secret handling).
+- **OSR-004**: Observability requirements MUST define logs, metrics, and health signals for the
+  feature.
+- **OSR-005**: Test requirements MUST define required unit and boundary tests (integration and/or
+  contract) for changed behavior.
+
 *Example of marking unclear requirements:*
 
 - **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
