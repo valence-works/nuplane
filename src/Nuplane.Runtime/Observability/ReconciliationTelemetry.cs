@@ -27,6 +27,14 @@ public sealed class ReconciliationTelemetry : IDisposable
 
     public Counter<long> LockHashMismatchCounter { get; }
 
+    public Counter<long> DryRunPlannedPackagesCounter { get; }
+
+    public Counter<long> CleanupDeletedCounter { get; }
+
+    public Counter<long> CleanupKeptCounter { get; }
+
+    public Counter<long> CleanupFailedCounter { get; }
+
     public Histogram<double> TransactionDurationMilliseconds { get; }
 
     public ObservableGauge<long> ActivePackagesGauge { get; }
@@ -45,6 +53,10 @@ public sealed class ReconciliationTelemetry : IDisposable
         LockEnforceCounter = meter.CreateCounter<long>("nuplane.lock.enforce");
         LockStrictFailureCounter = meter.CreateCounter<long>("nuplane.lock.strict.failure");
         LockHashMismatchCounter = meter.CreateCounter<long>("nuplane.lock.hashmismatch");
+        DryRunPlannedPackagesCounter = meter.CreateCounter<long>("nuplane.dryrun.planned.packages");
+        CleanupDeletedCounter = meter.CreateCounter<long>("nuplane.cleanup.deleted");
+        CleanupKeptCounter = meter.CreateCounter<long>("nuplane.cleanup.kept");
+        CleanupFailedCounter = meter.CreateCounter<long>("nuplane.cleanup.failed");
         TransactionDurationMilliseconds = meter.CreateHistogram<double>("nuplane.reconciliation.transaction.duration.ms");
         ActivePackagesGauge = meter.CreateObservableGauge<long>("nuplane.reconciliation.active", () => activePackages);
     }

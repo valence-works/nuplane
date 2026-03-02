@@ -75,4 +75,46 @@ public sealed class ReconciliationLogger
                 ["candidateFeeds"] = string.Join(",", decision.CandidateFeeds)
             }));
     }
+
+    public void LogTrustPolicyOutcome(string correlationId, string packageId, FeedTrustPolicyOutcome outcome)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentNullException.ThrowIfNull(outcome);
+
+        entries.Add(new ReconciliationLogEntry(
+            DateTimeOffset.UtcNow,
+            correlationId,
+            "reconciliation.trust.outcome",
+            outcome.ReasonCode,
+            new Dictionary<string, object?>
+            {
+                ["packageId"] = packageId,
+                ["trustLevel"] = outcome.TrustLevel.ToString(),
+                ["allowed"] = outcome.Allowed,
+                ["overrideScope"] = outcome.OverrideScope.ToString(),
+                ["overrideReason"] = outcome.OverrideReason
+            }));
+    }
+
+    public void LogLockOutcome(string correlationId, string packageId, LockFileEvaluationResult outcome)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentNullException.ThrowIfNull(outcome);
+
+        entries.Add(new ReconciliationLogEntry(
+            DateTimeOffset.UtcNow,
+            correlationId,
+            "reconciliation.lock.outcome",
+            outcome.ReasonCode,
+            new Dictionary<string, object?>
+            {
+                ["packageId"] = packageId,
+                ["allowed"] = outcome.Allowed,
+                ["expectedHash"] = outcome.ExpectedHash,
+                ["effectiveVersion"] = outcome.EffectivePackage?.Version,
+                ["effectiveFeed"] = outcome.EffectivePackage?.FeedName
+            }));
+    }
 }

@@ -6,6 +6,7 @@ using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Sources;
 using Nuplane.Store.State;
 
 namespace Nuplane.Hosting;
@@ -85,7 +86,16 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton(feedCredentialValidator);
         services.AddSingleton<DesiredStateAggregator>();
         services.AddSingleton<DesiredActualDiffEngine>();
+        services.AddSingleton<FeedRuleResultSelector>();
+        services.AddSingleton<DryRunPlanner>();
         services.AddSingleton<FeedResolutionPolicy>();
+        services.AddSingleton<FeedTrustPolicyEvaluator>();
+        services.AddSingleton<RestrictedFeedValidatorPipeline>();
+        services.AddSingleton<UntrustedOverridePolicy>();
+        services.AddSingleton(sp => new LockFileStore(sp.GetRequiredService<LockFileOptions>().Path));
+        services.AddSingleton<LockFileCoordinator>();
+        services.AddSingleton<CleanupPolicyEvaluator>();
+        services.AddSingleton<PackageCleanupService>();
         services.AddSingleton<ReconciliationTelemetry>();
         services.AddSingleton<ReconciliationMetrics>();
         services.AddSingleton<ReconciliationLogger>();

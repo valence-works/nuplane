@@ -76,23 +76,23 @@
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T028 [P] [US2] Add unit tests for trusted/restricted/untrusted policy transitions and fail-closed validator errors in test/Nuplane.Runtime.Tests/Reconciliation/FeedTrustPolicyEvaluatorTests.cs
-- [ ] T029 [P] [US2] Add contract tests for override scope and reason audit fields in test/Nuplane.Integration.Tests/Contracts/TrustPolicyContractTests.cs
-- [ ] T030 [P] [US2] Add integration tests for lock enforce mode reproducibility in test/Nuplane.Integration.Tests/Reconciliation/LockFileEnforceModeTests.cs
-- [ ] T031 [P] [US2] Add integration tests for strict lock missing-entry behavior in test/Nuplane.Integration.Tests/Reconciliation/LockFileStrictModeTests.cs
-- [ ] T032 [US2] Add regression test for lock hash mismatch preserving LKG active pointer in test/Nuplane.Store.Tests/Transactions/LockHashMismatchLkgRegressionTests.cs
+- [X] T028 [P] [US2] Add unit tests for trusted/restricted/untrusted policy transitions and fail-closed validator errors in test/Nuplane.Runtime.Tests/Reconciliation/FeedTrustPolicyEvaluatorTests.cs
+- [X] T029 [P] [US2] Add contract tests for override scope and reason audit fields in test/Nuplane.Integration.Tests/Contracts/TrustPolicyContractTests.cs
+- [X] T030 [P] [US2] Add integration tests for lock enforce mode reproducibility in test/Nuplane.Integration.Tests/Reconciliation/LockFileEnforceModeTests.cs
+- [X] T031 [P] [US2] Add integration tests for strict lock missing-entry behavior in test/Nuplane.Integration.Tests/Reconciliation/LockFileStrictModeTests.cs
+- [X] T032 [US2] Add regression test for lock hash mismatch preserving LKG active pointer in test/Nuplane.Store.Tests/Transactions/LockHashMismatchLkgRegressionTests.cs
 
 ### Implementation for User Story 2
 
-- [ ] T033 [P] [US2] Implement trust policy evaluator and outcome model in src/Nuplane.Runtime/Reconciliation/FeedTrustPolicyEvaluator.cs
-- [ ] T034 [P] [US2] Implement restricted validator pipeline coordinator (integrity hash + publisher/signature allowlist checks where metadata is available) in src/Nuplane.Runtime/Reconciliation/RestrictedFeedValidatorPipeline.cs
-- [ ] T035 [P] [US2] Implement untrusted override scope/reason enforcement in src/Nuplane.Runtime/Reconciliation/UntrustedOverridePolicy.cs
-- [ ] T036 [P] [US2] Implement lock file reader/writer and schema handling in src/Nuplane.Runtime/Reconciliation/LockFileStore.cs
-- [ ] T037 [P] [US2] Implement lock decision coordinator for generate/enforce/strict modes in src/Nuplane.Runtime/Reconciliation/LockFileCoordinator.cs
-- [ ] T038 [US2] Integrate trust and lock enforcement into src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
-- [ ] T039 [US2] Add lock hash validation boundary in src/Nuplane.Store/Transactions/PackageTransactionCoordinator.cs
-- [ ] T040 [US2] Emit override reason and lock outcome diagnostics in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
-- [ ] T041 [US2] Update health signals for trust/lock failure categories in src/Nuplane.Runtime/Health/ReconciliationHealthEvaluator.cs
+- [X] T033 [P] [US2] Implement trust policy evaluator and outcome model in src/Nuplane.Runtime/Reconciliation/FeedTrustPolicyEvaluator.cs
+- [X] T034 [P] [US2] Implement restricted validator pipeline coordinator (integrity hash + publisher/signature allowlist checks where metadata is available) in src/Nuplane.Runtime/Reconciliation/RestrictedFeedValidatorPipeline.cs
+- [X] T035 [P] [US2] Implement untrusted override scope/reason enforcement in src/Nuplane.Runtime/Reconciliation/UntrustedOverridePolicy.cs
+- [X] T036 [P] [US2] Implement lock file reader/writer and schema handling in src/Nuplane.Runtime/Reconciliation/LockFileStore.cs
+- [X] T037 [P] [US2] Implement lock decision coordinator for generate/enforce/strict modes in src/Nuplane.Runtime/Reconciliation/LockFileCoordinator.cs
+- [X] T038 [US2] Integrate trust and lock enforcement into src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
+- [X] T039 [US2] Add lock hash validation boundary in src/Nuplane.Store/Transactions/PackageTransactionCoordinator.cs
+- [X] T040 [US2] Emit override reason and lock outcome diagnostics in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
+- [X] T041 [US2] Update health signals for trust/lock failure categories in src/Nuplane.Runtime/Health/ReconciliationHealthEvaluator.cs
 
 **Checkpoint**: User Stories 1 and 2 are independently functional and testable.
 
@@ -106,23 +106,23 @@
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T042 [P] [US3] Add unit tests for prefix-only rule matching and deterministic ordering in test/Nuplane.Runtime.Tests/Reconciliation/FeedRuleDesiredSourceTests.cs
-- [ ] T043 [P] [US3] Add integration tests for max package limit enforcement in test/Nuplane.Integration.Tests/Reconciliation/FeedRuleMaxLimitTests.cs
-- [ ] T044 [P] [US3] Add integration tests for dry-run full-check parity and no mutation in test/Nuplane.Integration.Tests/Reconciliation/FeedRuleDryRunParityTests.cs
-- [ ] T045 [P] [US3] Add unit tests for cleanup union retention semantics in test/Nuplane.Store.Tests/State/CleanupPolicyUnionRetentionTests.cs
-- [ ] T046 [P] [US3] Add integration tests for cleanup post-success trigger and manual-only mode in test/Nuplane.Integration.Tests/Reconciliation/CleanupExecutionModeTests.cs
-- [ ] T047 [US3] Add regression test ensuring LKG versions are never deleted by cleanup in test/Nuplane.Store.Tests/State/CleanupLkgProtectionRegressionTests.cs
+- [X] T042 [P] [US3] Add unit tests for prefix-only rule matching and deterministic ordering in test/Nuplane.Runtime.Tests/Reconciliation/FeedRuleDesiredSourceTests.cs
+- [X] T043 [P] [US3] Add integration tests for max package limit enforcement in test/Nuplane.Integration.Tests/Reconciliation/FeedRuleMaxLimitTests.cs
+- [X] T044 [P] [US3] Add integration tests for dry-run full-check parity and no mutation in test/Nuplane.Integration.Tests/Reconciliation/FeedRuleDryRunParityTests.cs
+- [X] T045 [P] [US3] Add unit tests for cleanup union retention semantics in test/Nuplane.Store.Tests/State/CleanupPolicyUnionRetentionTests.cs
+- [X] T046 [P] [US3] Add integration tests for cleanup post-success trigger and manual-only mode in test/Nuplane.Integration.Tests/Reconciliation/CleanupExecutionModeTests.cs
+- [X] T047 [US3] Add regression test ensuring LKG versions are never deleted by cleanup in test/Nuplane.Store.Tests/State/CleanupLkgProtectionRegressionTests.cs
 
 ### Implementation for User Story 3
 
-- [ ] T048 [P] [US3] Implement feed-rule desired source with hard limits in src/Nuplane.Runtime/Sources/FeedRuleDesiredSource.cs
-- [ ] T049 [P] [US3] Implement feed-rule result ordering and cap enforcement in src/Nuplane.Runtime/Sources/FeedRuleResultSelector.cs
-- [ ] T050 [P] [US3] Implement dry-run planner that executes full policy/lock checks without apply in src/Nuplane.Runtime/Reconciliation/DryRunPlanner.cs
-- [ ] T051 [P] [US3] Implement cleanup retention evaluator with union semantics in src/Nuplane.Store/State/CleanupPolicyEvaluator.cs
-- [ ] T052 [P] [US3] Implement cleanup executor with LKG protection and diagnostics in src/Nuplane.Store/State/PackageCleanupService.cs
-- [ ] T053 [US3] Integrate dry-run and cleanup workflows into src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
-- [ ] T054 [US3] Add cleanup and dry-run observability metrics in src/Nuplane.Runtime/Observability/ReconciliationMetrics.cs
-- [ ] T055 [US3] Update health/degraded transitions for cleanup failures in src/Nuplane.Runtime/Health/ReconciliationHealthEvaluator.cs
+- [X] T048 [P] [US3] Implement feed-rule desired source with hard limits in src/Nuplane.Runtime/Sources/FeedRuleDesiredSource.cs
+- [X] T049 [P] [US3] Implement feed-rule result ordering and cap enforcement in src/Nuplane.Runtime/Sources/FeedRuleResultSelector.cs
+- [X] T050 [P] [US3] Implement dry-run planner that executes full policy/lock checks without apply in src/Nuplane.Runtime/Reconciliation/DryRunPlanner.cs
+- [X] T051 [P] [US3] Implement cleanup retention evaluator with union semantics in src/Nuplane.Store/State/CleanupPolicyEvaluator.cs
+- [X] T052 [P] [US3] Implement cleanup executor with LKG protection and diagnostics in src/Nuplane.Store/State/PackageCleanupService.cs
+- [X] T053 [US3] Integrate dry-run and cleanup workflows into src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
+- [X] T054 [US3] Add cleanup and dry-run observability metrics in src/Nuplane.Runtime/Observability/ReconciliationMetrics.cs
+- [X] T055 [US3] Update health/degraded transitions for cleanup failures in src/Nuplane.Runtime/Health/ReconciliationHealthEvaluator.cs
 
 **Checkpoint**: All user stories are independently functional and testable.
 

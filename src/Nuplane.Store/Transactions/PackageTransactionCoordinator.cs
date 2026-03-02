@@ -24,6 +24,8 @@ public sealed record PackageTransactionRequest(
     bool BlockedByTrustPolicy = false,
     bool BlockedByLockPolicy = false,
     string? PolicyFailureMessage = null,
+    string? ExpectedArtifactHash = null,
+    string? ActualArtifactHash = null,
     Func<PackageTransactionStage, CancellationToken, Task>? StageExecutor = null);
 
 public sealed record PackageTransactionResult(
@@ -59,6 +61,17 @@ public sealed class PackageTransactionCoordinator
 
         try
         {
+            if (!string.IsNullOrWhiteSpace(request.ExpectedArtifactHash) &&
+                !string.IsNullOrWhiteSpace(request.ActualArtifactHash) &&
+                !string.Equals(request.ExpectedArtifactHash, request.ActualArtifactHash, StringComparison.OrdinalIgnoreCase))
+            {
+                return await BlockByPolicyAsync(
+                    request with { PolicyFailureMessage = "Lock hash mismatch detected during validation." },
+                    currentPointer,
+                    PackageTransactionStage.LockFileGate,
+                    cancellationToken);
+            }
+
             if (request.BlockedByTrustPolicy)
             {
                 return await BlockByPolicyAsync(
