@@ -52,6 +52,7 @@ specs/002-phase2-feed-governance/
 ├── research.md
 ├── data-model.md
 ├── quickstart.md
+├── quickstart-validation.md
 ├── contracts/
 │   ├── feed-resolution-contract.md
 │   ├── trust-policy-contract.md

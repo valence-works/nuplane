@@ -85,9 +85,9 @@ As an operator, I can use feed-based rule discovery with hard limits and dry-run
 - **FR-001**: System MUST support configuring multiple package feeds with priority ordering and trust classification.
 - **FR-002**: System MUST support per-request explicit feed targeting and all-feed resolution when feed is unspecified.
 - **FR-003**: System MUST resolve package candidates deterministically across eligible feeds for identical inputs; when priority and version are equal, tie-break by lexicographically smallest feed name.
-- **FR-004**: System MUST support strict and fallback feed outage behavior based on configured policy; in strict mode, packages that require an unavailable feed MUST fail explicitly while unrelated packages continue.
+- **FR-004**: System MUST support strict and fallback feed outage behavior based on configured policy; in strict mode, packages that require an unavailable feed MUST fail explicitly while unrelated packages continue; in fallback mode, candidate feeds MUST be tried in deterministic ascending priority order and package resolution MUST fail explicitly when no eligible feed remains.
 - **FR-005**: System MUST enforce feed trust policy levels (`Trusted`, `Restricted`, `Untrusted`) during package eligibility and activation decisions.
-- **FR-006**: System MUST require restricted-feed packages to pass configured validator checks before activation.
+- **FR-006**: System MUST require restricted-feed packages to pass configured validator checks before activation; baseline validation MUST include integrity hash validation and publisher/signature allowlist verification when metadata is available, and validator errors MUST fail closed.
 - **FR-007**: System MUST prevent untrusted-feed package activation unless an explicit per-package or per-feed-rule override is configured with a required operator-provided reason.
 - **FR-008**: System MUST support lock-file generate mode that records resolved package identity, source, integrity hash, and timestamp.
 - **FR-009**: System MUST support lock-file enforce mode that uses lock-defined package versions instead of live range resolution.
@@ -101,7 +101,7 @@ As an operator, I can use feed-based rule discovery with hard limits and dry-run
 
 ### Operational & Safety Requirements *(mandatory)*
 
-- **OSR-001**: Reconciliation across multi-feed, lock, rule-discovery, and dry-run paths MUST remain deterministic and idempotent for repeated identical inputs.
+- **OSR-001**: Reconciliation across multi-feed, lock, rule-discovery, and dry-run paths MUST remain deterministic and idempotent for repeated identical inputs, and MUST use bounded retries with policy-defined backoff and max-attempt limits for recoverable resolution/validation/source-access failures.
 - **OSR-002**: Package activation and removal flows MUST preserve transactional last-known-good safety and MUST NOT leave unknown active state on failures.
 - **OSR-003**: Only explicitly configured desired sources and feeds MAY influence reconciliation, and integrity checks MUST run before activation in accordance with trust policy.
 - **OSR-004**: Each reconciliation cycle MUST emit structured logs with correlation identifiers, including selected feed decisions, policy outcomes, lock-mode decisions, cleanup outcomes, and untrusted-override reason metadata when used.
@@ -129,4 +129,4 @@ As an operator, I can use feed-based rule discovery with hard limits and dry-run
 - **SC-003**: In lock enforce-mode tests where feed versions drift, 100% of reconciliations activate the lock-defined package set without unintended version changes.
 - **SC-004**: In strict lock-mode tests with missing lock entries or hash mismatches, 100% of affected packages fail with explicit policy/integrity outcomes and no active-state corruption.
 - **SC-005**: In controlled feed-rule discovery tests, 100% of runs enforce configured max-package limits and produce dry-run diffs without mutating active package state.
-- **SC-006**: In cleanup validation tests, 100% of protected last-known-good versions remain present while at least 95% of eligible non-protected stale versions are removed successfully.
+- **SC-006**: In cleanup validation tests across at least 10 runs with a minimum of 100 eligible non-protected stale versions total, 100% of protected last-known-good versions remain present while at least 95% of eligible non-protected stale versions are removed successfully.
