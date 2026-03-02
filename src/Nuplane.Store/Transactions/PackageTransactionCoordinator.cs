@@ -82,10 +82,9 @@ public sealed class PackageTransactionCoordinator
                 request.CorrelationId,
                 cancellationToken);
 
-            var hadPriorPointer = !string.IsNullOrWhiteSpace(currentPointer);
-            if (hadPriorPointer)
+            if (!string.IsNullOrWhiteSpace(currentPointer))
             {
-                await pointerSwitcher.SwitchAsync(request.PackageId, currentPointer!, cancellationToken);
+                await pointerSwitcher.SwitchAsync(request.PackageId, currentPointer, cancellationToken);
             }
 
             return new PackageTransactionResult(
@@ -94,7 +93,7 @@ public sealed class PackageTransactionCoordinator
                 Succeeded: false,
                 FailedStage: ex is PackageTransactionStageException stageFailure ? stageFailure.Stage : null,
                 FailureMessage: ex.Message,
-                LastKnownGoodPreserved: hadPriorPointer);
+                LastKnownGoodPreserved: !string.IsNullOrWhiteSpace(currentPointer));
         }
     }
 

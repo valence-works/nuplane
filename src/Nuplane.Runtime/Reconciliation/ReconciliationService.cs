@@ -161,9 +161,17 @@ public sealed class ReconciliationService
                 mergedActive[id] = version;
             }
 
-            foreach (var removedId in changeSet.Removed)
+            // Only remove packages that are truly no longer desired (not in the request list at all)
+            // Resolution/transaction failures should preserve the previous active version
+            var requestedIds = new HashSet<string>(
+                allowlistedRequests.Select(r => r.Id),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var activeId in activeVersions.Keys)
             {
-                mergedActive.Remove(removedId);
+                if (!requestedIds.Contains(activeId))
+                {
+                    mergedActive.Remove(activeId);
+                }
             }
 
             await storeRegistry.PersistActiveVersionsAsync(mergedActive, appliedVersions, correlationId, cancellationToken);
