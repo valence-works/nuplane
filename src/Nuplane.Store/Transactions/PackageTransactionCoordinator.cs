@@ -8,6 +8,8 @@ namespace Nuplane.Store.Transactions;
 
 public enum PackageTransactionStage
 {
+    TrustPolicyGate,
+    LockFileGate,
     Stage,
     Validate,
     PublishImmutable,
@@ -19,6 +21,9 @@ public sealed record PackageTransactionRequest(
     string PackageId,
     string Version,
     string CorrelationId,
+    bool BlockedByTrustPolicy = false,
+    bool BlockedByLockPolicy = false,
+    string? PolicyFailureMessage = null,
     Func<PackageTransactionStage, CancellationToken, Task>? StageExecutor = null);
 
 public sealed record PackageTransactionResult(
@@ -54,6 +59,24 @@ public sealed class PackageTransactionCoordinator
 
         try
         {
+            if (request.BlockedByTrustPolicy)
+            {
+                return await BlockByPolicyAsync(
+                    request,
+                    currentPointer,
+                    PackageTransactionStage.TrustPolicyGate,
+                    cancellationToken);
+            }
+
+            if (request.BlockedByLockPolicy)
+            {
+                return await BlockByPolicyAsync(
+                    request,
+                    currentPointer,
+                    PackageTransactionStage.LockFileGate,
+                    cancellationToken);
+            }
+
             await ExecuteStageAsync(request, PackageTransactionStage.Stage, cancellationToken);
             await ExecuteStageAsync(request, PackageTransactionStage.Validate, cancellationToken);
             await ExecuteStageAsync(request, PackageTransactionStage.PublishImmutable, cancellationToken);
@@ -95,6 +118,37 @@ public sealed class PackageTransactionCoordinator
                 FailureMessage: ex.Message,
                 LastKnownGoodPreserved: !string.IsNullOrWhiteSpace(currentPointer));
         }
+    }
+
+    private async Task<PackageTransactionResult> BlockByPolicyAsync(
+        PackageTransactionRequest request,
+        string? currentPointer,
+        PackageTransactionStage stage,
+        CancellationToken cancellationToken)
+    {
+        var message = string.IsNullOrWhiteSpace(request.PolicyFailureMessage)
+            ? "Package transaction blocked by policy gate."
+            : request.PolicyFailureMessage;
+
+        await failureRecorder.RecordAsync(
+            request.PackageId,
+            stage.ToString(),
+            message,
+            request.CorrelationId,
+            cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(currentPointer))
+        {
+            await pointerSwitcher.SwitchAsync(request.PackageId, currentPointer, cancellationToken);
+        }
+
+        return new PackageTransactionResult(
+            request.PackageId,
+            request.Version,
+            Succeeded: false,
+            FailedStage: stage,
+            FailureMessage: message,
+            LastKnownGoodPreserved: !string.IsNullOrWhiteSpace(currentPointer));
     }
 
     private static async Task ExecuteStageAsync(PackageTransactionRequest request, PackageTransactionStage stage, CancellationToken cancellationToken)

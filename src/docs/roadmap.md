@@ -27,6 +27,20 @@ Current repository behavior aligns with the Phase 1 runtime baseline:
 
 Release-readiness checks completed in Phase 1 include central package version verification and secret-scan policy/script coverage.
 
+## Phase 2 Scope (Advanced Feeds & Governance)
+
+Phase 2 extends the runtime baseline with feed governance and reproducibility controls:
+- deterministic multi-feed resolution with explicit tie-break ordering and bounded retries
+- strict/fallback feed policy modes with outage isolation for impacted packages only
+- trust policy enforcement for trusted/restricted/untrusted feeds and auditable untrusted overrides
+- lock-file generate/enforce/strict modes with package hash validation boundaries
+- controlled feed-rule discovery, deterministic dry-run parity, and cleanup retention safety with LKG protection
+
+Implementation notes:
+- reconciliation remains idempotent and deterministic for identical inputs
+- policy and lock failures are non-mutating and must preserve LKG active pointers
+- diagnostics include correlation-linked policy, lock, and cleanup outcomes for operator triage
+
 ---
 
 ## Naming & Packages

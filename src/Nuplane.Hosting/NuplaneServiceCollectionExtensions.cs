@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Nuplane.Abstractions;
 using Nuplane.NuGet.Resolution;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
@@ -15,6 +16,11 @@ public static class NuplaneServiceCollectionExtensions
         this IServiceCollection services,
         Action<SourceTrustOptions>? configureSourceTrust = null,
         Action<ReconciliationOptions>? configureReconciliation = null,
+        Action<FeedResolutionOptions>? configureFeedResolution = null,
+        Action<FeedTrustPolicyOptions>? configureFeedTrustPolicy = null,
+        Action<LockFileOptions>? configureLockFile = null,
+        Action<CleanupPolicyOptions>? configureCleanupPolicy = null,
+        Action<ICollection<FeedDefinition>>? configureFeeds = null,
         string? stateFilePath = null)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -25,8 +31,58 @@ public static class NuplaneServiceCollectionExtensions
         var reconciliationOptions = new ReconciliationOptions();
         configureReconciliation?.Invoke(reconciliationOptions);
 
+        var feedResolutionOptions = new FeedResolutionOptions();
+        configureFeedResolution?.Invoke(feedResolutionOptions);
+        configureFeeds?.Invoke(feedResolutionOptions.Feeds);
+
+        var feedTrustPolicyOptions = new FeedTrustPolicyOptions();
+        configureFeedTrustPolicy?.Invoke(feedTrustPolicyOptions);
+
+        var lockFileOptions = new LockFileOptions();
+        configureLockFile?.Invoke(lockFileOptions);
+
+        var cleanupPolicyOptions = new CleanupPolicyOptions();
+        configureCleanupPolicy?.Invoke(cleanupPolicyOptions);
+
+        if (!reconciliationOptions.IsValid())
+        {
+            throw new ArgumentException("Invalid reconciliation options configuration.", nameof(configureReconciliation));
+        }
+
+        if (!feedResolutionOptions.IsValid())
+        {
+            throw new ArgumentException("Invalid feed resolution options configuration.", nameof(configureFeedResolution));
+        }
+
+        if (!feedTrustPolicyOptions.IsValid())
+        {
+            throw new ArgumentException("Invalid feed trust policy options configuration.", nameof(configureFeedTrustPolicy));
+        }
+
+        if (!lockFileOptions.IsValid())
+        {
+            throw new ArgumentException("Invalid lock file options configuration.", nameof(configureLockFile));
+        }
+
+        if (!cleanupPolicyOptions.IsValid())
+        {
+            throw new ArgumentException("Invalid cleanup policy options configuration.", nameof(configureCleanupPolicy));
+        }
+
+        var feedCredentialValidator = new FeedCredentialOptionsValidator();
+        var validationErrors = feedCredentialValidator.Validate(feedResolutionOptions, feedTrustPolicyOptions, sourceTrustOptions);
+        if (validationErrors.Count > 0)
+        {
+            throw new ArgumentException($"Invalid feed trust/credential configuration: {string.Join("; ", validationErrors)}");
+        }
+
         services.AddSingleton(sourceTrustOptions);
         services.AddSingleton(reconciliationOptions);
+        services.AddSingleton(feedResolutionOptions);
+        services.AddSingleton(feedTrustPolicyOptions);
+        services.AddSingleton(lockFileOptions);
+        services.AddSingleton(cleanupPolicyOptions);
+        services.AddSingleton(feedCredentialValidator);
         services.AddSingleton<DesiredStateAggregator>();
         services.AddSingleton<DesiredActualDiffEngine>();
         services.AddSingleton<ReconciliationTelemetry>();

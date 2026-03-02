@@ -11,10 +11,10 @@
 
 **Purpose**: Prepare shared feature scaffolding and references for Phase 2 implementation.
 
-- [ ] T001 Add Phase 2 feature scope and implementation notes in src/docs/roadmap.md
-- [ ] T002 Add Phase 2 operator guidance (including lock-file conventions) in README.md
-- [ ] T003 [P] Add Phase 2 sample configuration block in samples/Nuplane.Sample.Console/Program.cs
-- [ ] T004 [P] Add Phase 2 sample configuration block in samples/Nuplane.Sample.AspNetCore/Program.cs
+- [X] T001 Add Phase 2 feature scope and implementation notes in src/docs/roadmap.md
+- [X] T002 Add Phase 2 operator guidance (including lock-file conventions) in README.md
+- [X] T003 [P] Add Phase 2 sample configuration block in samples/Nuplane.Sample.Console/Program.cs
+- [X] T004 [P] Add Phase 2 sample configuration block in samples/Nuplane.Sample.AspNetCore/Program.cs
 
 ---
 
@@ -24,15 +24,15 @@
 
 **⚠️ CRITICAL**: No user story work starts before this phase is complete.
 
-- [ ] T005 Define feed trust and lock model contracts in src/Nuplane.Abstractions/Abstractions.cs
-- [ ] T006 [P] Add multi-feed and strict/fallback policy options (including deterministic fallback order and stop condition) in src/Nuplane.Runtime/Configuration/FeedResolutionOptions.cs
-- [ ] T007 [P] Add trust policy and override options in src/Nuplane.Runtime/Configuration/FeedTrustPolicyOptions.cs
-- [ ] T008 [P] Add lock mode options and lock path configuration in src/Nuplane.Runtime/Configuration/LockFileOptions.cs
-- [ ] T009 [P] Add cleanup policy options with union retention semantics in src/Nuplane.Store/State/CleanupPolicyOptions.cs
-- [ ] T010 Add trusted source and secret reference validation gate in src/Nuplane.Runtime/Configuration/FeedCredentialOptionsValidator.cs
-- [ ] T011 Add transactional LKG guardrails for lock/trust failures in src/Nuplane.Store/Transactions/PackageTransactionCoordinator.cs
-- [ ] T012 Add baseline observability event/metric contracts for policy and lock outcomes in src/Nuplane.Runtime/Observability/ReconciliationTelemetry.cs
-- [ ] T013 Wire foundational options and validators in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
+- [X] T005 Define feed trust and lock model contracts in src/Nuplane.Abstractions/Abstractions.cs
+- [X] T006 [P] Add multi-feed and strict/fallback policy options (including deterministic fallback order and stop condition) in src/Nuplane.Runtime/Configuration/FeedResolutionOptions.cs
+- [X] T007 [P] Add trust policy and override options in src/Nuplane.Runtime/Configuration/FeedTrustPolicyOptions.cs
+- [X] T008 [P] Add lock mode options and lock path configuration in src/Nuplane.Runtime/Configuration/LockFileOptions.cs
+- [X] T009 [P] Add cleanup policy options with union retention semantics in src/Nuplane.Store/State/CleanupPolicyOptions.cs
+- [X] T010 Add trusted source and secret reference validation gate in src/Nuplane.Runtime/Configuration/FeedCredentialOptionsValidator.cs
+- [X] T011 Add transactional LKG guardrails for lock/trust failures in src/Nuplane.Store/Transactions/PackageTransactionCoordinator.cs
+- [X] T012 Add baseline observability event/metric contracts for policy and lock outcomes in src/Nuplane.Runtime/Observability/ReconciliationTelemetry.cs
+- [X] T013 Wire foundational options and validators in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
 
 **Checkpoint**: Foundation complete; user stories can proceed.
 

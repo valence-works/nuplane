@@ -15,6 +15,18 @@ public sealed class ReconciliationTelemetry : IDisposable
 
     public Counter<long> FailedPackagesCounter { get; }
 
+    public Counter<long> TrustPolicyAllowedCounter { get; }
+
+    public Counter<long> TrustPolicyBlockedCounter { get; }
+
+    public Counter<long> LockGenerateCounter { get; }
+
+    public Counter<long> LockEnforceCounter { get; }
+
+    public Counter<long> LockStrictFailureCounter { get; }
+
+    public Counter<long> LockHashMismatchCounter { get; }
+
     public Histogram<double> TransactionDurationMilliseconds { get; }
 
     public ObservableGauge<long> ActivePackagesGauge { get; }
@@ -27,6 +39,12 @@ public sealed class ReconciliationTelemetry : IDisposable
         UpdatedPackagesCounter = meter.CreateCounter<long>("nuplane.reconciliation.updated");
         RemovedPackagesCounter = meter.CreateCounter<long>("nuplane.reconciliation.removed");
         FailedPackagesCounter = meter.CreateCounter<long>("nuplane.reconciliation.failed");
+        TrustPolicyAllowedCounter = meter.CreateCounter<long>("nuplane.policy.trust.allowed");
+        TrustPolicyBlockedCounter = meter.CreateCounter<long>("nuplane.policy.trust.blocked");
+        LockGenerateCounter = meter.CreateCounter<long>("nuplane.lock.generate");
+        LockEnforceCounter = meter.CreateCounter<long>("nuplane.lock.enforce");
+        LockStrictFailureCounter = meter.CreateCounter<long>("nuplane.lock.strict.failure");
+        LockHashMismatchCounter = meter.CreateCounter<long>("nuplane.lock.hashmismatch");
         TransactionDurationMilliseconds = meter.CreateHistogram<double>("nuplane.reconciliation.transaction.duration.ms");
         ActivePackagesGauge = meter.CreateObservableGauge<long>("nuplane.reconciliation.active", () => activePackages);
     }
