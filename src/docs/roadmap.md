@@ -75,6 +75,12 @@ Notes:
 - Keep `Nuplane.Abstractions` minimal: options-free contracts and pure models only.
 - No Elsa/CShells references anywhere in `src/`. Host integrations live in their own repos/packages.
 
+### Dependency Management Policy
+
+- The repository uses NuGet Central Package Management via `Directory.Packages.props`.
+- Project files MUST reference shared dependencies without inline `Version` attributes unless explicitly justified.
+- Shared package versions are managed centrally to keep package graphs consistent across all Nuplane modules.
+
 ---
 
 # Phase 1 — Core Runtime (Production-Ready Baseline)
