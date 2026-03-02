@@ -130,6 +130,10 @@ public sealed class ReconciliationService
 
             // Phase 1: Resolve packages to determine the desired target versions
             var resolutionResult = await applyExecutor.ResolveAsync(allowlistedRequests, correlationId, cancellationToken);
+            foreach (var decision in resolutionResult.FeedDecisions)
+            {
+                logger.LogFeedDecision(decision);
+            }
 
             // Compute diff against pre-apply active state so Changing fires with accurate data
             var activeVersions = await storeRegistry.GetActiveVersionsAsync(cancellationToken);
@@ -207,7 +211,7 @@ public sealed class ReconciliationService
             var sourceName = source.GetType().FullName ?? source.GetType().Name;
             try
             {
-                var fromSource = await retryPolicy.ExecuteAsync(ct => source.GetDesiredAsync(ct), cancellationToken);
+                var fromSource = await retryPolicy.ExecuteForFeedResolutionAsync(ct => source.GetDesiredAsync(ct), cancellationToken);
                 await snapshotCache.SaveAsync(sourceName, fromSource, cancellationToken);
                 requests.AddRange(fromSource);
                 freshReads++;

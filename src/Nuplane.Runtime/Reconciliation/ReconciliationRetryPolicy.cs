@@ -31,6 +31,15 @@ public sealed class ReconciliationRetryPolicy
         }
     }
 
+    public Task<T> ExecuteForFeedResolutionAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken) =>
+        ExecuteAsync(operation, cancellationToken);
+
+    public Task<T> ExecuteForLockEvaluationAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken) =>
+        ExecuteAsync(operation, cancellationToken);
+
+    public Task<T> ExecuteForDryRunAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken) =>
+        ExecuteAsync(operation, cancellationToken);
+
     public static TimeSpan GetBackoffForRetry(ReconciliationOptions options, int retryAttempt)
     {
         ArgumentNullException.ThrowIfNull(options);

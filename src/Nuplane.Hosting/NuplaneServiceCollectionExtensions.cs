@@ -85,6 +85,7 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton(feedCredentialValidator);
         services.AddSingleton<DesiredStateAggregator>();
         services.AddSingleton<DesiredActualDiffEngine>();
+        services.AddSingleton<FeedResolutionPolicy>();
         services.AddSingleton<ReconciliationTelemetry>();
         services.AddSingleton<ReconciliationMetrics>();
         services.AddSingleton<ReconciliationLogger>();
@@ -97,7 +98,7 @@ public static class NuplaneServiceCollectionExtensions
             new ObserverNotifier(
                 sp.GetServices<Nuplane.Abstractions.INuplaneObserver>(),
                 sp.GetRequiredService<ReconciliationLogger>()));
-        services.AddSingleton<INuGetPackageResolver, NuGetPackageResolver>();
+        services.AddSingleton<INuGetPackageResolver, Nuplane.Runtime.Reconciliation.MultiFeedPackageResolver>();
         services.AddSingleton(new StoreRegistry(new StoreStateSerializer(), stateFilePath));
         services.AddSingleton<ReconciliationService>();
 

@@ -1,3 +1,5 @@
+using Nuplane.Runtime.Reconciliation;
+
 namespace Nuplane.Runtime.Observability;
 
 public sealed record ReconciliationLogEntry(
@@ -50,6 +52,27 @@ public sealed class ReconciliationLogger
             new Dictionary<string, object?>
             {
                 ["callback"] = callbackName
+            }));
+    }
+
+    public void LogFeedDecision(FeedResolutionDecision decision)
+    {
+        ArgumentNullException.ThrowIfNull(decision);
+
+        entries.Add(new ReconciliationLogEntry(
+            DateTimeOffset.UtcNow,
+            decision.CorrelationId,
+            "reconciliation.feed.decision",
+            decision.DecisionPath,
+            new Dictionary<string, object?>
+            {
+                ["packageId"] = decision.PackageId,
+                ["requestedFeed"] = decision.RequestedFeed,
+                ["selectedFeed"] = decision.SelectedFeed,
+                ["selectedVersion"] = decision.SelectedVersion,
+                ["feedUnavailable"] = decision.FeedUnavailable,
+                ["failureReason"] = decision.FailureReason,
+                ["candidateFeeds"] = string.Join(",", decision.CandidateFeeds)
             }));
     }
 }

@@ -46,23 +46,23 @@
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T014 [P] [US1] Add unit tests for deterministic feed ordering and tie-break rules in test/Nuplane.Runtime.Tests/Reconciliation/MultiFeedResolutionPolicyTests.cs
-- [ ] T015 [P] [US1] Add contract tests for explicit-feed behavior and fallback ordering/stop-condition behavior in test/Nuplane.Integration.Tests/Contracts/FeedResolutionContractTests.cs
-- [ ] T016 [US1] Add integration tests for strict outage isolation behavior in test/Nuplane.Integration.Tests/Reconciliation/StrictFeedOutageIsolationTests.cs
-- [ ] T017 [US1] Add regression test for equal-priority/equal-version deterministic tie-break drift in test/Nuplane.Runtime.Tests/Reconciliation/MultiFeedTieBreakRegressionTests.cs
-- [ ] T018 [P] [US1] Add unit tests for bounded retry max-attempt and backoff progression in test/Nuplane.Runtime.Tests/Reconciliation/MultiFeedRetryPolicyTests.cs
-- [ ] T019 [US1] Add integration test for retry exhaustion behavior on feed outage in test/Nuplane.Integration.Tests/Reconciliation/MultiFeedRetryExhaustionTests.cs
+- [X] T014 [P] [US1] Add unit tests for deterministic feed ordering and tie-break rules in test/Nuplane.Runtime.Tests/Reconciliation/MultiFeedResolutionPolicyTests.cs
+- [X] T015 [P] [US1] Add contract tests for explicit-feed behavior and fallback ordering/stop-condition behavior in test/Nuplane.Integration.Tests/Contracts/FeedResolutionContractTests.cs
+- [X] T016 [US1] Add integration tests for strict outage isolation behavior in test/Nuplane.Integration.Tests/Reconciliation/StrictFeedOutageIsolationTests.cs
+- [X] T017 [US1] Add regression test for equal-priority/equal-version deterministic tie-break drift in test/Nuplane.Runtime.Tests/Reconciliation/MultiFeedTieBreakRegressionTests.cs
+- [X] T018 [P] [US1] Add unit tests for bounded retry max-attempt and backoff progression in test/Nuplane.Runtime.Tests/Reconciliation/MultiFeedRetryPolicyTests.cs
+- [X] T019 [US1] Add integration test for retry exhaustion behavior on feed outage in test/Nuplane.Integration.Tests/Reconciliation/MultiFeedRetryExhaustionTests.cs
 
 ### Implementation for User Story 1
 
-- [ ] T020 [P] [US1] Implement multi-feed candidate ordering policy in src/Nuplane.Runtime/Reconciliation/FeedResolutionPolicy.cs
-- [ ] T021 [P] [US1] Implement multi-feed resolver adapter in src/Nuplane.NuGet/Resolution/MultiFeedPackageResolver.cs
-- [ ] T022 [P] [US1] Implement feed resolution decision model and tracing payload in src/Nuplane.Runtime/Reconciliation/FeedResolutionDecision.cs
-- [ ] T023 [US1] Integrate deterministic resolver flow into src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
-- [ ] T024 [US1] Implement strict outage scoping logic (impacted package fail, unrelated continue) in src/Nuplane.Runtime/Reconciliation/PackageApplyExecutor.cs
-- [ ] T025 [US1] Implement bounded retry/backoff policy application for multi-feed, lock, and dry-run paths in src/Nuplane.Runtime/Reconciliation/ReconciliationRetryPolicy.cs and src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
-- [ ] T026 [US1] Add feed decision diagnostics and correlation logging in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
-- [ ] T027 [US1] Update DI registration for multi-feed resolver components in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
+- [X] T020 [P] [US1] Implement multi-feed candidate ordering policy in src/Nuplane.Runtime/Reconciliation/FeedResolutionPolicy.cs
+- [X] T021 [P] [US1] Implement multi-feed resolver adapter in src/Nuplane.NuGet/Resolution/MultiFeedPackageResolver.cs
+- [X] T022 [P] [US1] Implement feed resolution decision model and tracing payload in src/Nuplane.Runtime/Reconciliation/FeedResolutionDecision.cs
+- [X] T023 [US1] Integrate deterministic resolver flow into src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
+- [X] T024 [US1] Implement strict outage scoping logic (impacted package fail, unrelated continue) in src/Nuplane.Runtime/Reconciliation/PackageApplyExecutor.cs
+- [X] T025 [US1] Implement bounded retry/backoff policy application for multi-feed, lock, and dry-run paths in src/Nuplane.Runtime/Reconciliation/ReconciliationRetryPolicy.cs and src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
+- [X] T026 [US1] Add feed decision diagnostics and correlation logging in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
+- [X] T027 [US1] Update DI registration for multi-feed resolver components in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
 
 **Checkpoint**: User Story 1 is independently functional and testable (MVP).
 
