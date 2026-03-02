@@ -17,7 +17,7 @@ public sealed class CleanupPolicyOptions
     public bool ProtectLastKnownGood { get; set; } = true;
 
     public bool IsValid() =>
-        (!RetainLastNVersions.HasValue || RetainLastNVersions.Value > 0) &&
+        (!RetainLastNVersions.HasValue || RetainLastNVersions.Value >= 0) &&
         (!RetainYoungerThanDays.HasValue || RetainYoungerThanDays.Value >= 0);
 
     public bool IsRetainedByUnion(int versionOrdinalFromNewest, int ageInDays)

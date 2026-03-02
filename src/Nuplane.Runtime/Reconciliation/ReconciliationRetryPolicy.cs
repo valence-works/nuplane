@@ -23,9 +23,13 @@ public sealed class ReconciliationRetryPolicy
             {
                 return await operation(cancellationToken);
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch
             {
-                if (attempt >= options.MaxRetryAttempts)
+                if (attempt > options.MaxRetryAttempts)
                 {
                     throw;
                 }
