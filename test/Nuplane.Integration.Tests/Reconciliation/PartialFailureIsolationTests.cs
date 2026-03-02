@@ -50,7 +50,7 @@ public sealed class PartialFailureIsolationTests
                 throw new InvalidOperationException("resolution failed");
             }
 
-            return Task.FromResult(new ResolvedPackage(request.Id, request.VersionRange, request.FeedName ?? "default", $"/tmp/{request.Id}", DateTimeOffset.UtcNow));
+            return Task.FromResult(new ResolvedPackage(request.Id, request.VersionRange, request.FeedName ?? "default", $"/tmp/{request.Id}", DateTimeOffset.UtcNow, request.SourceName));
         }
     }
 }

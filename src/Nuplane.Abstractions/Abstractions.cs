@@ -35,7 +35,8 @@ public sealed record ResolvedPackage(
     string Version,
     string FeedName,
     string InstallPath,
-    DateTimeOffset InstalledAt);
+    DateTimeOffset InstalledAt,
+    string SourceName = "");
 
 public sealed record PackageChangeSet(
     IReadOnlyList<ResolvedPackage> Added,

@@ -11,8 +11,10 @@ public sealed class PackageTransactionCoordinatorTests
     {
         var stateFilePath = Path.Combine(Path.GetTempPath(), $"nuplane-store-{Guid.NewGuid():N}", "state.json");
         var registry = new StoreRegistry(new StoreStateSerializer(), stateFilePath);
+        var seedVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["pkg-a"] = "1.0.0" };
         await registry.PersistActiveVersionsAsync(
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["pkg-a"] = "1.0.0" },
+            seedVersions,
+            seedVersions,
             "corr-seed",
             CancellationToken.None);
 
@@ -27,7 +29,7 @@ public sealed class PackageTransactionCoordinatorTests
                 "pkg-a",
                 "2.0.0",
                 "corr-1",
-                stageExecutor: stage =>
+                StageExecutor: (stage, ct) =>
                 {
                     if (stage == PackageTransactionStage.Validate)
                     {

@@ -18,10 +18,11 @@ public sealed class DesiredSourceSnapshotCache
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceName);
         ArgumentNullException.ThrowIfNull(requests);
 
-        snapshots[sourceName] = requests.ToArray();
+        var captured = requests.ToArray();
+        snapshots[sourceName] = captured;
         await storeRegistry.PersistSourceSnapshotAsync(
             sourceName,
-            new SourceSnapshotRef(Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow),
+            new SourceSnapshotRef(Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow, captured),
             cancellationToken);
     }
 
@@ -37,5 +38,25 @@ public sealed class DesiredSourceSnapshotCache
 
         requests = Array.Empty<PackageRequest>();
         return false;
+    }
+
+    public async Task<IReadOnlyList<PackageRequest>?> LoadSnapshotAsync(string sourceName, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceName);
+
+        if (snapshots.TryGetValue(sourceName, out var cached))
+        {
+            return cached;
+        }
+
+        var state = await storeRegistry.GetStateAsync(cancellationToken);
+        if (state.LastSuccessfulSourceSnapshots.TryGetValue(sourceName, out var snapshotRef) &&
+            snapshotRef.Requests is { Count: > 0 } storedRequests)
+        {
+            snapshots[sourceName] = storedRequests;
+            return storedRequests;
+        }
+
+        return null;
     }
 }

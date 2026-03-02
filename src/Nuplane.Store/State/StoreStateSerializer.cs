@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using Nuplane.Abstractions;
 
 namespace Nuplane.Store.State;
 
@@ -17,7 +18,8 @@ public sealed record FailureRecord(
 
 public sealed record SourceSnapshotRef(
     string Version,
-    DateTimeOffset CapturedAt);
+    DateTimeOffset CapturedAt,
+    IReadOnlyList<PackageRequest>? Requests = null);
 
 public sealed record StoreStateRecord(
     Dictionary<string, string> ActiveVersionById,

@@ -19,7 +19,7 @@ public sealed record PackageTransactionRequest(
     string PackageId,
     string Version,
     string CorrelationId,
-    Func<PackageTransactionStage, Task>? stageExecutor = null);
+    Func<PackageTransactionStage, CancellationToken, Task>? StageExecutor = null);
 
 public sealed record PackageTransactionResult(
     string PackageId,
@@ -54,12 +54,12 @@ public sealed class PackageTransactionCoordinator
 
         try
         {
-            await ExecuteStageAsync(request, PackageTransactionStage.Stage);
-            await ExecuteStageAsync(request, PackageTransactionStage.Validate);
-            await ExecuteStageAsync(request, PackageTransactionStage.PublishImmutable);
-            await ExecuteStageAsync(request, PackageTransactionStage.AtomicSwitch);
+            await ExecuteStageAsync(request, PackageTransactionStage.Stage, cancellationToken);
+            await ExecuteStageAsync(request, PackageTransactionStage.Validate, cancellationToken);
+            await ExecuteStageAsync(request, PackageTransactionStage.PublishImmutable, cancellationToken);
+            await ExecuteStageAsync(request, PackageTransactionStage.AtomicSwitch, cancellationToken);
             await pointerSwitcher.SwitchAsync(request.PackageId, request.Version, cancellationToken);
-            await ExecuteStageAsync(request, PackageTransactionStage.PersistState);
+            await ExecuteStageAsync(request, PackageTransactionStage.PersistState, cancellationToken);
 
             return new PackageTransactionResult(
                 request.PackageId,
@@ -67,7 +67,7 @@ public sealed class PackageTransactionCoordinator
                 Succeeded: true,
                 FailedStage: null,
                 FailureMessage: null,
-                LastKnownGoodPreserved: true);
+                LastKnownGoodPreserved: false);
         }
         catch (Exception ex)
         {
@@ -82,9 +82,10 @@ public sealed class PackageTransactionCoordinator
                 request.CorrelationId,
                 cancellationToken);
 
-            if (!string.IsNullOrWhiteSpace(currentPointer))
+            var hadPriorPointer = !string.IsNullOrWhiteSpace(currentPointer);
+            if (hadPriorPointer)
             {
-                await pointerSwitcher.SwitchAsync(request.PackageId, currentPointer, cancellationToken);
+                await pointerSwitcher.SwitchAsync(request.PackageId, currentPointer!, cancellationToken);
             }
 
             return new PackageTransactionResult(
@@ -93,20 +94,20 @@ public sealed class PackageTransactionCoordinator
                 Succeeded: false,
                 FailedStage: ex is PackageTransactionStageException stageFailure ? stageFailure.Stage : null,
                 FailureMessage: ex.Message,
-                LastKnownGoodPreserved: true);
+                LastKnownGoodPreserved: hadPriorPointer);
         }
     }
 
-    private static async Task ExecuteStageAsync(PackageTransactionRequest request, PackageTransactionStage stage)
+    private static async Task ExecuteStageAsync(PackageTransactionRequest request, PackageTransactionStage stage, CancellationToken cancellationToken)
     {
         try
         {
-            if (request.stageExecutor is null)
+            if (request.StageExecutor is null)
             {
                 return;
             }
 
-            await request.stageExecutor(stage);
+            await request.StageExecutor(stage, cancellationToken);
         }
         catch (Exception ex)
         {

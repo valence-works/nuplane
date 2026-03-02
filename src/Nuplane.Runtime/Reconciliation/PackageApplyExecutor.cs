@@ -5,6 +5,10 @@ using Nuplane.Store.Transactions;
 
 namespace Nuplane.Runtime.Reconciliation;
 
+public sealed record PackageResolutionResult(
+    IReadOnlyList<ResolvedPackage> ResolvedPackages,
+    IReadOnlyList<string> FailedPackageIds);
+
 public sealed record PackageApplyExecutionResult(
     IReadOnlyList<ResolvedPackage> AppliedPackages,
     IReadOnlyList<string> FailedPackageIds);
@@ -28,7 +32,7 @@ public sealed class PackageApplyExecutor
         this.failureRecorder = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
     }
 
-    public async Task<PackageApplyExecutionResult> ExecuteAsync(
+    public async Task<PackageResolutionResult> ResolveAsync(
         IReadOnlyList<PackageRequest> desiredRequests,
         string correlationId,
         CancellationToken cancellationToken)
@@ -36,34 +40,52 @@ public sealed class PackageApplyExecutor
         ArgumentNullException.ThrowIfNull(desiredRequests);
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
-        var applied = new List<ResolvedPackage>();
+        var resolved = new List<ResolvedPackage>();
         var failed = new List<string>();
 
         foreach (var request in desiredRequests)
         {
             try
             {
-                var resolved = await retryPolicy.ExecuteAsync(
+                var pkg = await retryPolicy.ExecuteAsync(
                     ct => packageResolver.ResolveAsync(request, ct),
                     cancellationToken);
-
-                var transaction = await transactionCoordinator.ExecuteAsync(
-                    new PackageTransactionRequest(request.Id, resolved.Version, correlationId),
-                    cancellationToken);
-
-                if (transaction.Succeeded)
-                {
-                    applied.Add(resolved);
-                }
-                else
-                {
-                    failed.Add(request.Id);
-                }
+                resolved.Add(pkg);
             }
             catch (Exception ex)
             {
                 failed.Add(request.Id);
                 await failureRecorder.RecordAsync(request.Id, "resolve", ex.Message, correlationId, cancellationToken);
+            }
+        }
+
+        return new PackageResolutionResult(resolved, failed);
+    }
+
+    public async Task<PackageApplyExecutionResult> ExecuteTransactionsAsync(
+        PackageResolutionResult resolutionResult,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(resolutionResult);
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+
+        var applied = new List<ResolvedPackage>();
+        var failed = new List<string>(resolutionResult.FailedPackageIds);
+
+        foreach (var resolved in resolutionResult.ResolvedPackages)
+        {
+            var transaction = await transactionCoordinator.ExecuteAsync(
+                new PackageTransactionRequest(resolved.Id, resolved.Version, correlationId),
+                cancellationToken);
+
+            if (transaction.Succeeded)
+            {
+                applied.Add(resolved);
+            }
+            else
+            {
+                failed.Add(resolved.Id);
             }
         }
 

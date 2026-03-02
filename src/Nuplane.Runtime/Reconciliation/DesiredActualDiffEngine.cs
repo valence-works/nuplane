@@ -49,7 +49,7 @@ public sealed class DesiredActualDiffEngine
             .GroupBy(pkg => pkg.Id, StringComparer.OrdinalIgnoreCase)
             .Select(group => group
                 .OrderByDescending(pkg => VersionKey.Create(pkg.Version))
-                .ThenBy(pkg => pkg.FeedName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(pkg => pkg.SourceName, StringComparer.OrdinalIgnoreCase)
                 .First())
             .OrderBy(pkg => pkg.Id, StringComparer.OrdinalIgnoreCase)
             .ToArray();
