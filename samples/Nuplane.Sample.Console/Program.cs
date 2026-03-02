@@ -1,2 +1,51 @@
-﻿// See https://aka.ms/new-console-template for more information
-Console.WriteLine("Hello, World!");
+﻿using Microsoft.Extensions.DependencyInjection;
+using Nuplane.Abstractions;
+using Nuplane.Hosting;
+using Nuplane.Runtime.Configuration;
+using Nuplane.Store.State;
+
+var services = new ServiceCollection();
+
+services.AddNuplaneRuntime(
+	configureSourceTrust: trust =>
+	{
+		trust.AllowedSourceNames.Add("NuGet.Main");
+		trust.AllowedPackageIds.Add("Nuplane.Sample.Plugin");
+	},
+	configureReconciliation: reconciliation =>
+	{
+		reconciliation.PollInterval = TimeSpan.FromSeconds(30);
+		reconciliation.MaxRetryAttempts = 3;
+	},
+	configureFeedResolution: feedResolution =>
+	{
+		feedResolution.PolicyMode = FeedResolutionPolicyMode.Fallback;
+		feedResolution.StopOnFirstSuccessfulFeed = true;
+	},
+	configureFeedTrustPolicy: trustPolicy =>
+	{
+		trustPolicy.DefaultRestrictedValidatorRequired = true;
+		trustPolicy.RequireOverrideReason = true;
+	},
+	configureLockFile: lockFile =>
+	{
+		lockFile.Mode = LockFileMode.Enforce;
+		lockFile.Path = "state/nuplane.lock.json";
+		lockFile.FailOnHashMismatch = true;
+	},
+	configureCleanupPolicy: cleanup =>
+	{
+		cleanup.RetainLastNVersions = 3;
+		cleanup.RetainYoungerThanDays = 14;
+		cleanup.Mode = CleanupExecutionMode.Automatic;
+	},
+	configureFeeds: feeds =>
+	{
+		feeds.Add(new FeedDefinition(
+			Name: "NuGet.Main",
+			ServiceIndex: new Uri("https://api.nuget.org/v3/index.json"),
+			TrustLevel: FeedTrustLevel.Trusted,
+			Credentials: "secrets://nuget/main"));
+	});
+
+Console.WriteLine("Nuplane Sample Console configured for Phase 2 governance options.");

@@ -1,3 +1,5 @@
+using Nuplane.Runtime.Reconciliation;
+
 namespace Nuplane.Runtime.Observability;
 
 public sealed record ReconciliationLogEntry(
@@ -50,6 +52,69 @@ public sealed class ReconciliationLogger
             new Dictionary<string, object?>
             {
                 ["callback"] = callbackName
+            }));
+    }
+
+    public void LogFeedDecision(FeedResolutionDecision decision)
+    {
+        ArgumentNullException.ThrowIfNull(decision);
+
+        entries.Add(new ReconciliationLogEntry(
+            DateTimeOffset.UtcNow,
+            decision.CorrelationId,
+            "reconciliation.feed.decision",
+            decision.DecisionPath,
+            new Dictionary<string, object?>
+            {
+                ["packageId"] = decision.PackageId,
+                ["requestedFeed"] = decision.RequestedFeed,
+                ["selectedFeed"] = decision.SelectedFeed,
+                ["selectedVersion"] = decision.SelectedVersion,
+                ["feedUnavailable"] = decision.FeedUnavailable,
+                ["failureReason"] = decision.FailureReason,
+                ["candidateFeeds"] = string.Join(",", decision.CandidateFeeds)
+            }));
+    }
+
+    public void LogTrustPolicyOutcome(string correlationId, string packageId, FeedTrustPolicyOutcome outcome)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentNullException.ThrowIfNull(outcome);
+
+        entries.Add(new ReconciliationLogEntry(
+            DateTimeOffset.UtcNow,
+            correlationId,
+            "reconciliation.trust.outcome",
+            outcome.ReasonCode,
+            new Dictionary<string, object?>
+            {
+                ["packageId"] = packageId,
+                ["trustLevel"] = outcome.TrustLevel.ToString(),
+                ["allowed"] = outcome.Allowed,
+                ["overrideScope"] = outcome.OverrideScope.ToString(),
+                ["overrideReason"] = outcome.OverrideReason
+            }));
+    }
+
+    public void LogLockOutcome(string correlationId, string packageId, LockFileEvaluationResult outcome)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentNullException.ThrowIfNull(outcome);
+
+        entries.Add(new ReconciliationLogEntry(
+            DateTimeOffset.UtcNow,
+            correlationId,
+            "reconciliation.lock.outcome",
+            outcome.ReasonCode,
+            new Dictionary<string, object?>
+            {
+                ["packageId"] = packageId,
+                ["allowed"] = outcome.Allowed,
+                ["expectedHash"] = outcome.ExpectedHash,
+                ["effectiveVersion"] = outcome.EffectivePackage?.Version,
+                ["effectiveFeed"] = outcome.EffectivePackage?.FeedName
             }));
     }
 }

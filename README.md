@@ -135,6 +135,24 @@ options.Desired.FromNupkgDirectory("drop-folder");
 Dropping a `.nupkg` into the folder adds it.
 Removing the file removes it.
 
+## ⚙️ Phase 2 Operator Guidance
+
+Use these conventions when enabling advanced feed governance:
+
+- Configure deterministic feed priorities and keep names stable across environments.
+- Set trust explicitly per feed: `Trusted`, `Restricted`, or `Untrusted`.
+- Use untrusted overrides only with scoped intent (`package` or `feed-rule`) and always provide an operator reason.
+- Enable strict outage handling only when you want impacted packages to fail fast while unrelated packages continue.
+
+### Lock-file conventions
+
+- Recommended lock path: `./state/nuplane.lock.json` (outside source-controlled app code paths).
+- Commit lock files only for reproducibility workflows where environment parity is required.
+- Use `generate` mode to refresh lock entries from a known-good cycle.
+- Use `enforce` mode to hold package versions/feed selection stable under feed drift.
+- Use `strict` mode to fail packages missing lock entries and to block hash mismatches.
+- Rotate lock files intentionally and treat lock updates as auditable operational changes.
+
 ---
 
 ## 🛡 Integrity & Trust

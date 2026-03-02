@@ -7,7 +7,8 @@ namespace Nuplane.Runtime.Reconciliation;
 
 public sealed record PackageResolutionResult(
     IReadOnlyList<ResolvedPackage> ResolvedPackages,
-    IReadOnlyList<string> FailedPackageIds);
+    IReadOnlyList<string> FailedPackageIds,
+    IReadOnlyList<FeedResolutionDecision> FeedDecisions);
 
 public sealed record PackageApplyExecutionResult(
     IReadOnlyList<ResolvedPackage> AppliedPackages,
@@ -42,6 +43,7 @@ public sealed class PackageApplyExecutor
 
         var resolved = new List<ResolvedPackage>();
         var failed = new List<string>();
+        var decisions = new List<FeedResolutionDecision>();
 
         foreach (var request in desiredRequests)
         {
@@ -51,15 +53,28 @@ public sealed class PackageApplyExecutor
                     ct => packageResolver.ResolveAsync(request, ct),
                     cancellationToken);
                 resolved.Add(pkg);
+
+                if (packageResolver is MultiFeedPackageResolver multiFeedResolver &&
+                    multiFeedResolver.TryGetDecision(request.Id, out var decision))
+                {
+                    decisions.Add(decision with { CorrelationId = correlationId });
+                }
             }
             catch (Exception ex)
             {
                 failed.Add(request.Id);
-                await failureRecorder.RecordAsync(request.Id, "resolve", ex.Message, correlationId, cancellationToken);
+                var stage = ex is FeedUnavailableException ? "resolve-feed-unavailable" : "resolve";
+                await failureRecorder.RecordAsync(request.Id, stage, ex.Message, correlationId, cancellationToken);
+
+                if (packageResolver is MultiFeedPackageResolver multiFeedResolver &&
+                    multiFeedResolver.TryGetDecision(request.Id, out var decision))
+                {
+                    decisions.Add(decision with { CorrelationId = correlationId });
+                }
             }
         }
 
-        return new PackageResolutionResult(resolved, failed);
+        return new PackageResolutionResult(resolved, failed, decisions);
     }
 
     public async Task<PackageApplyExecutionResult> ExecuteTransactionsAsync(

@@ -38,6 +38,14 @@ public sealed class ReconciliationService
     private readonly ReconciliationLogger logger;
     private readonly ReconciliationMetrics metrics;
     private readonly FailureRecorder failureRecorder;
+    private readonly FeedResolutionOptions feedResolutionOptions;
+    private readonly FeedTrustPolicyOptions feedTrustPolicyOptions;
+    private readonly LockFileOptions lockFileOptions;
+    private readonly CleanupPolicyOptions cleanupPolicyOptions;
+    private readonly FeedTrustPolicyEvaluator feedTrustPolicyEvaluator;
+    private readonly LockFileCoordinator lockFileCoordinator;
+    private readonly DryRunPlanner dryRunPlanner;
+    private readonly PackageCleanupService packageCleanupService;
     private readonly SemaphoreSlim cycleLock = new(1, 1);
     private int inFlight;
 
@@ -61,7 +69,10 @@ public sealed class ReconciliationService
             new ObserverNotifier(Array.Empty<INuplaneObserver>()),
             new ReconciliationHealthEvaluator(),
             new ReconciliationLogger(),
-            new ReconciliationMetrics(new ReconciliationTelemetry()))
+                new ReconciliationMetrics(new ReconciliationTelemetry()),
+                new FeedResolutionOptions(),
+                new FeedTrustPolicyOptions(),
+                new LockFileOptions())
     {
     }
 
@@ -77,7 +88,11 @@ public sealed class ReconciliationService
         ObserverNotifier observerNotifier,
         ReconciliationHealthEvaluator healthEvaluator,
         ReconciliationLogger? logger = null,
-        ReconciliationMetrics? metrics = null)
+        ReconciliationMetrics? metrics = null,
+        FeedResolutionOptions? feedResolutionOptions = null,
+        FeedTrustPolicyOptions? feedTrustPolicyOptions = null,
+        LockFileOptions? lockFileOptions = null,
+        CleanupPolicyOptions? cleanupPolicyOptions = null)
     {
         this.sources = sources?.ToArray() ?? throw new ArgumentNullException(nameof(sources));
         this.sourceTrustOptions = sourceTrustOptions ?? throw new ArgumentNullException(nameof(sourceTrustOptions));
@@ -90,6 +105,14 @@ public sealed class ReconciliationService
         this.healthEvaluator = healthEvaluator ?? throw new ArgumentNullException(nameof(healthEvaluator));
         this.logger = logger ?? new ReconciliationLogger();
         this.metrics = metrics ?? new ReconciliationMetrics(new ReconciliationTelemetry());
+        this.feedResolutionOptions = feedResolutionOptions ?? new FeedResolutionOptions();
+        this.feedTrustPolicyOptions = feedTrustPolicyOptions ?? new FeedTrustPolicyOptions();
+        this.lockFileOptions = lockFileOptions ?? new LockFileOptions();
+        this.cleanupPolicyOptions = cleanupPolicyOptions ?? new CleanupPolicyOptions();
+        this.feedTrustPolicyEvaluator = new FeedTrustPolicyEvaluator();
+        this.lockFileCoordinator = new LockFileCoordinator(new LockFileStore(this.lockFileOptions.Path), this.lockFileOptions);
+        this.dryRunPlanner = new DryRunPlanner(this.desiredActualDiffEngine);
+        this.packageCleanupService = new PackageCleanupService(new CleanupPolicyEvaluator());
 
         var failureRecorder = new FailureRecorder(this.storeRegistry);
         this.failureRecorder = failureRecorder;
@@ -130,9 +153,80 @@ public sealed class ReconciliationService
 
             // Phase 1: Resolve packages to determine the desired target versions
             var resolutionResult = await applyExecutor.ResolveAsync(allowlistedRequests, correlationId, cancellationToken);
+            foreach (var decision in resolutionResult.FeedDecisions)
+            {
+                logger.LogFeedDecision(decision);
+            }
+
+            var requestByPackageId = allowlistedRequests
+                .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
+
+            var trustFailures = 0;
+            var lockFailures = 0;
+            var trustAndLockPassed = new List<ResolvedPackage>();
+            var combinedFailures = new HashSet<string>(resolutionResult.FailedPackageIds, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var resolved in resolutionResult.ResolvedPackages)
+            {
+                var request = requestByPackageId.TryGetValue(resolved.Id, out var matchedRequest)
+                    ? matchedRequest
+                    : new PackageRequest(resolved.Id, resolved.Version, resolved.FeedName, PackageUpdatePolicy.Exact, resolved.SourceName);
+
+                var feed = feedResolutionOptions.Feeds.FirstOrDefault(x =>
+                    string.Equals(x.Name, resolved.FeedName, StringComparison.OrdinalIgnoreCase))
+                    ?? new FeedDefinition(resolved.FeedName, new Uri("https://unknown.invalid"), FeedTrustLevel.Untrusted);
+
+                var trustOutcome = feedTrustPolicyEvaluator.Evaluate(
+                    request,
+                    feed,
+                    feedTrustPolicyOptions,
+                    validatorPassed: true);
+
+                logger.LogTrustPolicyOutcome(correlationId, resolved.Id, trustOutcome);
+
+                if (!trustOutcome.Allowed)
+                {
+                    trustFailures++;
+                    combinedFailures.Add(resolved.Id);
+                    await failureRecorder.RecordAsync(resolved.Id, "trust", trustOutcome.ReasonCode, correlationId, cancellationToken);
+                    continue;
+                }
+
+                var lockOutcome = await retryPolicy.ExecuteForLockEvaluationAsync(
+                    ct => lockFileCoordinator.EvaluateAsync(resolved, ct),
+                    cancellationToken);
+
+                logger.LogLockOutcome(correlationId, resolved.Id, lockOutcome);
+
+                if (!lockOutcome.Allowed || lockOutcome.EffectivePackage is null)
+                {
+                    lockFailures++;
+                    combinedFailures.Add(resolved.Id);
+                    await failureRecorder.RecordAsync(resolved.Id, "lock", lockOutcome.ReasonCode, correlationId, cancellationToken);
+                    continue;
+                }
+
+                trustAndLockPassed.Add(lockOutcome.EffectivePackage);
+            }
+
+            resolutionResult = new PackageResolutionResult(
+                trustAndLockPassed,
+                combinedFailures.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray(),
+                resolutionResult.FeedDecisions);
 
             // Compute diff against pre-apply active state so Changing fires with accurate data
             var activeVersions = await storeRegistry.GetActiveVersionsAsync(cancellationToken);
+
+            var dryRunPlan = await retryPolicy.ExecuteForDryRunAsync(
+                ct => dryRunPlanner.BuildPlanAsync(
+                    resolutionResult.ResolvedPackages,
+                    activeVersions,
+                    correlationId,
+                    ct),
+                cancellationToken);
+            metrics.RecordDryRun(dryRunPlan);
+
             var changeSet = desiredActualDiffEngine.Compute(resolutionResult.ResolvedPackages, activeVersions, correlationId, DateTimeOffset.UtcNow);
 
             // Emit Changing before transactions begin (observer contract)
@@ -176,13 +270,32 @@ public sealed class ReconciliationService
 
             await storeRegistry.PersistActiveVersionsAsync(mergedActive, appliedVersions, correlationId, cancellationToken);
 
+            var storeState = await storeRegistry.GetStateAsync(cancellationToken);
+            var cleanupInputs = mergedActive
+                .Select(x => new PackageVersionEntry(
+                    x.Key,
+                    x.Value,
+                    storeState.UpdatedAt,
+                    IsLastKnownGood: storeState.LastKnownGoodById.TryGetValue(x.Key, out var lkgVersion) &&
+                        string.Equals(lkgVersion, x.Value, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+
+            var cleanupResults = await packageCleanupService.ExecuteAutomaticAsync(
+                cleanupInputs,
+                cleanupPolicyOptions,
+                correlationId,
+                triggerOnSuccessfulReconciliation: applyResult.FailedPackageIds.Count == 0,
+                cancellationToken);
+            metrics.RecordCleanup(cleanupResults);
+            var cleanupFailures = cleanupResults.Count(x => x.Action == CleanupAction.Blocked);
+
             if (changeSet.Added.Count + changeSet.Updated.Count + changeSet.Removed.Count > 0)
             {
                 await changeEventPublisher.PublishChangedAsync(changeSet, cancellationToken);
             }
 
             var hadFailures = readResult.UsedFallback || applyResult.FailedPackageIds.Count > 0;
-            var isDegraded = healthEvaluator.Evaluate(hadFailures, readResult.AllSourcesFresh);
+            var isDegraded = healthEvaluator.Evaluate(hadFailures, readResult.AllSourcesFresh, trustFailures, lockFailures, cleanupFailures);
             var cycleDuration = DateTimeOffset.UtcNow - cycleStartedAt;
             metrics.RecordCycle(changeSet, applyResult.FailedPackageIds.Count, cycleDuration, mergedActive.Count);
             logger.LogCycleCompleted(correlationId, isDegraded, applyResult.FailedPackageIds.Count);
@@ -202,12 +315,22 @@ public sealed class ReconciliationService
         var usedFallback = false;
         var freshReads = 0;
 
-        foreach (var source in sources.OrderBy(x => x.GetType().FullName ?? x.GetType().Name, StringComparer.Ordinal))
+        var orderedSources = sources
+            .Select(source => new
+            {
+                Source = source,
+                SourceName = source.GetType().FullName ?? source.GetType().Name
+            })
+            .OrderBy(x => x.SourceName, StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (var entry in orderedSources)
         {
-            var sourceName = source.GetType().FullName ?? source.GetType().Name;
+            var source = entry.Source;
+            var sourceName = entry.SourceName;
             try
             {
-                var fromSource = await retryPolicy.ExecuteAsync(ct => source.GetDesiredAsync(ct), cancellationToken);
+                var fromSource = await retryPolicy.ExecuteForFeedResolutionAsync(ct => source.GetDesiredAsync(ct), cancellationToken);
                 await snapshotCache.SaveAsync(sourceName, fromSource, cancellationToken);
                 requests.AddRange(fromSource);
                 freshReads++;
@@ -232,7 +355,7 @@ public sealed class ReconciliationService
         return new DesiredReadResult(
             requests,
             usedFallback,
-            AllSourcesFresh: freshReads == sources.Count);
+                AllSourcesFresh: freshReads == orderedSources.Length);
     }
 
     private sealed record DesiredReadResult(

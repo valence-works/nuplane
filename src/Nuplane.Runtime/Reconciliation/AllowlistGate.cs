@@ -11,16 +11,23 @@ public sealed class AllowlistGate
         ArgumentNullException.ThrowIfNull(trustOptions);
 
         var accepted = new List<PackageRequest>(requests.Count);
+        var errors = new List<Exception>();
+
         foreach (var request in requests)
         {
             if (!trustOptions.IsPackageAllowed(request.Id))
             {
-                throw new InvalidOperationException($"Package '{request.Id}' is not allowlisted.");
+                errors.Add(new InvalidOperationException($"Package '{request.Id}' is not allowlisted."));
+                continue;
             }
 
             accepted.Add(request);
         }
 
+        if (errors.Count > 0)
+        {
+            throw new AggregateException("One or more package requests are not allowlisted.", errors);
+        }
         return accepted;
     }
 }

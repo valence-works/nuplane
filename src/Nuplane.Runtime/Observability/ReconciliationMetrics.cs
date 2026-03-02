@@ -1,4 +1,6 @@
 using Nuplane.Abstractions;
+using Nuplane.Runtime.Reconciliation;
+using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Observability;
 
@@ -19,5 +21,20 @@ public sealed class ReconciliationMetrics
         telemetry.FailedPackagesCounter.Add(failedPackages);
         telemetry.TransactionDurationMilliseconds.Record(duration.TotalMilliseconds);
         telemetry.SetActivePackages(activePackages);
+    }
+
+    public void RecordDryRun(DryRunPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        var total = plan.ChangeSet.Added.Count + plan.ChangeSet.Updated.Count + plan.ChangeSet.Removed.Count;
+        telemetry.DryRunPlannedPackagesCounter.Add(total);
+    }
+
+    public void RecordCleanup(IReadOnlyList<CleanupDecision> decisions)
+    {
+        ArgumentNullException.ThrowIfNull(decisions);
+        telemetry.CleanupDeletedCounter.Add(decisions.Count(x => x.Action == CleanupAction.Deleted));
+        telemetry.CleanupKeptCounter.Add(decisions.Count(x => x.Action == CleanupAction.Kept));
+        telemetry.CleanupFailedCounter.Add(decisions.Count(x => x.Action == CleanupAction.Blocked));
     }
 }

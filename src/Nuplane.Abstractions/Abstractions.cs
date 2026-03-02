@@ -8,7 +8,15 @@ namespace Nuplane.Abstractions;
 public enum FeedTrustLevel
 {
     Trusted,
-    Restricted
+    Restricted,
+    Untrusted
+}
+
+public enum FeedOverrideScope
+{
+    None,
+    Package,
+    FeedRule
 }
 
 public enum PackageUpdatePolicy
@@ -22,6 +30,23 @@ public sealed record FeedDefinition(
     Uri ServiceIndex,
     FeedTrustLevel TrustLevel,
     string? Credentials = null);
+
+public sealed record UntrustedFeedOverride(
+    FeedOverrideScope Scope,
+    string Target,
+    string Reason);
+
+public sealed record PackageLockEntry(
+    string Id,
+    string Version,
+    string Feed,
+    string Hash,
+    DateTimeOffset Timestamp);
+
+public sealed record PackageLockFile(
+    string SchemaVersion,
+    DateTimeOffset GeneratedAt,
+    IReadOnlyList<PackageLockEntry> Packages);
 
 public sealed record PackageRequest(
     string Id,
