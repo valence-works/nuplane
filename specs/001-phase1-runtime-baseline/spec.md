@@ -92,7 +92,7 @@ As an operator or host integrator, I can receive change notifications and operat
 - **FR-008**: System MUST support single-feed package retrieval for this phase.
 - **FR-009**: System MUST persist active-state metadata that survives process restart.
 - **FR-010**: System MUST emit package change notifications before and after applied change sets.
-- **FR-011**: System MUST allow only one active reconciliation cycle at a time; if a trigger occurs while a cycle is active, it MUST be skipped and logged with correlation metadata.
+- **FR-011**: System MUST allow only one active reconciliation cycle at a time; if a trigger occurs while a cycle is active, it MUST be skipped and logged with correlation metadata (see OSR-010 for safety posture).
 - **FR-012**: System MUST enforce a strict package ID allowlist for desired package inputs and MUST reject non-allowlisted package IDs before resolution.
 
 ### Operational & Safety Requirements *(mandatory)*
@@ -106,7 +106,7 @@ As an operator or host integrator, I can receive change notifications and operat
 - **OSR-007**: Credentials or secrets used for source access MUST be handled via secure runtime configuration and MUST NOT be committed to source control.
 - **OSR-008**: Test coverage MUST include unit tests for diffing and transaction behavior, regression tests for failure and LKG fallback, and boundary tests for runtime-store and runtime-source contracts.
 - **OSR-009**: If a desired source is unavailable during a cycle, the system MUST use that source’s last successful snapshot for reconciliation, continue processing, and report degraded health for the cycle.
-- **OSR-010**: Reconciliation execution MUST be single-flight; concurrent cycle execution is prohibited to prevent store/state races.
+- **OSR-010**: Reconciliation execution MUST be single-flight; concurrent cycle execution is prohibited to prevent store/state races (functional behavior defined in FR-011).
 - **OSR-011**: Health status MUST return from degraded to healthy only after a fully successful reconciliation cycle with fresh reads from all configured desired sources.
 
 ### Key Entities *(include if feature involves data)*
@@ -121,8 +121,8 @@ As an operator or host integrator, I can receive change notifications and operat
 
 ### Measurable Outcomes
 
-- **SC-001**: In test environments, at least 95% of detected desired-state changes are reconciled to active state within one configured poll interval.
+- **SC-001**: In acceptance tests with poll interval set to 60 seconds, at least 95% of detected desired-state changes are reconciled to active state within 60 seconds from detection timestamp.
 - **SC-002**: In failure-injection scenarios, 100% of failed package updates preserve the previously active last-known-good package version.
 - **SC-003**: In repeated-cycle tests with unchanged inputs, 100% of cycles produce no unintended package mutations.
-- **SC-004**: Operators can determine cycle outcome (success, partial failure, failure) and affected packages from emitted events and logs within 5 minutes of any reconciliation cycle.
+- **SC-004**: For any reconciliation cycle, operators can determine cycle outcome and affected packages within 5 minutes using emitted logs/events that include correlation identifier, cycle status, and package identifiers.
 - **SC-005**: For acceptance tests covering add, update, and remove flows, at least 95% of runs complete without manual recovery actions.
