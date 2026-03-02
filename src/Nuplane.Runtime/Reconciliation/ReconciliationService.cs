@@ -37,6 +37,7 @@ public sealed class ReconciliationService
     private readonly ReconciliationHealthEvaluator healthEvaluator;
     private readonly ReconciliationLogger logger;
     private readonly ReconciliationMetrics metrics;
+    private readonly FailureRecorder failureRecorder;
     private readonly SemaphoreSlim cycleLock = new(1, 1);
     private int inFlight;
 
@@ -91,6 +92,7 @@ public sealed class ReconciliationService
         this.metrics = metrics ?? new ReconciliationMetrics(new ReconciliationTelemetry());
 
         var failureRecorder = new FailureRecorder(this.storeRegistry);
+        this.failureRecorder = failureRecorder;
         var pointerSwitcher = new AtomicPointerSwitcher();
         var transactionCoordinator = new PackageTransactionCoordinator(pointerSwitcher, failureRecorder);
 
@@ -118,22 +120,29 @@ public sealed class ReconciliationService
             var correlationId = CorrelationContext.CreateNew();
             using var _ = CorrelationContext.BeginScope(correlationId);
 
-            var readResult = await ReadDesiredRequestsWithFallbackAsync(cancellationToken);
+            var readResult = await ReadDesiredRequestsWithFallbackAsync(correlationId, cancellationToken);
             var desiredRequests = await desiredStateAggregator.AggregateAsync(
                 [new StaticDesiredSource(readResult.Requests)],
                 sourceTrustOptions,
                 cancellationToken);
             var allowlistedRequests = allowlistGate.Enforce(desiredRequests, sourceTrustOptions);
             logger.LogCycleStarted(correlationId, allowlistedRequests.Count);
-            var applyResult = await applyExecutor.ExecuteAsync(allowlistedRequests, correlationId, cancellationToken);
 
+            // Phase 1: Resolve packages to determine the desired target versions
+            var resolutionResult = await applyExecutor.ResolveAsync(allowlistedRequests, correlationId, cancellationToken);
+
+            // Compute diff against pre-apply active state so Changing fires with accurate data
             var activeVersions = await storeRegistry.GetActiveVersionsAsync(cancellationToken);
-            var changeSet = desiredActualDiffEngine.Compute(applyResult.AppliedPackages, activeVersions, correlationId, DateTimeOffset.UtcNow);
+            var changeSet = desiredActualDiffEngine.Compute(resolutionResult.ResolvedPackages, activeVersions, correlationId, DateTimeOffset.UtcNow);
 
+            // Emit Changing before transactions begin (observer contract)
             if (changeSet.Added.Count + changeSet.Updated.Count + changeSet.Removed.Count > 0)
             {
                 await changeEventPublisher.PublishChangingAsync(changeSet, cancellationToken);
             }
+
+            // Phase 2: Execute transactions for resolved packages
+            var applyResult = await applyExecutor.ExecuteTransactionsAsync(resolutionResult, correlationId, cancellationToken);
 
             foreach (var failedPackage in applyResult.FailedPackageIds)
             {
@@ -144,8 +153,28 @@ public sealed class ReconciliationService
                     cancellationToken);
             }
 
-            var nextActive = desiredActualDiffEngine.BuildNextActiveVersions(applyResult.AppliedPackages);
-            await storeRegistry.PersistActiveVersionsAsync(nextActive, correlationId, cancellationToken);
+            // Merge applied packages into existing active state: preserve active versions for packages that failed
+            var appliedVersions = desiredActualDiffEngine.BuildNextActiveVersions(applyResult.AppliedPackages);
+            var mergedActive = new Dictionary<string, string>(activeVersions, StringComparer.OrdinalIgnoreCase);
+            foreach (var (id, version) in appliedVersions)
+            {
+                mergedActive[id] = version;
+            }
+
+            // Only remove packages that are truly no longer desired (not in the request list at all)
+            // Resolution/transaction failures should preserve the previous active version
+            var requestedIds = new HashSet<string>(
+                allowlistedRequests.Select(r => r.Id),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var activeId in activeVersions.Keys)
+            {
+                if (!requestedIds.Contains(activeId))
+                {
+                    mergedActive.Remove(activeId);
+                }
+            }
+
+            await storeRegistry.PersistActiveVersionsAsync(mergedActive, appliedVersions, correlationId, cancellationToken);
 
             if (changeSet.Added.Count + changeSet.Updated.Count + changeSet.Removed.Count > 0)
             {
@@ -155,7 +184,7 @@ public sealed class ReconciliationService
             var hadFailures = readResult.UsedFallback || applyResult.FailedPackageIds.Count > 0;
             var isDegraded = healthEvaluator.Evaluate(hadFailures, readResult.AllSourcesFresh);
             var cycleDuration = DateTimeOffset.UtcNow - cycleStartedAt;
-            metrics.RecordCycle(changeSet, applyResult.FailedPackageIds.Count, cycleDuration, nextActive.Count);
+            metrics.RecordCycle(changeSet, applyResult.FailedPackageIds.Count, cycleDuration, mergedActive.Count);
             logger.LogCycleCompleted(correlationId, isDegraded, applyResult.FailedPackageIds.Count);
 
             return new ReconciliationRunResult(false, changeSet, applyResult.FailedPackageIds, isDegraded);
@@ -167,7 +196,7 @@ public sealed class ReconciliationService
         }
     }
 
-    private async Task<DesiredReadResult> ReadDesiredRequestsWithFallbackAsync(CancellationToken cancellationToken)
+    private async Task<DesiredReadResult> ReadDesiredRequestsWithFallbackAsync(string correlationId, CancellationToken cancellationToken)
     {
         var requests = new List<PackageRequest>();
         var usedFallback = false;
@@ -183,12 +212,19 @@ public sealed class ReconciliationService
                 requests.AddRange(fromSource);
                 freshReads++;
             }
-            catch
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
             {
                 usedFallback = true;
-                if (snapshotCache.TryGetSnapshot(sourceName, out var cached))
+                await failureRecorder.RecordAsync(sourceName, "source-read", ex.Message, correlationId, cancellationToken);
+
+                var fallback = await snapshotCache.LoadSnapshotAsync(sourceName, cancellationToken);
+                if (fallback is not null)
                 {
-                    requests.AddRange(cached);
+                    requests.AddRange(fallback);
                 }
             }
         }

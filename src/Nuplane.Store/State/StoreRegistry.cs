@@ -8,6 +8,7 @@ public sealed class StoreRegistry
     private readonly StoreStateSerializer serializer;
     private readonly string? stateFilePath;
     private StoreStateRecord currentState;
+    private bool loaded;
 
     public StoreRegistry(StoreStateSerializer serializer, string? stateFilePath)
     {
@@ -18,36 +19,61 @@ public sealed class StoreRegistry
 
     public async Task<IReadOnlyDictionary<string, string>> GetActiveVersionsAsync(CancellationToken cancellationToken)
     {
-        await EnsureLoadedAsync(cancellationToken);
-        return new ReadOnlyDictionary<string, string>(
-            new Dictionary<string, string>(currentState.ActiveVersionById, StringComparer.OrdinalIgnoreCase));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            await EnsureLoadedUnderLockAsync(cancellationToken);
+            return new ReadOnlyDictionary<string, string>(
+                new Dictionary<string, string>(currentState.ActiveVersionById, StringComparer.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     public async Task<StoreStateRecord> GetStateAsync(CancellationToken cancellationToken)
     {
-        await EnsureLoadedAsync(cancellationToken);
-        return new StoreStateRecord(
-            new Dictionary<string, string>(currentState.ActiveVersionById, StringComparer.OrdinalIgnoreCase),
-            new Dictionary<string, string>(currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase),
-            new Dictionary<string, FailureRecord>(currentState.LastFailureById, StringComparer.OrdinalIgnoreCase),
-            new Dictionary<string, SourceSnapshotRef>(currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
-            currentState.UpdatedAt);
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            await EnsureLoadedUnderLockAsync(cancellationToken);
+            return new StoreStateRecord(
+                new Dictionary<string, string>(currentState.ActiveVersionById, StringComparer.OrdinalIgnoreCase),
+                new Dictionary<string, string>(currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase),
+                new Dictionary<string, FailureRecord>(currentState.LastFailureById, StringComparer.OrdinalIgnoreCase),
+                new Dictionary<string, SourceSnapshotRef>(currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
+                currentState.UpdatedAt);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     public async Task PersistActiveVersionsAsync(
         IReadOnlyDictionary<string, string> activeVersions,
+        IReadOnlyDictionary<string, string> successfullyApplied,
         string correlationId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(activeVersions);
+        ArgumentNullException.ThrowIfNull(successfullyApplied);
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
         await gate.WaitAsync(cancellationToken);
         try
         {
+            await EnsureLoadedUnderLockAsync(cancellationToken);
+
             var now = DateTimeOffset.UtcNow;
             var nextActive = new Dictionary<string, string>(activeVersions, StringComparer.OrdinalIgnoreCase);
-            var nextLkg = new Dictionary<string, string>(activeVersions, StringComparer.OrdinalIgnoreCase);
+            var nextLkg = new Dictionary<string, string>(currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var (id, version) in successfullyApplied)
+            {
+                nextLkg[id] = version;
+            }
 
             currentState = currentState with
             {
@@ -82,6 +108,8 @@ public sealed class StoreRegistry
         await gate.WaitAsync(cancellationToken);
         try
         {
+            await EnsureLoadedUnderLockAsync(cancellationToken);
+
             var nextFailures = new Dictionary<string, FailureRecord>(currentState.LastFailureById, StringComparer.OrdinalIgnoreCase)
             {
                 [packageId] = new FailureRecord(packageId, stage, message, DateTimeOffset.UtcNow, correlationId)
@@ -115,6 +143,8 @@ public sealed class StoreRegistry
         await gate.WaitAsync(cancellationToken);
         try
         {
+            await EnsureLoadedUnderLockAsync(cancellationToken);
+
             var nextSnapshots = new Dictionary<string, SourceSnapshotRef>(currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase)
             {
                 [sourceName] = snapshot
@@ -137,21 +167,14 @@ public sealed class StoreRegistry
         }
     }
 
-    private async Task EnsureLoadedAsync(CancellationToken cancellationToken)
+    private async Task EnsureLoadedUnderLockAsync(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(stateFilePath))
+        if (string.IsNullOrWhiteSpace(stateFilePath) || loaded)
         {
             return;
         }
 
-        await gate.WaitAsync(cancellationToken);
-        try
-        {
-            currentState = await serializer.LoadAsync(stateFilePath, cancellationToken);
-        }
-        finally
-        {
-            gate.Release();
-        }
+        currentState = await serializer.LoadAsync(stateFilePath, cancellationToken);
+        loaded = true;
     }
 }

@@ -32,15 +32,15 @@ public sealed class DesiredActualDiffEngineTests
     }
 
     [Fact]
-    public void Compute_ResolvesDuplicateDesiredPackageByHighestVersionThenFeedName()
+    public void Compute_ResolvesDuplicateDesiredPackageByHighestVersionThenSourceName()
     {
         var engine = new DesiredActualDiffEngine();
         var timestamp = DateTimeOffset.UtcNow;
         var desired = new[]
         {
-            new ResolvedPackage("alpha", "1.2.0", "feed-z", "/x/alpha-z", timestamp),
-            new ResolvedPackage("alpha", "1.3.0", "feed-y", "/x/alpha-y", timestamp),
-            new ResolvedPackage("alpha", "1.3.0", "feed-a", "/x/alpha-a", timestamp)
+            new ResolvedPackage("alpha", "1.2.0", "feed-z", "/x/alpha-z", timestamp, SourceName: "source-z"),
+            new ResolvedPackage("alpha", "1.3.0", "feed-y", "/x/alpha-y", timestamp, SourceName: "source-y"),
+            new ResolvedPackage("alpha", "1.3.0", "feed-a", "/x/alpha-a", timestamp, SourceName: "source-a")
         };
 
         var changeSet = engine.Compute(
@@ -52,6 +52,6 @@ public sealed class DesiredActualDiffEngineTests
         var selected = Assert.Single(changeSet.Added);
         Assert.Equal("alpha", selected.Id);
         Assert.Equal("1.3.0", selected.Version);
-        Assert.Equal("feed-a", selected.FeedName);
+        Assert.Equal("source-a", selected.SourceName);
     }
 }

@@ -20,7 +20,8 @@ public sealed class NuGetPackageResolver : INuGetPackageResolver
             selectedVersion,
             request.FeedName ?? "default",
             $"/packages/{request.Id}/{selectedVersion}",
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            request.SourceName);
 
         return Task.FromResult(resolved);
     }

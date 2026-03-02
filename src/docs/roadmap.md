@@ -275,14 +275,6 @@ Implementation foundation:
 
 ---
 
-Perfect. You’re at the stage where Phase 2–4 need to stop being bullet points and start being **architecturally concrete** so Spec Kit can extract meaningful feature specs.
-
-Below is a **fully expanded Phase 2, Phase 3, and Phase 4** section that is structured in a way Spec Kit can split into individual specs cleanly.
-
-You can drop this directly into your roadmap file replacing the existing Phase 2–4 sections.
-
----
-
 # Phase 2 — Advanced Feeds & Governance
 
 ## Strategic Goal
