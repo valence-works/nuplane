@@ -4,6 +4,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+	ProjectSection(SolutionItems) = preProject
+		src\Directory.Build.props = src\Directory.Build.props
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.Abstractions", "src\Nuplane.Abstractions\Nuplane.Abstractions.csproj", "{923D9AB1-A683-42D6-8A33-D92C25620865}"
 EndProject
@@ -26,6 +29,9 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.Sample.AspNetCore", "samples\Nuplane.Sample.AspNetCore\Nuplane.Sample.AspNetCore.csproj", "{E968D565-AF2F-443E-9A34-CDB6E62D9650}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{0C88DD14-F956-CE84-757C-A364CCF449FC}"
+	ProjectSection(SolutionItems) = preProject
+		test\Directory.Build.props = test\Directory.Build.props
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.Runtime.Tests", "test\Nuplane.Runtime.Tests\Nuplane.Runtime.Tests.csproj", "{557FDAD4-FF88-47C1-9514-BCA0E7B07550}"
 EndProject
@@ -34,6 +40,14 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.NuGet.Tests", "test\Nuplane.NuGet.Tests\Nuplane.NuGet.Tests.csproj", "{984AE888-FCD2-47B6-BBBD-E5F2B82BE599}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.Integration.Tests", "test\Nuplane.Integration.Tests\Nuplane.Integration.Tests.csproj", "{FE7E8A54-77F4-4E0A-97D8-98173A34A7EC}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "solution", "solution", "{B8C2A4B2-5750-4DAF-BF88-9D5CED940F14}"
+	ProjectSection(SolutionItems) = preProject
+		Directory.Build.props = Directory.Build.props
+		Directory.Packages.props = Directory.Packages.props
+		NuGet.config = NuGet.config
+		README.md = README.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
