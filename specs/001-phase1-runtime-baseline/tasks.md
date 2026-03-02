@@ -72,21 +72,21 @@
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T024 [P] [US2] Add unit tests for transaction failures preserving LKG pointer in test/Nuplane.Store.Tests/Transactions/PackageTransactionCoordinatorTests.cs
-- [ ] T025 [P] [US2] Add integration tests for desired-source outage snapshot fallback in test/Nuplane.Integration.Tests/Reconciliation/SourceOutageFallbackTests.cs
-- [ ] T026 [US2] Add regression test for partial-cycle failure isolation in test/Nuplane.Integration.Tests/Reconciliation/PartialFailureIsolationTests.cs
-- [ ] T027 [P] [US2] Add unit tests for retry max-attempt and backoff progression in test/Nuplane.Runtime.Tests/Reconciliation/ReconciliationRetryPolicyTests.cs
-- [ ] T028 [US2] Add integration test for retry exhaustion stop-condition in test/Nuplane.Integration.Tests/Reconciliation/RetryExhaustionTests.cs
+- [x] T024 [P] [US2] Add unit tests for transaction failures preserving LKG pointer in test/Nuplane.Store.Tests/Transactions/PackageTransactionCoordinatorTests.cs
+- [x] T025 [P] [US2] Add integration tests for desired-source outage snapshot fallback in test/Nuplane.Integration.Tests/Reconciliation/SourceOutageFallbackTests.cs
+- [x] T026 [US2] Add regression test for partial-cycle failure isolation in test/Nuplane.Integration.Tests/Reconciliation/PartialFailureIsolationTests.cs
+- [x] T027 [P] [US2] Add unit tests for retry max-attempt and backoff progression in test/Nuplane.Runtime.Tests/Reconciliation/ReconciliationRetryPolicyTests.cs
+- [x] T028 [US2] Add integration test for retry exhaustion stop-condition in test/Nuplane.Integration.Tests/Reconciliation/RetryExhaustionTests.cs
 
 ### Implementation for User Story 2
 
-- [ ] T029 [P] [US2] Implement immutable publish + atomic current-pointer switch in src/Nuplane.Store/Activation/AtomicPointerSwitcher.cs
-- [ ] T030 [P] [US2] Implement failure recording (stage/message/timestamp/correlation) in src/Nuplane.Store/State/FailureRecorder.cs
-- [ ] T031 [P] [US2] Implement desired-source snapshot cache for fallback reads in src/Nuplane.Runtime/Sources/DesiredSourceSnapshotCache.cs
-- [ ] T032 [US2] Integrate source-unavailable fallback path in src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
-- [ ] T033 [US2] Implement bounded retry/backoff policy in src/Nuplane.Runtime/Reconciliation/ReconciliationRetryPolicy.cs
-- [ ] T034 [US2] Enforce strict package allowlist gate before resolution in src/Nuplane.Runtime/Reconciliation/AllowlistGate.cs
-- [ ] T035 [US2] Implement per-package apply executor to continue unaffected packages in src/Nuplane.Runtime/Reconciliation/PackageApplyExecutor.cs
+- [x] T029 [P] [US2] Implement immutable publish + atomic current-pointer switch in src/Nuplane.Store/Activation/AtomicPointerSwitcher.cs
+- [x] T030 [P] [US2] Implement failure recording (stage/message/timestamp/correlation) in src/Nuplane.Store/State/FailureRecorder.cs
+- [x] T031 [P] [US2] Implement desired-source snapshot cache for fallback reads in src/Nuplane.Runtime/Sources/DesiredSourceSnapshotCache.cs
+- [x] T032 [US2] Integrate source-unavailable fallback path in src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
+- [x] T033 [US2] Implement bounded retry/backoff policy in src/Nuplane.Runtime/Reconciliation/ReconciliationRetryPolicy.cs
+- [x] T034 [US2] Enforce strict package allowlist gate before resolution in src/Nuplane.Runtime/Reconciliation/AllowlistGate.cs
+- [x] T035 [US2] Implement per-package apply executor to continue unaffected packages in src/Nuplane.Runtime/Reconciliation/PackageApplyExecutor.cs
 
 **Checkpoint**: User Stories 1 and 2 are independently functional and testable.
 

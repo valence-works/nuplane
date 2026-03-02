@@ -23,6 +23,17 @@ public sealed class StoreRegistry
             new Dictionary<string, string>(currentState.ActiveVersionById, StringComparer.OrdinalIgnoreCase));
     }
 
+    public async Task<StoreStateRecord> GetStateAsync(CancellationToken cancellationToken)
+    {
+        await EnsureLoadedAsync(cancellationToken);
+        return new StoreStateRecord(
+            new Dictionary<string, string>(currentState.ActiveVersionById, StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, string>(currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, FailureRecord>(currentState.LastFailureById, StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, SourceSnapshotRef>(currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
+            currentState.UpdatedAt);
+    }
+
     public async Task PersistActiveVersionsAsync(
         IReadOnlyDictionary<string, string> activeVersions,
         string correlationId,
@@ -43,6 +54,76 @@ public sealed class StoreRegistry
                 ActiveVersionById = nextActive,
                 LastKnownGoodById = nextLkg,
                 UpdatedAt = now
+            };
+
+            if (!string.IsNullOrWhiteSpace(stateFilePath))
+            {
+                await serializer.SaveAsync(stateFilePath, currentState, cancellationToken);
+            }
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public async Task PersistFailureAsync(
+        string packageId,
+        string stage,
+        string message,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(stage);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var nextFailures = new Dictionary<string, FailureRecord>(currentState.LastFailureById, StringComparer.OrdinalIgnoreCase)
+            {
+                [packageId] = new FailureRecord(packageId, stage, message, DateTimeOffset.UtcNow, correlationId)
+            };
+
+            currentState = currentState with
+            {
+                LastFailureById = nextFailures,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+
+            if (!string.IsNullOrWhiteSpace(stateFilePath))
+            {
+                await serializer.SaveAsync(stateFilePath, currentState, cancellationToken);
+            }
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public async Task PersistSourceSnapshotAsync(
+        string sourceName,
+        SourceSnapshotRef snapshot,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceName);
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var nextSnapshots = new Dictionary<string, SourceSnapshotRef>(currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase)
+            {
+                [sourceName] = snapshot
+            };
+
+            currentState = currentState with
+            {
+                LastSuccessfulSourceSnapshots = nextSnapshots,
+                UpdatedAt = DateTimeOffset.UtcNow
             };
 
             if (!string.IsNullOrWhiteSpace(stateFilePath))
