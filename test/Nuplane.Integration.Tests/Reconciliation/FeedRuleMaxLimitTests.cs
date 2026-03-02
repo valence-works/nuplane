@@ -1,4 +1,3 @@
-using Nuplane.Abstractions;
 using Nuplane.NuGet.Resolution;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation;

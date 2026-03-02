@@ -1,5 +1,3 @@
-using System;
-
 namespace Nuplane.Runtime.Configuration;
 
 public sealed class ReconciliationOptions

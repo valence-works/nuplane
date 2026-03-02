@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Nuplane.Runtime.Configuration;
 
 public sealed class SourceTrustOptions

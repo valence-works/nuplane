@@ -1,6 +1,3 @@
-using System;
-using System.Threading;
-
 namespace Nuplane.Runtime.Observability;
 
 public static class CorrelationContext
