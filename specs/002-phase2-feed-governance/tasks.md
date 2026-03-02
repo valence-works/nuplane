@@ -135,6 +135,8 @@
 - [X] T056 [P] Finalize feature verification scenarios in specs/002-phase2-feed-governance/quickstart.md
 - [X] T057 [P] Add/verify secret handling checks for new feed credentials references in build/validate-secrets.sh
 - [X] T058 Execute quickstart validation run (targeted + full regression) and capture evidence/summary in specs/002-phase2-feed-governance/quickstart-validation.md
+- [X] T059 [US2] Add reconciliation regression test for undefined feed-definition compatibility fallback in test/Nuplane.Integration.Tests/Reconciliation/DesiredStateReconciliationTests.cs
+- [X] T060 [US2] Add reconciliation boundary regression test for explicitly configured untrusted feed fail-closed behavior in test/Nuplane.Integration.Tests/Reconciliation/DesiredStateReconciliationTests.cs
 
 ---
 

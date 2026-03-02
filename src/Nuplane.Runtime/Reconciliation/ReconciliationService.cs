@@ -174,7 +174,7 @@ public sealed class ReconciliationService
 
                 var feed = feedResolutionOptions.Feeds.FirstOrDefault(x =>
                     string.Equals(x.Name, resolved.FeedName, StringComparison.OrdinalIgnoreCase))
-                    ?? new FeedDefinition(resolved.FeedName, new("https://unknown.invalid"), FeedTrustLevel.Untrusted);
+                    ?? new FeedDefinition(resolved.FeedName, new("https://unknown.invalid"), FeedTrustLevel.Trusted);
 
                 var trustOutcome = feedTrustPolicyEvaluator.Evaluate(
                     request,

@@ -14,6 +14,7 @@
 - Q: When feeds have equal priority and contain the same matching version, what tie-breaker is used? → A: Select the feed with lexicographically smallest feed name.
 - Q: For untrusted feeds, how should explicit override be scoped? → A: Per-package (or per-feed-rule) override with required reason.
 - Q: In dry-run mode, should trust validators and lock-file checks execute? → A: Yes, run all checks and report outcomes; do not mutate state.
+- Q: When a resolved feed has no explicit feed definition in configuration, what trust level applies? → A: Use legacy-compatible permissive fallback for undefined feeds; fail-closed trust enforcement applies to explicitly configured feed trust levels.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -69,6 +70,7 @@ As an operator, I can use feed-based rule discovery with hard limits and dry-run
 - Lock file hash does not match downloaded artifact; package activation is rejected and active state remains unchanged.
 - Feed-rule discovery attempts to exceed configured max package count; system blocks additional candidates and records limit enforcement.
 - Untrusted feed is configured but no explicit override exists; packages from that feed are rejected before activation.
+- Package resolves from an undefined feed (not present in configured feed definitions); runtime uses compatibility fallback behavior while still enforcing explicit trust policy for configured feeds.
 - Manual-only cleanup mode is configured; no automated deletion occurs after reconciliation.
 
 ## Requirements *(mandatory)*
@@ -87,6 +89,7 @@ As an operator, I can use feed-based rule discovery with hard limits and dry-run
 - **FR-003**: System MUST resolve package candidates deterministically across eligible feeds for identical inputs; when priority and version are equal, tie-break by lexicographically smallest feed name.
 - **FR-004**: System MUST support strict and fallback feed outage behavior based on configured policy; in strict mode, packages that require an unavailable feed MUST fail explicitly while unrelated packages continue; in fallback mode, candidate feeds MUST be tried in deterministic ascending priority order and package resolution MUST fail explicitly when no eligible feed remains.
 - **FR-005**: System MUST enforce feed trust policy levels (`Trusted`, `Restricted`, `Untrusted`) during package eligibility and activation decisions.
+- **FR-005a**: System MUST apply fail-closed trust enforcement to explicitly configured feed trust levels; when a feed definition is absent, runtime MUST use a documented compatibility fallback behavior.
 - **FR-006**: System MUST require restricted-feed packages to pass configured validator checks before activation; baseline validation MUST include integrity hash validation and publisher/signature allowlist verification when metadata is available, and validator errors MUST fail closed.
 - **FR-007**: System MUST prevent untrusted-feed package activation unless an explicit per-package or per-feed-rule override is configured with a required operator-provided reason.
 - **FR-008**: System MUST support lock-file generate mode that records resolved package identity, source, integrity hash, and timestamp.
