@@ -11,10 +11,10 @@
 
 **Purpose**: Initialize solution-wide build/dependency baseline for all Nuplane modules.
 
-- [ ] T001 Create solution/project skeleton and references in nuplane.sln
-- [ ] T002 Configure central package management baselines in Directory.Packages.props
-- [ ] T003 [P] Configure shared build/test settings in Directory.Build.props
-- [ ] T004 [P] Configure feed/test package source behavior in NuGet.config
+- [x] T001 Create solution/project skeleton and references in nuplane.sln
+- [x] T002 Configure central package management baselines in Directory.Packages.props
+- [x] T003 [P] Configure shared build/test settings in Directory.Build.props
+- [x] T004 [P] Configure feed/test package source behavior in NuGet.config
 
 ---
 
@@ -24,14 +24,14 @@
 
 **⚠️ CRITICAL**: No user story work starts before this phase is complete.
 
-- [ ] T005 Define core abstractions models/interfaces in src/Nuplane.Abstractions/Abstractions.cs
-- [ ] T006 [P] Implement persisted store state schema and serializer in src/Nuplane.Store/State/StoreStateSerializer.cs
-- [ ] T007 [P] Implement trusted-source and secret-reference options in src/Nuplane.Runtime/Configuration/SourceTrustOptions.cs
-- [ ] T008 Define reconciliation policy options (interval/single-flight/retry) in src/Nuplane.Runtime/Configuration/ReconciliationOptions.cs
-- [ ] T009 Define transactional stage contract and LKG boundary in src/Nuplane.Store/Transactions/PackageTransactionCoordinator.cs
-- [ ] T010 Define baseline observability primitives (logs/metrics/health) in src/Nuplane.Runtime/Observability/ReconciliationTelemetry.cs
-- [ ] T011 Define correlation-id context propagation in src/Nuplane.Runtime/Observability/CorrelationContext.cs
-- [ ] T012 Define secret-handling verification gate (no committed credentials) in build/secret-scan-policy.md
+- [x] T005 Define core abstractions models/interfaces in src/Nuplane.Abstractions/Abstractions.cs
+- [x] T006 [P] Implement persisted store state schema and serializer in src/Nuplane.Store/State/StoreStateSerializer.cs
+- [x] T007 [P] Implement trusted-source and secret-reference options in src/Nuplane.Runtime/Configuration/SourceTrustOptions.cs
+- [x] T008 Define reconciliation policy options (interval/single-flight/retry) in src/Nuplane.Runtime/Configuration/ReconciliationOptions.cs
+- [x] T009 Define transactional stage contract and LKG boundary in src/Nuplane.Store/Transactions/PackageTransactionCoordinator.cs
+- [x] T010 Define baseline observability primitives (logs/metrics/health) in src/Nuplane.Runtime/Observability/ReconciliationTelemetry.cs
+- [x] T011 Define correlation-id context propagation in src/Nuplane.Runtime/Observability/CorrelationContext.cs
+- [x] T012 Define secret-handling verification gate (no committed credentials) in build/secret-scan-policy.md
 
 **Checkpoint**: Foundation complete; user stories can proceed.
 
