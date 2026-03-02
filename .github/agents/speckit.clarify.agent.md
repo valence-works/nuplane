@@ -31,6 +31,15 @@ Execution steps:
 
 2. Load the current spec file. Perform a structured ambiguity & coverage scan using this taxonomy. For each category, mark status: Clear / Partial / Missing. Produce an internal coverage map used for prioritization (do not output raw map unless no questions will be asked).
 
+   Constitution priority overlay (MUST-level):
+   - Deterministic reconciliation expectations
+   - Transactional safety with rollback/LKG semantics where state mutates
+   - Trusted source/integrity and secret-handling constraints
+   - Observability signals (logs/metrics/health)
+   - Test and contract discipline for changed behavior
+
+   Treat unresolved ambiguity in these areas as higher impact than cosmetic or low-risk omissions.
+
    Functional Scope & Behavior:
    - Core user goals & success criteria
    - Explicit out-of-scope declarations
@@ -95,6 +104,8 @@ Execution steps:
     - Exclude questions already answered, trivial stylistic preferences, or plan-level execution details (unless blocking correctness).
     - Favor clarifications that reduce downstream rework risk or prevent misaligned acceptance tests.
     - If more than 5 categories remain unresolved, select the top 5 by (Impact * Uncertainty) heuristic.
+      - Prioritize unresolved constitution-principle ambiguities ahead of other categories when both
+         are candidates.
 
 4. Sequential questioning loop (interactive):
     - Present EXACTLY ONE question at a time.

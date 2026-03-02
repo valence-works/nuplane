@@ -79,6 +79,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - spec.md: Feature requirements and scope
    - plan.md (if exists): Technical details, dependencies
    - tasks.md (if exists): Implementation tasks
+   - `.specify/memory/constitution.md`: MUST-level policy gates for quality alignment
 
    **Context Loading Strategy**:
    - Load only necessary portions relevant to active focus areas (avoid full-file dumping)
@@ -113,6 +114,15 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **Non-Functional Requirements** (Performance, Security, Accessibility, etc. - are they specified?)
    - **Dependencies & Assumptions** (Are they documented and validated?)
    - **Ambiguities & Conflicts** (What needs clarification?)
+   - **Constitution Gate Alignment** (Do requirements explicitly satisfy project MUST-level gates?)
+
+   **Constitution Gate Coverage (mandatory in checklist content)**:
+   Include checklist items validating requirement-level coverage for:
+   - Deterministic reconciliation behavior where applicable
+   - Transactional safety and rollback/LKG semantics where state mutation exists
+   - Trusted source/integrity constraints and secret-handling expectations
+   - Observability requirements (logs, metrics, health)
+   - Test and contract discipline requirements for changed behavior
 
    **HOW TO WRITE CHECKLIST ITEMS - "Unit Tests for English"**:
 

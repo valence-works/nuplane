@@ -69,6 +69,13 @@ Given that feature description, do this:
    - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot")
 
 3. Load `.specify/templates/spec-template.md` to understand required sections.
+    - Load `.specify/memory/constitution.md` and enforce these principle gates in requirements where
+       applicable:
+       - I. Deterministic Reconciliation
+       - II. Transactional Store Safety
+       - III. Source & Supply Chain Integrity
+       - IV. Observability & Operability
+       - V. Test & Contract Discipline
 
 4. Follow this execution flow:
 
@@ -88,6 +95,9 @@ Given that feature description, do this:
        If no clear user flow: ERROR "Cannot determine user scenarios"
     5. Generate Functional Requirements
        Each requirement must be testable
+       Include constitution-aligned operational/safety requirements for deterministic behavior,
+       rollback/LKG or transactional safety, trusted source/integrity constraints, observability
+       expectations, and required test/contract coverage when relevant to the feature.
        Use reasonable defaults for unspecified details (document assumptions in Assumptions section)
     6. Define Success Criteria
        Create measurable, technology-agnostic outcomes

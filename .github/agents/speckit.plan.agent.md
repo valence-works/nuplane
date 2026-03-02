@@ -26,7 +26,12 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 3. **Execute plan workflow**: Follow the structure in IMPL_PLAN template to:
    - Fill Technical Context (mark unknowns as "NEEDS CLARIFICATION")
-   - Fill Constitution Check section from constitution
+   - Fill Constitution Check section from constitution using explicit gates:
+     - Deterministic reconciliation (idempotency + bounded retries/backoff)
+     - Transactional store safety (stage/validate/publish/atomic switch + LKG/rollback)
+     - Source & supply chain integrity (trusted sources, validation, secret handling)
+     - Observability & operability (correlation IDs, structured logs, metrics, health)
+     - Test & contract discipline (required unit + boundary tests; regression tests for fixes)
    - Evaluate gates (ERROR if violations unjustified)
    - Phase 0: Generate research.md (resolve all NEEDS CLARIFICATION)
    - Phase 1: Generate data-model.md, contracts/, quickstart.md

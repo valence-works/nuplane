@@ -48,6 +48,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 3. Load and analyze the implementation context:
    - **REQUIRED**: Read tasks.md for the complete task list and execution plan
    - **REQUIRED**: Read plan.md for tech stack, architecture, and file structure
+   - **REQUIRED**: Read `.specify/memory/constitution.md` and enforce its MUST-level principles
    - **IF EXISTS**: Read data-model.md for entities and relationships
    - **IF EXISTS**: Read contracts/ for API specifications and test requirements
    - **IF EXISTS**: Read research.md for technical decisions and constraints
@@ -130,6 +131,12 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Check that implemented features match the original specification
    - Validate that tests pass and coverage meets requirements
    - Confirm the implementation follows the technical plan
+   - Confirm implementation is constitution-aligned:
+     - Deterministic reconciliation behavior where applicable
+     - Transactional safety with rollback/LKG semantics where applicable
+     - Trusted source/integrity and secret-handling constraints
+     - Observability signals (logs/metrics/health) defined by plan
+     - Test and contract discipline requirements are satisfied
    - Report final status with summary of completed work
 
 Note: This command assumes a complete task breakdown exists in tasks.md. If tasks are incomplete or missing, suggest running `/speckit.tasks` first to regenerate the task list.
