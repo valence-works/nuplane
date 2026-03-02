@@ -73,7 +73,7 @@ public sealed class PackageTransactionCoordinator
             }
 
             if (request.BlockedByTrustPolicy)
-            {
+                : nameof(PackageTransactionStage);
                 return await BlockByPolicyAsync(
                     request,
                     currentPointer,

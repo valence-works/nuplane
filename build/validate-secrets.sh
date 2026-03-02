@@ -24,12 +24,25 @@ patterns=(
   'sk_live_[A-Za-z0-9]+'
 )
 
+feed_credential_pattern='Credentials[[:space:]]*[:=][[:space:]]*"[^"]+"'
+
 allowlist=(
   'build/secret-scan-policy.md'
   '.gitignore'
   'README.md'
   'specs/'
 )
+
+is_allowlisted_path() {
+  local file_path="$1"
+  for allowed in "${allowlist[@]}"; do
+    if [[ "$file_path" == *"$allowed"* ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
 
 failures=0
 
@@ -38,20 +51,27 @@ for pattern in "${patterns[@]}"; do
     [[ -z "$match" ]] && continue
 
     file_path="${match%%:*}"
-    skip=false
-    for allowed in "${allowlist[@]}"; do
-      if [[ "$file_path" == *"$allowed"* ]]; then
-        skip=true
-        break
-      fi
-    done
-
-    if [[ "$skip" == false ]]; then
+    if ! is_allowlisted_path "$file_path"; then
       echo "[validate-secrets] potential secret: $match"
       failures=$((failures + 1))
     fi
   done < <(grep -RInE "${pattern}" . "${exclude_args[@]}" || true)
 done
+
+while IFS= read -r match; do
+  [[ -z "$match" ]] && continue
+
+  file_path="${match%%:*}"
+  line_payload="${match#*:}"
+  line_payload="${line_payload#*:}"
+  secret_ref="$(printf '%s' "$line_payload" | sed -E 's/.*Credentials[[:space:]]*[:=][[:space:]]*"([^"]+)".*/\1/')"
+  secret_ref="$(printf '%s' "$secret_ref" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+
+  if ! is_allowlisted_path "$file_path" && [[ ! "$secret_ref" =~ ^[Ss][Ee][Cc][Rr][Ee][Tt][Ss]:// ]]; then
+    echo "[validate-secrets] feed credential reference must use secrets:// in $match"
+    failures=$((failures + 1))
+  fi
+done < <(grep -RInE "${feed_credential_pattern}" . "${exclude_args[@]}" || true)
 
 if [[ $failures -gt 0 ]]; then
   echo "[validate-secrets] FAILED with $failures potential credential findings."

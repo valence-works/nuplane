@@ -1,11 +1,12 @@
 using Nuplane.Abstractions;
 using Nuplane.Store.State;
+using System.Collections.Concurrent;
 
 namespace Nuplane.Runtime.Sources;
 
 public sealed class DesiredSourceSnapshotCache
 {
-    private readonly Dictionary<string, IReadOnlyList<PackageRequest>> snapshots = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, IReadOnlyList<PackageRequest>> snapshots = new(StringComparer.OrdinalIgnoreCase);
     private readonly StoreRegistry storeRegistry;
 
     public DesiredSourceSnapshotCache(StoreRegistry storeRegistry)

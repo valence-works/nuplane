@@ -132,9 +132,9 @@
 
 **Purpose**: Final consistency, documentation, and end-to-end validation across stories.
 
-- [ ] T056 [P] Finalize feature verification scenarios in specs/002-phase2-feed-governance/quickstart.md
-- [ ] T057 [P] Add/verify secret handling checks for new feed credentials references in build/validate-secrets.sh
-- [ ] T058 Execute quickstart validation run (targeted + full regression) and capture evidence/summary in specs/002-phase2-feed-governance/quickstart-validation.md
+- [X] T056 [P] Finalize feature verification scenarios in specs/002-phase2-feed-governance/quickstart.md
+- [X] T057 [P] Add/verify secret handling checks for new feed credentials references in build/validate-secrets.sh
+- [X] T058 Execute quickstart validation run (targeted + full regression) and capture evidence/summary in specs/002-phase2-feed-governance/quickstart-validation.md
 
 ---
 

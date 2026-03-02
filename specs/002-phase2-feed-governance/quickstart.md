@@ -18,11 +18,16 @@ Validate deterministic multi-feed behavior, trust/override governance, lock-file
 Run from repository root:
 
 ```bash
-dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj --filter "FullyQualifiedName~MultiFeedResolution|FullyQualifiedName~FeedTrustPolicy"
-dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj --filter "FullyQualifiedName~MultiFeedDeterminism|FullyQualifiedName~StrictFeedOutageIsolation"
-dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj --filter "FullyQualifiedName~LockFileEnforceMode|FullyQualifiedName~LockFileStrictMode|FullyQualifiedName~LockHashMismatch"
-dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj --filter "FullyQualifiedName~FeedRuleDryRun|FullyQualifiedName~FeedRuleMaxLimit"
-dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj --filter "FullyQualifiedName~CleanupRetentionPolicy|FullyQualifiedName~LkgProtection"
+dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
+	--filter "FullyQualifiedName~MultiFeedResolutionPolicyTests|FullyQualifiedName~MultiFeedTieBreakRegressionTests|FullyQualifiedName~MultiFeedRetryPolicyTests|FullyQualifiedName~FeedTrustPolicyEvaluatorTests|FullyQualifiedName~FeedRuleDesiredSourceTests"
+dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+	--filter "FullyQualifiedName~FeedResolutionContractTests|FullyQualifiedName~StrictFeedOutageIsolationTests|FullyQualifiedName~MultiFeedRetryExhaustionTests"
+dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+	--filter "FullyQualifiedName~TrustPolicyContractTests|FullyQualifiedName~LockFileEnforceModeTests|FullyQualifiedName~LockFileStrictModeTests"
+dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+	--filter "FullyQualifiedName~FeedRuleDryRunParityTests|FullyQualifiedName~FeedRuleMaxLimitTests|FullyQualifiedName~CleanupExecutionModeTests"
+dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+	--filter "FullyQualifiedName~CleanupPolicyUnionRetentionTests|FullyQualifiedName~CleanupLkgProtectionRegressionTests|FullyQualifiedName~LockHashMismatchLkgRegressionTests"
 dotnet test nuplane.sln
 ./build/validate-secrets.sh
 ```
@@ -75,3 +80,4 @@ dotnet test nuplane.sln
 - All targeted test commands pass with 0 failed tests.
 - Full solution test pass (`dotnet test nuplane.sln`).
 - Secret validation script reports no committed credentials.
+- Any feed credential declaration in code/config uses secret references (`secrets://...`) and no inline credential values are committed.

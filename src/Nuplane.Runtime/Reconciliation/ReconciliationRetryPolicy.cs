@@ -23,8 +23,12 @@ public sealed class ReconciliationRetryPolicy
             {
                 return await operation(cancellationToken);
             }
-            catch when (attempt <= options.MaxRetryAttempts)
+            catch
             {
+                if (attempt >= options.MaxRetryAttempts)
+                {
+                    throw;
+                }
                 var backoff = GetBackoffForRetry(options, attempt);
                 await Task.Delay(backoff, cancellationToken);
             }

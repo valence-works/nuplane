@@ -311,9 +311,19 @@ public sealed class ReconciliationService
         var usedFallback = false;
         var freshReads = 0;
 
-        foreach (var source in sources.OrderBy(x => x.GetType().FullName ?? x.GetType().Name, StringComparer.Ordinal))
+        var orderedSources = sources
+            .Select(source => new
+            {
+                Source = source,
+                SourceName = source.GetType().FullName ?? source.GetType().Name
+            })
+            .OrderBy(x => x.SourceName, StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (var entry in orderedSources)
         {
-            var sourceName = source.GetType().FullName ?? source.GetType().Name;
+            var source = entry.Source;
+            var sourceName = entry.SourceName;
             try
             {
                 var fromSource = await retryPolicy.ExecuteForFeedResolutionAsync(ct => source.GetDesiredAsync(ct), cancellationToken);
@@ -341,7 +351,7 @@ public sealed class ReconciliationService
         return new DesiredReadResult(
             requests,
             usedFallback,
-            AllSourcesFresh: freshReads == sources.Count);
+                AllSourcesFresh: freshReads == orderedSources.Length);
     }
 
     private sealed record DesiredReadResult(
