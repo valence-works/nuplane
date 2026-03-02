@@ -1,5 +1,7 @@
 # Nuplane
 
+![Nuplane](./branding/nuplane-banner.jpg)
+
 Nuplane is a lightweight runtime control plane for NuGet packages.
 
 It enables .NET applications to resolve, synchronize, and manage NuGet packages at runtime with deterministic storage, transactional updates, and host-neutral change events.
