@@ -100,18 +100,18 @@
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T036 [P] [US3] Add contract tests for observer callback ordering/correlation in test/Nuplane.Integration.Tests/Contracts/ObserverContractTests.cs
-- [ ] T037 [P] [US3] Add integration tests for degraded-to-healthy fresh-read rule in test/Nuplane.Integration.Tests/Observability/HealthRecoveryTests.cs
-- [ ] T038 [US3] Add regression test for observer-exception isolation in test/Nuplane.Runtime.Tests/Observers/ObserverIsolationTests.cs
+- [x] T036 [P] [US3] Add contract tests for observer callback ordering/correlation in test/Nuplane.Integration.Tests/Contracts/ObserverContractTests.cs
+- [x] T037 [P] [US3] Add integration tests for degraded-to-healthy fresh-read rule in test/Nuplane.Integration.Tests/Observability/HealthRecoveryTests.cs
+- [x] T038 [US3] Add regression test for observer-exception isolation in test/Nuplane.Runtime.Tests/Observers/ObserverIsolationTests.cs
 
 ### Implementation for User Story 3
 
-- [ ] T039 [P] [US3] Implement pre/post change-set event publisher in src/Nuplane.Runtime/Events/PackageChangeEventPublisher.cs
-- [ ] T040 [P] [US3] Implement package-failure observer notifications in src/Nuplane.Runtime/Events/ObserverNotifier.cs
-- [ ] T041 [US3] Implement structured reconciliation logging with correlation IDs in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
-- [ ] T042 [US3] Implement runtime metrics (active/add/update/remove/duration/failures) in src/Nuplane.Runtime/Observability/ReconciliationMetrics.cs
-- [ ] T043 [US3] Implement health evaluator with fresh-read recovery rule in src/Nuplane.Runtime/Health/ReconciliationHealthEvaluator.cs
-- [ ] T044 [US3] Wire health checks and observer plumbing in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
+- [x] T039 [P] [US3] Implement pre/post change-set event publisher in src/Nuplane.Runtime/Events/PackageChangeEventPublisher.cs
+- [x] T040 [P] [US3] Implement package-failure observer notifications in src/Nuplane.Runtime/Events/ObserverNotifier.cs
+- [x] T041 [US3] Implement structured reconciliation logging with correlation IDs in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
+- [x] T042 [US3] Implement runtime metrics (active/add/update/remove/duration/failures) in src/Nuplane.Runtime/Observability/ReconciliationMetrics.cs
+- [x] T043 [US3] Implement health evaluator with fresh-read recovery rule in src/Nuplane.Runtime/Health/ReconciliationHealthEvaluator.cs
+- [x] T044 [US3] Wire health checks and observer plumbing in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
 
 **Checkpoint**: All user stories are independently functional and testable.
 
