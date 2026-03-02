@@ -39,15 +39,15 @@ public sealed class CleanupPolicyEvaluator
 
         if (options.ProtectLastKnownGood && isLastKnownGood)
         {
-            return new CleanupDecision(packageId, version, CleanupAction.Kept, "protected-lkg", now, correlationId);
+            return new(packageId, version, CleanupAction.Kept, "protected-lkg", now, correlationId);
         }
 
         var ageInDays = Math.Max(0, (int)(now - capturedAt).TotalDays);
         if (options.IsRetainedByUnion(versionOrdinalFromNewest, ageInDays))
         {
-            return new CleanupDecision(packageId, version, CleanupAction.Kept, "retained-policy", now, correlationId);
+            return new(packageId, version, CleanupAction.Kept, "retained-policy", now, correlationId);
         }
 
-        return new CleanupDecision(packageId, version, CleanupAction.Deleted, "eligible-for-deletion", now, correlationId);
+        return new(packageId, version, CleanupAction.Deleted, "eligible-for-deletion", now, correlationId);
     }
 }

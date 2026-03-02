@@ -21,11 +21,11 @@ public sealed class RetryExhaustionTests
 
         var service = new ReconciliationService(
             new[] { source },
-            new SourceTrustOptions { AllowedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
+            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
+            new(),
+            new(),
             new NuGetPackageResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
+            new(new(), stateFilePath: null),
             options);
 
         var result = await service.TriggerManualAsync(CancellationToken.None);

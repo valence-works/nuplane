@@ -64,14 +64,14 @@ public sealed class ReconciliationService
             packageResolver,
             storeRegistry,
             reconciliationOptions,
-            new PackageChangeEventPublisher(Array.Empty<INuplaneObserver>()),
-            new ObserverNotifier(Array.Empty<INuplaneObserver>()),
-            new ReconciliationHealthEvaluator(),
-            new ReconciliationLogger(),
-                new ReconciliationMetrics(new ReconciliationTelemetry()),
-                new FeedResolutionOptions(),
-                new FeedTrustPolicyOptions(),
-                new LockFileOptions())
+            new(Array.Empty<INuplaneObserver>()),
+            new(Array.Empty<INuplaneObserver>()),
+            new(),
+            new(),
+                new(new()),
+                new(),
+                new(),
+                new())
     {
     }
 
@@ -103,25 +103,25 @@ public sealed class ReconciliationService
         this.observerNotifier = observerNotifier ?? throw new ArgumentNullException(nameof(observerNotifier));
         this.healthEvaluator = healthEvaluator ?? throw new ArgumentNullException(nameof(healthEvaluator));
         this.logger = logger ?? new ReconciliationLogger();
-        this.metrics = metrics ?? new ReconciliationMetrics(new ReconciliationTelemetry());
+        this.metrics = metrics ?? new ReconciliationMetrics(new());
         this.feedResolutionOptions = feedResolutionOptions ?? new FeedResolutionOptions();
         this.feedTrustPolicyOptions = feedTrustPolicyOptions ?? new FeedTrustPolicyOptions();
         this.lockFileOptions = lockFileOptions ?? new LockFileOptions();
         this.cleanupPolicyOptions = cleanupPolicyOptions ?? new CleanupPolicyOptions();
-        this.feedTrustPolicyEvaluator = new FeedTrustPolicyEvaluator();
-        this.lockFileCoordinator = new LockFileCoordinator(new LockFileStore(this.lockFileOptions.Path), this.lockFileOptions);
-        this.dryRunPlanner = new DryRunPlanner(this.desiredActualDiffEngine);
-        this.packageCleanupService = new PackageCleanupService(new CleanupPolicyEvaluator());
+        feedTrustPolicyEvaluator = new();
+        lockFileCoordinator = new(new(this.lockFileOptions.Path), this.lockFileOptions);
+        dryRunPlanner = new(this.desiredActualDiffEngine);
+        packageCleanupService = new(new());
 
         var failureRecorder = new FailureRecorder(this.storeRegistry);
         this.failureRecorder = failureRecorder;
         var pointerSwitcher = new AtomicPointerSwitcher();
         var transactionCoordinator = new PackageTransactionCoordinator(pointerSwitcher, failureRecorder);
 
-        retryPolicy = new ReconciliationRetryPolicy(this.reconciliationOptions);
-        snapshotCache = new DesiredSourceSnapshotCache(this.storeRegistry);
-        allowlistGate = new AllowlistGate();
-        applyExecutor = new PackageApplyExecutor(
+        retryPolicy = new(this.reconciliationOptions);
+        snapshotCache = new(this.storeRegistry);
+        allowlistGate = new();
+        applyExecutor = new(
             packageResolver ?? throw new ArgumentNullException(nameof(packageResolver)),
             transactionCoordinator,
             retryPolicy,
@@ -132,7 +132,7 @@ public sealed class ReconciliationService
     {
         if (reconciliationOptions.EnableSingleFlight && Interlocked.CompareExchange(ref inFlight, 1, 0) != 0)
         {
-            return new ReconciliationRunResult(true, EmptyChangeSet, Array.Empty<string>(), IsDegraded: false);
+            return new(true, EmptyChangeSet, Array.Empty<string>(), IsDegraded: false);
         }
 
         await cycleLock.WaitAsync(cancellationToken);
@@ -170,11 +170,11 @@ public sealed class ReconciliationService
             {
                 var request = requestByPackageId.TryGetValue(resolved.Id, out var matchedRequest)
                     ? matchedRequest
-                    : new PackageRequest(resolved.Id, resolved.Version, resolved.FeedName, PackageUpdatePolicy.Exact, resolved.SourceName);
+                    : new(resolved.Id, resolved.Version, resolved.FeedName, PackageUpdatePolicy.Exact, resolved.SourceName);
 
                 var feed = feedResolutionOptions.Feeds.FirstOrDefault(x =>
                     string.Equals(x.Name, resolved.FeedName, StringComparison.OrdinalIgnoreCase))
-                    ?? new FeedDefinition(resolved.FeedName, new Uri("https://unknown.invalid"), FeedTrustLevel.Untrusted);
+                    ?? new FeedDefinition(resolved.FeedName, new("https://unknown.invalid"), FeedTrustLevel.Untrusted);
 
                 var trustOutcome = feedTrustPolicyEvaluator.Evaluate(
                     request,
@@ -209,7 +209,7 @@ public sealed class ReconciliationService
                 trustAndLockPassed.Add(lockOutcome.EffectivePackage);
             }
 
-            resolutionResult = new PackageResolutionResult(
+            resolutionResult = new(
                 trustAndLockPassed,
                 combinedFailures.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray(),
                 resolutionResult.FeedDecisions);
@@ -299,7 +299,7 @@ public sealed class ReconciliationService
             metrics.RecordCycle(changeSet, applyResult.FailedPackageIds.Count, cycleDuration, mergedActive.Count);
             logger.LogCycleCompleted(correlationId, isDegraded, applyResult.FailedPackageIds.Count);
 
-            return new ReconciliationRunResult(false, changeSet, applyResult.FailedPackageIds, isDegraded);
+            return new(false, changeSet, applyResult.FailedPackageIds, isDegraded);
         }
         finally
         {
@@ -351,7 +351,7 @@ public sealed class ReconciliationService
             }
         }
 
-        return new DesiredReadResult(
+        return new(
             requests,
             usedFallback,
                 AllSourcesFresh: freshReads == orderedSources.Length);

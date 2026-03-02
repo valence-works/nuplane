@@ -38,11 +38,11 @@ public sealed class StoreRegistry
         try
         {
             await EnsureLoadedUnderLockAsync(cancellationToken);
-            return new StoreStateRecord(
-                new Dictionary<string, string>(currentState.ActiveVersionById, StringComparer.OrdinalIgnoreCase),
-                new Dictionary<string, string>(currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase),
-                new Dictionary<string, FailureRecord>(currentState.LastFailureById, StringComparer.OrdinalIgnoreCase),
-                new Dictionary<string, SourceSnapshotRef>(currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
+            return new(
+                new(currentState.ActiveVersionById, StringComparer.OrdinalIgnoreCase),
+                new(currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase),
+                new(currentState.LastFailureById, StringComparer.OrdinalIgnoreCase),
+                new(currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
                 currentState.UpdatedAt);
         }
         finally
@@ -112,7 +112,7 @@ public sealed class StoreRegistry
 
             var nextFailures = new Dictionary<string, FailureRecord>(currentState.LastFailureById, StringComparer.OrdinalIgnoreCase)
             {
-                [packageId] = new FailureRecord(packageId, stage, message, DateTimeOffset.UtcNow, correlationId)
+                [packageId] = new(packageId, stage, message, DateTimeOffset.UtcNow, correlationId)
             };
 
             currentState = currentState with

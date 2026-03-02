@@ -18,7 +18,7 @@ public sealed class DirectoryNupkgDesiredSource : IDesiredPackageSource
         this.sourceName = string.IsNullOrWhiteSpace(sourceName) ? throw new ArgumentException("Source name is required.", nameof(sourceName)) : sourceName;
         this.directoryPath = string.IsNullOrWhiteSpace(directoryPath) ? throw new ArgumentException("Directory path is required.", nameof(directoryPath)) : directoryPath;
         this.allowlistedPackageIds = allowlistedPackageIds is null
-            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            ? new(StringComparer.OrdinalIgnoreCase)
             : new HashSet<string>(allowlistedPackageIds, StringComparer.OrdinalIgnoreCase);
     }
 
@@ -33,7 +33,7 @@ public sealed class DirectoryNupkgDesiredSource : IDesiredPackageSource
 
         var requests = System.IO.Directory
             .EnumerateFiles(directoryPath, "*.nupkg", SearchOption.TopDirectoryOnly)
-            .Select(System.IO.Path.GetFileNameWithoutExtension)
+            .Select(Path.GetFileNameWithoutExtension)
             .Where(fileName => !string.IsNullOrWhiteSpace(fileName))
             .Select(fileName => CreateRequest(fileName!))
             .Where(request => request is not null)
@@ -60,6 +60,6 @@ public sealed class DirectoryNupkgDesiredSource : IDesiredPackageSource
         }
 
         var version = match.Groups["version"].Value;
-        return new PackageRequest(packageId, version, null, PackageUpdatePolicy.Exact, sourceName);
+        return new(packageId, version, null, PackageUpdatePolicy.Exact, sourceName);
     }
 }

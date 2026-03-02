@@ -10,9 +10,9 @@ public sealed class MultiFeedResolutionPolicyTests
     public void OrderCandidates_WithoutExplicitFeed_UsesPriorityThenFeedName()
     {
         var options = new FeedResolutionOptions();
-        options.Feeds.Add(new FeedDefinition("z-feed", new Uri("https://z.example/v3/index.json"), FeedTrustLevel.Trusted));
-        options.Feeds.Add(new FeedDefinition("a-feed", new Uri("https://a.example/v3/index.json"), FeedTrustLevel.Trusted));
-        options.Feeds.Add(new FeedDefinition("m-feed", new Uri("https://m.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("z-feed", new("https://z.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("a-feed", new("https://a.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("m-feed", new("https://m.example/v3/index.json"), FeedTrustLevel.Trusted));
 
         options.SetPriority("z-feed", 20);
         options.SetPriority("a-feed", 10);

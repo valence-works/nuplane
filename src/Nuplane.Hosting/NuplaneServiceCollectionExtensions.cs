@@ -101,15 +101,15 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<ReconciliationLogger>();
         services.AddSingleton<ReconciliationHealthEvaluator>();
         services.AddSingleton<PackageChangeEventPublisher>(sp =>
-            new PackageChangeEventPublisher(
-                sp.GetServices<Nuplane.Abstractions.INuplaneObserver>(),
+            new(
+                sp.GetServices<INuplaneObserver>(),
                 sp.GetRequiredService<ReconciliationLogger>()));
         services.AddSingleton<ObserverNotifier>(sp =>
-            new ObserverNotifier(
-                sp.GetServices<Nuplane.Abstractions.INuplaneObserver>(),
+            new(
+                sp.GetServices<INuplaneObserver>(),
                 sp.GetRequiredService<ReconciliationLogger>()));
-        services.AddSingleton<INuGetPackageResolver, Nuplane.Runtime.Reconciliation.MultiFeedPackageResolver>();
-        services.AddSingleton(new StoreRegistry(new StoreStateSerializer(), stateFilePath));
+        services.AddSingleton<INuGetPackageResolver, Runtime.Reconciliation.MultiFeedPackageResolver>();
+        services.AddSingleton(new StoreRegistry(new(), stateFilePath));
         services.AddSingleton<ReconciliationService>();
 
         return services;

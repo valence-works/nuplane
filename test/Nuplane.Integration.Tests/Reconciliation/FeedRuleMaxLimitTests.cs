@@ -19,12 +19,12 @@ public sealed class FeedRuleMaxLimitTests
 
         var service = new ReconciliationService(
             new[] { source },
-            new SourceTrustOptions { RejectUnallowlistedPackages = false },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
+            new() { RejectUnallowlistedPackages = false },
+            new(),
+            new(),
             new NuGetPackageResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions { MaxRetryAttempts = 0 });
+            new(new(), stateFilePath: null),
+            new() { MaxRetryAttempts = 0 });
 
         var result = await service.TriggerManualAsync(CancellationToken.None);
 

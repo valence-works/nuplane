@@ -23,7 +23,7 @@ public sealed class DesiredSourceSnapshotCache
         snapshots[sourceName] = captured;
         await storeRegistry.PersistSourceSnapshotAsync(
             sourceName,
-            new SourceSnapshotRef(Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow, captured),
+            new(Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow, captured),
             cancellationToken);
     }
 

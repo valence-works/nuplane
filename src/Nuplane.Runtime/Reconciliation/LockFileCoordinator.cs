@@ -26,7 +26,7 @@ public sealed class LockFileCoordinator
 
         if (options.Mode == LockFileMode.Generate)
         {
-            return new LockFileEvaluationResult(true, "generate", resolved, null);
+            return new(true, "generate", resolved, null);
         }
 
         var lockFile = await store.ReadAsync(cancellationToken);
@@ -36,10 +36,10 @@ public sealed class LockFileCoordinator
         {
             if (options.Mode == LockFileMode.Strict && options.RequireEntryInStrictMode)
             {
-                return new LockFileEvaluationResult(false, "strict-missing-entry", null, null);
+                return new(false, "strict-missing-entry", null, null);
             }
 
-            return new LockFileEvaluationResult(true, "enforce-no-entry", resolved, null);
+            return new(true, "enforce-no-entry", resolved, null);
         }
 
         if (options.Mode is LockFileMode.Enforce or LockFileMode.Strict)
@@ -52,9 +52,9 @@ public sealed class LockFileCoordinator
                 resolved.InstalledAt,
                 resolved.SourceName);
 
-            return new LockFileEvaluationResult(true, "enforced", effective, entry.Hash);
+            return new(true, "enforced", effective, entry.Hash);
         }
 
-        return new LockFileEvaluationResult(true, "generate", resolved, null);
+        return new(true, "generate", resolved, null);
     }
 }

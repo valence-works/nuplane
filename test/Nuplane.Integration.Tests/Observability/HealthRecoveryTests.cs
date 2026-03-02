@@ -17,14 +17,14 @@ public sealed class HealthRecoveryTests
         var evaluator = new ReconciliationHealthEvaluator();
         var service = new ReconciliationService(
             [source],
-            new SourceTrustOptions { AllowedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
+            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
+            new(),
+            new(),
             new NuGetPackageResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions { MaxRetryAttempts = 0 },
-            new PackageChangeEventPublisher([]),
-            new ObserverNotifier([]),
+            new(new(), stateFilePath: null),
+            new() { MaxRetryAttempts = 0 },
+            new([]),
+            new([]),
             evaluator);
 
         source.FailReads = true;
@@ -50,7 +50,7 @@ public sealed class HealthRecoveryTests
             }
 
             return Task.FromResult<IReadOnlyList<PackageRequest>>(
-                [new PackageRequest("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")]);
+                [new("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")]);
         }
     }
 }

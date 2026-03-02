@@ -94,7 +94,7 @@ public sealed class PackageTransactionCoordinator
             await pointerSwitcher.SwitchAsync(request.PackageId, request.Version, cancellationToken);
             await ExecuteStageAsync(request, PackageTransactionStage.PersistState, cancellationToken);
 
-            return new PackageTransactionResult(
+            return new(
                 request.PackageId,
                 request.Version,
                 Succeeded: true,
@@ -120,7 +120,7 @@ public sealed class PackageTransactionCoordinator
                 await pointerSwitcher.SwitchAsync(request.PackageId, currentPointer, cancellationToken);
             }
 
-            return new PackageTransactionResult(
+            return new(
                 request.PackageId,
                 request.Version,
                 Succeeded: false,
@@ -152,7 +152,7 @@ public sealed class PackageTransactionCoordinator
             await pointerSwitcher.SwitchAsync(request.PackageId, currentPointer, cancellationToken);
         }
 
-        return new PackageTransactionResult(
+        return new(
             request.PackageId,
             request.Version,
             Succeeded: false,

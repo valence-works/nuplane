@@ -19,12 +19,12 @@ public sealed class DesiredStateReconciliationTests
 
         var service = new ReconciliationService(
             new[] { source },
-            new SourceTrustOptions { AllowedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
+            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
+            new(),
+            new(),
             new NuGetPackageResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions());
+            new(new(), stateFilePath: null),
+            new());
 
         var first = await service.TriggerManualAsync(CancellationToken.None);
         var second = await service.TriggerManualAsync(CancellationToken.None);

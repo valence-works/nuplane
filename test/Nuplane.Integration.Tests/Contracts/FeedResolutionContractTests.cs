@@ -15,11 +15,11 @@ public sealed class FeedResolutionContractTests
             StopOnFirstSuccessfulFeed = false
         };
 
-        options.Feeds.Add(new FeedDefinition("feed-a", new Uri("https://a.example/v3/index.json"), FeedTrustLevel.Trusted));
-        options.Feeds.Add(new FeedDefinition("feed-b", new Uri("https://b.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("feed-a", new("https://a.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("feed-b", new("https://b.example/v3/index.json"), FeedTrustLevel.Trusted));
         options.UnavailableFeeds.Add("feed-a");
 
-        var resolver = new MultiFeedPackageResolver(options, new FeedResolutionPolicy(options));
+        var resolver = new MultiFeedPackageResolver(options, new(options));
         var request = new PackageRequest("pkg", "1.0.0", "feed-b", PackageUpdatePolicy.Exact, "source");
 
         var resolved = await resolver.ResolveAsync(request, CancellationToken.None);
@@ -36,13 +36,13 @@ public sealed class FeedResolutionContractTests
             StopOnFirstSuccessfulFeed = false
         };
 
-        options.Feeds.Add(new FeedDefinition("feed-a", new Uri("https://a.example/v3/index.json"), FeedTrustLevel.Trusted));
-        options.Feeds.Add(new FeedDefinition("feed-b", new Uri("https://b.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("feed-a", new("https://a.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("feed-b", new("https://b.example/v3/index.json"), FeedTrustLevel.Trusted));
         options.SetPriority("feed-a", 10);
         options.SetPriority("feed-b", 20);
         options.UnavailableFeeds.Add("feed-a");
 
-        var resolver = new MultiFeedPackageResolver(options, new FeedResolutionPolicy(options));
+        var resolver = new MultiFeedPackageResolver(options, new(options));
         var request = new PackageRequest("pkg", "1.0.0", null, PackageUpdatePolicy.Exact, "source");
 
         var resolved = await resolver.ResolveAsync(request, CancellationToken.None);

@@ -7,7 +7,7 @@ public sealed class CleanupExecutionModeTests
     [Fact]
     public async Task ExecuteAutomaticAsync_RespectsAutomaticAndManualModes()
     {
-        var service = new PackageCleanupService(new CleanupPolicyEvaluator());
+        var service = new PackageCleanupService(new());
         var now = DateTimeOffset.UtcNow;
         var versions = new[]
         {
@@ -18,14 +18,14 @@ public sealed class CleanupExecutionModeTests
 
         var automatic = await service.ExecuteAutomaticAsync(
             versions,
-            new CleanupPolicyOptions { Mode = CleanupExecutionMode.Automatic, RetainLastNVersions = 1, ProtectLastKnownGood = true },
+            new() { Mode = CleanupExecutionMode.Automatic, RetainLastNVersions = 1, ProtectLastKnownGood = true },
             "corr-1",
             triggerOnSuccessfulReconciliation: true,
             CancellationToken.None);
 
         var manual = await service.ExecuteAutomaticAsync(
             versions,
-            new CleanupPolicyOptions { Mode = CleanupExecutionMode.ManualOnly, RetainLastNVersions = 1, ProtectLastKnownGood = true },
+            new() { Mode = CleanupExecutionMode.ManualOnly, RetainLastNVersions = 1, ProtectLastKnownGood = true },
             "corr-2",
             triggerOnSuccessfulReconciliation: true,
             CancellationToken.None);

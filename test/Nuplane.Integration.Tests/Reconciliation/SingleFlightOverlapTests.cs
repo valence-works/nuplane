@@ -18,12 +18,12 @@ public sealed class SingleFlightOverlapTests
 
         var service = new ReconciliationService(
             new[] { source },
-            new SourceTrustOptions { AllowedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
+            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
+            new(),
+            new(),
             new SlowResolver(TimeSpan.FromMilliseconds(200)),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions { EnableSingleFlight = true });
+            new(new(), stateFilePath: null),
+            new() { EnableSingleFlight = true });
 
         var firstRun = service.TriggerManualAsync(CancellationToken.None);
         await Task.Delay(30);
@@ -44,7 +44,7 @@ public sealed class SingleFlightOverlapTests
         public async Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)
         {
             await Task.Delay(delay, cancellationToken);
-            return new ResolvedPackage(request.Id, request.VersionRange, request.FeedName ?? "default", $"/tmp/{request.Id}/{request.VersionRange}", DateTimeOffset.UtcNow);
+            return new(request.Id, request.VersionRange, request.FeedName ?? "default", $"/tmp/{request.Id}/{request.VersionRange}", DateTimeOffset.UtcNow);
         }
     }
 }

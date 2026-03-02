@@ -7,15 +7,15 @@ public sealed class CleanupLkgProtectionRegressionTests
     [Fact]
     public async Task ExecuteAutomaticAsync_NeverDeletesLkgVersion()
     {
-        var service = new PackageCleanupService(new CleanupPolicyEvaluator());
+        var service = new PackageCleanupService(new());
         var now = DateTimeOffset.UtcNow;
 
         var results = await service.ExecuteAutomaticAsync(
             [
-                new PackageVersionEntry("pkg", "1.0.0", now.AddDays(-100), IsLastKnownGood: true),
-                new PackageVersionEntry("pkg", "2.0.0", now.AddDays(-50), IsLastKnownGood: false)
+                new("pkg", "1.0.0", now.AddDays(-100), IsLastKnownGood: true),
+                new("pkg", "2.0.0", now.AddDays(-50), IsLastKnownGood: false)
             ],
-            new CleanupPolicyOptions
+            new()
             {
                 Mode = CleanupExecutionMode.Automatic,
                 RetainLastNVersions = 0,

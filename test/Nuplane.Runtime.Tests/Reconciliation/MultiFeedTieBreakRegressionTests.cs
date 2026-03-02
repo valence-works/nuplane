@@ -9,7 +9,7 @@ public sealed class MultiFeedTieBreakRegressionTests
     [Fact]
     public void SelectWinner_WithEqualPriorityAndVersion_IsStableAcrossInputOrder()
     {
-        var policy = new FeedResolutionPolicy(new FeedResolutionOptions());
+        var policy = new FeedResolutionPolicy(new());
         var timestamp = DateTimeOffset.UtcNow;
 
         var firstOrder = new[]

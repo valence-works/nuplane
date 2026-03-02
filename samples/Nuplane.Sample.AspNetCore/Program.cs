@@ -36,9 +36,9 @@ builder.Services.AddNuplaneRuntime(
 	},
 	configureFeeds: feeds =>
 	{
-		feeds.Add(new FeedDefinition(
+		feeds.Add(new(
 			Name: "NuGet.Main",
-			ServiceIndex: new Uri("https://api.nuget.org/v3/index.json"),
+			ServiceIndex: new("https://api.nuget.org/v3/index.json"),
 			TrustLevel: FeedTrustLevel.Restricted,
 			Credentials: "secrets://nuget/main"));
 	});

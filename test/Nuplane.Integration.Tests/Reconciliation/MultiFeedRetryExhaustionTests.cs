@@ -12,7 +12,7 @@ public sealed class MultiFeedRetryExhaustionTests
     {
         var source = new StaticSource(
         [
-            new PackageRequest("pkg", "1.0.0", "feed-down", PackageUpdatePolicy.Exact, "source")
+            new("pkg", "1.0.0", "feed-down", PackageUpdatePolicy.Exact, "source")
         ]);
 
         var feedOptions = new FeedResolutionOptions
@@ -21,19 +21,19 @@ public sealed class MultiFeedRetryExhaustionTests
             StopOnFirstSuccessfulFeed = true
         };
 
-        feedOptions.Feeds.Add(new FeedDefinition("feed-down", new Uri("https://down.example/v3/index.json"), FeedTrustLevel.Trusted));
+        feedOptions.Feeds.Add(new("feed-down", new("https://down.example/v3/index.json"), FeedTrustLevel.Trusted));
         feedOptions.UnavailableFeeds.Add("feed-down");
 
-        var resolver = new MultiFeedPackageResolver(feedOptions, new FeedResolutionPolicy(feedOptions));
+        var resolver = new MultiFeedPackageResolver(feedOptions, new(feedOptions));
 
         var service = new ReconciliationService(
             new[] { source },
-            new SourceTrustOptions { AllowedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "pkg" } },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
+            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg" } },
+            new(),
+            new(),
             resolver,
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions
+            new(new(), stateFilePath: null),
+            new()
             {
                 MaxRetryAttempts = 2,
                 InitialRetryBackoff = TimeSpan.FromMilliseconds(1),

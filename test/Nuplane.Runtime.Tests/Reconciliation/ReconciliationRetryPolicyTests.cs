@@ -9,7 +9,7 @@ public sealed class ReconciliationRetryPolicyTests
     public async Task ExecuteAsync_RetriesUntilSuccess_WithinMaxAttempts()
     {
         var policy = new ReconciliationRetryPolicy(
-            new ReconciliationOptions
+            new()
             {
                 MaxRetryAttempts = 3,
                 InitialRetryBackoff = TimeSpan.FromMilliseconds(1),

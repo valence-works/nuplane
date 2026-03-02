@@ -11,15 +11,15 @@ public sealed class LockFileEnforceModeTests
     {
         var lockPath = Path.Combine(Path.GetTempPath(), $"nuplane-lock-{Guid.NewGuid():N}.json");
         var store = new LockFileStore(lockPath);
-        await store.WriteAsync(new PackageLockFile(
+        await store.WriteAsync(new(
             "1.0",
             DateTimeOffset.UtcNow,
-            [new PackageLockEntry("pkg-a", "1.2.3", "feed-lock", "hash-123", DateTimeOffset.UtcNow)]),
+            [new("pkg-a", "1.2.3", "feed-lock", "hash-123", DateTimeOffset.UtcNow)]),
             CancellationToken.None);
 
         var coordinator = new LockFileCoordinator(
             store,
-            new LockFileOptions { Mode = LockFileMode.Enforce, Path = lockPath, FailOnHashMismatch = true });
+            new() { Mode = LockFileMode.Enforce, Path = lockPath, FailOnHashMismatch = true });
 
         var resolved = new ResolvedPackage("pkg-a", "9.9.9", "feed-live", "/tmp/pkg-a", DateTimeOffset.UtcNow, "source");
         var result = await coordinator.EvaluateAsync(resolved, CancellationToken.None);

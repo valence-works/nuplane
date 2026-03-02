@@ -17,7 +17,7 @@ public sealed class ReconciliationLogger
 
     public void LogCycleStarted(string correlationId, int requestCount)
     {
-        entries.Add(new ReconciliationLogEntry(
+        entries.Add(new(
             DateTimeOffset.UtcNow,
             correlationId,
             "reconciliation.started",
@@ -30,7 +30,7 @@ public sealed class ReconciliationLogger
 
     public void LogCycleCompleted(string correlationId, bool degraded, int failedCount)
     {
-        entries.Add(new ReconciliationLogEntry(
+        entries.Add(new(
             DateTimeOffset.UtcNow,
             correlationId,
             "reconciliation.completed",
@@ -44,7 +44,7 @@ public sealed class ReconciliationLogger
 
     public void LogObserverError(string correlationId, string callbackName, string message)
     {
-        entries.Add(new ReconciliationLogEntry(
+        entries.Add(new(
             DateTimeOffset.UtcNow,
             correlationId,
             "observer.error",
@@ -59,7 +59,7 @@ public sealed class ReconciliationLogger
     {
         ArgumentNullException.ThrowIfNull(decision);
 
-        entries.Add(new ReconciliationLogEntry(
+        entries.Add(new(
             DateTimeOffset.UtcNow,
             decision.CorrelationId,
             "reconciliation.feed.decision",
@@ -82,7 +82,7 @@ public sealed class ReconciliationLogger
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
         ArgumentNullException.ThrowIfNull(outcome);
 
-        entries.Add(new ReconciliationLogEntry(
+        entries.Add(new(
             DateTimeOffset.UtcNow,
             correlationId,
             "reconciliation.trust.outcome",
@@ -103,7 +103,7 @@ public sealed class ReconciliationLogger
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
         ArgumentNullException.ThrowIfNull(outcome);
 
-        entries.Add(new ReconciliationLogEntry(
+        entries.Add(new(
             DateTimeOffset.UtcNow,
             correlationId,
             "reconciliation.lock.outcome",

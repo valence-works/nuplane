@@ -74,7 +74,7 @@ public sealed class PackageApplyExecutor
             }
         }
 
-        return new PackageResolutionResult(resolved, failed, decisions);
+        return new(resolved, failed, decisions);
     }
 
     public async Task<PackageApplyExecutionResult> ExecuteTransactionsAsync(
@@ -91,7 +91,7 @@ public sealed class PackageApplyExecutor
         foreach (var resolved in resolutionResult.ResolvedPackages)
         {
             var transaction = await transactionCoordinator.ExecuteAsync(
-                new PackageTransactionRequest(resolved.Id, resolved.Version, correlationId),
+                new(resolved.Id, resolved.Version, correlationId),
                 cancellationToken);
 
             if (transaction.Succeeded)
@@ -104,6 +104,6 @@ public sealed class PackageApplyExecutor
             }
         }
 
-        return new PackageApplyExecutionResult(applied, failed);
+        return new(applied, failed);
     }
 }

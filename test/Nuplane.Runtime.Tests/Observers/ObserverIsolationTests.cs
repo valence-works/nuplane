@@ -14,16 +14,16 @@ public sealed class ObserverIsolationTests
     public async Task TriggerManualAsync_WhenObserverThrows_ReconciliationStillCompletes()
     {
         var service = new ReconciliationService(
-            [new StaticSource([new PackageRequest("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")])],
-            new SourceTrustOptions { AllowedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
+            [new StaticSource([new("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")])],
+            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
+            new(),
+            new(),
             new NuGetPackageResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions(),
-            new PackageChangeEventPublisher([new ThrowingObserver()]),
-            new ObserverNotifier([new ThrowingObserver()]),
-            new ReconciliationHealthEvaluator());
+            new(new(), stateFilePath: null),
+            new(),
+            new([new ThrowingObserver()]),
+            new([new ThrowingObserver()]),
+            new());
 
         var result = await service.TriggerManualAsync(CancellationToken.None);
 

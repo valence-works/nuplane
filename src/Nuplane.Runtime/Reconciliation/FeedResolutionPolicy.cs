@@ -50,7 +50,7 @@ public sealed class FeedResolutionPolicy
         {
             if (string.IsNullOrWhiteSpace(version))
             {
-                return new VersionKey(0, 0, 0, string.Empty);
+                return new(0, 0, 0, string.Empty);
             }
 
             var normalized = version.Trim();
@@ -75,7 +75,7 @@ public sealed class FeedResolutionPolicy
             _ = int.TryParse(parts.ElementAtOrDefault(1), out var minor);
             _ = int.TryParse(parts.ElementAtOrDefault(2), out var patch);
 
-            return new VersionKey(major, minor, patch, suffix);
+            return new(major, minor, patch, suffix);
         }
 
         public int CompareTo(VersionKey other)

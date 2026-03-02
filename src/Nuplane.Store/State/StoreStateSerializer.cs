@@ -25,10 +25,10 @@ public sealed record StoreStateRecord(
 {
     public static StoreStateRecord Empty() =>
         new(
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-            new Dictionary<string, FailureRecord>(StringComparer.OrdinalIgnoreCase),
-            new Dictionary<string, SourceSnapshotRef>(StringComparer.OrdinalIgnoreCase),
+            new(StringComparer.OrdinalIgnoreCase),
+            new(StringComparer.OrdinalIgnoreCase),
+            new(StringComparer.OrdinalIgnoreCase),
+            new(StringComparer.OrdinalIgnoreCase),
             DateTimeOffset.UtcNow);
 }
 

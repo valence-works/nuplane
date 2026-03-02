@@ -12,7 +12,7 @@ public sealed class DesiredSourceContractTests
         var aggregator = new DesiredStateAggregator();
         var trust = new SourceTrustOptions
         {
-            AllowedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "a", "b", "c" }
+            AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "a", "b", "c" }
         };
 
         var sources = new IDesiredPackageSource[]
@@ -39,7 +39,7 @@ public sealed class DesiredSourceContractTests
         var aggregator = new DesiredStateAggregator();
         var trust = new SourceTrustOptions
         {
-            AllowedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "approved" },
+            AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "approved" },
             RejectUnallowlistedPackages = true
         };
 

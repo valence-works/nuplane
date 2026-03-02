@@ -31,7 +31,7 @@ public sealed class DesiredActualDiffEngine
             .OrderBy(activeId => activeId, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return new PackageChangeSet(added, updated, removed, correlationId, timestamp);
+        return new(added, updated, removed, correlationId, timestamp);
     }
 
     public IReadOnlyDictionary<string, string> BuildNextActiveVersions(IReadOnlyCollection<ResolvedPackage> desired)
@@ -61,7 +61,7 @@ public sealed class DesiredActualDiffEngine
         {
             if (string.IsNullOrWhiteSpace(version))
             {
-                return new VersionKey(0, 0, 0, string.Empty);
+                return new(0, 0, 0, string.Empty);
             }
 
             var normalized = version.Trim();
@@ -85,7 +85,7 @@ public sealed class DesiredActualDiffEngine
             _ = int.TryParse(coreParts.ElementAtOrDefault(1), out var minor);
             _ = int.TryParse(coreParts.ElementAtOrDefault(2), out var patch);
 
-            return new VersionKey(major, minor, patch, suffix);
+            return new(major, minor, patch, suffix);
         }
 
         public int CompareTo(VersionKey other)

@@ -13,21 +13,21 @@ public sealed class PartialFailureIsolationTests
     {
         var source = new StaticSource(
         [
-            new PackageRequest("pkg-good", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a"),
-            new PackageRequest("pkg-bad", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")
+            new("pkg-good", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a"),
+            new("pkg-bad", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")
         ]);
 
         var service = new ReconciliationService(
             new[] { source },
-            new SourceTrustOptions
+            new()
             {
-                AllowedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "pkg-good", "pkg-bad" }
+                AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-good", "pkg-bad" }
             },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
+            new(),
+            new(),
             new FailOneResolver("pkg-bad"),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions { MaxRetryAttempts = 0 });
+            new(new(), stateFilePath: null),
+            new() { MaxRetryAttempts = 0 });
 
         var result = await service.TriggerManualAsync(CancellationToken.None);
 

@@ -12,26 +12,26 @@ public sealed class StrictFeedOutageIsolationTests
     {
         var source = new StaticSource(
         [
-            new PackageRequest("pkg-impacted", "1.0.0", "feed-down", PackageUpdatePolicy.Exact, "source"),
-            new PackageRequest("pkg-ok", "1.0.0", "feed-up", PackageUpdatePolicy.Exact, "source")
+            new("pkg-impacted", "1.0.0", "feed-down", PackageUpdatePolicy.Exact, "source"),
+            new("pkg-ok", "1.0.0", "feed-up", PackageUpdatePolicy.Exact, "source")
         ]);
 
         var feedOptions = new FeedResolutionOptions { PolicyMode = FeedResolutionPolicyMode.Strict };
-        feedOptions.Feeds.Add(new FeedDefinition("feed-down", new Uri("https://down.example/v3/index.json"), FeedTrustLevel.Trusted));
-        feedOptions.Feeds.Add(new FeedDefinition("feed-up", new Uri("https://up.example/v3/index.json"), FeedTrustLevel.Trusted));
+        feedOptions.Feeds.Add(new("feed-down", new("https://down.example/v3/index.json"), FeedTrustLevel.Trusted));
+        feedOptions.Feeds.Add(new("feed-up", new("https://up.example/v3/index.json"), FeedTrustLevel.Trusted));
         feedOptions.UnavailableFeeds.Add("feed-down");
 
         var service = new ReconciliationService(
             new[] { source },
-            new SourceTrustOptions
+            new()
             {
-                AllowedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "pkg-impacted", "pkg-ok" }
+                AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-impacted", "pkg-ok" }
             },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
-            new MultiFeedPackageResolver(feedOptions, new FeedResolutionPolicy(feedOptions)),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions { MaxRetryAttempts = 0 });
+            new(),
+            new(),
+            new MultiFeedPackageResolver(feedOptions, new(feedOptions)),
+            new(new(), stateFilePath: null),
+            new() { MaxRetryAttempts = 0 });
 
         var result = await service.TriggerManualAsync(CancellationToken.None);
 

@@ -12,7 +12,7 @@ public sealed class SourceOutageFallbackTests
     public async Task ManualTrigger_WhenSourceOutage_UsesLastSuccessfulSnapshot()
     {
         var source = new FlakySource();
-        var service = CreateService(source, new ReconciliationOptions { MaxRetryAttempts = 1 });
+        var service = CreateService(source, new() { MaxRetryAttempts = 1 });
 
         var first = await service.TriggerManualAsync(CancellationToken.None);
         var second = await service.TriggerManualAsync(CancellationToken.None);
@@ -26,13 +26,13 @@ public sealed class SourceOutageFallbackTests
 
     private static ReconciliationService CreateService(IDesiredPackageSource source, ReconciliationOptions options)
     {
-        return new ReconciliationService(
+        return new(
             new[] { source },
-            new SourceTrustOptions { AllowedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
+            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
+            new(),
+            new(),
             new NuGetPackageResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
+            new(new(), stateFilePath: null),
             options);
     }
 
@@ -49,7 +49,7 @@ public sealed class SourceOutageFallbackTests
             }
 
             return Task.FromResult<IReadOnlyList<PackageRequest>>(
-                [new PackageRequest("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")]);
+                [new("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")]);
         }
     }
 }
