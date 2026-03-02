@@ -15,6 +15,18 @@ It does **not** define a plugin programming model.
 It does **not** impose activation semantics.
 It is infrastructure only.
 
+## Phase 1 Implementation Status (2026-03-02)
+
+Current repository behavior aligns with the Phase 1 runtime baseline:
+- deterministic desired-vs-actual reconciliation with idempotent repeat cycles
+- per-package transactional apply flow with last-known-good preservation on failures
+- snapshot fallback for desired-source outages with explicit degraded cycle outcomes
+- bounded retry/backoff execution and strict allowlist gating before resolution
+- observer callbacks (`Changing -> Failed* -> Changed`) with correlation propagation and exception isolation
+- baseline observability via structured cycle logging, metrics facade, and degraded/healthy evaluation
+
+Release-readiness checks completed in Phase 1 include central package version verification and secret-scan policy/script coverage.
+
 ---
 
 ## Naming & Packages

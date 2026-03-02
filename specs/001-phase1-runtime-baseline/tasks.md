@@ -123,12 +123,12 @@
 
 **Traceability Note**: Tasks in this phase are cross-cutting release-readiness activities and may not map 1:1 to a single FR/OSR requirement key.
 
-- [ ] T045 [P] Update onboarding and operational guidance in README.md
-- [ ] T046 [P] Align roadmap operational notes with implemented behavior in src/docs/roadmap.md
-- [ ] T047 [P] Finalize quickstart verification steps with concrete run commands in specs/001-phase1-runtime-baseline/quickstart.md
-- [ ] T048 Execute end-to-end quickstart validation and capture evidence in specs/001-phase1-runtime-baseline/quickstart-validation.md
-- [ ] T049 [P] Verify centralized dependency versions and remove inline package versions in Directory.Packages.props
-- [ ] T050 [P] Add CI validation step for no committed source credentials in build/validate-secrets.sh
+- [x] T045 [P] Update onboarding and operational guidance in README.md
+- [x] T046 [P] Align roadmap operational notes with implemented behavior in src/docs/roadmap.md
+- [x] T047 [P] Finalize quickstart verification steps with concrete run commands in specs/001-phase1-runtime-baseline/quickstart.md
+- [x] T048 Execute end-to-end quickstart validation and capture evidence in specs/001-phase1-runtime-baseline/quickstart-validation.md
+- [x] T049 [P] Verify centralized dependency versions and remove inline package versions in Directory.Packages.props
+- [x] T050 [P] Add CI validation step for no committed source credentials in build/validate-secrets.sh
 
 ---
 

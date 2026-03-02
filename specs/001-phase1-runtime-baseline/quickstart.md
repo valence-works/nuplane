@@ -11,6 +11,20 @@ Validate deterministic reconciliation, transactional activation with LKG fallbac
 - One configured directory desired source.
 - Package ID allowlist configured.
 
+## Verification command set
+
+Run from repository root:
+
+```bash
+dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj --filter "FullyQualifiedName~DesiredStateReconciliationTests"
+dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj --filter "FullyQualifiedName~DesiredActualDiffEngineTests"
+dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj --filter "FullyQualifiedName~SourceOutageFallbackTests|FullyQualifiedName~PartialFailureIsolationTests|FullyQualifiedName~RetryExhaustionTests"
+dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj --filter "FullyQualifiedName~ObserverContractTests|FullyQualifiedName~HealthRecoveryTests"
+dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj --filter "FullyQualifiedName~ObserverIsolationTests"
+dotnet test nuplane.sln
+./build/validate-secrets.sh
+```
+
 ## 1) Baseline successful cycle
 1. Configure explicit desired package requests and run one manual reconciliation trigger.
 2. Verify:
@@ -51,3 +65,8 @@ Validate deterministic reconciliation, transactional activation with LKG fallbac
 - Unit tests for deterministic diff, duplicate resolution, and retry/backoff boundaries.
 - Integration/contract tests for runtime-store, runtime-nuget, and runtime-source boundaries.
 - Regression tests for LKG fallback and degraded-to-healthy transition semantics.
+
+## Expected command outcomes
+- All `dotnet test` commands succeed with 0 failed tests.
+- `dotnet test nuplane.sln` passes full regression.
+- `./build/validate-secrets.sh` reports no potential committed credentials.
