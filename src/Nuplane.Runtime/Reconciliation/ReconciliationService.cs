@@ -41,6 +41,7 @@ public sealed class ReconciliationService
     private readonly FeedResolutionOptions feedResolutionOptions;
     private readonly FeedTrustPolicyOptions feedTrustPolicyOptions;
     private readonly LockFileOptions lockFileOptions;
+    private readonly CleanupPolicyOptions cleanupPolicyOptions;
     private readonly FeedTrustPolicyEvaluator feedTrustPolicyEvaluator;
     private readonly LockFileCoordinator lockFileCoordinator;
     private readonly DryRunPlanner dryRunPlanner;
@@ -90,7 +91,8 @@ public sealed class ReconciliationService
         ReconciliationMetrics? metrics = null,
         FeedResolutionOptions? feedResolutionOptions = null,
         FeedTrustPolicyOptions? feedTrustPolicyOptions = null,
-        LockFileOptions? lockFileOptions = null)
+        LockFileOptions? lockFileOptions = null,
+        CleanupPolicyOptions? cleanupPolicyOptions = null)
     {
         this.sources = sources?.ToArray() ?? throw new ArgumentNullException(nameof(sources));
         this.sourceTrustOptions = sourceTrustOptions ?? throw new ArgumentNullException(nameof(sourceTrustOptions));
@@ -106,6 +108,7 @@ public sealed class ReconciliationService
         this.feedResolutionOptions = feedResolutionOptions ?? new FeedResolutionOptions();
         this.feedTrustPolicyOptions = feedTrustPolicyOptions ?? new FeedTrustPolicyOptions();
         this.lockFileOptions = lockFileOptions ?? new LockFileOptions();
+        this.cleanupPolicyOptions = cleanupPolicyOptions ?? new CleanupPolicyOptions();
         this.feedTrustPolicyEvaluator = new FeedTrustPolicyEvaluator();
         this.lockFileCoordinator = new LockFileCoordinator(new LockFileStore(this.lockFileOptions.Path), this.lockFileOptions);
         this.dryRunPlanner = new DryRunPlanner(this.desiredActualDiffEngine);
@@ -172,7 +175,7 @@ public sealed class ReconciliationService
 
                 var feed = feedResolutionOptions.Feeds.FirstOrDefault(x =>
                     string.Equals(x.Name, resolved.FeedName, StringComparison.OrdinalIgnoreCase))
-                    ?? new FeedDefinition(resolved.FeedName, new Uri("https://unknown.invalid"), FeedTrustLevel.Trusted);
+                    ?? new FeedDefinition(resolved.FeedName, new Uri("https://unknown.invalid"), FeedTrustLevel.Untrusted);
 
                 var trustOutcome = feedTrustPolicyEvaluator.Evaluate(
                     request,
@@ -267,18 +270,19 @@ public sealed class ReconciliationService
 
             await storeRegistry.PersistActiveVersionsAsync(mergedActive, appliedVersions, correlationId, cancellationToken);
 
+            var storeState = await storeRegistry.GetStateAsync(cancellationToken);
             var cleanupInputs = mergedActive
-                .Select(x => new PackageVersionEntry(x.Key, x.Value, DateTimeOffset.UtcNow, IsLastKnownGood: true))
+                .Select(x => new PackageVersionEntry(
+                    x.Key,
+                    x.Value,
+                    storeState.UpdatedAt,
+                    IsLastKnownGood: storeState.LastKnownGoodById.TryGetValue(x.Key, out var lkgVersion) &&
+                        string.Equals(lkgVersion, x.Value, StringComparison.OrdinalIgnoreCase)))
                 .ToArray();
 
             var cleanupResults = await packageCleanupService.ExecuteAutomaticAsync(
                 cleanupInputs,
-                new CleanupPolicyOptions
-                {
-                    Mode = CleanupExecutionMode.Automatic,
-                    RetainLastNVersions = 1,
-                    ProtectLastKnownGood = true
-                },
+                cleanupPolicyOptions,
                 correlationId,
                 triggerOnSuccessfulReconciliation: applyResult.FailedPackageIds.Count == 0,
                 cancellationToken);
