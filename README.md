@@ -1,6 +1,6 @@
-# Nuplane
-
 ![Nuplane](./branding/nuplane-banner.jpg)
+
+# Nuplane
 
 Nuplane is a lightweight runtime control plane for NuGet packages.
 
