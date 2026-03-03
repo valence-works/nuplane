@@ -1,7 +1,8 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Reconciliation.Models;
 
-namespace Nuplane.Runtime.Reconciliation;
+namespace Nuplane.Runtime.Reconciliation.FeedPolicy;
 
 /// <summary>
 /// Evaluates the trust policy for a package/feed pair, checking trusted, restricted,

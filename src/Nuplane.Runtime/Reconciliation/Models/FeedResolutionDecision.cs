@@ -1,6 +1,6 @@
 using Nuplane.Abstractions;
 
-namespace Nuplane.Runtime.Reconciliation;
+namespace Nuplane.Runtime.Reconciliation.Models;
 
 /// <summary>
 /// Records the decision made during feed resolution for a package, including candidate feeds,

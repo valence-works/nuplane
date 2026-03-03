@@ -12,6 +12,13 @@ public sealed class ReconciliationOptions
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(60);
 
     /// <summary>
+    /// Gets or sets whether automatic background reconciliation is enabled.
+    /// When <see langword="true"/>, a hosted service polls at <see cref="PollInterval"/> intervals.
+    /// Defaults to <see langword="false"/> (manual-only).
+    /// </summary>
+    public bool EnableAutomaticReconciliation { get; set; } = false;
+
+    /// <summary>
     /// Gets or sets whether only one reconciliation cycle is allowed to execute at a time.
     /// </summary>
     public bool EnableSingleFlight { get; set; } = true;

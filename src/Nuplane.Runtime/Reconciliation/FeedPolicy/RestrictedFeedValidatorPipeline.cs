@@ -1,7 +1,7 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 
-namespace Nuplane.Runtime.Reconciliation;
+namespace Nuplane.Runtime.Reconciliation.FeedPolicy;
 
 /// <summary>
 /// Evaluates whether a package from a restricted feed passes the required validation.

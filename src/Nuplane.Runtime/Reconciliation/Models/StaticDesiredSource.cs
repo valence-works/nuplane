@@ -1,6 +1,6 @@
 using Nuplane.Abstractions;
 
-namespace Nuplane.Runtime.Reconciliation;
+namespace Nuplane.Runtime.Reconciliation.Models;
 
 internal sealed class StaticDesiredSource(IReadOnlyList<PackageRequest> requests) : IDesiredPackageSource
 {

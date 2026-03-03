@@ -1,12 +1,12 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿﻿using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Abstractions;
-using Nuplane.Hosting;
+using Nuplane;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Store.State;
 
 var services = new ServiceCollection();
 
-services.AddNuplaneRuntime(
+services.AddNuplane(
 	configureSourceTrust: trust =>
 	{
 		trust.AllowedSourceNames.Add("NuGet.Main");
@@ -48,7 +48,7 @@ services.AddNuplaneRuntime(
 			Credentials: "secrets://nuget/main"));
 	});
 
-// Phase 3 optional loading (register via Nuplane.Loading.Hosting — fully wired):
+// Phase 3 optional loading (register via Nuplane.Loading — fully wired):
 // services.AddNuplaneLoading(loading =>
 // {
 // 	loading.Enabled = true;

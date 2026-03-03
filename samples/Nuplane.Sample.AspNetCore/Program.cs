@@ -1,11 +1,11 @@
 using Nuplane.Abstractions;
-using Nuplane.Hosting;
+using Nuplane;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Store.State;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddNuplaneRuntime(
+builder.Services.AddNuplane(
 	configureSourceTrust: trust =>
 	{
 		trust.AllowedSourceNames.Add("NuGet.Main");
@@ -43,7 +43,7 @@ builder.Services.AddNuplaneRuntime(
 			Credentials: "secrets://nuget/main"));
 	});
 
-// Phase 3 optional loading (register via Nuplane.Loading.Hosting — fully wired):
+// Phase 3 optional loading (register via Nuplane.Loading — fully wired):
 // builder.Services.AddNuplaneLoading(loading =>
 // {
 // 	loading.Enabled = true;

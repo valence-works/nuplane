@@ -1,6 +1,7 @@
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Observability;
 using Nuplane.Store.State;
+using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.Runtime.Reconciliation.Middleware;
 

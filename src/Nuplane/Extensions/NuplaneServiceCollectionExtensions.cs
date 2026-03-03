@@ -1,14 +1,17 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.Models;
+using Nuplane.Runtime.Reconciliation.FeedPolicy;
 using Nuplane.Runtime.Sources;
 using Nuplane.Store.State;
 
-namespace Nuplane.Hosting;
+namespace Nuplane;
 
 /// <summary>
 /// Provides extension methods for registering Nuplane runtime services with a
@@ -32,7 +35,7 @@ public static class NuplaneServiceCollectionExtensions
     /// <returns>The service collection for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when any options configuration is invalid.</exception>
-    public static IServiceCollection AddNuplaneRuntime(
+    public static IServiceCollection AddNuplane(
         this IServiceCollection services,
         Action<SourceTrustOptions>? configureSourceTrust = null,
         Action<ReconciliationOptions>? configureReconciliation = null,
@@ -47,6 +50,7 @@ public static class NuplaneServiceCollectionExtensions
 
         var sourceTrustOptions = new SourceTrustOptions();
         configureSourceTrust?.Invoke(sourceTrustOptions);
+
 
         var reconciliationOptions = new ReconciliationOptions();
         configureReconciliation?.Invoke(reconciliationOptions);
@@ -146,7 +150,14 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<ReconciliationRetryPolicy>();
         services.AddSingleton<IReconciliationRetryPolicy>(sp => sp.GetRequiredService<ReconciliationRetryPolicy>());
         services.AddSingleton<ReconciliationService>();
+        services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
+
+        if (reconciliationOptions.EnableAutomaticReconciliation)
+        {
+            services.AddHostedService<ReconciliationHostedService>();
+        }
 
         return services;
     }
 }
+

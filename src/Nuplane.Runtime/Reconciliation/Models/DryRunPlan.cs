@@ -1,6 +1,6 @@
 using Nuplane.Abstractions;
 
-namespace Nuplane.Runtime.Reconciliation;
+namespace Nuplane.Runtime.Reconciliation.Models;
 
 /// <summary>
 /// Represents a dry-run reconciliation plan showing projected changes without mutating state.

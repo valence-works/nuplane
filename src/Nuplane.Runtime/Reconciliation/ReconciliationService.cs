@@ -10,6 +10,8 @@ using Nuplane.Runtime.Sources;
 using Nuplane.Store.Activation;
 using Nuplane.Store.State;
 using Nuplane.Store.Transactions;
+using Nuplane.Runtime.Reconciliation.Models;
+using Nuplane.Runtime.Reconciliation.FeedPolicy;
 
 namespace Nuplane.Runtime.Reconciliation;
 
@@ -19,7 +21,7 @@ namespace Nuplane.Runtime.Reconciliation;
 /// package resolution, trust and lock evaluation, assembly loading, transaction execution,
 /// unloading, cleanup, and health assessment through a middleware pipeline.
 /// </summary>
-public sealed class ReconciliationService
+public sealed class ReconciliationService : IReconciliationService
 {
     private static readonly PackageChangeSet EmptyChangeSet = new([], [], [], string.Empty, DateTimeOffset.UtcNow);
 

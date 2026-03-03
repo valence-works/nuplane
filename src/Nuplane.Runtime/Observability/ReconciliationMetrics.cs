@@ -1,5 +1,6 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Observability;

@@ -1,4 +1,4 @@
-namespace Nuplane.Runtime.Reconciliation;
+namespace Nuplane.Runtime.Reconciliation.FeedPolicy;
 
 /// <summary>
 /// Thrown when a NuGet feed is unavailable during package resolution.

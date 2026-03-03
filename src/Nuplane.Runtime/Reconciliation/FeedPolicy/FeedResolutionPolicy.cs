@@ -2,7 +2,7 @@ using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Versioning;
 
-namespace Nuplane.Runtime.Reconciliation;
+namespace Nuplane.Runtime.Reconciliation.FeedPolicy;
 
 /// <summary>
 /// Orders candidate feeds for package resolution based on priority and deterministic ordering,
