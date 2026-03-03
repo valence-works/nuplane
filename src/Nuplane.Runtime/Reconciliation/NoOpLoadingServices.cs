@@ -18,7 +18,7 @@ internal sealed class NoOpPackageLoader : IPackageLoader
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 id => id,
-                _ => "Loading services are not registered. Call AddNuplaneLoading() from Nuplane.Hosting.Loading.",
+                _ => "Loading services are not registered. Call AddNuplaneLoading() from Nuplane.Loading.Hosting.",
                 StringComparer.OrdinalIgnoreCase);
 
         return Task.FromResult(new PackageLoadResult(Array.Empty<PackageLoadSession>(), failed));
