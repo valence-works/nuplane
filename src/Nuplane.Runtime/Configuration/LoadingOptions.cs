@@ -1,6 +1,9 @@
-using Nuplane.Abstractions;
-
 namespace Nuplane.Runtime.Configuration;
+
+public sealed record SharedAssemblyIdentity(
+    string Name,
+    string PublicKeyToken,
+    int MajorVersion);
 
 public sealed class LoadingOptions
 {
