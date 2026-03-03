@@ -5,6 +5,7 @@
     <ProjectReference Include="..\Nuplane.Store\Nuplane.Store.csproj" />
     <ProjectReference Include="..\Nuplane.NuGet\Nuplane.NuGet.csproj" />
     <ProjectReference Include="..\Nuplane.Sources.Directory\Nuplane.Sources.Directory.csproj" />
+    <ProjectReference Include="..\Nuplane.Loading.Abstractions\Nuplane.Loading.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

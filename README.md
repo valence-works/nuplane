@@ -153,6 +153,23 @@ Use these conventions when enabling advanced feed governance:
 - Use `strict` mode to fail packages missing lock entries and to block hash mismatches.
 - Rotate lock files intentionally and treat lock updates as auditable operational changes.
 
+## ⚙️ Phase 3 Operator Guidance (Optional Loading)
+
+Use these conventions when enabling optional in-process loading:
+
+- Keep loading opt-in and default-disabled unless the host explicitly wants Nuplane-managed loading.
+- Use per-package isolated load contexts and configure shared contracts by strong identity (`name`, `publicKeyToken`, `majorVersion`).
+- Configure bounded deactivation timeout and continue with unload attempt on timeout.
+- Treat `UnloadPending` as degraded and retry pending unload on each reconciliation cycle.
+- Capture outcome evidence using observer callbacks plus correlation-linked logs/metrics/health.
+
+### Phase 3 validation baseline
+
+- Profile: `phase3-loading-baseline`
+- Dataset: 20 active packages (including overlapping dependencies + shared-contract references)
+- Window: 10 identical reconciliation cycles
+- Failure injection: load failures, unload failures, deactivation timeout events
+
 ---
 
 ## 🛡 Integrity & Trust

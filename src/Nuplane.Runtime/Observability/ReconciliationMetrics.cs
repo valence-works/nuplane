@@ -32,4 +32,20 @@ public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
         telemetry.CleanupKeptCounter.Add(decisions.Count(x => x.Action == CleanupAction.Kept));
         telemetry.CleanupFailedCounter.Add(decisions.Count(x => x.Action == CleanupAction.Blocked));
     }
+
+    public void RecordLoadAttemptStarted() => telemetry.LoadingStartedCounter.Add(1);
+
+    public void RecordLoadSucceeded() => telemetry.LoadingSucceededCounter.Add(1);
+
+    public void RecordLoadFailed() => telemetry.LoadingFailedCounter.Add(1);
+
+    public void RecordUnloadAttempted() => telemetry.UnloadAttemptedCounter.Add(1);
+
+    public void RecordUnloadSucceeded() => telemetry.UnloadSucceededCounter.Add(1);
+
+    public void RecordUnloadPending() => telemetry.UnloadPendingCounter.Add(1);
+
+    public void RecordDeactivationTimeout() => telemetry.DeactivationTimeoutCounter.Add(1);
+
+    public void SetUnloadPendingPackages(long count) => telemetry.SetUnloadPendingPackages(count);
 }

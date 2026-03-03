@@ -594,6 +594,26 @@ If unload fails:
 * Host may choose to restart
 * Failure logged
 
+### Phase 3 Operator Notes
+
+Operational guidance for optional loading:
+
+* Keep loading opt-in and default-disabled for hosts that own loading behavior.
+* Configure a bounded deactivation timeout before unload attempts.
+* Treat `UnloadPending` as actionable degraded state and retry unload each reconciliation cycle.
+* Configure shared contract assemblies by strong identity (`name + public key token + major version`).
+* Capture per-cycle evidence with correlation IDs for load/unload outcomes and timeout events.
+
+### Phase 3 Validation Profile
+
+Recommended baseline for acceptance validation:
+
+* Profile: `phase3-loading-baseline`
+* Dataset: 20 active packages with valid dependencies, including overlapping dependency names and shared-contract references
+* Window: 10 identical reconciliation cycles for idempotence checks
+* Failure injection: load failures, unload failures, and deactivation timeout events
+* Required evidence: observer callbacks + correlation-linked logs/metrics/health snapshots
+
 ---
 
 ## Acceptance Criteria

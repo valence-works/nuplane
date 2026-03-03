@@ -1,4 +1,6 @@
 using Nuplane.Abstractions;
+using Nuplane.Loading;
+using Nuplane.Loading.Configuration;
 using Nuplane.NuGet.Resolution;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
@@ -41,11 +43,15 @@ public sealed class ReconciliationService
     private readonly FeedTrustPolicyOptions feedTrustPolicyOptions;
     private readonly LockFileOptions lockFileOptions;
     private readonly CleanupPolicyOptions cleanupPolicyOptions;
+    private readonly LoadingOptions loadingOptions;
+    private readonly IPackageLoader packageLoader;
+    private readonly IPackageUnloadCoordinator packageUnloadCoordinator;
     private readonly FeedTrustPolicyEvaluator feedTrustPolicyEvaluator;
     private readonly LockFileCoordinator lockFileCoordinator;
     private readonly DryRunPlanner dryRunPlanner;
     private readonly PackageCleanupService packageCleanupService;
     private readonly SemaphoreSlim cycleLock = new(1, 1);
+    private readonly Dictionary<string, PackageLoadContextHandle> pendingUnloads = new(StringComparer.OrdinalIgnoreCase);
     private int inFlight;
 
     public ReconciliationService(
@@ -91,7 +97,10 @@ public sealed class ReconciliationService
         FeedResolutionOptions? feedResolutionOptions = null,
         FeedTrustPolicyOptions? feedTrustPolicyOptions = null,
         LockFileOptions? lockFileOptions = null,
-        CleanupPolicyOptions? cleanupPolicyOptions = null)
+        CleanupPolicyOptions? cleanupPolicyOptions = null,
+        LoadingOptions? loadingOptions = null,
+        IPackageLoader? packageLoader = null,
+        IPackageUnloadCoordinator? packageUnloadCoordinator = null)
     {
         this.sources = sources?.ToArray() ?? throw new ArgumentNullException(nameof(sources));
         this.sourceTrustOptions = sourceTrustOptions ?? throw new ArgumentNullException(nameof(sourceTrustOptions));
@@ -108,6 +117,9 @@ public sealed class ReconciliationService
         this.feedTrustPolicyOptions = feedTrustPolicyOptions ?? new FeedTrustPolicyOptions();
         this.lockFileOptions = lockFileOptions ?? new LockFileOptions();
         this.cleanupPolicyOptions = cleanupPolicyOptions ?? new CleanupPolicyOptions();
+        this.loadingOptions = loadingOptions ?? new LoadingOptions();
+        this.packageLoader = packageLoader ?? new NoOpPackageLoader();
+        this.packageUnloadCoordinator = packageUnloadCoordinator ?? new NoOpPackageUnloadCoordinator();
         feedTrustPolicyEvaluator = new();
         lockFileCoordinator = new(new(this.lockFileOptions.Path), this.lockFileOptions);
         dryRunPlanner = new(this.desiredActualDiffEngine);
@@ -209,6 +221,57 @@ public sealed class ReconciliationService
                 trustAndLockPassed.Add(lockOutcome.EffectivePackage);
             }
 
+            if (loadingOptions.Enabled && trustAndLockPassed.Count > 0)
+            {
+                // Validate install paths are within the trusted store root before loading
+                if (!string.IsNullOrWhiteSpace(loadingOptions.ActiveStoreRoot))
+                {
+                    foreach (var package in trustAndLockPassed)
+                    {
+                        allowlistGate.EnsureActiveStorePath(package.Id, package.InstallPath, loadingOptions.ActiveStoreRoot);
+                    }
+                }
+
+                var sharedPolicy = loadingOptions.SharedAssemblies
+                    .Select(x => new SharedAssemblyPolicyEntry(x.Name, x.PublicKeyToken, x.MajorVersion))
+                    .ToArray();
+
+                foreach (var package in trustAndLockPassed)
+                {
+                    metrics.RecordLoadAttemptStarted();
+                }
+
+                var loadResult = await packageLoader.EnsureLoadedAsync(trustAndLockPassed, sharedPolicy, cancellationToken);
+
+                var failedLoadIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var package in trustAndLockPassed)
+                {
+                    if (loadResult.FailedByPackageId.TryGetValue(package.Id, out var reason))
+                    {
+                        failedLoadIds.Add(package.Id);
+                        combinedFailures.Add(package.Id);
+                        metrics.RecordLoadFailed();
+                        logger.LogLoadOutcome(correlationId, package.Id, succeeded: false, reason);
+                        await applyExecutor.RecordLoadingFailureNonMutatingAsync(package.Id, correlationId, reason, cancellationToken);
+                        await observerNotifier.NotifyPackageFailedAsync(
+                            package.Id,
+                            new InvalidOperationException(reason),
+                            correlationId,
+                            cancellationToken);
+                    }
+                    else
+                    {
+                        metrics.RecordLoadSucceeded();
+                        logger.LogLoadOutcome(correlationId, package.Id, succeeded: true, reason: null);
+                    }
+                }
+
+                trustAndLockPassed = trustAndLockPassed
+                    .Where(x => !failedLoadIds.Contains(x.Id))
+                    .ToList();
+            }
+
             resolutionResult = new(
                 trustAndLockPassed,
                 combinedFailures.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray(),
@@ -259,10 +322,84 @@ public sealed class ReconciliationService
             var requestedIds = new HashSet<string>(
                 allowlistedRequests.Select(r => r.Id),
                 StringComparer.OrdinalIgnoreCase);
+            var unloadPendingCount = 0;
+
+            // Retry previously pending unloads from prior cycles
+            var completedPending = new List<string>();
+            foreach (var (pendingKey, pendingContext) in pendingUnloads)
+            {
+                metrics.RecordUnloadAttempted();
+
+                var (_, retryUnload) = await packageUnloadCoordinator.AttemptUnloadAsync(
+                    pendingKey,
+                    pendingContext,
+                    loadingOptions.DeactivationTimeout,
+                    correlationId,
+                    cancellationToken);
+
+                if (retryUnload.Outcome == UnloadOutcome.Unloaded)
+                {
+                    completedPending.Add(pendingKey);
+                    metrics.RecordUnloadSucceeded();
+                    logger.LogUnloadOutcome(correlationId, pendingKey, "unloaded", retryUnload.PendingReason);
+                }
+                else
+                {
+                    metrics.RecordUnloadPending();
+                    unloadPendingCount++;
+                    logger.LogUnloadOutcome(correlationId, pendingKey, "unload-pending-retry", retryUnload.PendingReason);
+                }
+            }
+
+            foreach (var completed in completedPending)
+            {
+                pendingUnloads.Remove(completed);
+            }
+
             foreach (var activeId in activeVersions.Keys)
             {
                 if (!requestedIds.Contains(activeId))
                 {
+                    if (loadingOptions.Enabled &&
+                        activeVersions.TryGetValue(activeId, out var activeVersion) &&
+                        packageLoader.TryRemoveContext(activeId, activeVersion, out var context) &&
+                        context is not null)
+                    {
+                        metrics.RecordUnloadAttempted();
+
+                        var (deactivation, unload) = await packageUnloadCoordinator.AttemptUnloadAsync(
+                            activeId,
+                            context,
+                            loadingOptions.DeactivationTimeout,
+                            correlationId,
+                            cancellationToken);
+
+                        if (deactivation.TimedOut)
+                        {
+                            metrics.RecordDeactivationTimeout();
+                        }
+
+                        switch (unload.Outcome)
+                        {
+                            case UnloadOutcome.Unloaded:
+                                metrics.RecordUnloadSucceeded();
+                                logger.LogUnloadOutcome(correlationId, activeId, "unloaded", unload.PendingReason);
+                                break;
+                            case UnloadOutcome.UnloadPending:
+                                metrics.RecordUnloadPending();
+                                unloadPendingCount++;
+                                pendingUnloads[$"{activeId}@{activeVersion}"] = context;
+                                logger.LogUnloadOutcome(correlationId, activeId, "unload-pending", unload.PendingReason);
+                                break;
+                            default:
+                                metrics.RecordUnloadPending();
+                                unloadPendingCount++;
+                                pendingUnloads[$"{activeId}@{activeVersion}"] = context;
+                                logger.LogUnloadOutcome(correlationId, activeId, "unload-failed", unload.PendingReason);
+                                break;
+                        }
+                    }
+
                     mergedActive.Remove(activeId);
                 }
             }
@@ -294,7 +431,14 @@ public sealed class ReconciliationService
             }
 
             var hadFailures = readResult.UsedFallback || applyResult.FailedPackageIds.Count > 0;
-            var isDegraded = healthEvaluator.Evaluate(hadFailures, readResult.AllSourcesFresh, trustFailures, lockFailures, cleanupFailures);
+            metrics.SetUnloadPendingPackages(unloadPendingCount);
+            var isDegraded = healthEvaluator.Evaluate(
+                hadFailures,
+                readResult.AllSourcesFresh,
+                trustFailures,
+                lockFailures,
+                cleanupFailures,
+                unloadPendingCount);
             var cycleDuration = DateTimeOffset.UtcNow - cycleStartedAt;
             metrics.RecordCycle(changeSet, applyResult.FailedPackageIds.Count, cycleDuration, mergedActive.Count);
             logger.LogCycleCompleted(correlationId, isDegraded, applyResult.FailedPackageIds.Count);

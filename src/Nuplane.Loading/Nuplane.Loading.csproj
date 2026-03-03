@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Nuplane.Abstractions\Nuplane.Abstractions.csproj" />
+    <ProjectReference Include="..\Nuplane.Loading.Abstractions\Nuplane.Loading.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

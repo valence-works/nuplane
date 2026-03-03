@@ -10,6 +10,8 @@ public sealed class ReconciliationHealthEvaluator
 
     public int LastCleanupFailureCount { get; private set; }
 
+    public int LastUnloadPendingCount { get; private set; }
+
     public bool Evaluate(bool hadAnyFailures, bool allSourcesFresh)
     {
         if (hadAnyFailures || !allSourcesFresh)
@@ -33,5 +35,22 @@ public sealed class ReconciliationHealthEvaluator
     {
         LastCleanupFailureCount = Math.Max(0, cleanupFailures);
         return Evaluate(hadAnyFailures || cleanupFailures > 0, allSourcesFresh, trustFailures, lockFailures);
+    }
+
+    public bool Evaluate(
+        bool hadAnyFailures,
+        bool allSourcesFresh,
+        int trustFailures,
+        int lockFailures,
+        int cleanupFailures,
+        int unloadPendingCount)
+    {
+        LastUnloadPendingCount = Math.Max(0, unloadPendingCount);
+        return Evaluate(
+            hadAnyFailures || unloadPendingCount > 0,
+            allSourcesFresh,
+            trustFailures,
+            lockFailures,
+            cleanupFailures);
     }
 }

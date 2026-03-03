@@ -43,8 +43,16 @@ builder.Services.AddNuplaneRuntime(
 			Credentials: "secrets://nuget/main"));
 	});
 
+// Phase 3 optional loading (register via Nuplane.Loading.Hosting — fully wired):
+// builder.Services.AddNuplaneLoading(loading =>
+// {
+// 	loading.Enabled = true;
+// 	loading.DeactivationTimeout = TimeSpan.FromSeconds(15);
+// 	loading.SharedAssemblies.Add(new("Nuplane.Abstractions", "31bf3856ad364e35", 1));
+// });
+
 var app = builder.Build();
 
-app.MapGet("/", () => "Nuplane Sample ASP.NET configured for Phase 2 governance options.");
+app.MapGet("/", () => "Nuplane Sample ASP.NET configured for Phase 2 governance options (plus Phase 3 loading example comments).");
 
 app.Run();

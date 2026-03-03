@@ -48,4 +48,12 @@ services.AddNuplaneRuntime(
 			Credentials: "secrets://nuget/main"));
 	});
 
-Console.WriteLine("Nuplane Sample Console configured for Phase 2 governance options.");
+// Phase 3 optional loading (register via Nuplane.Loading.Hosting — fully wired):
+// services.AddNuplaneLoading(loading =>
+// {
+// 	loading.Enabled = true;
+// 	loading.DeactivationTimeout = TimeSpan.FromSeconds(15);
+// 	loading.SharedAssemblies.Add(new("Nuplane.Abstractions", "31bf3856ad364e35", 1));
+// });
+
+Console.WriteLine("Nuplane Sample Console configured for Phase 2 governance options (plus Phase 3 loading example comments).");
