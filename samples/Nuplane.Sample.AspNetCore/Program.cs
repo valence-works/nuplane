@@ -43,7 +43,7 @@ builder.Services.AddNuplaneRuntime(
 			Credentials: "secrets://nuget/main"));
 	});
 
-// Phase 3 optional loading example (separate opt-in registration):
+// Phase 3 optional loading example (separate opt-in registration via Nuplane.Hosting.Loading):
 // builder.Services.AddNuplaneLoading(loading =>
 // {
 // 	loading.Enabled = true;

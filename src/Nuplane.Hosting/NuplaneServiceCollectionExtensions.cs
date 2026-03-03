@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Abstractions;
-using Nuplane.Loading;
 using Nuplane.NuGet.Resolution;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
@@ -112,36 +111,6 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<INuGetPackageResolver, Runtime.Reconciliation.MultiFeedPackageResolver>();
         services.AddSingleton(new StoreRegistry(new(), stateFilePath));
         services.AddSingleton<ReconciliationService>();
-
-        return services;
-    }
-
-    public static IServiceCollection AddNuplaneLoading(
-        this IServiceCollection services,
-        Action<LoadingOptions>? configureLoading = null)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-
-        var loadingOptions = new LoadingOptions();
-        configureLoading?.Invoke(loadingOptions);
-
-        if (!loadingOptions.IsValid())
-        {
-            throw new ArgumentException("Invalid loading options configuration.", nameof(configureLoading));
-        }
-
-        var loadingOptionsValidator = new LoadingOptionsValidator();
-        var loadingValidationErrors = loadingOptionsValidator.Validate(loadingOptions);
-        if (loadingValidationErrors.Count > 0)
-        {
-            throw new ArgumentException($"Invalid loading configuration: {string.Join("; ", loadingValidationErrors)}");
-        }
-
-        services.AddSingleton(loadingOptions);
-        services.AddSingleton(loadingOptionsValidator);
-        services.AddSingleton<SharedAssemblyPolicyMatcher>();
-        services.AddSingleton<PackageLoader>();
-        services.AddSingleton<PackageUnloadCoordinator>();
 
         return services;
     }

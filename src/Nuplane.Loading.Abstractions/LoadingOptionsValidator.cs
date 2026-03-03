@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Nuplane.Runtime.Configuration;
+namespace Nuplane.Loading.Configuration;
 
 public sealed class LoadingOptionsValidator
 {

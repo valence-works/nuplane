@@ -1,5 +1,6 @@
 using Nuplane.Abstractions;
 using Nuplane.Loading;
+using Nuplane.Loading.Configuration;
 using Nuplane.NuGet.Resolution;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
@@ -43,8 +44,8 @@ public sealed class ReconciliationService
     private readonly LockFileOptions lockFileOptions;
     private readonly CleanupPolicyOptions cleanupPolicyOptions;
     private readonly LoadingOptions loadingOptions;
-    private readonly PackageLoader packageLoader;
-    private readonly PackageUnloadCoordinator packageUnloadCoordinator;
+    private readonly IPackageLoader packageLoader;
+    private readonly IPackageUnloadCoordinator packageUnloadCoordinator;
     private readonly FeedTrustPolicyEvaluator feedTrustPolicyEvaluator;
     private readonly LockFileCoordinator lockFileCoordinator;
     private readonly DryRunPlanner dryRunPlanner;
@@ -97,8 +98,8 @@ public sealed class ReconciliationService
         LockFileOptions? lockFileOptions = null,
         CleanupPolicyOptions? cleanupPolicyOptions = null,
         LoadingOptions? loadingOptions = null,
-        PackageLoader? packageLoader = null,
-        PackageUnloadCoordinator? packageUnloadCoordinator = null)
+        IPackageLoader? packageLoader = null,
+        IPackageUnloadCoordinator? packageUnloadCoordinator = null)
     {
         this.sources = sources?.ToArray() ?? throw new ArgumentNullException(nameof(sources));
         this.sourceTrustOptions = sourceTrustOptions ?? throw new ArgumentNullException(nameof(sourceTrustOptions));
@@ -116,8 +117,8 @@ public sealed class ReconciliationService
         this.lockFileOptions = lockFileOptions ?? new LockFileOptions();
         this.cleanupPolicyOptions = cleanupPolicyOptions ?? new CleanupPolicyOptions();
         this.loadingOptions = loadingOptions ?? new LoadingOptions();
-        this.packageLoader = packageLoader ?? new PackageLoader();
-        this.packageUnloadCoordinator = packageUnloadCoordinator ?? new PackageUnloadCoordinator();
+        this.packageLoader = packageLoader ?? new NoOpPackageLoader();
+        this.packageUnloadCoordinator = packageUnloadCoordinator ?? new NoOpPackageUnloadCoordinator();
         feedTrustPolicyEvaluator = new();
         lockFileCoordinator = new(new(this.lockFileOptions.Path), this.lockFileOptions);
         dryRunPlanner = new(this.desiredActualDiffEngine);

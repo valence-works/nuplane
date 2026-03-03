@@ -24,9 +24,9 @@
 
 **⚠️ CRITICAL**: No user story implementation starts before this phase is complete.
 
-- [X] T005 Define loading options model (enable flag, deactivation timeout, shared policy entries) in src/Nuplane.Runtime/Configuration/LoadingOptions.cs
+- [X] T005 Define loading options model (enable flag, deactivation timeout, shared policy entries) in src/Nuplane.Loading.Abstractions/LoadingOptions.cs
 - [X] T006 [P] Add loading abstractions for session and unload outcomes in src/Nuplane.Loading/
-- [X] T007 [P] Add shared assembly identity validation (name/token/major) in src/Nuplane.Runtime/Configuration/LoadingOptionsValidator.cs
+- [X] T007 [P] Add shared assembly identity validation (name/token/major) in src/Nuplane.Loading.Abstractions/LoadingOptionsValidator.cs
 - [X] T008 [P] Add trusted-source loading boundary validation for active-store-only assembly paths in src/Nuplane.Runtime/Reconciliation/AllowlistGate.cs
 - [X] T009 Add non-mutating transactional safety guard for loading failures (preserve active/LKG) in src/Nuplane.Runtime/Reconciliation/PackageApplyExecutor.cs
 - [X] T010 Add baseline loading observability contracts (load/unload/timeout/pending) in src/Nuplane.Runtime/Observability/ReconciliationTelemetry.cs
@@ -84,7 +84,7 @@
 - [X] T030 [P] [US2] Implement deterministic resolver order (shared policy -> package resolver -> framework fallback) in src/Nuplane.Loading/PackageAssemblyResolver.cs
 - [X] T031 [US2] Integrate shared policy evaluation into package load context resolution in src/Nuplane.Loading/PackageAssemblyLoadContext.cs
 - [X] T032 [US2] Add shared policy diagnostics and mismatch reason codes in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
-- [X] T033 [US2] Validate shared policy configuration wiring and defaults in src/Nuplane.Runtime/Configuration/LoadingOptions.cs
+- [X] T033 [US2] Validate shared policy configuration wiring and defaults in src/Nuplane.Loading.Abstractions/LoadingOptions.cs
 
 **Checkpoint**: User Stories 1 and 2 are independently functional and testable.
 

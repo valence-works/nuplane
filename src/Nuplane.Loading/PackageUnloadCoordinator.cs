@@ -2,13 +2,30 @@ using System.Collections.Concurrent;
 
 namespace Nuplane.Loading;
 
-public sealed class PackageUnloadCoordinator
+public sealed class PackageUnloadCoordinator : IPackageUnloadCoordinator
 {
     private readonly ConcurrentDictionary<string, int> attempts = new(StringComparer.OrdinalIgnoreCase);
 
-    public async Task<(DeactivationAttempt deactivation, UnloadOutcomeRecord unload)> AttemptUnloadAsync(
+    public Task<(DeactivationAttempt deactivation, UnloadOutcomeRecord unload)> AttemptUnloadAsync(
         string packageId,
         PackageAssemblyLoadContext context,
+        TimeSpan deactivationTimeout,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return AttemptUnloadAsync(
+            packageId,
+            new PackageLoadContextHandle($"{packageId}:context", context),
+            deactivationTimeout,
+            correlationId,
+            cancellationToken);
+    }
+
+    public async Task<(DeactivationAttempt deactivation, UnloadOutcomeRecord unload)> AttemptUnloadAsync(
+        string packageId,
+        PackageLoadContextHandle context,
         TimeSpan deactivationTimeout,
         string correlationId,
         CancellationToken cancellationToken)
@@ -16,6 +33,11 @@ public sealed class PackageUnloadCoordinator
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+
+        if (context.Context is not PackageAssemblyLoadContext loadContext)
+        {
+            throw new ArgumentException("Invalid load context handle.", nameof(context));
+        }
 
         var requestedAt = DateTimeOffset.UtcNow;
         var completed = false;
@@ -44,7 +66,7 @@ public sealed class PackageUnloadCoordinator
 
         try
         {
-            context.Unload();
+            loadContext.Unload();
             var unload = new UnloadOutcomeRecord(
                 packageId,
                 attempt,

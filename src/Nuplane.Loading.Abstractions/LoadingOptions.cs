@@ -1,4 +1,4 @@
-namespace Nuplane.Runtime.Configuration;
+namespace Nuplane.Loading.Configuration;
 
 public sealed record SharedAssemblyIdentity(
     string Name,

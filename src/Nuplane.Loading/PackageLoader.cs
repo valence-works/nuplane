@@ -4,11 +4,7 @@ using Nuplane.Abstractions;
 
 namespace Nuplane.Loading;
 
-public sealed record PackageLoadResult(
-    IReadOnlyList<PackageLoadSession> Loaded,
-    IReadOnlyDictionary<string, string> FailedByPackageId);
-
-public sealed class PackageLoader
+public sealed class PackageLoader : IPackageLoader
 {
     private readonly SharedAssemblyPolicyMatcher matcher;
     private readonly ConcurrentDictionary<string, PackageAssemblyLoadContext> contexts = new(StringComparer.OrdinalIgnoreCase);
@@ -81,17 +77,19 @@ public sealed class PackageLoader
         return Task.FromResult<PackageLoadResult>(new(loaded, failed));
     }
 
-    public bool TryGetContext(string packageId, string version, out PackageAssemblyLoadContext? context)
-    {
-        var key = BuildKey(packageId, version);
-        return contexts.TryGetValue(key, out context);
-    }
-
-    public bool TryRemoveContext(string packageId, string version, out PackageAssemblyLoadContext? context)
+    public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
     {
         var key = BuildKey(packageId, version);
         sessions.TryRemove(key, out _);
-        return contexts.TryRemove(key, out context);
+
+        if (contexts.TryRemove(key, out var removed) && removed is not null)
+        {
+            context = new PackageLoadContextHandle(key, removed);
+            return true;
+        }
+
+        context = null;
+        return false;
     }
 
     private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";

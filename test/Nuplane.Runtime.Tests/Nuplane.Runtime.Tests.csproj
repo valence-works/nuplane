@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Nuplane.Runtime\Nuplane.Runtime.csproj" />
+    <ProjectReference Include="..\..\src\Nuplane.Loading\Nuplane.Loading.csproj" />
   </ItemGroup>
 
 </Project>
