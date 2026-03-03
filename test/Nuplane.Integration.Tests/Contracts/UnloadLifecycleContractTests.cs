@@ -18,6 +18,7 @@ public sealed class UnloadLifecycleContractTests
             CancellationToken.None);
 
         Assert.True(deactivation.TimedOut);
+        // After unload, the context may or may not be GC-collected depending on timing
         Assert.True(unload.Outcome == UnloadOutcome.Unloaded || unload.Outcome == UnloadOutcome.UnloadPending);
     }
 
