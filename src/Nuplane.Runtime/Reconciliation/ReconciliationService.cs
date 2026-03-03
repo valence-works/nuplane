@@ -51,6 +51,7 @@ public sealed class ReconciliationService
     private readonly DryRunPlanner dryRunPlanner;
     private readonly PackageCleanupService packageCleanupService;
     private readonly SemaphoreSlim cycleLock = new(1, 1);
+    private readonly Dictionary<string, PackageLoadContextHandle> pendingUnloads = new(StringComparer.OrdinalIgnoreCase);
     private int inFlight;
 
     public ReconciliationService(
@@ -222,9 +223,23 @@ public sealed class ReconciliationService
 
             if (loadingOptions.Enabled && trustAndLockPassed.Count > 0)
             {
+                // Validate install paths are within the trusted store root before loading
+                if (!string.IsNullOrWhiteSpace(loadingOptions.ActiveStoreRoot))
+                {
+                    foreach (var package in trustAndLockPassed)
+                    {
+                        allowlistGate.EnsureActiveStorePath(package.Id, package.InstallPath, loadingOptions.ActiveStoreRoot);
+                    }
+                }
+
                 var sharedPolicy = loadingOptions.SharedAssemblies
                     .Select(x => new SharedAssemblyPolicyEntry(x.Name, x.PublicKeyToken, x.MajorVersion))
                     .ToArray();
+
+                foreach (var package in trustAndLockPassed)
+                {
+                    metrics.RecordLoadAttemptStarted();
+                }
 
                 var loadResult = await packageLoader.EnsureLoadedAsync(trustAndLockPassed, sharedPolicy, cancellationToken);
 
@@ -232,7 +247,6 @@ public sealed class ReconciliationService
 
                 foreach (var package in trustAndLockPassed)
                 {
-                    metrics.RecordLoadAttemptStarted();
                     if (loadResult.FailedByPackageId.TryGetValue(package.Id, out var reason))
                     {
                         failedLoadIds.Add(package.Id);
@@ -310,6 +324,38 @@ public sealed class ReconciliationService
                 StringComparer.OrdinalIgnoreCase);
             var unloadPendingCount = 0;
 
+            // Retry previously pending unloads from prior cycles
+            var completedPending = new List<string>();
+            foreach (var (pendingKey, pendingContext) in pendingUnloads)
+            {
+                metrics.RecordUnloadAttempted();
+
+                var (_, retryUnload) = await packageUnloadCoordinator.AttemptUnloadAsync(
+                    pendingKey,
+                    pendingContext,
+                    loadingOptions.DeactivationTimeout,
+                    correlationId,
+                    cancellationToken);
+
+                if (retryUnload.Outcome == UnloadOutcome.Unloaded)
+                {
+                    completedPending.Add(pendingKey);
+                    metrics.RecordUnloadSucceeded();
+                    logger.LogUnloadOutcome(correlationId, pendingKey, "unloaded", retryUnload.PendingReason);
+                }
+                else
+                {
+                    metrics.RecordUnloadPending();
+                    unloadPendingCount++;
+                    logger.LogUnloadOutcome(correlationId, pendingKey, "unload-pending-retry", retryUnload.PendingReason);
+                }
+            }
+
+            foreach (var completed in completedPending)
+            {
+                pendingUnloads.Remove(completed);
+            }
+
             foreach (var activeId in activeVersions.Keys)
             {
                 if (!requestedIds.Contains(activeId))
@@ -342,11 +388,13 @@ public sealed class ReconciliationService
                             case UnloadOutcome.UnloadPending:
                                 metrics.RecordUnloadPending();
                                 unloadPendingCount++;
+                                pendingUnloads[$"{activeId}@{activeVersion}"] = context;
                                 logger.LogUnloadOutcome(correlationId, activeId, "unload-pending", unload.PendingReason);
                                 break;
                             default:
                                 metrics.RecordUnloadPending();
                                 unloadPendingCount++;
+                                pendingUnloads[$"{activeId}@{activeVersion}"] = context;
                                 logger.LogUnloadOutcome(correlationId, activeId, "unload-failed", unload.PendingReason);
                                 break;
                         }

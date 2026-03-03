@@ -11,6 +11,8 @@ public sealed class LoadingOptions
 
     public TimeSpan DeactivationTimeout { get; set; } = TimeSpan.FromSeconds(15);
 
+    public string? ActiveStoreRoot { get; set; }
+
     public ICollection<SharedAssemblyIdentity> SharedAssemblies { get; } = new List<SharedAssemblyIdentity>();
 
     public bool IsValid() =>

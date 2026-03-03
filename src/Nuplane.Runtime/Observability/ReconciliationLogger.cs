@@ -127,7 +127,7 @@ public sealed class ReconciliationLogger
             DateTimeOffset.UtcNow,
             correlationId,
             "reconciliation.load.outcome",
-            reason ?? (succeeded ? "load-succeeded" : "load-failed"),
+            succeeded ? "load-succeeded" : "load-failed",
             new Dictionary<string, object?>
             {
                 ["packageId"] = packageId,
