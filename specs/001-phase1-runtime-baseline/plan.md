@@ -10,13 +10,13 @@ Deliver a production-ready Phase 1 baseline for Nuplane runtime package reconcil
 ## Technical Context
 
 **Language/Version**: C# on .NET 8 (LTS)  
-**Primary Dependencies**: `NuGet.Protocol`/NuGet Client SDK, `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Logging`, `System.Diagnostics.Metrics`  
+**Primary Dependencies**: `NuGet.Protocol`/NuGet Client SDK, `Microsoft.Extensions.Hosting.Abstractions` (for `BackgroundService`), `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Logging`, `System.Diagnostics.Metrics`  
 **Dependency Management**: NuGet Central Package Management (`Directory.Packages.props`) with shared versions managed centrally  
 **Storage**: File-based deterministic store (`state.json`, immutable package directories, atomic active-pointer switching)  
 **Testing**: xUnit + integration tests (runtime/store/nuget boundaries) + contract tests for source/observer interfaces  
 **Target Platform**: Cross-platform host environments supporting .NET 8 (Linux/macOS/Windows)  
 **Project Type**: Multi-package .NET class-library runtime infrastructure  
-**Performance Goals**: Detect and converge desired-state changes within one poll interval while maintaining host availability during failed updates  
+**Performance Goals**: Detect and converge desired-state changes within one poll interval while maintaining host availability during failed updates. The polling loop MUST be a `BackgroundService` (hosted service) using `PeriodicTimer` — the reconciliation engine itself (`ReconciliationService`) provides only the single-cycle `TriggerManualAsync` method; the timer-driven invocation is a separate hosted service class.
 **Constraints**: Idempotent cycles, single-flight reconciliation, bounded retries with backoff, strict allowlisted package IDs, no host-specific activation semantics  
 **Scale/Scope**: Phase 1 only — explicit + directory desired sources, one feed, per-package transactions, baseline observability and health signals
 

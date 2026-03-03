@@ -1,80 +1,91 @@
-# Quickstart — Phase 4 Operational Enhancements
+# Quickstart — Phase 4 Cluster-Convergent Runtime Loading (Lean)
 
 ## Goal
-Validate Phase 4 behavior for channel isolation, explicit staged promotion, deterministic canary rollout selection, integrity enforcement gates, optional admin operational surface, and non-mutating failure handling.
+
+Validate Phase 4 behavior for:
+
+- deterministic desired manifest input (exact versions)
+- deterministic multi-source aggregation
+- startup + polling reconciliation plus explicit trigger
+- optional loader boundary integration
+- optional admin operational surface
+- non-mutating, LKG-preserving failure handling
 
 ## Preconditions
+
 - .NET 8 SDK installed.
 - Feature branch checked out: `004-phase4-operational-enhancements`.
-- Baseline reconciliation/store behavior from Phases 1–3 passing in local environment.
-- Distinct channel configurations for `prod`, `staging`, and `canary`.
-- Deterministic node identity inputs available for canary selection tests.
-- Integrity rules configured for at least one required verification in enforce mode.
+- Baseline reconciliation/store behavior from Phases 1–3 passing locally.
 
 ## Validation Profile
-- Profile name: `phase4-operational-governance-baseline`.
-- Channels: 3 (`prod`, `staging`, `canary`) with disjoint desired package sets.
-- Package set: 30 total packages, including staged candidates and mixed compliance for integrity checks.
-- Node set: 50 eligible nodes for canary channel validation.
+
+- Profile name: `phase4-convergent-loading-baseline`.
+- Replicas: 2+ host instances pointing at the same desired manifest.
+- Desired state: exact versions only.
 - Cycle window: 20 identical-input cycles for determinism checks.
-- Failure injection: channel misconfiguration, promotion failure, integrity failure, admin trigger unavailable.
+- Failure injection: manifest invalid, desired source outage, acquisition failure, loader failure, admin trigger unavailable.
 
 ## Verification command set
+
 Run from repository root:
 
 ```bash
 dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
-  --filter "FullyQualifiedName~ChannelIsolation|FullyQualifiedName~StagedPromotion|FullyQualifiedName~CanarySelectionDeterminism|FullyQualifiedName~IntegrityActivationGate"
+  --filter "FullyQualifiedName~DesiredManifest|FullyQualifiedName~DesiredAggregation|FullyQualifiedName~LoaderBoundary|FullyQualifiedName~OperationalSnapshot"
+
 dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
-  --filter "FullyQualifiedName~ChannelRolloutContract|FullyQualifiedName~CanarySelectionContract|FullyQualifiedName~IntegrityAdminContract"
-dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
-  --filter "FullyQualifiedName~PromotionFailureIsolation|FullyQualifiedName~ChannelMisconfigurationDegraded|FullyQualifiedName~ManualReconcileObservability"
+  --filter "FullyQualifiedName~ManifestConvergence|FullyQualifiedName~DesiredSourceOutageIsolation|FullyQualifiedName~ManualReconcile|FullyQualifiedName~LoaderFailureIsolation"
+
 dotnet test Nuplane.sln
 ./build/validate-secrets.sh
 ```
 
-## 1) Channel isolation and misconfiguration handling
-1. Configure disjoint desired package sets per channel.
-2. Run reconciliation with `prod` selected.
-3. Verify only `prod`-scoped packages are evaluated/activated.
-4. Select a channel with empty desired sources.
-5. Verify cycle is non-mutating and health reports degraded with explicit misconfiguration reason.
+## 1) Desired manifest determinism
 
-## 2) Staging and explicit promotion
-1. Introduce a newer package version with staging enabled.
-2. Verify candidate is staged and remains inactive.
-3. Issue explicit operator promotion request.
-4. Verify atomic active switch, LKG preservation, and promoted state.
-5. Inject promotion failure for one package/node.
-6. Verify current active remains unchanged, candidate marked failed, and unrelated operations continue.
+1. Configure a desired manifest containing 5–10 packages pinned to exact versions.
+2. Start two host instances configured to read the same manifest.
+3. Run multiple reconciliation cycles with no input changes.
+4. Verify both hosts compute the same desired set and remain idempotent.
 
-## 3) Deterministic canary rollout
-1. Configure canary rollout with rollout ID, eligible nodes, and target percentage.
-2. Run repeated cycles with identical inputs.
-3. Verify selected node set is identical across cycles.
-4. Increase target percentage.
-5. Verify deterministic expansion of selected nodes and no activation on non-eligible nodes.
+## 2) Manifest update → eventual convergence
 
-## 4) Integrity enforcement
-1. Configure enforce-mode integrity rules.
-2. Attempt activation with mixed compliant/non-compliant package set.
-3. Verify compliant packages remain eligible.
-4. Verify non-compliant packages are blocked with explicit policy-failure outcomes and non-mutating active state.
+1. Upload a new package version to the configured source.
+2. Update the manifest to reference the new exact version.
+3. Trigger reconcile (or wait for polling interval).
+4. Verify each host eventually activates the new version with transactional/LKG safety.
+
+## 3) Multi-source aggregation determinism + outage isolation
+
+1. Configure two desired sources (e.g., manifest + directory desired source).
+2. Introduce a duplicate package ID across sources.
+3. Verify deterministic tie-break behavior and reason codes.
+4. Simulate one source being unavailable.
+5. Verify degraded outcome and non-mutating behavior for impacted requests.
+
+## 4) Optional loader boundary
+
+1. Activate a package containing a known type.
+2. Enable the optional loader boundary.
+3. Verify the host can load the known type from the active package.
+4. Inject a loader failure (e.g., invalid assembly) and verify:
+   - host does not crash
+   - failure is observable (event + correlation)
 
 ## 5) Optional admin surface
-1. Read package inventory, state, and health snapshot through admin surface.
-2. Verify snapshot consistency for active/staged/reconcile outcome data.
-3. Trigger manual reconciliation.
-4. Verify outcome is observable via logs/metrics/snapshot changes.
+
+1. Read operational snapshot/state via the admin surface.
+2. Verify snapshot is internally consistent and reflects the current active set.
+3. Trigger manual reconcile.
+4. Verify the outcome is observable and reflected in snapshot/telemetry.
 
 ## Expected evidence
-- Correlation-linked logs for channel scope, staging/promotion, canary selection, integrity outcomes, and admin trigger outcomes.
-- Metrics for staged/promoted counts, canary-selected nodes, integrity failures, and degraded-cycle reasons.
-- Health state transitions demonstrating degraded behavior for channel misconfiguration and recovery when resolved.
+
+- Correlation-linked logs for manifest/source outcomes, acquisition/activation outcomes, loader outcomes, and admin trigger outcomes.
+- Metrics for degraded reasons and failure counts by stage.
+- Health state transitions demonstrating degraded behavior on invalid manifest/source outage and recovery when resolved.
 
 ## Success Criteria Validation Checks
-1. Validate channel isolation for 100% of activation actions across 20 cycles (`SC-001`).
-2. Validate staged inactivity until explicit promotion and atomic promoted switch with fallback on failure (`SC-002`).
-3. Validate deterministic canary selection and zero non-eligible activations (`SC-003`).
-4. Validate all non-compliant packages are blocked while compliant packages remain eligible (`SC-004`).
-5. Validate operator read+trigger workflows complete within 2 minutes in at least 95% of acceptance runs (`SC-005`).
+
+1. Validate replica convergence on identical manifest (`SC-001`).
+2. Validate LKG preservation and non-corruption under injected failures (`SC-002`).
+3. Validate admin read+trigger workflow timing (`SC-003`).

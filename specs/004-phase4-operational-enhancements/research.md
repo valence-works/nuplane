@@ -1,51 +1,46 @@
-# Phase 0 Research — Phase 4 Operational Enhancements
+# Phase 0 Research — Phase 4 Cluster-Convergent Runtime Loading (Lean)
 
-## Decision 1: Channel selection and isolation semantics
-- Decision: Reconciliation and activation execute strictly within the selected channel scope (`prod`, `staging`, `canary`) and never cross-activate packages from other channels.
-- Rationale: Enforces environment segmentation and prevents cross-environment contamination.
-- Alternatives considered: Shared global desired set with channel tags (rejected: higher accidental activation risk), implicit default-channel fallback (rejected: hides config errors).
+## Decision 1: Convergence model (no distributed coordination)
+- Decision: Each replica reconciles independently against shared desired-state inputs and a node-local store. Cluster convergence is achieved via deterministic desired inputs, not via leader election or distributed locks.
+- Rationale: Keeps Nuplane host-neutral and avoids embedding distributed systems primitives.
+- Alternatives considered: leader-based reconciliation (rejected: adds cluster coupling), shared distributed store (rejected: much larger scope/risk).
 
-## Decision 2: Empty/unconfigured channel behavior
-- Decision: When selected channel has no configured desired sources, run a non-mutating cycle and emit degraded health with explicit misconfiguration outcome.
-- Rationale: Preserves store/runtime safety while surfacing actionable operator diagnostics.
-- Alternatives considered: Hard cycle abort (rejected: unnecessary operational disruption), reporting healthy no-op (rejected: masks configuration defect).
+## Decision 2: Shared desired manifest (exact versions)
+- Decision: Add an optional shared desired manifest input that pins exact package versions.
+- Rationale: Exact versions provide deterministic convergence, simplify troubleshooting, and avoid version-range drift across replicas.
+- Alternatives considered: version ranges in manifest (deferred: requires deterministic resolution policy/lock behavior), “latest” semantics (rejected: nondeterministic without additional controls).
 
-## Decision 3: Staged rollout promotion trigger
-- Decision: Promotion from staged candidate to active requires explicit operator action only.
-- Rationale: Keeps release intent auditable and minimizes accidental activation from noisy readiness signals.
-- Alternatives considered: automatic readiness promotion (rejected: less operator control), dual-mode per-channel promotion (deferred: increases policy complexity for Phase 4 baseline).
+## Decision 3: Manifest update protocol (upload then manifest)
+- Decision: Recommend an update pattern where package blobs are uploaded first, and the manifest is written/overwritten last.
+- Rationale: Minimizes “manifest references missing package” windows and makes failures cleanly retryable.
+- Alternatives considered: implicit discovery by listing storage (rejected: listing can be eventually consistent/unordered, complicates determinism).
 
-## Decision 4: Promotion failure isolation
-- Decision: Promotion failure keeps current active version unchanged, marks staged candidate as failed, and continues unrelated package/node operations in the same cycle.
-- Rationale: Aligns with transactional safety + bounded blast radius while preserving forward progress.
-- Alternatives considered: fail-fast whole-cycle abort (rejected: broad impact), all-or-nothing global rollback (rejected: unnecessary coupling across independent updates).
+## Decision 4: Multi-source desired aggregation (deterministic tie-break)
+- Decision: Support multiple desired sources but require deterministic ordering and explicit tie-break rules for duplicates.
+- Rationale: Prevents “flip-flopping” desired sets across cycles and makes behavior testable.
+- Alternatives considered: first-come runtime ordering (rejected: nondeterministic), error on duplicates only (deferred: too strict for early adopters).
 
-## Decision 5: Canary node selection strategy
-- Decision: Percentage-based canary rollout uses deterministic stable hashing over canonical selection input (`rolloutId`, sorted eligible node IDs, target percentage).
-- Rationale: Guarantees idempotent node selection for identical inputs and avoids node flapping.
-- Alternatives considered: random selection each cycle (rejected: nondeterministic), explicit allowlist only (rejected: no gradual rollout capability).
+## Decision 5: Triggering reconciliation (polling + explicit)
+- Decision: Keep polling as the robustness baseline and add explicit triggers (in-process and optional REST) for near real-time updates.
+- Rationale: Polling ensures eventual convergence even if triggers fail; explicit triggers reduce operator feedback loop time after uploads.
+- Alternatives considered: triggers-only (rejected: brittle), short polling only (rejected: unnecessary overhead).
 
-## Decision 6: Canary progression model
-- Decision: Canary progression is monotonic within a rollout (percentage can increase in steps; selected node set expands deterministically).
-- Rationale: Supports controlled expansion and reproducible rollout evidence.
-- Alternatives considered: bidirectional percentage changes by default (rejected: operational ambiguity), ad hoc per-cycle overrides (rejected: weak auditability).
+## Decision 6: Loader boundary (optional module)
+- Decision: Provide an optional Loader SDK integration boundary (separate module) to load assemblies/types/services from active packages.
+- Rationale: Keeps Nuplane core host-neutral while enabling end-to-end runtime extensibility where desired.
+- Alternatives considered: mandate loading in core runtime (rejected: violates optionality), define a plugin model (rejected: out of scope).
 
-## Decision 7: Advanced integrity enforcement boundary
-- Decision: Activation gate enforces trust policy + required integrity verification (hash/signature where configured); failing packages are non-mutating and produce explicit policy-failure outcomes.
-- Rationale: Protects supply-chain boundary and preserves LKG on validation failure.
-- Alternatives considered: warning-only policy failures (rejected: insufficient governance), post-activation verification (rejected: too late for safety guarantees).
+## Decision 7: Observability and failure surfacing
+- Decision: For manifest/source/acquisition/loader/admin failures, require correlation-linked logs/metrics/health plus explicit observer failure events with scoped targets and reason codes.
+- Rationale: Operational triage requires more than logs; events make failure handling reliable for host integrations.
+- Alternatives considered: logs-only (rejected: weak automation), metrics-only (rejected: poor diagnosability).
 
-## Decision 8: Optional admin surface contract
-- Decision: Phase 4 defines an optional administrative interface surface for package/state/health reads and manual reconcile trigger; host integration provides authentication/authorization.
-- Rationale: Keeps Nuplane host-neutral while enabling operator visibility/control.
-- Alternatives considered: mandatory admin package in core runtime (rejected: violates optionality), no operator trigger surface (rejected: weak operability).
+## Decision 8: Admin surface is optional and host-authorized
+- Decision: Provide an optional admin surface for read snapshot + trigger reconcile; authentication/authorization is host-supplied.
+- Rationale: Keeps Nuplane host-neutral and usable in different environments.
+- Alternatives considered: embed auth model (rejected: host-specific), no admin surface (rejected: reduces usability/operability).
 
-## Decision 9: Observability model
-- Decision: Each cycle emits correlation-linked logs + metrics + health signals for channel scope, staged/promoted outcomes, canary selection/progression, integrity policy failures, and manual trigger results.
-- Rationale: Enables triage and auditability for release governance decisions.
-- Alternatives considered: logs-only telemetry (rejected: weak alerting), metrics-only telemetry (rejected: low diagnosability).
-
-## Decision 10: Test and contract strategy
-- Decision: Require unit tests for channel/promotion/canary/integrity logic, boundary integration tests across runtime-store-nuget-host surfaces, and contract tests for admin/read and reconcile trigger behavior.
-- Rationale: Satisfies constitution test discipline for reconciliation and boundary changes.
-- Alternatives considered: unit-only testing (rejected: misses boundary failures), integration-only testing (rejected: poor failure localization).
+## Decision 9: Testing strategy
+- Decision: Require unit tests for determinism (manifest + aggregation) and integration tests for degraded non-mutating behavior and admin/loader boundaries.
+- Rationale: Determinism and failure isolation are easy to regress without explicit tests.
+- Alternatives considered: unit-only (rejected: misses boundary failures), integration-only (rejected: poor failure localization).

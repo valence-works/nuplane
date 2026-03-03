@@ -84,6 +84,15 @@
 
 ### Functional Requirements
 
+<!--
+  Each FR MUST be implementation-prescriptive: name the concrete architectural
+  element being required (e.g., "a BackgroundService using PeriodicTimer") rather
+  than describing behavior abstractly ("polling-based reconciliation"). If an FR
+  covers both a mechanism and a driver/trigger, split it into separate FRs.
+  Every configuration property introduced by an FR MUST have an explicit FR or
+  task that implements its consumer.
+-->
+
 - **FR-001**: System MUST [specific capability, e.g., "allow users to create accounts"]
 - **FR-002**: System MUST [specific capability, e.g., "validate email addresses"]  
 - **FR-003**: Users MUST be able to [key interaction, e.g., "reset their password"]

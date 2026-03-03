@@ -1,150 +1,77 @@
-# Data Model — Phase 4 Operational Enhancements
+# Data Model — Phase 4 Cluster-Convergent Runtime Loading (Lean)
 
-## Entity: ChannelPolicy
-- Purpose: Defines reconciliation/activation boundary for one channel.
+## Entity: DesiredManifest
+- Purpose: Deterministic desired-state artifact that drives convergence across replicas.
 - Fields:
-  - `channelName` (enum/string, required; `prod|staging|canary` minimum set)
-  - `desiredSourceRefs` (list, required)
-  - `enabled` (bool, required)
-  - `priority` (int, optional)
-  - `configuredAt` (datetime, required)
+  - `schemaVersion` (string, required)
+  - `generatedAt` (datetime, required)
+  - `packages` (list, required)
+    - `id` (string, required)
+    - `version` (string, required; exact)
+    - `sourceHint` (string, optional; e.g., feed name / container path)
+    - `sha512` (string, optional)
 - Validation rules:
-  - `channelName` must be unique per policy set.
-  - At least one desired source is required for configured channels.
-  - Missing/empty desired source list yields non-mutating degraded cycle outcome.
+  - Duplicate `id` entries are not permitted within one manifest.
+  - Exact versions are required for deterministic convergence.
 
-## Entity: StagedReleaseCandidate
-- Purpose: Represents a resolved package version prepared for later activation.
+## Entity: DesiredManifestReadResult
+- Purpose: Captures manifest read/parse outcome for one cycle.
+- Fields:
+  - `status` (enum: `Succeeded`, `NotFound`, `Unreadable`, `Invalid`)
+  - `reasonCode` (string, required)
+  - `correlationId` (string, required)
+  - `observedAt` (datetime, required)
+- Validation rules:
+  - `Invalid` and `Unreadable` must produce degraded, non-mutating outcomes.
+
+## Entity: DesiredAggregationOutcome
+- Purpose: Deterministic aggregation result across desired sources.
+- Fields:
+  - `requestedPackages` (list, required)
+  - `duplicateResolution` (list, optional)
+    - `packageId` (string, required)
+    - `selectedSource` (string, required)
+    - `reasonCode` (string, required)
+  - `correlationId` (string, required)
+- Validation rules:
+  - Identical inputs must yield identical `requestedPackages` ordering and content.
+
+## Entity: AcquisitionOutcome
+- Purpose: Captures per-package acquisition/activation boundary result.
 - Fields:
   - `packageId` (string, required)
   - `version` (string, required)
-  - `channelName` (string, required)
-  - `candidateState` (enum: `Staged`, `PromotionRequested`, `Promoted`, `PromotionFailed`, `Superseded`)
-  - `stagedAt` (datetime, required)
-  - `promotionRequestedAt` (datetime, optional)
-  - `promotionOutcomeCode` (string, optional)
+  - `status` (enum: `Acquired`, `Activated`, `Failed`, `Skipped`)
+  - `stage` (enum: `Resolve`, `Download`, `Validate`, `Activate`)
+  - `reasonCode` (string, required)
   - `correlationId` (string, required)
 - Validation rules:
-  - Candidate may transition to `Promoted` only after explicit operator promotion request.
-  - `PromotionFailed` must preserve existing active version and LKG.
+  - Any failure must preserve active/LKG pointers.
 
-## Entity: PromotionRequest
-- Purpose: Operator action artifact that authorizes staged candidate promotion.
-- Fields:
-  - `requestId` (string, required)
-  - `channelName` (string, required)
-  - `packageId` (string, required)
-  - `requestedBy` (string, required)
-  - `requestedAt` (datetime, required)
-  - `status` (enum: `Accepted`, `Rejected`, `Completed`, `Failed`)
-  - `reason` (string, optional)
-- Validation rules:
-  - Request must reference an existing `StagedReleaseCandidate` in `Staged` state.
-  - Duplicate active request for same package/channel is not permitted.
-
-## Entity: CanaryRolloutPlan
-- Purpose: Defines controlled rollout boundaries for canary activation.
-- Fields:
-  - `rolloutId` (string, required)
-  - `channelName` (string, required)
-  - `eligibleNodeIds` (set<string>, required)
-  - `targetPercentage` (decimal, required, range 0-100)
-  - `currentState` (enum: `Planned`, `InProgress`, `Completed`, `Paused`, `Failed`)
-  - `updatedAt` (datetime, required)
-  - `correlationId` (string, required)
-- Validation rules:
-  - `eligibleNodeIds` cannot be empty for percentage-based rollout.
-  - `targetPercentage` changes are monotonic-increase within one active rollout unless a new rollout is created.
-
-## Entity: CanarySelectionInput
-- Purpose: Canonical deterministic input used to compute selected canary nodes.
-- Fields:
-  - `rolloutId` (string, required)
-  - `eligibleNodeIdsSorted` (ordered list<string>, required)
-  - `targetPercentage` (decimal, required)
-  - `selectionSalt` (string, optional)
-  - `computedAt` (datetime, required)
-- Validation rules:
-  - Inputs must be canonicalized deterministically before selection.
-  - Identical input values must produce identical selected node set.
-
-## Entity: CanarySelectionResult
-- Purpose: Captures the deterministic node selection result for one cycle/rollout.
-- Fields:
-  - `rolloutId` (string, required)
-  - `selectedNodeIds` (set<string>, required)
-  - `selectedCount` (int, required)
-  - `targetPercentage` (decimal, required)
-  - `outcomeCode` (string, required)
-  - `correlationId` (string, required)
-- Validation rules:
-  - `selectedNodeIds` must be subset of `eligibleNodeIds`.
-  - `selectedCount` must equal deterministic percentage projection for input set.
-
-## Entity: IntegrityRuleSet
-- Purpose: Defines trust and integrity checks required before activation.
-- Fields:
-  - `ruleSetId` (string, required)
-  - `requireTrustedFeed` (bool, required)
-  - `requireHashValidation` (bool, required)
-  - `requireSignatureValidation` (bool, required)
-  - `publisherAllowlistRef` (string, optional)
-  - `enforcementMode` (enum: `Enforce`, `Audit`)
-- Validation rules:
-  - `enforcementMode=Enforce` blocks activation on failed required check.
-  - Rule set changes apply at next reconciliation cycle.
-
-## Entity: IntegrityEvaluationRecord
-- Purpose: Records pre-activation integrity outcome for one package candidate.
+## Entity: LoaderOutcome
+- Purpose: Captures per-package loader boundary outcome when loader is enabled.
 - Fields:
   - `packageId` (string, required)
   - `version` (string, required)
-  - `channelName` (string, required)
-  - `ruleSetId` (string, required)
-  - `status` (enum: `Passed`, `Failed`)
-  - `failureReasonCode` (string, optional)
-  - `evaluatedAt` (datetime, required)
+  - `status` (enum: `Loaded`, `Failed`, `Skipped`)
+  - `reasonCode` (string, required)
   - `correlationId` (string, required)
 - Validation rules:
-  - `Failed` status must prevent activation and preserve active/LKG pointers.
+  - Loader failures do not crash the host and do not corrupt the store.
 
 ## Entity: OperationalSnapshot
 - Purpose: Operator-facing point-in-time state projection.
 - Fields:
   - `snapshotAt` (datetime, required)
-  - `channelName` (string, required)
   - `activePackages` (list, required)
-  - `stagedCandidates` (list, required)
-  - `canaryStatus` (object, required)
   - `lastReconcileOutcome` (object, required)
   - `healthState` (enum: `Healthy`, `Degraded`)
   - `correlationId` (string, required)
 - Validation rules:
   - Snapshot must be internally consistent for one correlation scope.
-  - Missing/empty channel configuration reflects `Degraded` health with explicit reason.
 
 ## Relationships
-- One `ChannelPolicy` has many `StagedReleaseCandidate` records.
-- One `StagedReleaseCandidate` may have many `PromotionRequest` attempts.
-- One `CanaryRolloutPlan` has one or more `CanarySelectionResult` records over time.
-- One `CanarySelectionInput` produces one deterministic `CanarySelectionResult` per evaluation.
-- One `IntegrityRuleSet` governs many `IntegrityEvaluationRecord` entries.
-- One `OperationalSnapshot` aggregates channel, candidate, canary, and integrity outcomes.
-
-## State Transitions
-
-### Staged release lifecycle
-1. `Staged`
-2. `PromotionRequested` (explicit operator action)
-3. `Promoted` OR `PromotionFailed`
-4. `Superseded` when replaced by newer staged candidate
-
-### Canary rollout lifecycle
-1. `Planned`
-2. `InProgress`
-3. `Completed` OR `Paused` OR `Failed`
-
-### Integrity gating lifecycle
-1. `EvaluationStarted`
-2. `Passed` OR `Failed`
-3. On `Failed` -> activation blocked, non-mutating outcome recorded
+- One `DesiredManifestReadResult` influences one `DesiredAggregationOutcome` per cycle.
+- One `DesiredAggregationOutcome` produces zero or more `AcquisitionOutcome` results.
+- When loader is enabled, each activated package may produce a `LoaderOutcome`.
+- One `OperationalSnapshot` summarizes the last reconcile outcome, active set, and current health.

@@ -256,3 +256,9 @@ With multiple developers:
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
 - Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence
+- Each task MUST map to exactly one deployable artifact (class, file, or tightly coupled file group);
+  split tasks that span multiple independent classes or architectural layers
+- Mechanism (engine/capability) and driver (hosted service, API endpoint, CLI, event handler) MUST
+  be separate tasks — never conflate both in a single task
+- Every configuration property defined in an options class MUST have a task implementing its consumer;
+  flag orphan config properties as specification gaps

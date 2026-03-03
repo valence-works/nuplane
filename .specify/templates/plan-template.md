@@ -39,6 +39,9 @@
   explicitly defined.
 - Test discipline: unit + boundary (integration/contract) test approach is defined for affected
   components and includes regression coverage for bug fixes.
+- Decomposition discipline: each FR names a concrete architectural element, mechanism and driver
+  are separate tasks, each task maps to one artifact, and every defined config property has a
+  consumer task.
 
 ## Project Structure
 
