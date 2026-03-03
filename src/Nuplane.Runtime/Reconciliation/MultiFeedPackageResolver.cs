@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Nuplane.Abstractions;
 using Nuplane.NuGet.Resolution;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Versioning;
 
 namespace Nuplane.Runtime.Reconciliation;
 
@@ -51,7 +52,7 @@ public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, Feed
                 continue;
             }
 
-            var selectedVersion = SelectVersion(request.VersionRange);
+            var selectedVersion = NuGetVersionRangeParser.SelectVersion(request.VersionRange);
             var resolved = new ResolvedPackage(
                 request.Id,
                 selectedVersion,
@@ -86,27 +87,4 @@ public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, Feed
 
     public int GetAttempts(string packageId) => attempts.TryGetValue(packageId, out var count) ? count : 0;
 
-    private static string SelectVersion(string versionRange)
-    {
-        if (string.IsNullOrWhiteSpace(versionRange))
-        {
-            return "0.0.0";
-        }
-
-        var normalized = versionRange.Trim();
-        if (normalized.StartsWith("[", StringComparison.Ordinal) || normalized.StartsWith("(", StringComparison.Ordinal))
-        {
-            var parts = normalized
-                .TrimStart('[', '(')
-                .TrimEnd(']', ')')
-                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-
-            if (parts.Length > 0)
-            {
-                return parts[0];
-            }
-        }
-
-        return normalized;
-    }
 }

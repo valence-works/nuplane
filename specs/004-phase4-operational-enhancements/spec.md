@@ -119,7 +119,8 @@ As an operations engineer, I want an optional administrative surface to inspect 
 - **FR-009**: The system MUST support advanced integrity policy configuration requiring package trust enforcement and integrity verification before activation.
 - **FR-010**: The system MUST block activation of packages that fail required integrity policy checks and record the failed policy condition.
 - **FR-011**: The system MUST expose an optional administrative capability surface for viewing package inventory, runtime state, reconciliation status, and health state.
-- **FR-012**: The administrative capability surface MUST allow authorized operators to request an on-demand reconciliation cycle.
+- **FR-012**: The administrative capability surface MUST support on-demand reconciliation requests when invoked through a host-authorized administrative boundary.
+- **FR-012a**: Unauthorized or unavailable administrative reconcile requests MUST produce explicit non-mutating outcome codes and correlation-linked diagnostics.
 - **FR-013**: Administrative views MUST present a consistent snapshot of active/staged package status and last reconcile outcomes.
 - **FR-014**: Channel, rollout, and integrity policy configuration changes MUST become effective at the next reconciliation cycle without requiring unsafe state mutation.
 - **FR-015**: If any rollout, integrity, or policy check fails for a package, the failure MUST be isolated to impacted package/node scope and MUST NOT force unrelated package activations to fail.
@@ -129,9 +130,10 @@ As an operations engineer, I want an optional administrative surface to inspect 
 
 - **OSR-001**: Reconciliation/apply flows MUST be idempotent for repeated identical inputs.
 - **OSR-002**: Staging, promotion, and activation MUST follow transactional safety semantics and preserve last-known-good state on failure.
-- **OSR-002a**: Promotion failure handling MUST be non-mutating for unaffected package/node scopes and MUST preserve deterministic cycle outcomes for unchanged inputs.
+- **OSR-002a**: Regression coverage MUST verify non-mutating failure isolation across promotion, canary, and integrity failure paths for unaffected package/node scopes.
 - **OSR-003**: Only explicitly configured channels, feeds, and policy-approved packages MAY influence activation; secrets and credentials MUST be handled outside source control.
 - **OSR-004**: Every reconciliation cycle MUST emit correlation-linked logs, metrics, and health signals covering channel scope, staged/promoted counts, canary progression, integrity-policy failures, and manual trigger outcomes.
+- **OSR-004b**: Every failed channel, promotion, canary, integrity, and administrative operation MUST emit an observer event with correlation ID, scoped target (package/node/channel), and reason code, in addition to logs/metrics/health signals.
 - **OSR-004a**: Health signaling MUST report degraded (not healthy) for cycles where selected channel configuration is missing/empty and no mutations are performed.
 - **OSR-005**: The feature MUST include automated unit, integration, and contract-level tests for channel isolation, staged promotion, canary limits, integrity enforcement, administrative operations, and non-mutating failure behavior.
 
@@ -159,4 +161,4 @@ As an operations engineer, I want an optional administrative surface to inspect 
 - **SC-002**: For staged rollout scenarios, 100% of staged package versions remain inactive until promotion is triggered, and 100% of promoted versions switch to active state atomically with fallback preserved on injected failure.
 - **SC-003**: In canary validation with a defined eligible node set, 100% of activations occur only on eligible nodes, and non-eligible nodes experience 0 unintended canary activations.
 - **SC-004**: In integrity validation using a mixed compliant/non-compliant package set, 100% of non-compliant packages are blocked from activation while compliant packages remain eligible.
-- **SC-005**: Operators can retrieve current package/state/health information and initiate a manual reconcile with observable outcomes in under 2 minutes for at least 95% of operational tasks in acceptance testing.
+- **SC-005**: In acceptance validation, for the two-step workflow (read operational snapshot and trigger reconcile), at least 95 of 100 attempts MUST complete end-to-end within 120 seconds.
