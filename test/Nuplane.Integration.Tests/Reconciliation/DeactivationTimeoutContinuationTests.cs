@@ -9,15 +9,13 @@ public sealed class DeactivationTimeoutContinuationTests
     {
         var coordinator = new PackageUnloadCoordinator();
         var context = CreateContext();
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
 
         var (_, unload) = await coordinator.AttemptUnloadAsync(
             "pkg-timeout",
             context,
-            TimeSpan.FromSeconds(1),
+            TimeSpan.FromMilliseconds(50),
             "corr-timeout",
-            cts.Token);
+            CancellationToken.None);
 
         Assert.True(unload.AttemptNumber >= 1);
     }

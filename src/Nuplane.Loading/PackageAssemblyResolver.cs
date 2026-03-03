@@ -28,9 +28,8 @@ public sealed class PackageAssemblyResolver(
             return null;
         }
 
-        return AssemblyLoadContext.GetLoadContext(typeof(PackageAssemblyResolver).Assembly) is null
-            ? null
-            : AssemblyLoadContext.Default.LoadFromAssemblyPath(path);
+        var loadContext = AssemblyLoadContext.GetLoadContext(typeof(PackageAssemblyResolver).Assembly);
+        return loadContext?.LoadFromAssemblyPath(path);
     }
 
     private static Assembly? ResolveFromDefaultContext(AssemblyName assemblyName)

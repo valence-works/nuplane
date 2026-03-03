@@ -101,16 +101,46 @@ public sealed class PackageLoader : IPackageLoader
             throw new DirectoryNotFoundException($"Install path '{installPath}' does not exist.");
         }
 
-        var assemblyPath = Directory
-            .EnumerateFiles(installPath, "*.dll", SearchOption.AllDirectories)
-            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
+        // Prefer assemblies under a conventional "lib" folder (e.g., lib/<tfm>/) if present.
+        var libPath = Path.Combine(installPath, "lib");
+        var searchRoot = Directory.Exists(libPath) ? libPath : installPath;
 
-        if (string.IsNullOrWhiteSpace(assemblyPath))
+        var assemblies = Directory
+            .EnumerateFiles(searchRoot, "*.dll", SearchOption.AllDirectories)
+            .ToArray();
+
+        if (assemblies.Length == 0)
         {
             throw new FileNotFoundException($"No loadable assembly found under '{installPath}'.");
         }
 
-        return assemblyPath;
+        // If there is only a single assembly, use it directly.
+        if (assemblies.Length == 1)
+        {
+            return assemblies[0];
+        }
+
+        // Try to select an assembly whose file name matches the package directory name.
+        var packageDirectoryName = Path.GetFileName(Path.GetFullPath(installPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (!string.IsNullOrEmpty(packageDirectoryName))
+        {
+            var matchingByName = assemblies
+                .Where(path =>
+                    string.Equals(
+                        Path.GetFileNameWithoutExtension(path),
+                        packageDirectoryName,
+                        StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            if (matchingByName.Length == 1)
+            {
+                return matchingByName[0];
+            }
+        }
+
+        // Ambiguous case: multiple candidate assemblies and no clear main assembly.
+        throw new InvalidOperationException(
+            $"Multiple assemblies were found under '{installPath}', and a main assembly could not be determined. " +
+            "Ensure the package contains a single loadable assembly or that the main assembly file name matches the package directory name.");
     }
 }
