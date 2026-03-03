@@ -43,14 +43,13 @@ builder.Services.AddNuplaneRuntime(
 			Credentials: "secrets://nuget/main"));
 	});
 
-// Phase 3 optional loading example (enable once loading options are wired):
-// builder.Services.AddNuplaneRuntime(
-// 	configureLoading: loading =>
-// 	{
-// 		loading.Enabled = true;
-// 		loading.DeactivationTimeout = TimeSpan.FromSeconds(15);
-// 		loading.SharedAssemblies.Add(new("Nuplane.Abstractions", "31bf3856ad364e35", 1));
-// 	});
+// Phase 3 optional loading example (separate opt-in registration):
+// builder.Services.AddNuplaneLoading(loading =>
+// {
+// 	loading.Enabled = true;
+// 	loading.DeactivationTimeout = TimeSpan.FromSeconds(15);
+// 	loading.SharedAssemblies.Add(new("Nuplane.Abstractions", "31bf3856ad364e35", 1));
+// });
 
 var app = builder.Build();
 
