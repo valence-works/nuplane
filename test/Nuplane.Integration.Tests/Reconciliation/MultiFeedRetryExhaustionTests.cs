@@ -32,7 +32,7 @@ public sealed class MultiFeedRetryExhaustionTests
             new(),
             new(),
             resolver,
-            new(new(), stateFilePath: null),
+            new(new StoreStateSerializer(), stateFilePath: null),
             new()
             {
                 MaxRetryAttempts = 2,

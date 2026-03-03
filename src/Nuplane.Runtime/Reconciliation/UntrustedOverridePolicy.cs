@@ -3,8 +3,18 @@ using Nuplane.Runtime.Configuration;
 
 namespace Nuplane.Runtime.Reconciliation;
 
+/// <summary>
+/// Finds matching untrusted feed overrides for a package request based on package-scoped
+/// or feed-rule-scoped override entries.
+/// </summary>
 public sealed class UntrustedOverridePolicy
 {
+    /// <summary>
+    /// Finds a matching override for the specified package request.
+    /// </summary>
+    /// <param name="request">The package request to match.</param>
+    /// <param name="options">The trust policy options containing override entries.</param>
+    /// <returns>The matching override, or <see langword="null"/> if no override applies.</returns>
     public UntrustedFeedOverride? FindOverride(PackageRequest request, FeedTrustPolicyOptions options)
     {
         ArgumentNullException.ThrowIfNull(request);

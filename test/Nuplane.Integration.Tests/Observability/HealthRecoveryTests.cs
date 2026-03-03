@@ -1,9 +1,8 @@
 using Nuplane.Abstractions;
-using Nuplane.NuGet.Resolution;
+using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Reconciliation;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Observability;
@@ -21,10 +20,9 @@ public sealed class HealthRecoveryTests
             new(),
             new(),
             new NuGetPackageResolver(),
-            new(new(), stateFilePath: null),
+            new(new StoreStateSerializer(), stateFilePath: null),
             new() { MaxRetryAttempts = 0 },
-            new([]),
-            new([]),
+            new ObserverEventDispatcher([]),
             evaluator);
 
         source.FailReads = true;

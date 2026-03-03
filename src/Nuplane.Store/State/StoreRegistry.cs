@@ -2,13 +2,39 @@ using System.Collections.ObjectModel;
 
 namespace Nuplane.Store.State;
 
-public sealed class StoreRegistry(StoreStateSerializer serializer, string? stateFilePath)
+/// <summary>
+/// Thread-safe store registry that persists reconciliation state including active versions,
+/// last-known-good versions, failure records, and source snapshots. Supports lazy loading
+/// from a serialized state file.
+/// </summary>
+public sealed class StoreRegistry : IStoreRegistry
 {
     private readonly SemaphoreSlim gate = new(1, 1);
-    private readonly StoreStateSerializer serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+    private readonly IStoreStateSerializer serializer;
+    private readonly string? stateFilePath;
     private StoreStateRecord currentState = StoreStateRecord.Empty();
     private bool loaded;
 
+    /// <summary>
+    /// Initializes a new instance of <see cref="StoreRegistry"/> with a serializer and optional state file path.
+    /// </summary>
+    public StoreRegistry(IStoreStateSerializer serializer, string? stateFilePath)
+    {
+        this.serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        this.stateFilePath = stateFilePath;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of <see cref="StoreRegistry"/> with a serializer and options.
+    /// </summary>
+    public StoreRegistry(IStoreStateSerializer serializer, StoreRegistryOptions options)
+    {
+        this.serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        ArgumentNullException.ThrowIfNull(options);
+        stateFilePath = options.StateFilePath;
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyDictionary<string, string>> GetActiveVersionsAsync(CancellationToken cancellationToken)
     {
         await gate.WaitAsync(cancellationToken);
@@ -24,6 +50,7 @@ public sealed class StoreRegistry(StoreStateSerializer serializer, string? state
         }
     }
 
+    /// <inheritdoc />
     public async Task<StoreStateRecord> GetStateAsync(CancellationToken cancellationToken)
     {
         await gate.WaitAsync(cancellationToken);
@@ -43,6 +70,7 @@ public sealed class StoreRegistry(StoreStateSerializer serializer, string? state
         }
     }
 
+    /// <inheritdoc />
     public async Task PersistActiveVersionsAsync(
         IReadOnlyDictionary<string, string> activeVersions,
         IReadOnlyDictionary<string, string> successfullyApplied,
@@ -85,6 +113,7 @@ public sealed class StoreRegistry(StoreStateSerializer serializer, string? state
         }
     }
 
+    /// <inheritdoc />
     public async Task PersistFailureAsync(
         string packageId,
         string stage,
@@ -124,6 +153,7 @@ public sealed class StoreRegistry(StoreStateSerializer serializer, string? state
         }
     }
 
+    /// <inheritdoc />
     public async Task PersistSourceSnapshotAsync(
         string sourceName,
         SourceSnapshotRef snapshot,

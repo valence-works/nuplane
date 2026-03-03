@@ -1,7 +1,6 @@
 using Nuplane.Abstractions;
-using Nuplane.NuGet.Resolution;
-using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Configuration;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
@@ -22,7 +21,7 @@ public sealed class SingleFlightOverlapTests
             new(),
             new(),
             new SlowResolver(TimeSpan.FromMilliseconds(200)),
-            new(new(), stateFilePath: null),
+            new(new StoreStateSerializer(), stateFilePath: null),
             new() { EnableSingleFlight = true });
 
         var firstRun = service.TriggerManualAsync(CancellationToken.None);

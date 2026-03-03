@@ -4,10 +4,17 @@ using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Observability;
 
+/// <summary>
+/// Records reconciliation operational metrics including cycle outcomes, dry runs,
+/// cleanup results, and assembly loading/unloading statistics.
+/// </summary>
 public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
 {
     private readonly ReconciliationTelemetry telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
 
+    /// <summary>
+    /// Records metrics for a completed reconciliation cycle.
+    /// </summary>
     public void RecordCycle(PackageChangeSet changeSet, int failedPackages, TimeSpan duration, int activePackages)
     {
         telemetry.AddedPackagesCounter.Add(changeSet.Added.Count);
@@ -18,6 +25,7 @@ public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
         telemetry.SetActivePackages(activePackages);
     }
 
+    /// <summary>Records metrics for a dry-run plan.</summary>
     public void RecordDryRun(DryRunPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -25,6 +33,7 @@ public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
         telemetry.DryRunPlannedPackagesCounter.Add(total);
     }
 
+    /// <summary>Records cleanup decision metrics.</summary>
     public void RecordCleanup(IReadOnlyList<CleanupDecision> decisions)
     {
         ArgumentNullException.ThrowIfNull(decisions);
@@ -33,19 +42,27 @@ public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
         telemetry.CleanupFailedCounter.Add(decisions.Count(x => x.Action == CleanupAction.Blocked));
     }
 
+    /// <summary>Records that a package load attempt has started.</summary>
     public void RecordLoadAttemptStarted() => telemetry.LoadingStartedCounter.Add(1);
 
+    /// <summary>Records a successful package load.</summary>
     public void RecordLoadSucceeded() => telemetry.LoadingSucceededCounter.Add(1);
 
+    /// <summary>Records a failed package load.</summary>
     public void RecordLoadFailed() => telemetry.LoadingFailedCounter.Add(1);
 
+    /// <summary>Records that a package unload was attempted.</summary>
     public void RecordUnloadAttempted() => telemetry.UnloadAttemptedCounter.Add(1);
 
+    /// <summary>Records a successful package unload.</summary>
     public void RecordUnloadSucceeded() => telemetry.UnloadSucceededCounter.Add(1);
 
+    /// <summary>Records a pending package unload.</summary>
     public void RecordUnloadPending() => telemetry.UnloadPendingCounter.Add(1);
 
+    /// <summary>Records a deactivation timeout.</summary>
     public void RecordDeactivationTimeout() => telemetry.DeactivationTimeoutCounter.Add(1);
 
+    /// <summary>Sets the gauge value for packages with pending unloads.</summary>
     public void SetUnloadPendingPackages(long count) => telemetry.SetUnloadPendingPackages(count);
 }

@@ -2,10 +2,19 @@ using System.Text.RegularExpressions;
 
 namespace Nuplane.Loading.Configuration;
 
+/// <summary>
+/// Validates <see cref="LoadingOptions"/> configuration, checking deactivation timeout,
+/// shared assembly identities, and public key token format.
+/// </summary>
 public sealed class LoadingOptionsValidator
 {
     private static readonly Regex PublicKeyTokenPattern = new("^[0-9a-fA-F]{16}$", RegexOptions.Compiled);
 
+    /// <summary>
+    /// Validates the specified loading options and returns a list of validation error messages.
+    /// </summary>
+    /// <param name="options">The loading options to validate.</param>
+    /// <returns>An empty list if the options are valid; otherwise a list of error descriptions.</returns>
     public IReadOnlyList<string> Validate(LoadingOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);

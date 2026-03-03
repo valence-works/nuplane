@@ -3,17 +3,17 @@ using Nuplane.Runtime.Configuration;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-public sealed record LockFileEvaluationResult(
-    bool Allowed,
-    string ReasonCode,
-    ResolvedPackage? EffectivePackage,
-    string? ExpectedHash);
 
-public sealed class LockFileCoordinator(LockFileStore store, LockFileOptions options)
+/// <summary>
+/// Evaluates resolved packages against the lock file, enforcing or overriding
+/// package versions and feeds based on the configured lock file mode.
+/// </summary>
+public sealed class LockFileCoordinator(LockFileStore store, LockFileOptions options) : ILockFileCoordinator
 {
     private readonly LockFileStore store = store ?? throw new ArgumentNullException(nameof(store));
     private readonly LockFileOptions options = options ?? throw new ArgumentNullException(nameof(options));
 
+    /// <inheritdoc />
     public async Task<LockFileEvaluationResult> EvaluateAsync(ResolvedPackage resolved, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(resolved);

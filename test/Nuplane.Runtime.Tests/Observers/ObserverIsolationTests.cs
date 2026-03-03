@@ -1,9 +1,8 @@
 using Nuplane.Abstractions;
-using Nuplane.NuGet.Resolution;
+using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Reconciliation;
 using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Observers;
@@ -19,10 +18,9 @@ public sealed class ObserverIsolationTests
             new(),
             new(),
             new NuGetPackageResolver(),
-            new(new(), stateFilePath: null),
+            new(new StoreStateSerializer(), stateFilePath: null),
             new(),
-            new([new ThrowingObserver()]),
-            new([new ThrowingObserver()]),
+            new ObserverEventDispatcher([new ThrowingObserver()]),
             new());
 
         var result = await service.TriggerManualAsync(CancellationToken.None);

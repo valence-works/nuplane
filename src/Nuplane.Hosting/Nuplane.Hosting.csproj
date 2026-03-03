@@ -4,7 +4,6 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <ProjectReference Include="..\Nuplane.Runtime\Nuplane.Runtime.csproj" />
     <ProjectReference Include="..\Nuplane.Store\Nuplane.Store.csproj" />
-    <ProjectReference Include="..\Nuplane.NuGet\Nuplane.NuGet.csproj" />
     <ProjectReference Include="..\Nuplane.Sources.Directory\Nuplane.Sources.Directory.csproj" />
     <ProjectReference Include="..\Nuplane.Abstractions\Nuplane.Abstractions.csproj" />
   </ItemGroup>

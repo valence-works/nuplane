@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Abstractions;
-using Nuplane.NuGet.Resolution;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
@@ -11,8 +10,28 @@ using Nuplane.Store.State;
 
 namespace Nuplane.Hosting;
 
+/// <summary>
+/// Provides extension methods for registering Nuplane runtime services with a
+/// <see cref="IServiceCollection"/> dependency injection container.
+/// </summary>
 public static class NuplaneServiceCollectionExtensions
 {
+    /// <summary>
+    /// Registers all Nuplane runtime services, including reconciliation, feed resolution,
+    /// trust policy, lock file coordination, cleanup, health evaluation, and observability.
+    /// </summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <param name="configureSourceTrust">An optional action to configure source trust options.</param>
+    /// <param name="configureReconciliation">An optional action to configure reconciliation options.</param>
+    /// <param name="configureFeedResolution">An optional action to configure feed resolution options.</param>
+    /// <param name="configureFeedTrustPolicy">An optional action to configure feed trust policy options.</param>
+    /// <param name="configureLockFile">An optional action to configure lock file options.</param>
+    /// <param name="configureCleanupPolicy">An optional action to configure cleanup policy options.</param>
+    /// <param name="configureFeeds">An optional action to configure feed definitions.</param>
+    /// <param name="stateFilePath">The file path for persisting store state, or <see langword="null"/> for in-memory only.</param>
+    /// <returns>The service collection for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">Thrown when any options configuration is invalid.</exception>
     public static IServiceCollection AddNuplaneRuntime(
         this IServiceCollection services,
         Action<SourceTrustOptions>? configureSourceTrust = null,
@@ -85,31 +104,47 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton(cleanupPolicyOptions);
         services.AddSingleton(feedCredentialValidator);
         services.AddSingleton<DesiredStateAggregator>();
+        services.AddSingleton<IDesiredStateAggregator>(sp => sp.GetRequiredService<DesiredStateAggregator>());
         services.AddSingleton<DesiredActualDiffEngine>();
+        services.AddSingleton<IDesiredActualDiffEngine>(sp => sp.GetRequiredService<DesiredActualDiffEngine>());
         services.AddSingleton<FeedRuleResultSelector>();
         services.AddSingleton<DryRunPlanner>();
+        services.AddSingleton<IDryRunPlanner>(sp => sp.GetRequiredService<DryRunPlanner>());
         services.AddSingleton<FeedResolutionPolicy>();
         services.AddSingleton<FeedTrustPolicyEvaluator>();
+        services.AddSingleton<IFeedTrustPolicyEvaluator>(sp => sp.GetRequiredService<FeedTrustPolicyEvaluator>());
         services.AddSingleton<RestrictedFeedValidatorPipeline>();
         services.AddSingleton<UntrustedOverridePolicy>();
         services.AddSingleton(sp => new LockFileStore(sp.GetRequiredService<LockFileOptions>().Path));
         services.AddSingleton<LockFileCoordinator>();
+        services.AddSingleton<ILockFileCoordinator>(sp => sp.GetRequiredService<LockFileCoordinator>());
         services.AddSingleton<CleanupPolicyEvaluator>();
         services.AddSingleton<PackageCleanupService>();
+        services.AddSingleton<IPackageCleanupService>(sp => sp.GetRequiredService<PackageCleanupService>());
         services.AddSingleton<ReconciliationTelemetry>();
         services.AddSingleton<ReconciliationMetrics>();
         services.AddSingleton<ReconciliationLogger>();
+        services.AddSingleton<IReconciliationLogger>(sp => sp.GetRequiredService<ReconciliationLogger>());
         services.AddSingleton<ReconciliationHealthEvaluator>();
-        services.AddSingleton<PackageChangeEventPublisher>(sp =>
-            new(
+        services.AddSingleton<IReconciliationHealthEvaluator>(sp => sp.GetRequiredService<ReconciliationHealthEvaluator>());
+        services.AddSingleton<ObserverEventDispatcher>(sp =>
+            new ObserverEventDispatcher(
                 sp.GetServices<INuplaneObserver>(),
-                sp.GetRequiredService<ReconciliationLogger>()));
-        services.AddSingleton<ObserverNotifier>(sp =>
-            new(
-                sp.GetServices<INuplaneObserver>(),
-                sp.GetRequiredService<ReconciliationLogger>()));
-        services.AddSingleton<INuGetPackageResolver, Runtime.Reconciliation.MultiFeedPackageResolver>();
-        services.AddSingleton(new StoreRegistry(new(), stateFilePath));
+                sp.GetRequiredService<IReconciliationLogger>()));
+        services.AddSingleton<IObserverEventDispatcher>(sp => sp.GetRequiredService<ObserverEventDispatcher>());
+        services.AddSingleton<IPackageResolver, MultiFeedPackageResolver>();
+        services.AddSingleton<StoreStateSerializer>();
+        services.AddSingleton<IStoreStateSerializer>(sp => sp.GetRequiredService<StoreStateSerializer>());
+        services.AddSingleton(new StoreRegistryOptions { StateFilePath = stateFilePath });
+        services.AddSingleton<StoreRegistry>(sp =>
+            new StoreRegistry(
+                sp.GetRequiredService<IStoreStateSerializer>(),
+                sp.GetRequiredService<StoreRegistryOptions>()));
+        services.AddSingleton<IStoreRegistry>(sp => sp.GetRequiredService<StoreRegistry>());
+        services.AddSingleton<FailureRecorder>();
+        services.AddSingleton<IFailureRecorder>(sp => sp.GetRequiredService<FailureRecorder>());
+        services.AddSingleton<ReconciliationRetryPolicy>();
+        services.AddSingleton<IReconciliationRetryPolicy>(sp => sp.GetRequiredService<ReconciliationRetryPolicy>());
         services.AddSingleton<ReconciliationService>();
 
         return services;

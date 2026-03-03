@@ -4,11 +4,18 @@ using System.Collections.Concurrent;
 
 namespace Nuplane.Runtime.Sources;
 
-public sealed class DesiredSourceSnapshotCache(StoreRegistry storeRegistry)
+/// <summary>
+/// Caches desired-state source snapshots in memory and persists them to the store registry,
+/// providing fallback data when sources are temporarily unavailable.
+/// </summary>
+public sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
 {
     private readonly ConcurrentDictionary<string, IReadOnlyList<PackageRequest>> snapshots = new(StringComparer.OrdinalIgnoreCase);
-    private readonly StoreRegistry storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
+    private readonly IStoreRegistry storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
 
+    /// <summary>
+    /// Saves a desired-state snapshot to both the in-memory cache and the store registry.
+    /// </summary>
     public async Task SaveAsync(string sourceName, IReadOnlyList<PackageRequest> requests, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceName);
@@ -22,6 +29,9 @@ public sealed class DesiredSourceSnapshotCache(StoreRegistry storeRegistry)
             cancellationToken);
     }
 
+    /// <summary>
+    /// Tries to retrieve a cached snapshot for the specified source from in-memory cache.
+    /// </summary>
     public bool TryGetSnapshot(string sourceName, out IReadOnlyList<PackageRequest> requests)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceName);
@@ -36,6 +46,10 @@ public sealed class DesiredSourceSnapshotCache(StoreRegistry storeRegistry)
         return false;
     }
 
+    /// <summary>
+    /// Loads a snapshot for the specified source, first checking the in-memory cache,
+    /// then falling back to the persisted store state.
+    /// </summary>
     public async Task<IReadOnlyList<PackageRequest>?> LoadSnapshotAsync(string sourceName, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceName);

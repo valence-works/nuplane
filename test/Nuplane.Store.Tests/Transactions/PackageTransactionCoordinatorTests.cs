@@ -10,7 +10,7 @@ public sealed class PackageTransactionCoordinatorTests
     public async Task ExecuteAsync_WhenValidateFails_PreservesLastKnownGoodPointer()
     {
         var stateFilePath = Path.Combine(Path.GetTempPath(), $"nuplane-store-{Guid.NewGuid():N}", "state.json");
-        var registry = new StoreRegistry(new(), stateFilePath);
+        var registry = new StoreRegistry(new StoreStateSerializer(), stateFilePath);
         var seedVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["pkg-a"] = "1.0.0" };
         await registry.PersistActiveVersionsAsync(
             seedVersions,

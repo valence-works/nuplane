@@ -1,26 +1,23 @@
 using System.Collections.Concurrent;
 using Nuplane.Abstractions;
-using Nuplane.NuGet.Resolution;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Versioning;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-public sealed class FeedUnavailableException(string feedName, string packageId)
-    : InvalidOperationException($"Feed '{feedName}' is unavailable for package '{packageId}'.")
-{
-    public string FeedName { get; } = feedName;
 
-    public string PackageId { get; } = packageId;
-}
-
-public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, FeedResolutionPolicy policy) : INuGetPackageResolver
+/// <summary>
+/// Resolves packages across multiple feeds using priority ordering and feed availability
+/// tracking, recording resolution decisions for observability.
+/// </summary>
+public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, FeedResolutionPolicy policy) : IPackageResolver
 {
     private readonly FeedResolutionOptions options = options ?? throw new ArgumentNullException(nameof(options));
     private readonly FeedResolutionPolicy policy = policy ?? throw new ArgumentNullException(nameof(policy));
     private readonly ConcurrentDictionary<string, FeedResolutionDecision> decisions = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, int> attempts = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <inheritdoc />
     public Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -82,9 +79,20 @@ public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, Feed
         throw new InvalidOperationException($"No available feed could resolve package '{request.Id}'.");
     }
 
+    /// <summary>
+    /// Tries to retrieve the feed resolution decision for the specified package.
+    /// </summary>
+    /// <param name="packageId">The package identifier.</param>
+    /// <param name="decision">The resolution decision, if found.</param>
+    /// <returns><see langword="true"/> if a decision was found; otherwise <see langword="false"/>.</returns>
     public bool TryGetDecision(string packageId, out FeedResolutionDecision decision) =>
         decisions.TryGetValue(packageId, out decision!);
 
+    /// <summary>
+    /// Gets the number of resolution attempts for the specified package.
+    /// </summary>
+    /// <param name="packageId">The package identifier.</param>
+    /// <returns>The number of attempts, or 0 if no attempts have been made.</returns>
     public int GetAttempts(string packageId) => attempts.TryGetValue(packageId, out var count) ? count : 0;
 
 }

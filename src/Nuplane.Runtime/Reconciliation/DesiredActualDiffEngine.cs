@@ -3,8 +3,13 @@ using Nuplane.Runtime.Versioning;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-public sealed class DesiredActualDiffEngine
+/// <summary>
+/// Computes the difference between desired and actual package state using deterministic
+/// version ordering. Deduplicates desired packages by selecting the highest version.
+/// </summary>
+public sealed class DesiredActualDiffEngine : IDesiredActualDiffEngine
 {
+    /// <inheritdoc />
     public PackageChangeSet Compute(
         IReadOnlyCollection<ResolvedPackage> desired,
         IReadOnlyDictionary<string, string> activeVersions,
@@ -35,6 +40,7 @@ public sealed class DesiredActualDiffEngine
         return new(added, updated, removed, correlationId, timestamp);
     }
 
+    /// <inheritdoc />
     public IReadOnlyDictionary<string, string> BuildNextActiveVersions(IReadOnlyCollection<ResolvedPackage> desired)
     {
         ArgumentNullException.ThrowIfNull(desired);

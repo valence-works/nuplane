@@ -3,18 +3,16 @@ using Nuplane.Runtime.Configuration;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-public sealed record FeedTrustPolicyOutcome(
-    bool Allowed,
-    FeedTrustLevel TrustLevel,
-    FeedOverrideScope OverrideScope,
-    string? OverrideReason,
-    string ReasonCode);
-
-public sealed class FeedTrustPolicyEvaluator
+/// <summary>
+/// Evaluates the trust policy for a package/feed pair, checking trusted, restricted,
+/// and untrusted levels and applying any configured overrides.
+/// </summary>
+public sealed class FeedTrustPolicyEvaluator : IFeedTrustPolicyEvaluator
 {
     private readonly UntrustedOverridePolicy overridePolicy = new();
     private readonly RestrictedFeedValidatorPipeline restrictedValidatorPipeline = new();
 
+    /// <inheritdoc />
     public FeedTrustPolicyOutcome Evaluate(
         PackageRequest request,
         FeedDefinition feed,

@@ -4,19 +4,31 @@ using Nuplane.Abstractions;
 
 namespace Nuplane.Loading;
 
+/// <summary>
+/// Loads package assemblies into isolated collectible load contexts, tracking sessions
+/// and providing context removal for unloading. Resolves the main assembly within
+/// each package's install directory.
+/// </summary>
 public sealed class PackageLoader : IPackageLoader
 {
     private readonly SharedAssemblyPolicyMatcher matcher;
     private readonly ConcurrentDictionary<string, PackageAssemblyLoadContext> contexts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, PackageLoadSession> sessions = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Initializes a new instance of <see cref="PackageLoader"/> with an optional shared assembly policy matcher.
+    /// </summary>
     public PackageLoader(SharedAssemblyPolicyMatcher? matcher = null)
     {
         this.matcher = matcher ?? new SharedAssemblyPolicyMatcher();
     }
 
+    /// <summary>
+    /// Gets the active load sessions keyed by package-version key.
+    /// </summary>
     public IReadOnlyDictionary<string, PackageLoadSession> Sessions => sessions;
 
+    /// <inheritdoc />
     public Task<PackageLoadResult> EnsureLoadedAsync(
         IReadOnlyList<ResolvedPackage> packages,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
@@ -77,6 +89,7 @@ public sealed class PackageLoader : IPackageLoader
         return Task.FromResult<PackageLoadResult>(new(loaded, failed));
     }
 
+    /// <inheritdoc />
     public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
     {
         var key = BuildKey(packageId, version);

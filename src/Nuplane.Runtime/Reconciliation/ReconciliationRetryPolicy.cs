@@ -2,10 +2,14 @@ using Nuplane.Runtime.Configuration;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-public sealed class ReconciliationRetryPolicy(ReconciliationOptions options)
+/// <summary>
+/// Implements an exponential backoff retry policy for reconciliation operations.
+/// </summary>
+public sealed class ReconciliationRetryPolicy(ReconciliationOptions options) : IReconciliationRetryPolicy
 {
     private readonly ReconciliationOptions options = options ?? throw new ArgumentNullException(nameof(options));
 
+    /// <inheritdoc />
     public async Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -34,15 +38,13 @@ public sealed class ReconciliationRetryPolicy(ReconciliationOptions options)
         }
     }
 
-    public Task<T> ExecuteForFeedResolutionAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken) =>
-        ExecuteAsync(operation, cancellationToken);
 
-    public Task<T> ExecuteForLockEvaluationAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken) =>
-        ExecuteAsync(operation, cancellationToken);
-
-    public Task<T> ExecuteForDryRunAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken) =>
-        ExecuteAsync(operation, cancellationToken);
-
+    /// <summary>
+    /// Computes the exponential backoff delay for the specified retry attempt.
+    /// </summary>
+    /// <param name="options">The reconciliation options containing backoff settings.</param>
+    /// <param name="retryAttempt">The 1-based retry attempt number.</param>
+    /// <returns>The backoff delay, capped at <see cref="ReconciliationOptions.MaxRetryBackoff"/>.</returns>
     public static TimeSpan GetBackoffForRetry(ReconciliationOptions options, int retryAttempt)
     {
         ArgumentNullException.ThrowIfNull(options);

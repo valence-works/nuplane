@@ -3,8 +3,13 @@ using Nuplane.Runtime.Configuration;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-public sealed class DesiredStateAggregator
+/// <summary>
+/// Aggregates desired package requests from multiple <see cref="IDesiredPackageSource"/> instances,
+/// validates them against the allowlist, and produces a deterministically ordered result.
+/// </summary>
+public sealed class DesiredStateAggregator : IDesiredStateAggregator
 {
+    /// <inheritdoc />
     public async Task<IReadOnlyList<PackageRequest>> AggregateAsync(
         IEnumerable<IDesiredPackageSource> sources,
         SourceTrustOptions trustOptions,

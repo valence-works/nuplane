@@ -9,13 +9,13 @@ public sealed class LoadingHealthProjectionTests
     {
         var evaluator = new ReconciliationHealthEvaluator();
 
-        var degraded = evaluator.Evaluate(
-            hadAnyFailures: false,
-            allSourcesFresh: true,
-            trustFailures: 0,
-            lockFailures: 0,
-            cleanupFailures: 0,
-            unloadPendingCount: 1);
+        var degraded = evaluator.Evaluate(new ReconciliationHealthInput(
+            HadAnyFailures: false,
+            AllSourcesFresh: true,
+            TrustFailures: 0,
+            LockFailures: 0,
+            CleanupFailures: 0,
+            UnloadPendingCount: 1));
 
         Assert.True(degraded);
         Assert.Equal(1, evaluator.LastUnloadPendingCount);
