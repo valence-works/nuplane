@@ -5,6 +5,15 @@
 **Status**: Draft  
 **Input**: User description: "Extract requirements for a new spec based on Phase 4 of the Roadmap"
 
+## Clarifications
+
+### Session 2026-03-03
+
+- Q: How should canary node selection be determined for percentage-based rollout? → A: Use stable hash-based selection so identical inputs produce the same selected nodes.
+- Q: How should reconciliation behave when the selected channel is empty or unconfigured? → A: Perform no mutations and report degraded with explicit misconfiguration reason.
+- Q: How should staged package promotion be triggered? → A: Promotion requires explicit operator action only.
+- Q: How should the system behave when a staged promotion fails? → A: Keep current active version, mark staged candidate failed, and continue other package/node operations.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Enforce Channel Separation (Priority: P1)
@@ -32,7 +41,7 @@ As an operator, I want updates to be staged before activation so I can validate 
 
 **Acceptance Scenarios**:
 
-1. **Given** a newer package version is discovered, **When** staged rollout is enabled, **Then** the version is prepared and remains inactive until an explicit promotion condition is met.
+1. **Given** a newer package version is discovered, **When** staged rollout is enabled, **Then** the version is prepared and remains inactive until explicit operator promotion is requested.
 2. **Given** a staged version is promoted, **When** activation executes, **Then** the active pointer switches atomically and the previous last-known-good version remains available for fallback.
 
 ---
@@ -48,7 +57,8 @@ As a release manager, I want canary rollout controls so only a defined subset of
 **Acceptance Scenarios**:
 
 1. **Given** canary rollout is configured for a subset of nodes, **When** activation runs, **Then** only nodes in the canary target set are eligible to activate the canary package version.
-2. **Given** canary percentage is increased, **When** subsequent cycles run, **Then** additional nodes are activated according to the updated rollout limit without affecting out-of-scope nodes.
+2. **Given** canary percentage is unchanged and rollout inputs are unchanged, **When** subsequent cycles run, **Then** the same eligible canary nodes remain selected.
+3. **Given** canary percentage is increased, **When** subsequent cycles run, **Then** additional nodes are activated according to the updated rollout limit without affecting out-of-scope nodes.
 
 ---
 
@@ -84,8 +94,9 @@ As an operations engineer, I want an optional administrative surface to inspect 
 
 ### Edge Cases
 
-- Channel selection references a channel name with no configured desired-state sources.
+- Channel selection references a channel name with no configured desired-state sources; cycle remains non-mutating and reports degraded with explicit misconfiguration reason.
 - A package is staged successfully but promotion condition is never met for an extended period.
+- A staged promotion fails for one package/node while other staged promotions in the same cycle are still eligible.
 - Canary node targeting changes while a canary rollout is in progress.
 - A package passes feed trust checks but fails hash/signature verification at activation time.
 - Administrative read operations are available while manual reconcile trigger is temporarily unavailable.
@@ -97,11 +108,13 @@ As an operations engineer, I want an optional administrative surface to inspect 
 
 - **FR-001**: The system MUST support explicit channel selection for reconciliation and activation scopes, including at minimum production, staging, and canary channels.
 - **FR-002**: The system MUST enforce channel separation so desired-state evaluation and activation in one channel do not activate packages scoped to another channel.
+- **FR-002a**: If the selected channel has no configured desired-state sources, the system MUST perform no package mutations for that cycle and MUST record an explicit channel-misconfiguration outcome.
 - **FR-003**: The system MUST support staged rollout behavior where a resolved update can be prepared without immediate activation.
-- **FR-004**: The system MUST support controlled promotion of staged versions using explicit operator action or predefined readiness conditions.
+- **FR-004**: The system MUST support controlled promotion of staged versions using explicit operator action only.
 - **FR-005**: Promotion from staged to active MUST execute with atomic activation semantics and preserve last-known-good fallback behavior.
+- **FR-005a**: If promotion fails for a package/node, the system MUST keep the current active version unchanged, mark the staged candidate as failed, and continue processing unrelated package/node operations.
 - **FR-006**: The system MUST support canary rollout targeting based on a defined subset of eligible nodes.
-- **FR-007**: The system MUST support gradual rollout control using a configurable canary percentage that can be increased over time.
+- **FR-007**: For percentage-based canary rollout, the system MUST use deterministic stable selection so identical rollout inputs produce the same selected nodes across cycles.
 - **FR-008**: The system MUST prevent canary-targeted activations from affecting non-eligible nodes.
 - **FR-009**: The system MUST support advanced integrity policy configuration requiring package trust enforcement and integrity verification before activation.
 - **FR-010**: The system MUST block activation of packages that fail required integrity policy checks and record the failed policy condition.
@@ -116,8 +129,10 @@ As an operations engineer, I want an optional administrative surface to inspect 
 
 - **OSR-001**: Reconciliation/apply flows MUST be idempotent for repeated identical inputs.
 - **OSR-002**: Staging, promotion, and activation MUST follow transactional safety semantics and preserve last-known-good state on failure.
+- **OSR-002a**: Promotion failure handling MUST be non-mutating for unaffected package/node scopes and MUST preserve deterministic cycle outcomes for unchanged inputs.
 - **OSR-003**: Only explicitly configured channels, feeds, and policy-approved packages MAY influence activation; secrets and credentials MUST be handled outside source control.
 - **OSR-004**: Every reconciliation cycle MUST emit correlation-linked logs, metrics, and health signals covering channel scope, staged/promoted counts, canary progression, integrity-policy failures, and manual trigger outcomes.
+- **OSR-004a**: Health signaling MUST report degraded (not healthy) for cycles where selected channel configuration is missing/empty and no mutations are performed.
 - **OSR-005**: The feature MUST include automated unit, integration, and contract-level tests for channel isolation, staged promotion, canary limits, integrity enforcement, administrative operations, and non-mutating failure behavior.
 
 ### Key Entities *(include if feature involves data)*
@@ -125,6 +140,7 @@ As an operations engineer, I want an optional administrative surface to inspect 
 - **Channel Policy**: Declares environment scope (production/staging/canary), eligible desired-state sources, and activation boundaries.
 - **Staged Release Candidate**: Represents a resolved package version prepared for activation, including readiness status and promotion metadata.
 - **Canary Rollout Plan**: Defines node eligibility set, current rollout percentage, progression state, and observed rollout outcomes.
+- **Canary Selection Input**: Canonical input set used for deterministic canary node selection, including rollout identifier, eligible node identities, and target percentage.
 - **Integrity Rule Set**: Represents trust and validation requirements that packages must satisfy before activation.
 - **Operational Snapshot**: Operator-facing view of package inventory, active/staged status, reconcile history, and current health state.
 
