@@ -42,6 +42,8 @@
 - Decomposition discipline: each FR names a concrete architectural element, mechanism and driver
   are separate tasks, each task maps to one artifact, and every defined config property has a
   consumer task.
+- Options validation discipline: options types remain data-only, validation is implemented via
+  `IValidateOptions<T>` and startup fail-fast (`ValidateOnStart`) where required.
 
 ## Project Structure
 

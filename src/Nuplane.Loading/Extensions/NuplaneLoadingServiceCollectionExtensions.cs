@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Nuplane.Loading;
 using Nuplane.Loading.Configuration;
 
@@ -18,30 +19,21 @@ public static class NuplaneLoadingServiceCollectionExtensions
     /// <param name="configureLoading">An optional action to configure loading options.</param>
     /// <returns>The service collection for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">Thrown when the loading options configuration is invalid.</exception>
     public static IServiceCollection AddNuplaneLoading(
         this IServiceCollection services,
         Action<LoadingOptions>? configureLoading = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        var loadingOptions = new LoadingOptions();
-        configureLoading?.Invoke(loadingOptions);
+        services.AddSingleton<LoadingOptionsValidator>();
+        services.AddSingleton<IValidateOptions<LoadingOptions>, LoadingOptionsValidation>();
 
-        if (!loadingOptions.IsValid())
-        {
-            throw new ArgumentException("Invalid loading options configuration.", nameof(configureLoading));
-        }
+        services
+            .AddOptions<LoadingOptions>()
+            .Configure(options => configureLoading?.Invoke(options))
+            .ValidateOnStart();
 
-        var loadingOptionsValidator = new LoadingOptionsValidator();
-        var loadingValidationErrors = loadingOptionsValidator.Validate(loadingOptions);
-        if (loadingValidationErrors.Count > 0)
-        {
-            throw new ArgumentException($"Invalid loading configuration: {string.Join("; ", loadingValidationErrors)}");
-        }
-
-        services.AddSingleton(loadingOptions);
-        services.AddSingleton(loadingOptionsValidator);
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<LoadingOptions>>().Value);
         services.AddSingleton<SharedAssemblyPolicyMatcher>();
         services.AddSingleton<PackageLoader>();
         services.AddSingleton<IPackageLoader>(sp => sp.GetRequiredService<PackageLoader>());
@@ -51,4 +43,3 @@ public static class NuplaneLoadingServiceCollectionExtensions
         return services;
     }
 }
-

@@ -1,5 +1,24 @@
 <!--
-Sync Impact Report (v1.1.0)
+Sync Impact Report (v1.2.0)
+- Version change: 1.1.0 → 1.2.0
+- Modified principles: none renamed
+- Added sections:
+	- VII. Options Validation Pipeline Discipline
+	  (under Delivery Workflow & Quality Gates)
+- Removed sections: none
+- Templates requiring updates:
+	- ✅ updated: .specify/templates/plan-template.md
+	  (Constitution Check: added options-validation-pipeline bullet)
+	- ✅ updated: .specify/templates/spec-template.md
+	  (FR guidance: added options validation implementation rule)
+	- ✅ updated: .specify/templates/tasks-template.md
+	  (Notes: added validator registration and ValidateOnStart rule)
+	- ⚠ pending (not present in repo): .specify/templates/commands/*.md
+- Follow-up TODOs: none
+- Bump rationale: MINOR — adds a new normative principle section
+  for options validation architecture.
+
+Prior Sync Impact Report (v1.1.0)
 - Version change: 1.0.0 → 1.1.0
 - Modified principles: none renamed
 - Added sections:
@@ -125,6 +144,33 @@ in a single requirement or task leads to partial implementations and silent gaps
    flagged during plan review. Rationale: orphan configuration indicates a
    missing implementation task.
 
+### VII. Options Validation Pipeline Discipline
+
+Nuplane MUST validate runtime configuration through the .NET options pipeline,
+not through ad-hoc validation methods on options objects. Validation rules MUST
+be centralized, testable, and executed before runtime services begin processing.
+
+1. **Use `IValidateOptions<T>` for all options validation.** Per-options and
+   cross-options rules MUST be implemented as `IValidateOptions<T>` validators.
+   Options classes MUST remain plain configuration data objects and MUST NOT
+   expose `IsValid()` methods. Rationale: policy and data must remain separate
+   to keep validation composable and DI-friendly.
+
+2. **Fail fast with `ValidateOnStart()`.** Any options type required for runtime
+   operation MUST call `ValidateOnStart()` during service registration.
+   Validation failures MUST prevent startup. Rationale: invalid configuration
+   detected at startup is safer than runtime failure in reconciliation flows.
+
+3. **Cross-options constraints MUST be explicit.** Rules that depend on multiple
+   option sets (for example feed resolution + trust policy + source trust)
+   MUST be implemented as explicit cross-options validators and registered in DI.
+   Rationale: hidden coupling in extension methods causes drift and missed checks.
+
+4. **Configuration properties MUST have validating consumers.** Every options
+   property introduced by a spec/task MUST have both (a) a runtime consumer and
+   (b) a corresponding validation rule where constraints exist. Rationale:
+   unvalidated or unconsumed options indicate incomplete implementation.
+
 ## Governance
 
 - This constitution is the highest-priority engineering policy for this repository; conflicting local
@@ -138,4 +184,4 @@ in a single requirement or task leads to partial implementations and silent gaps
 - Compliance review is mandatory in plan reviews and pull request reviews; unresolved MUST-level
 	violations block merge.
 
-**Version**: 1.1.0 | **Ratified**: 2026-03-02 | **Last Amended**: 2026-03-03
+**Version**: 1.2.0 | **Ratified**: 2026-03-02 | **Last Amended**: 2026-03-03

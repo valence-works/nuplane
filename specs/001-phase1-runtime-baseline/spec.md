@@ -108,6 +108,7 @@ As an operator or host integrator, I can receive change notifications and operat
 - **OSR-009**: If a desired source is unavailable during a cycle, the system MUST use that source’s last successful snapshot for reconciliation, continue processing, and report degraded health for the cycle.
 - **OSR-010**: Reconciliation execution MUST be single-flight; concurrent cycle execution is prohibited to prevent store/state races (functional behavior defined in FR-011).
 - **OSR-011**: Health status MUST return from degraded to healthy only after a fully successful reconciliation cycle with fresh reads from all configured desired sources.
+- **OSR-012**: Configuration validation MUST use the .NET options pipeline (`IValidateOptions<T>` with `ValidateOnStart()`) and MUST NOT rely on `IsValid()` methods inside options classes.
 
 ### Key Entities *(include if feature involves data)*
 

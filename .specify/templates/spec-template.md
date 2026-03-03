@@ -90,7 +90,9 @@
   than describing behavior abstractly ("polling-based reconciliation"). If an FR
   covers both a mechanism and a driver/trigger, split it into separate FRs.
   Every configuration property introduced by an FR MUST have an explicit FR or
-  task that implements its consumer.
+  task that implements its consumer. If options/configuration are introduced,
+  the FR MUST also specify validation topology (e.g., `IValidateOptions<T>`
+  validators and startup fail-fast behavior).
 -->
 
 - **FR-001**: System MUST [specific capability, e.g., "allow users to create accounts"]

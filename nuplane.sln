@@ -47,6 +47,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.Loading.Abstraction
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane", "src\Nuplane\Nuplane.csproj", "{72324F7F-5AA3-495F-9CCD-9546096FF2F3}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{B5399A3A-BDFA-4BB9-BD23-F3A0D7A0B4FE}"
+	ProjectSection(SolutionItems) = preProject
+		docs\coding-conventions.md = docs\coding-conventions.md
+		docs\roadmap.md = docs\roadmap.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

@@ -27,26 +27,4 @@ public sealed class FeedTrustPolicyOptions
     /// Gets the list of explicitly configured untrusted feed overrides.
     /// </summary>
     public List<UntrustedFeedOverride> Overrides { get; } = [];
-
-    /// <summary>
-    /// Validates that the feed trust policy options are internally consistent.
-    /// </summary>
-    /// <returns><see langword="true"/> if the options are valid; otherwise <see langword="false"/>.</returns>
-    public bool IsValid()
-    {
-        if (!RequireOverrideReason)
-        {
-            return true;
-        }
-
-        foreach (var item in Overrides)
-        {
-            if (item.Scope != FeedOverrideScope.None && string.IsNullOrWhiteSpace(item.Reason))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
 }

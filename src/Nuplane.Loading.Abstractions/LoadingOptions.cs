@@ -37,15 +37,4 @@ public sealed class LoadingOptions
     /// the host's default context rather than package-specific contexts.
     /// </summary>
     public ICollection<SharedAssemblyIdentity> SharedAssemblies { get; } = new List<SharedAssemblyIdentity>();
-
-    /// <summary>
-    /// Validates that the loading options are internally consistent.
-    /// </summary>
-    /// <returns><see langword="true"/> if the options are valid; otherwise <see langword="false"/>.</returns>
-    public bool IsValid() =>
-        DeactivationTimeout > TimeSpan.Zero &&
-        SharedAssemblies.All(static x =>
-            !string.IsNullOrWhiteSpace(x.Name) &&
-            !string.IsNullOrWhiteSpace(x.PublicKeyToken) &&
-            x.MajorVersion >= 0);
 }

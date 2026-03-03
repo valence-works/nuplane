@@ -1,12 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Extensions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Runtime.Reconciliation.FeedPolicy;
 using Nuplane.Runtime.Sources;
 using Nuplane.Store.State;
@@ -48,65 +48,58 @@ public static class NuplaneServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        var sourceTrustOptions = new SourceTrustOptions();
-        configureSourceTrust?.Invoke(sourceTrustOptions);
+        // Preview reconciliation options so hosted service registration can remain conditional.
+        var reconciliationPreview = new ReconciliationOptions();
+        configureReconciliation?.Invoke(reconciliationPreview);
 
+        services.AddSingleton<IValidateOptions<ReconciliationOptions>, ReconciliationOptionsValidator>();
+        services.AddSingleton<IValidateOptions<FeedResolutionOptions>, FeedResolutionOptionsValidator>();
+        services.AddSingleton<IValidateOptions<FeedTrustPolicyOptions>, FeedTrustPolicyOptionsValidator>();
+        services.AddSingleton<IValidateOptions<LockFileOptions>, LockFileOptionsValidator>();
+        services.AddSingleton<IValidateOptions<CleanupPolicyOptions>, CleanupPolicyOptionsValidator>();
+        services.AddSingleton<FeedCredentialOptionsValidator>();
+        services.AddSingleton<IValidateOptions<FeedResolutionOptions>, FeedCredentialCompositeValidator>();
 
-        var reconciliationOptions = new ReconciliationOptions();
-        configureReconciliation?.Invoke(reconciliationOptions);
+        services
+            .AddOptions<SourceTrustOptions>()
+            .Configure(options => configureSourceTrust?.Invoke(options));
 
-        var feedResolutionOptions = new FeedResolutionOptions();
-        configureFeedResolution?.Invoke(feedResolutionOptions);
-        configureFeeds?.Invoke(feedResolutionOptions.Feeds);
+        services
+            .AddOptions<ReconciliationOptions>()
+            .Configure(options => configureReconciliation?.Invoke(options))
+            .ValidateOnStart();
 
-        var feedTrustPolicyOptions = new FeedTrustPolicyOptions();
-        configureFeedTrustPolicy?.Invoke(feedTrustPolicyOptions);
+        services
+            .AddOptions<FeedResolutionOptions>()
+            .Configure(options =>
+            {
+                configureFeedResolution?.Invoke(options);
+                configureFeeds?.Invoke(options.Feeds);
+            })
+            .ValidateOnStart();
 
-        var lockFileOptions = new LockFileOptions();
-        configureLockFile?.Invoke(lockFileOptions);
+        services
+            .AddOptions<FeedTrustPolicyOptions>()
+            .Configure(options => configureFeedTrustPolicy?.Invoke(options))
+            .ValidateOnStart();
 
-        var cleanupPolicyOptions = new CleanupPolicyOptions();
-        configureCleanupPolicy?.Invoke(cleanupPolicyOptions);
+        services
+            .AddOptions<LockFileOptions>()
+            .Configure(options => configureLockFile?.Invoke(options))
+            .ValidateOnStart();
 
-        if (!reconciliationOptions.IsValid())
-        {
-            throw new ArgumentException("Invalid reconciliation options configuration.", nameof(configureReconciliation));
-        }
+        services
+            .AddOptions<CleanupPolicyOptions>()
+            .Configure(options => configureCleanupPolicy?.Invoke(options))
+            .ValidateOnStart();
 
-        if (!feedResolutionOptions.IsValid())
-        {
-            throw new ArgumentException("Invalid feed resolution options configuration.", nameof(configureFeedResolution));
-        }
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<SourceTrustOptions>>().Value);
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<ReconciliationOptions>>().Value);
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<FeedResolutionOptions>>().Value);
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<FeedTrustPolicyOptions>>().Value);
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<LockFileOptions>>().Value);
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<CleanupPolicyOptions>>().Value);
 
-        if (!feedTrustPolicyOptions.IsValid())
-        {
-            throw new ArgumentException("Invalid feed trust policy options configuration.", nameof(configureFeedTrustPolicy));
-        }
-
-        if (!lockFileOptions.IsValid())
-        {
-            throw new ArgumentException("Invalid lock file options configuration.", nameof(configureLockFile));
-        }
-
-        if (!cleanupPolicyOptions.IsValid())
-        {
-            throw new ArgumentException("Invalid cleanup policy options configuration.", nameof(configureCleanupPolicy));
-        }
-
-        var feedCredentialValidator = new FeedCredentialOptionsValidator();
-        var validationErrors = feedCredentialValidator.Validate(feedResolutionOptions, feedTrustPolicyOptions, sourceTrustOptions);
-        if (validationErrors.Count > 0)
-        {
-            throw new ArgumentException($"Invalid feed trust/credential configuration: {string.Join("; ", validationErrors)}");
-        }
-
-        services.AddSingleton(sourceTrustOptions);
-        services.AddSingleton(reconciliationOptions);
-        services.AddSingleton(feedResolutionOptions);
-        services.AddSingleton(feedTrustPolicyOptions);
-        services.AddSingleton(lockFileOptions);
-        services.AddSingleton(cleanupPolicyOptions);
-        services.AddSingleton(feedCredentialValidator);
         services.AddSingleton<DesiredStateAggregator>();
         services.AddSingleton<IDesiredStateAggregator>(sp => sp.GetRequiredService<DesiredStateAggregator>());
         services.AddSingleton<DesiredActualDiffEngine>();
@@ -152,7 +145,7 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<ReconciliationService>();
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
 
-        if (reconciliationOptions.EnableAutomaticReconciliation)
+        if (reconciliationPreview.EnableAutomaticReconciliation)
         {
             services.AddHostedService<ReconciliationHostedService>();
         }
@@ -160,4 +153,3 @@ public static class NuplaneServiceCollectionExtensions
         return services;
     }
 }
-

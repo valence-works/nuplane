@@ -37,14 +37,4 @@ public sealed class ReconciliationOptions
     /// Gets or sets the maximum delay between retry attempts (caps exponential backoff).
     /// </summary>
     public TimeSpan MaxRetryBackoff { get; set; } = TimeSpan.FromSeconds(30);
-
-    /// <summary>
-    /// Validates that the reconciliation options are internally consistent.
-    /// </summary>
-    /// <returns><see langword="true"/> if the options are valid; otherwise <see langword="false"/>.</returns>
-    public bool IsValid() =>
-        PollInterval > TimeSpan.Zero &&
-        MaxRetryAttempts >= 0 &&
-        InitialRetryBackoff > TimeSpan.Zero &&
-        MaxRetryBackoff >= InitialRetryBackoff;
 }

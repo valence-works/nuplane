@@ -152,7 +152,7 @@ This allows:
 
 - One `Add{Feature}` method per feature area.
 - Accept optional `Action<TOptions>?` parameters for configuration.
-- Validate options eagerly; throw `ArgumentException` on invalid config.
+- Wire options via `AddOptions<T>()`, register `IValidateOptions<T>`, and call `ValidateOnStart()` for required options.
 - Return `IServiceCollection` for chaining.
 
 ---
@@ -162,8 +162,10 @@ This allows:
 ### Validation
 
 - Use `ArgumentNullException.ThrowIfNull(param)` for null guards.
-- Validate options in the `IsValid()` method of each options class.
-- Cross-validate related options via dedicated validator classes (e.g., `FeedCredentialOptionsValidator`).
+- Implement options validation through `IValidateOptions<T>` validators.
+- Use `ValidateOnStart()` for required options to fail fast during startup.
+- Keep options classes data-only; do **not** add `IsValid()` methods.
+- Cross-validate related options via dedicated validator classes (e.g., `FeedCredentialOptionsValidator` wrapped in a cross-options `IValidateOptions<T>` implementation).
 
 ### Exception Types
 
@@ -279,15 +281,23 @@ public static readonly ActivitySource Source = new("Nuplane.Runtime", "0.1.0");
 public sealed class ReconciliationOptions
 {
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(60);
+}
 
-    public bool IsValid() => PollInterval > TimeSpan.Zero;
+internal sealed class ReconciliationOptionsValidator : IValidateOptions<ReconciliationOptions>
+{
+    public ValidateOptionsResult Validate(string? name, ReconciliationOptions options)
+        => options.PollInterval > TimeSpan.Zero
+            ? ValidateOptionsResult.Success
+            : ValidateOptionsResult.Fail("PollInterval must be greater than zero.");
 }
 ```
 
-- All options classes are `sealed`.
-- Provide sensible defaults.
-- Include an `IsValid()` method for self-validation.
-- Complex cross-option validation goes in dedicated validator classes.
+- All options classes are `sealed` data-only types.
+- Provide sensible defaults on options properties.
+- Do not embed validation logic in options classes.
+- Register `IValidateOptions<T>` validators for each options type.
+- Use `ValidateOnStart()` for options required at startup.
+- Complex cross-option validation goes in dedicated validators.
 
 ---
 
@@ -413,4 +423,3 @@ foreach (var package in packages)
 - **Nullable reference types**: Enabled project-wide. Annotate nullability explicitly.
 - **`sealed`**: Seal all classes unless inheritance is an intentional design point.
 - **`readonly`**: Mark fields `readonly` when they are assigned only in the constructor.
-

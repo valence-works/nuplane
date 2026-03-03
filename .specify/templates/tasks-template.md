@@ -262,3 +262,5 @@ With multiple developers:
   be separate tasks — never conflate both in a single task
 - Every configuration property defined in an options class MUST have a task implementing its consumer;
   flag orphan config properties as specification gaps
+- For .NET options, create explicit tasks for `IValidateOptions<T>` validators and `ValidateOnStart`
+  wiring; options classes themselves MUST remain data-only (no `IsValid()` methods).

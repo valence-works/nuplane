@@ -38,14 +38,6 @@ public sealed class CleanupPolicyOptions
     public bool ProtectLastKnownGood { get; set; } = true;
 
     /// <summary>
-    /// Validates that the cleanup policy options are internally consistent.
-    /// </summary>
-    /// <returns><see langword="true"/> if the options are valid; otherwise <see langword="false"/>.</returns>
-    public bool IsValid() =>
-        (!RetainLastNVersions.HasValue || RetainLastNVersions.Value >= 0) &&
-        (!RetainYoungerThanDays.HasValue || RetainYoungerThanDays.Value >= 0);
-
-    /// <summary>
     /// Determines whether a version is retained by the union of count-based and age-based policies.
     /// </summary>
     /// <param name="versionOrdinalFromNewest">The 1-based ordinal from newest.</param>

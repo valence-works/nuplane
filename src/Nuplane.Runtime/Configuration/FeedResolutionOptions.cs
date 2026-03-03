@@ -75,12 +75,4 @@ public sealed class FeedResolutionOptions
         ArgumentException.ThrowIfNullOrWhiteSpace(feedName);
         return FeedPriorities.TryGetValue(feedName, out var priority) ? priority : int.MaxValue;
     }
-
-    /// <summary>
-    /// Validates that the feed resolution options are internally consistent.
-    /// </summary>
-    /// <returns><see langword="true"/> if the options are valid; otherwise <see langword="false"/>.</returns>
-    public bool IsValid() =>
-        Feeds.Count > 0 &&
-        (!ValidateDeterministicOrdering || DeterministicFeedOrder);
 }

@@ -37,10 +37,4 @@ public sealed class LockFileOptions
     /// Gets or sets whether strict mode requires every resolved package to have a lock entry.
     /// </summary>
     public bool RequireEntryInStrictMode { get; set; } = true;
-
-    /// <summary>
-    /// Validates that the lock file options are internally consistent.
-    /// </summary>
-    /// <returns><see langword="true"/> if the options are valid; otherwise <see langword="false"/>.</returns>
-    public bool IsValid() => !string.IsNullOrWhiteSpace(Path);
 }

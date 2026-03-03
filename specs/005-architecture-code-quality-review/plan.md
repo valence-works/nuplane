@@ -367,5 +367,4 @@ Phases A and B are safe and improve the codebase with low risk. Phase C (god cla
 
 4. **`ReconciliationTelemetry` counter proliferation**: The telemetry class has 22 individual counters/gauges. Consider grouping related metrics and using tags/dimensions instead of separate counters (e.g., a single `nuplane.reconciliation.packages` counter with a `change_type` tag for added/updated/removed).
 
-5. **Options validation pattern**: Each options class has an `IsValid()` method checked in the DI registration. Consider using `IValidateOptions<T>` from `Microsoft.Extensions.Options` for a more standard pattern, especially as configuration grows.
-
+5. **Options validation pattern**: ✅ Implemented. Options classes are now data-only; validation is handled via `IValidateOptions<T>` validators with `ValidateOnStart()` fail-fast registration in DI.
