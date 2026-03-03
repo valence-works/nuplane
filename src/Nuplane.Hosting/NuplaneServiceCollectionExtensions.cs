@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Abstractions;
+using Nuplane.Loading;
 using Nuplane.NuGet.Resolution;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
@@ -21,6 +22,7 @@ public static class NuplaneServiceCollectionExtensions
         Action<FeedTrustPolicyOptions>? configureFeedTrustPolicy = null,
         Action<LockFileOptions>? configureLockFile = null,
         Action<CleanupPolicyOptions>? configureCleanupPolicy = null,
+        Action<LoadingOptions>? configureLoading = null,
         Action<ICollection<FeedDefinition>>? configureFeeds = null,
         string? stateFilePath = null)
     {
@@ -44,6 +46,9 @@ public static class NuplaneServiceCollectionExtensions
 
         var cleanupPolicyOptions = new CleanupPolicyOptions();
         configureCleanupPolicy?.Invoke(cleanupPolicyOptions);
+
+        var loadingOptions = new LoadingOptions();
+        configureLoading?.Invoke(loadingOptions);
 
         if (!reconciliationOptions.IsValid())
         {
@@ -70,11 +75,23 @@ public static class NuplaneServiceCollectionExtensions
             throw new ArgumentException("Invalid cleanup policy options configuration.", nameof(configureCleanupPolicy));
         }
 
+        if (!loadingOptions.IsValid())
+        {
+            throw new ArgumentException("Invalid loading options configuration.", nameof(configureLoading));
+        }
+
         var feedCredentialValidator = new FeedCredentialOptionsValidator();
         var validationErrors = feedCredentialValidator.Validate(feedResolutionOptions, feedTrustPolicyOptions, sourceTrustOptions);
         if (validationErrors.Count > 0)
         {
             throw new ArgumentException($"Invalid feed trust/credential configuration: {string.Join("; ", validationErrors)}");
+        }
+
+        var loadingOptionsValidator = new LoadingOptionsValidator();
+        var loadingValidationErrors = loadingOptionsValidator.Validate(loadingOptions);
+        if (loadingValidationErrors.Count > 0)
+        {
+            throw new ArgumentException($"Invalid loading configuration: {string.Join("; ", loadingValidationErrors)}");
         }
 
         services.AddSingleton(sourceTrustOptions);
@@ -83,7 +100,12 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton(feedTrustPolicyOptions);
         services.AddSingleton(lockFileOptions);
         services.AddSingleton(cleanupPolicyOptions);
+        services.AddSingleton(loadingOptions);
         services.AddSingleton(feedCredentialValidator);
+        services.AddSingleton(loadingOptionsValidator);
+        services.AddSingleton<SharedAssemblyPolicyMatcher>();
+        services.AddSingleton<PackageLoader>();
+        services.AddSingleton<PackageUnloadCoordinator>();
         services.AddSingleton<DesiredStateAggregator>();
         services.AddSingleton<DesiredActualDiffEngine>();
         services.AddSingleton<FeedRuleResultSelector>();

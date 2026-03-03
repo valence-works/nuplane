@@ -1,4 +1,5 @@
 using Nuplane.Abstractions;
+using Nuplane.Loading;
 using Nuplane.NuGet.Resolution;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
@@ -41,6 +42,9 @@ public sealed class ReconciliationService
     private readonly FeedTrustPolicyOptions feedTrustPolicyOptions;
     private readonly LockFileOptions lockFileOptions;
     private readonly CleanupPolicyOptions cleanupPolicyOptions;
+    private readonly LoadingOptions loadingOptions;
+    private readonly PackageLoader packageLoader;
+    private readonly PackageUnloadCoordinator packageUnloadCoordinator;
     private readonly FeedTrustPolicyEvaluator feedTrustPolicyEvaluator;
     private readonly LockFileCoordinator lockFileCoordinator;
     private readonly DryRunPlanner dryRunPlanner;
@@ -91,7 +95,10 @@ public sealed class ReconciliationService
         FeedResolutionOptions? feedResolutionOptions = null,
         FeedTrustPolicyOptions? feedTrustPolicyOptions = null,
         LockFileOptions? lockFileOptions = null,
-        CleanupPolicyOptions? cleanupPolicyOptions = null)
+        CleanupPolicyOptions? cleanupPolicyOptions = null,
+        LoadingOptions? loadingOptions = null,
+        PackageLoader? packageLoader = null,
+        PackageUnloadCoordinator? packageUnloadCoordinator = null)
     {
         this.sources = sources?.ToArray() ?? throw new ArgumentNullException(nameof(sources));
         this.sourceTrustOptions = sourceTrustOptions ?? throw new ArgumentNullException(nameof(sourceTrustOptions));
@@ -108,6 +115,9 @@ public sealed class ReconciliationService
         this.feedTrustPolicyOptions = feedTrustPolicyOptions ?? new FeedTrustPolicyOptions();
         this.lockFileOptions = lockFileOptions ?? new LockFileOptions();
         this.cleanupPolicyOptions = cleanupPolicyOptions ?? new CleanupPolicyOptions();
+        this.loadingOptions = loadingOptions ?? new LoadingOptions();
+        this.packageLoader = packageLoader ?? new PackageLoader();
+        this.packageUnloadCoordinator = packageUnloadCoordinator ?? new PackageUnloadCoordinator();
         feedTrustPolicyEvaluator = new();
         lockFileCoordinator = new(new(this.lockFileOptions.Path), this.lockFileOptions);
         dryRunPlanner = new(this.desiredActualDiffEngine);
@@ -209,6 +219,44 @@ public sealed class ReconciliationService
                 trustAndLockPassed.Add(lockOutcome.EffectivePackage);
             }
 
+            if (loadingOptions.Enabled && trustAndLockPassed.Count > 0)
+            {
+                var sharedPolicy = loadingOptions.SharedAssemblies
+                    .Select(x => new SharedAssemblyPolicyEntry(x.Name, x.PublicKeyToken, x.MajorVersion))
+                    .ToArray();
+
+                var loadResult = await packageLoader.EnsureLoadedAsync(trustAndLockPassed, sharedPolicy, cancellationToken);
+
+                var failedLoadIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var package in trustAndLockPassed)
+                {
+                    metrics.RecordLoadAttemptStarted();
+                    if (loadResult.FailedByPackageId.TryGetValue(package.Id, out var reason))
+                    {
+                        failedLoadIds.Add(package.Id);
+                        combinedFailures.Add(package.Id);
+                        metrics.RecordLoadFailed();
+                        logger.LogLoadOutcome(correlationId, package.Id, succeeded: false, reason);
+                        await applyExecutor.RecordLoadingFailureNonMutatingAsync(package.Id, correlationId, reason, cancellationToken);
+                        await observerNotifier.NotifyPackageFailedAsync(
+                            package.Id,
+                            new InvalidOperationException(reason),
+                            correlationId,
+                            cancellationToken);
+                    }
+                    else
+                    {
+                        metrics.RecordLoadSucceeded();
+                        logger.LogLoadOutcome(correlationId, package.Id, succeeded: true, reason: null);
+                    }
+                }
+
+                trustAndLockPassed = trustAndLockPassed
+                    .Where(x => !failedLoadIds.Contains(x.Id))
+                    .ToList();
+            }
+
             resolutionResult = new(
                 trustAndLockPassed,
                 combinedFailures.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray(),
@@ -259,10 +307,50 @@ public sealed class ReconciliationService
             var requestedIds = new HashSet<string>(
                 allowlistedRequests.Select(r => r.Id),
                 StringComparer.OrdinalIgnoreCase);
+            var unloadPendingCount = 0;
+
             foreach (var activeId in activeVersions.Keys)
             {
                 if (!requestedIds.Contains(activeId))
                 {
+                    if (loadingOptions.Enabled &&
+                        activeVersions.TryGetValue(activeId, out var activeVersion) &&
+                        packageLoader.TryRemoveContext(activeId, activeVersion, out var context) &&
+                        context is not null)
+                    {
+                        metrics.RecordUnloadAttempted();
+
+                        var (deactivation, unload) = await packageUnloadCoordinator.AttemptUnloadAsync(
+                            activeId,
+                            context,
+                            loadingOptions.DeactivationTimeout,
+                            correlationId,
+                            cancellationToken);
+
+                        if (deactivation.TimedOut)
+                        {
+                            metrics.RecordDeactivationTimeout();
+                        }
+
+                        switch (unload.Outcome)
+                        {
+                            case UnloadOutcome.Unloaded:
+                                metrics.RecordUnloadSucceeded();
+                                logger.LogUnloadOutcome(correlationId, activeId, "unloaded", unload.PendingReason);
+                                break;
+                            case UnloadOutcome.UnloadPending:
+                                metrics.RecordUnloadPending();
+                                unloadPendingCount++;
+                                logger.LogUnloadOutcome(correlationId, activeId, "unload-pending", unload.PendingReason);
+                                break;
+                            default:
+                                metrics.RecordUnloadPending();
+                                unloadPendingCount++;
+                                logger.LogUnloadOutcome(correlationId, activeId, "unload-failed", unload.PendingReason);
+                                break;
+                        }
+                    }
+
                     mergedActive.Remove(activeId);
                 }
             }
@@ -294,7 +382,14 @@ public sealed class ReconciliationService
             }
 
             var hadFailures = readResult.UsedFallback || applyResult.FailedPackageIds.Count > 0;
-            var isDegraded = healthEvaluator.Evaluate(hadFailures, readResult.AllSourcesFresh, trustFailures, lockFailures, cleanupFailures);
+            metrics.SetUnloadPendingPackages(unloadPendingCount);
+            var isDegraded = healthEvaluator.Evaluate(
+                hadFailures,
+                readResult.AllSourcesFresh,
+                trustFailures,
+                lockFailures,
+                cleanupFailures,
+                unloadPendingCount);
             var cycleDuration = DateTimeOffset.UtcNow - cycleStartedAt;
             metrics.RecordCycle(changeSet, applyResult.FailedPackageIds.Count, cycleDuration, mergedActive.Count);
             logger.LogCycleCompleted(correlationId, isDegraded, applyResult.FailedPackageIds.Count);

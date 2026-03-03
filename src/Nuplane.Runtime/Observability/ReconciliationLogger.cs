@@ -117,4 +117,41 @@ public sealed class ReconciliationLogger
                 ["effectiveFeed"] = outcome.EffectivePackage?.FeedName
             }));
     }
+
+    public void LogLoadOutcome(string correlationId, string packageId, bool succeeded, string? reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+
+        entries.Add(new(
+            DateTimeOffset.UtcNow,
+            correlationId,
+            "reconciliation.load.outcome",
+            reason ?? (succeeded ? "load-succeeded" : "load-failed"),
+            new Dictionary<string, object?>
+            {
+                ["packageId"] = packageId,
+                ["succeeded"] = succeeded,
+                ["reason"] = reason
+            }));
+    }
+
+    public void LogUnloadOutcome(string correlationId, string packageId, string outcome, string? reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(outcome);
+
+        entries.Add(new(
+            DateTimeOffset.UtcNow,
+            correlationId,
+            "reconciliation.unload.outcome",
+            outcome,
+            new Dictionary<string, object?>
+            {
+                ["packageId"] = packageId,
+                ["outcome"] = outcome,
+                ["reason"] = reason
+            }));
+    }
 }

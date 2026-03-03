@@ -30,4 +30,21 @@ public sealed class AllowlistGate
         }
         return accepted;
     }
+
+    public void EnsureActiveStorePath(string packageId, string activeInstallPath, string rootDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(activeInstallPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootDirectory);
+
+        var normalizedRoot = Path.GetFullPath(rootDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var normalizedPath = Path.GetFullPath(activeInstallPath);
+
+        if (!normalizedPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Package '{packageId}' active install path '{activeInstallPath}' is outside trusted store root '{rootDirectory}'.");
+        }
+    }
 }

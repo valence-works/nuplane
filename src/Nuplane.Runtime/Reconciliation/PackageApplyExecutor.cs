@@ -98,4 +98,17 @@ public sealed class PackageApplyExecutor(
 
         return new(applied, failed);
     }
+
+    public async Task RecordLoadingFailureNonMutatingAsync(
+        string packageId,
+        string correlationId,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+
+        await failureRecorder.RecordAsync(packageId, "load", message, correlationId, cancellationToken);
+    }
 }

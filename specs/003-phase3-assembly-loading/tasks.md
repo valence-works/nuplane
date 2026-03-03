@@ -11,10 +11,10 @@
 
 **Purpose**: Prepare feature scaffolding, docs, and sample host configuration for Phase 3.
 
-- [ ] T001 Add Phase 3 loading scope and operator notes in docs/roadmap.md
-- [ ] T002 Add Phase 3 usage section and configuration guidance in README.md
-- [ ] T003 [P] Add optional loading configuration example in samples/Nuplane.Sample.Console/Program.cs
-- [ ] T004 [P] Add optional loading configuration example in samples/Nuplane.Sample.AspNetCore/Program.cs
+- [X] T001 Add Phase 3 loading scope and operator notes in docs/roadmap.md
+- [X] T002 Add Phase 3 usage section and configuration guidance in README.md
+- [X] T003 [P] Add optional loading configuration example in samples/Nuplane.Sample.Console/Program.cs
+- [X] T004 [P] Add optional loading configuration example in samples/Nuplane.Sample.AspNetCore/Program.cs
 
 ---
 
@@ -24,15 +24,15 @@
 
 **⚠️ CRITICAL**: No user story implementation starts before this phase is complete.
 
-- [ ] T005 Define loading options model (enable flag, deactivation timeout, shared policy entries) in src/Nuplane.Runtime/Configuration/LoadingOptions.cs
-- [ ] T006 [P] Add loading abstractions for session and unload outcomes in src/Nuplane.Abstractions/LoadingContracts.cs
-- [ ] T007 [P] Add shared assembly identity validation (name/token/major) in src/Nuplane.Runtime/Configuration/LoadingOptionsValidator.cs
-- [ ] T008 [P] Add trusted-source loading boundary validation for active-store-only assembly paths in src/Nuplane.Runtime/Reconciliation/AllowlistGate.cs
-- [ ] T009 Add non-mutating transactional safety guard for loading failures (preserve active/LKG) in src/Nuplane.Runtime/Reconciliation/PackageApplyExecutor.cs
-- [ ] T010 Add baseline loading observability contracts (load/unload/timeout/pending) in src/Nuplane.Runtime/Observability/ReconciliationTelemetry.cs
-- [ ] T011 Add loading metric counters/gauges/histograms baseline in src/Nuplane.Runtime/Observability/ReconciliationMetrics.cs
-- [ ] T012 Add loading health signal baseline (`UnloadPending` => degraded) in src/Nuplane.Runtime/Health/ReconciliationHealthEvaluator.cs
-- [ ] T013 Wire loading options and services in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
+- [X] T005 Define loading options model (enable flag, deactivation timeout, shared policy entries) in src/Nuplane.Runtime/Configuration/LoadingOptions.cs
+- [X] T006 [P] Add loading abstractions for session and unload outcomes in src/Nuplane.Abstractions/LoadingContracts.cs
+- [X] T007 [P] Add shared assembly identity validation (name/token/major) in src/Nuplane.Runtime/Configuration/LoadingOptionsValidator.cs
+- [X] T008 [P] Add trusted-source loading boundary validation for active-store-only assembly paths in src/Nuplane.Runtime/Reconciliation/AllowlistGate.cs
+- [X] T009 Add non-mutating transactional safety guard for loading failures (preserve active/LKG) in src/Nuplane.Runtime/Reconciliation/PackageApplyExecutor.cs
+- [X] T010 Add baseline loading observability contracts (load/unload/timeout/pending) in src/Nuplane.Runtime/Observability/ReconciliationTelemetry.cs
+- [X] T011 Add loading metric counters/gauges/histograms baseline in src/Nuplane.Runtime/Observability/ReconciliationMetrics.cs
+- [X] T012 Add loading health signal baseline (`UnloadPending` => degraded) in src/Nuplane.Runtime/Health/ReconciliationHealthEvaluator.cs
+- [X] T013 Wire loading options and services in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
 
 **Checkpoint**: Foundation complete; user stories can proceed.
 
@@ -46,19 +46,19 @@
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T014 [P] [US1] Add unit tests for package load session lifecycle in test/Nuplane.Runtime.Tests/Reconciliation/PackageLoadingSessionTests.cs
-- [ ] T015 [P] [US1] Add contract tests for loading boundary inputs/outputs in test/Nuplane.Integration.Tests/Contracts/PackageLoadingContractTests.cs
-- [ ] T016 [P] [US1] Add integration tests for per-package load failure isolation in test/Nuplane.Integration.Tests/Reconciliation/LoadFailureIsolationTests.cs
-- [ ] T017 [US1] Add regression test for repeated-cycle idempotence (no duplicate sessions) in test/Nuplane.Integration.Tests/Reconciliation/RepeatedCycleIdempotenceTests.cs
+- [X] T014 [P] [US1] Add unit tests for package load session lifecycle in test/Nuplane.Runtime.Tests/Reconciliation/PackageLoadingSessionTests.cs
+- [X] T015 [P] [US1] Add contract tests for loading boundary inputs/outputs in test/Nuplane.Integration.Tests/Contracts/PackageLoadingContractTests.cs
+- [X] T016 [P] [US1] Add integration tests for per-package load failure isolation in test/Nuplane.Integration.Tests/Reconciliation/LoadFailureIsolationTests.cs
+- [X] T017 [US1] Add regression test for repeated-cycle idempotence (no duplicate sessions) in test/Nuplane.Integration.Tests/Reconciliation/RepeatedCycleIdempotenceTests.cs
 
 ### Implementation for User Story 1
 
-- [ ] T018 [P] [US1] Implement package load session model in src/Nuplane.Loading/PackageLoadSession.cs
-- [ ] T019 [P] [US1] Implement collectible per-package load context in src/Nuplane.Loading/PackageAssemblyLoadContext.cs
-- [ ] T020 [P] [US1] Implement package loader orchestration for active package paths in src/Nuplane.Loading/PackageLoader.cs
-- [ ] T021 [US1] Integrate loading session orchestration into reconciliation flow in src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
-- [ ] T022 [US1] Add correlation-linked load diagnostics for success/failure outcomes in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
-- [ ] T023 [US1] Register loading services and options in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
+- [X] T018 [P] [US1] Implement package load session model in src/Nuplane.Loading/PackageLoadSession.cs
+- [X] T019 [P] [US1] Implement collectible per-package load context in src/Nuplane.Loading/PackageAssemblyLoadContext.cs
+- [X] T020 [P] [US1] Implement package loader orchestration for active package paths in src/Nuplane.Loading/PackageLoader.cs
+- [X] T021 [US1] Integrate loading session orchestration into reconciliation flow in src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
+- [X] T022 [US1] Add correlation-linked load diagnostics for success/failure outcomes in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
+- [X] T023 [US1] Register loading services and options in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
 
 **Checkpoint**: User Story 1 is independently functional and testable (MVP).
 
@@ -72,19 +72,19 @@
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T024 [P] [US2] Add unit tests for strong-identity policy matching in test/Nuplane.Runtime.Tests/Reconciliation/SharedAssemblyPolicyTests.cs
-- [ ] T025 [P] [US2] Add contract tests for shared-assembly resolution behavior in test/Nuplane.Integration.Tests/Contracts/SharedAssemblyPolicyContractTests.cs
-- [ ] T026 [P] [US2] Add integration tests for host-context reuse and package-local fallback in test/Nuplane.Integration.Tests/Reconciliation/SharedAssemblyTypeIdentityTests.cs
-- [ ] T027 [US2] Add regression test preventing name-only shared match fallback in test/Nuplane.Runtime.Tests/Reconciliation/SharedAssemblyMismatchRegressionTests.cs
+- [X] T024 [P] [US2] Add unit tests for strong-identity policy matching in test/Nuplane.Runtime.Tests/Reconciliation/SharedAssemblyPolicyTests.cs
+- [X] T025 [P] [US2] Add contract tests for shared-assembly resolution behavior in test/Nuplane.Integration.Tests/Contracts/SharedAssemblyPolicyContractTests.cs
+- [X] T026 [P] [US2] Add integration tests for host-context reuse and package-local fallback in test/Nuplane.Integration.Tests/Reconciliation/SharedAssemblyTypeIdentityTests.cs
+- [X] T027 [US2] Add regression test preventing name-only shared match fallback in test/Nuplane.Runtime.Tests/Reconciliation/SharedAssemblyMismatchRegressionTests.cs
 
 ### Implementation for User Story 2
 
-- [ ] T028 [P] [US2] Implement shared assembly policy entry model in src/Nuplane.Loading/SharedAssemblyPolicyEntry.cs
-- [ ] T029 [P] [US2] Implement strong-identity shared assembly matcher in src/Nuplane.Loading/SharedAssemblyPolicyMatcher.cs
-- [ ] T030 [P] [US2] Implement deterministic resolver order (shared policy -> package resolver -> framework fallback) in src/Nuplane.Loading/PackageAssemblyResolver.cs
-- [ ] T031 [US2] Integrate shared policy evaluation into package load context resolution in src/Nuplane.Loading/PackageAssemblyLoadContext.cs
-- [ ] T032 [US2] Add shared policy diagnostics and mismatch reason codes in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
-- [ ] T033 [US2] Validate shared policy configuration wiring and defaults in src/Nuplane.Runtime/Configuration/LoadingOptions.cs
+- [X] T028 [P] [US2] Implement shared assembly policy entry model in src/Nuplane.Loading/SharedAssemblyPolicyEntry.cs
+- [X] T029 [P] [US2] Implement strong-identity shared assembly matcher in src/Nuplane.Loading/SharedAssemblyPolicyMatcher.cs
+- [X] T030 [P] [US2] Implement deterministic resolver order (shared policy -> package resolver -> framework fallback) in src/Nuplane.Loading/PackageAssemblyResolver.cs
+- [X] T031 [US2] Integrate shared policy evaluation into package load context resolution in src/Nuplane.Loading/PackageAssemblyLoadContext.cs
+- [X] T032 [US2] Add shared policy diagnostics and mismatch reason codes in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
+- [X] T033 [US2] Validate shared policy configuration wiring and defaults in src/Nuplane.Runtime/Configuration/LoadingOptions.cs
 
 **Checkpoint**: User Stories 1 and 2 are independently functional and testable.
 
@@ -98,21 +98,21 @@
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T034 [P] [US3] Add unit tests for unload retry state transitions in test/Nuplane.Runtime.Tests/Reconciliation/UnloadPendingRetryTests.cs
-- [ ] T035 [P] [US3] Add contract tests for unload lifecycle and timeout continuation in test/Nuplane.Integration.Tests/Contracts/UnloadLifecycleContractTests.cs
-- [ ] T036 [P] [US3] Add integration tests for deactivation-timeout continuation behavior in test/Nuplane.Integration.Tests/Reconciliation/DeactivationTimeoutContinuationTests.cs
-- [ ] T037 [P] [US3] Add integration tests for unload pending recovery on later cycles in test/Nuplane.Integration.Tests/Reconciliation/UnloadPendingRecoveryTests.cs
-- [ ] T038 [US3] Add regression test for degraded health while any unload pending exists in test/Nuplane.Runtime.Tests/Reconciliation/LoadingHealthProjectionTests.cs
+- [X] T034 [P] [US3] Add unit tests for unload retry state transitions in test/Nuplane.Runtime.Tests/Reconciliation/UnloadPendingRetryTests.cs
+- [X] T035 [P] [US3] Add contract tests for unload lifecycle and timeout continuation in test/Nuplane.Integration.Tests/Contracts/UnloadLifecycleContractTests.cs
+- [X] T036 [P] [US3] Add integration tests for deactivation-timeout continuation behavior in test/Nuplane.Integration.Tests/Reconciliation/DeactivationTimeoutContinuationTests.cs
+- [X] T037 [P] [US3] Add integration tests for unload pending recovery on later cycles in test/Nuplane.Integration.Tests/Reconciliation/UnloadPendingRecoveryTests.cs
+- [X] T038 [US3] Add regression test for degraded health while any unload pending exists in test/Nuplane.Runtime.Tests/Reconciliation/LoadingHealthProjectionTests.cs
 
 ### Implementation for User Story 3
 
-- [ ] T039 [P] [US3] Implement deactivation attempt model and timeout outcome record in src/Nuplane.Loading/DeactivationAttempt.cs
-- [ ] T040 [P] [US3] Implement unload outcome record model with retry metadata in src/Nuplane.Loading/UnloadOutcomeRecord.cs
-- [ ] T041 [P] [US3] Implement bounded deactivation and unload coordinator in src/Nuplane.Loading/PackageUnloadCoordinator.cs
-- [ ] T042 [US3] Integrate remove/deactivate/unload/retry lifecycle in src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
-- [ ] T043 [US3] Emit timeout/unload-pending/unloaded diagnostics in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
-- [ ] T044 [US3] Emit unload pending gauge and timeout counters in src/Nuplane.Runtime/Observability/ReconciliationMetrics.cs
-- [ ] T045 [US3] Apply degraded-health projection for unload-pending states in src/Nuplane.Runtime/Health/ReconciliationHealthEvaluator.cs
+- [X] T039 [P] [US3] Implement deactivation attempt model and timeout outcome record in src/Nuplane.Loading/DeactivationAttempt.cs
+- [X] T040 [P] [US3] Implement unload outcome record model with retry metadata in src/Nuplane.Loading/UnloadOutcomeRecord.cs
+- [X] T041 [P] [US3] Implement bounded deactivation and unload coordinator in src/Nuplane.Loading/PackageUnloadCoordinator.cs
+- [X] T042 [US3] Integrate remove/deactivate/unload/retry lifecycle in src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
+- [X] T043 [US3] Emit timeout/unload-pending/unloaded diagnostics in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
+- [X] T044 [US3] Emit unload pending gauge and timeout counters in src/Nuplane.Runtime/Observability/ReconciliationMetrics.cs
+- [X] T045 [US3] Apply degraded-health projection for unload-pending states in src/Nuplane.Runtime/Health/ReconciliationHealthEvaluator.cs
 
 **Checkpoint**: All user stories are independently functional and testable.
 
@@ -122,13 +122,13 @@
 
 **Purpose**: Final consistency, documentation, and end-to-end validation.
 
-- [ ] T046 [P] Finalize feature verification steps in specs/003-phase3-assembly-loading/quickstart.md
-- [ ] T047 [P] Add quickstart validation evidence template in specs/003-phase3-assembly-loading/quickstart-validation.md
-- [ ] T048 [P] Update secret scan guidance for loading-related config examples in build/secret-scan-policy.md
-- [ ] T049 Execute targeted quickstart test matrix and capture results in specs/003-phase3-assembly-loading/quickstart-validation.md
-- [ ] T050 Execute full regression suite and capture summary in specs/003-phase3-assembly-loading/quickstart-validation.md
-- [ ] T051 Add SC-001 threshold verification report (>=99% per-cycle load success under `phase3-loading-baseline`) in specs/003-phase3-assembly-loading/quickstart-validation.md
-- [ ] T052 Add SC-004 diagnosability verification report (100% failure-cause traceability under `phase3-loading-baseline`) in specs/003-phase3-assembly-loading/quickstart-validation.md
+- [X] T046 [P] Finalize feature verification steps in specs/003-phase3-assembly-loading/quickstart.md
+- [X] T047 [P] Add quickstart validation evidence template in specs/003-phase3-assembly-loading/quickstart-validation.md
+- [X] T048 [P] Update secret scan guidance for loading-related config examples in build/secret-scan-policy.md
+- [X] T049 Execute targeted quickstart test matrix and capture results in specs/003-phase3-assembly-loading/quickstart-validation.md
+- [X] T050 Execute full regression suite and capture summary in specs/003-phase3-assembly-loading/quickstart-validation.md
+- [X] T051 Add SC-001 threshold verification report (>=99% per-cycle load success under `phase3-loading-baseline`) in specs/003-phase3-assembly-loading/quickstart-validation.md
+- [X] T052 Add SC-004 diagnosability verification report (100% failure-cause traceability under `phase3-loading-baseline`) in specs/003-phase3-assembly-loading/quickstart-validation.md
 
 ---
 

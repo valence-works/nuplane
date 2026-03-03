@@ -34,11 +34,28 @@ public sealed class ReconciliationTelemetry : IDisposable
 
     public Counter<long> CleanupFailedCounter { get; }
 
+    public Counter<long> LoadingStartedCounter { get; }
+
+    public Counter<long> LoadingSucceededCounter { get; }
+
+    public Counter<long> LoadingFailedCounter { get; }
+
+    public Counter<long> UnloadAttemptedCounter { get; }
+
+    public Counter<long> UnloadSucceededCounter { get; }
+
+    public Counter<long> UnloadPendingCounter { get; }
+
+    public Counter<long> DeactivationTimeoutCounter { get; }
+
     public Histogram<double> TransactionDurationMilliseconds { get; }
 
     public ObservableGauge<long> ActivePackagesGauge { get; }
 
+    public ObservableGauge<long> UnloadPendingPackagesGauge { get; }
+
     private long activePackages;
+    private long unloadPendingPackages;
 
     public ReconciliationTelemetry()
     {
@@ -56,13 +73,26 @@ public sealed class ReconciliationTelemetry : IDisposable
         CleanupDeletedCounter = meter.CreateCounter<long>("nuplane.cleanup.deleted");
         CleanupKeptCounter = meter.CreateCounter<long>("nuplane.cleanup.kept");
         CleanupFailedCounter = meter.CreateCounter<long>("nuplane.cleanup.failed");
+        LoadingStartedCounter = meter.CreateCounter<long>("nuplane.loading.started");
+        LoadingSucceededCounter = meter.CreateCounter<long>("nuplane.loading.succeeded");
+        LoadingFailedCounter = meter.CreateCounter<long>("nuplane.loading.failed");
+        UnloadAttemptedCounter = meter.CreateCounter<long>("nuplane.loading.unload.attempted");
+        UnloadSucceededCounter = meter.CreateCounter<long>("nuplane.loading.unload.succeeded");
+        UnloadPendingCounter = meter.CreateCounter<long>("nuplane.loading.unload.pending");
+        DeactivationTimeoutCounter = meter.CreateCounter<long>("nuplane.loading.deactivation.timeout");
         TransactionDurationMilliseconds = meter.CreateHistogram<double>("nuplane.reconciliation.transaction.duration.ms");
         ActivePackagesGauge = meter.CreateObservableGauge<long>("nuplane.reconciliation.active", () => activePackages);
+        UnloadPendingPackagesGauge = meter.CreateObservableGauge<long>("nuplane.loading.unload.pending.active", () => unloadPendingPackages);
     }
 
     public void SetActivePackages(long count)
     {
         activePackages = Math.Max(0, count);
+    }
+
+    public void SetUnloadPendingPackages(long count)
+    {
+        unloadPendingPackages = Math.Max(0, count);
     }
 
     public void Dispose()
