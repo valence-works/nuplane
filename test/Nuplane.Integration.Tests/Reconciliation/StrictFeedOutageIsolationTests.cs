@@ -30,7 +30,7 @@ public sealed class StrictFeedOutageIsolationTests
             new(),
             new(),
             new MultiFeedPackageResolver(feedOptions, new(feedOptions)),
-            new(new(), stateFilePath: null),
+            new(new StoreStateSerializer(), stateFilePath: null),
             new() { MaxRetryAttempts = 0 });
 
         var result = await service.TriggerManualAsync(CancellationToken.None);

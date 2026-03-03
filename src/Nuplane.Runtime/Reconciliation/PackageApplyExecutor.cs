@@ -1,30 +1,28 @@
 using Nuplane.Abstractions;
-using Nuplane.NuGet.Resolution;
 using Nuplane.Store.State;
 using Nuplane.Store.Transactions;
+using Nuplane.Runtime.Reconciliation.Models;
+using Nuplane.Runtime.Reconciliation.FeedPolicy;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-public sealed record PackageResolutionResult(
-    IReadOnlyList<ResolvedPackage> ResolvedPackages,
-    IReadOnlyList<string> FailedPackageIds,
-    IReadOnlyList<FeedResolutionDecision> FeedDecisions);
 
-public sealed record PackageApplyExecutionResult(
-    IReadOnlyList<ResolvedPackage> AppliedPackages,
-    IReadOnlyList<string> FailedPackageIds);
-
+/// <summary>
+/// Resolves package requests and executes transactional package activation using the
+/// configured resolver, transaction coordinator, retry policy, and failure recorder.
+/// </summary>
 public sealed class PackageApplyExecutor(
-    INuGetPackageResolver packageResolver,
+    IPackageResolver packageResolver,
     PackageTransactionCoordinator transactionCoordinator,
-    ReconciliationRetryPolicy retryPolicy,
-    FailureRecorder failureRecorder)
+    IReconciliationRetryPolicy retryPolicy,
+    IFailureRecorder failureRecorder) : IPackageApplyExecutor
 {
-    private readonly INuGetPackageResolver packageResolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver));
+    private readonly IPackageResolver packageResolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver));
     private readonly PackageTransactionCoordinator transactionCoordinator = transactionCoordinator ?? throw new ArgumentNullException(nameof(transactionCoordinator));
-    private readonly ReconciliationRetryPolicy retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
-    private readonly FailureRecorder failureRecorder = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
+    private readonly IReconciliationRetryPolicy retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
+    private readonly IFailureRecorder failureRecorder = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
 
+    /// <inheritdoc />
     public async Task<PackageResolutionResult> ResolveAsync(
         IReadOnlyList<PackageRequest> desiredRequests,
         string correlationId,
@@ -69,6 +67,7 @@ public sealed class PackageApplyExecutor(
         return new(resolved, failed, decisions);
     }
 
+    /// <inheritdoc />
     public async Task<PackageApplyExecutionResult> ExecuteTransactionsAsync(
         PackageResolutionResult resolutionResult,
         string correlationId,
@@ -99,6 +98,7 @@ public sealed class PackageApplyExecutor(
         return new(applied, failed);
     }
 
+    /// <inheritdoc />
     public async Task RecordLoadingFailureNonMutatingAsync(
         string packageId,
         string correlationId,

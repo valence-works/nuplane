@@ -6,7 +6,7 @@ namespace Nuplane.Runtime.Tests.Reconciliation;
 public sealed class MultiFeedRetryPolicyTests
 {
     [Fact]
-    public async Task ExecuteForFeedResolutionAsync_StopsAtMaxAttempts()
+    public async Task ExecuteAsync_StopsAtMaxAttempts()
     {
         var options = new ReconciliationOptions
         {
@@ -19,7 +19,7 @@ public sealed class MultiFeedRetryPolicyTests
         var attempts = 0;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            policy.ExecuteForFeedResolutionAsync<int>(
+            policy.ExecuteAsync<int>(
                 _ =>
                 {
                     attempts++;

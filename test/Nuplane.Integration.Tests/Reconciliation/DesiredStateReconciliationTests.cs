@@ -1,7 +1,8 @@
 using Nuplane.Abstractions;
-using Nuplane.NuGet.Resolution;
-using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Events;
+using Nuplane.Runtime.Health;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
@@ -23,7 +24,7 @@ public sealed class DesiredStateReconciliationTests
             new(),
             new(),
             new NuGetPackageResolver(),
-            new(new(), stateFilePath: null),
+            new(new StoreStateSerializer(), stateFilePath: null),
             new());
 
         var first = await service.TriggerManualAsync(CancellationToken.None);
@@ -50,7 +51,7 @@ public sealed class DesiredStateReconciliationTests
             new(),
             new(),
             new NuGetPackageResolver(),
-            new(new(), stateFilePath: null),
+            new(new StoreStateSerializer(), stateFilePath: null),
             new());
 
         var result = await service.TriggerManualAsync(CancellationToken.None);
@@ -81,10 +82,9 @@ public sealed class DesiredStateReconciliationTests
             new(),
             new(),
             new NuGetPackageResolver(),
-            new(new(), stateFilePath: null),
+            new(new StoreStateSerializer(), stateFilePath: null),
             new(),
-            new(Array.Empty<INuplaneObserver>()),
-            new(Array.Empty<INuplaneObserver>()),
+            new ObserverEventDispatcher(Array.Empty<INuplaneObserver>()),
             new(),
             feedResolutionOptions: feedResolutionOptions,
             feedTrustPolicyOptions: new FeedTrustPolicyOptions

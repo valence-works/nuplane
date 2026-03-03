@@ -625,62 +625,53 @@ Recommended baseline for acceptance validation:
 
 ---
 
-# Phase 4 — Operational Enhancements
+# Phase 4 — Cluster-Convergent Runtime Loading (Lean)
 
 ## Strategic Goal
 
-Elevate Nuplane to production-grade operational maturity.
+Make Nuplane practical for real applications that want to load packages at startup and at runtime across multiple identical replicas, converging on a shared desired state over time, without introducing distributed coordination inside Nuplane itself.
 
 ---
 
-## 4.1 Channels (Environment Segmentation)
+## 4.1 Shared Desired Manifest (Exact Versions)
 
-Support multiple package channels:
+Support a deterministic desired-state manifest as an optional desired-state input.
 
-* prod
-* staging
-* canary
+Purpose:
+- all replicas that read the same manifest eventually converge to the same active package set
+- exact version pinning is the initial default for determinism and operability
 
-Configuration example:
-
-```csharp
-options.Channel = "staging";
-```
-
-Feeds or rules may be channel-scoped.
+The manifest can be hosted in a shared location (directory, blob/object storage, or HTTPS) and should be updated atomically (upload packages first, write/update manifest last).
 
 ---
 
-## 4.2 Staged Rollouts
-
-Allow staged promotion:
-
-1. Download new version
-2. Do not activate immediately
-3. Wait for manual promotion or readiness condition
-4. Activate atomically
-
----
-
-## 4.3 Canary Mode
+## 4.2 Automatic + Explicit Reconciliation
 
 Allow:
+- automatic reconciliation at startup and via polling
+- explicit reconciliation triggers (in-process API and optional REST)
 
-* Activation only on subset of nodes
-* Gradual rollout percentage
-
-Cluster integration optional.
+Polling remains the robustness baseline; explicit triggers enable near real-time updates after package uploads.
 
 ---
 
-## 4.4 Advanced Integrity
+## 4.3 Optional Loader SDK Integration
 
-Support:
+Support an optional Loader SDK (separate module) that can load assemblies/types/services from activated packages.
 
-* Signature verification (NuGet signing)
-* Strict trust enforcement
-* Mandatory hash verification
-* Feed-level required validator configuration
+Nuplane remains host-neutral:
+- hosts may opt into loader integration
+- loader failures are observable and must not crash the host
+
+---
+
+## 4.4 Integrity (Pragmatic Baseline)
+
+Support pragmatic baseline integrity for runtime loading scenarios:
+- deterministic acquisition and activation boundaries
+- observable non-mutating failures with last-known-good preservation
+
+Advanced signing/trust policies can be introduced later if needed.
 
 ---
 
@@ -703,11 +694,52 @@ Authentication left to host.
 
 ## Acceptance Criteria
 
-* Channels enforce separation
-* Staged activation works
-* Canary activation limited correctly
-* Admin endpoints expose accurate state
-* Advanced validation enforced
+* Replicas converge to the same active package set given the same desired manifest
+* Reconciliation is safe, deterministic, and observable (logs/metrics/health/events)
+* Admin endpoints expose accurate state and can trigger reconcile
+* Loader integration is optional and safe
+
+---
+
+# Phase 5 — Progressive Delivery & Rollouts (Deferred)
+
+## Strategic Goal
+
+Add production-grade rollout controls for environments and fleets that require progressive delivery, blast-radius control, and deliberate promotion workflows.
+
+## 5.1 Channels (Environment Segmentation)
+
+Support multiple package channels, such as:
+- prod
+- staging
+- canary
+
+Feeds, rules, and desired inputs may be channel-scoped.
+
+## 5.2 Staged Promotion
+
+Allow staged promotion workflow:
+1. acquire + validate new version
+2. stage without activation
+3. wait for explicit promotion
+4. activate atomically with LKG preservation
+
+## 5.3 Canary Rollout
+
+Allow fleet canary behavior:
+- activation only on a subset of nodes
+- gradual rollout percentage
+- deterministic selection for identical inputs
+
+Cluster integration remains host-driven (Nuplane does not become a cluster orchestrator).
+
+## 5.4 Advanced Integrity & Governance
+
+Support stronger integrity/governance requirements where needed:
+- signature verification
+- strict trust enforcement
+- mandatory hash verification
+- feed-level required validator configuration
 
 ---
 

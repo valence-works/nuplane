@@ -1,9 +1,15 @@
 using Nuplane.Abstractions;
+using Nuplane.Runtime.Versioning;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-public sealed class DesiredActualDiffEngine
+/// <summary>
+/// Computes the difference between desired and actual package state using deterministic
+/// version ordering. Deduplicates desired packages by selecting the highest version.
+/// </summary>
+public sealed class DesiredActualDiffEngine : IDesiredActualDiffEngine
 {
+    /// <inheritdoc />
     public PackageChangeSet Compute(
         IReadOnlyCollection<ResolvedPackage> desired,
         IReadOnlyDictionary<string, string> activeVersions,
@@ -34,6 +40,7 @@ public sealed class DesiredActualDiffEngine
         return new(added, updated, removed, correlationId, timestamp);
     }
 
+    /// <inheritdoc />
     public IReadOnlyDictionary<string, string> BuildNextActiveVersions(IReadOnlyCollection<ResolvedPackage> desired)
     {
         ArgumentNullException.ThrowIfNull(desired);
@@ -55,70 +62,4 @@ public sealed class DesiredActualDiffEngine
             .ToArray();
     }
 
-    private readonly record struct VersionKey(int Major, int Minor, int Patch, string Suffix) : IComparable<VersionKey>
-    {
-        public static VersionKey Create(string version)
-        {
-            if (string.IsNullOrWhiteSpace(version))
-            {
-                return new(0, 0, 0, string.Empty);
-            }
-
-            var normalized = version.Trim();
-            if (normalized.StartsWith("[", StringComparison.Ordinal) && normalized.EndsWith("]", StringComparison.Ordinal))
-            {
-                normalized = normalized[1..^1];
-            }
-
-            var plusIndex = normalized.IndexOf('+');
-            if (plusIndex >= 0)
-            {
-                normalized = normalized[..plusIndex];
-            }
-
-            var dashIndex = normalized.IndexOf('-');
-            var core = dashIndex >= 0 ? normalized[..dashIndex] : normalized;
-            var suffix = dashIndex >= 0 ? normalized[(dashIndex + 1)..] : string.Empty;
-
-            var coreParts = core.Split('.', StringSplitOptions.RemoveEmptyEntries);
-            _ = int.TryParse(coreParts.ElementAtOrDefault(0), out var major);
-            _ = int.TryParse(coreParts.ElementAtOrDefault(1), out var minor);
-            _ = int.TryParse(coreParts.ElementAtOrDefault(2), out var patch);
-
-            return new(major, minor, patch, suffix);
-        }
-
-        public int CompareTo(VersionKey other)
-        {
-            var majorCompare = Major.CompareTo(other.Major);
-            if (majorCompare != 0)
-            {
-                return majorCompare;
-            }
-
-            var minorCompare = Minor.CompareTo(other.Minor);
-            if (minorCompare != 0)
-            {
-                return minorCompare;
-            }
-
-            var patchCompare = Patch.CompareTo(other.Patch);
-            if (patchCompare != 0)
-            {
-                return patchCompare;
-            }
-
-            if (string.IsNullOrEmpty(Suffix) && !string.IsNullOrEmpty(other.Suffix))
-            {
-                return 1;
-            }
-
-            if (!string.IsNullOrEmpty(Suffix) && string.IsNullOrEmpty(other.Suffix))
-            {
-                return -1;
-            }
-
-            return string.Compare(Suffix, other.Suffix, StringComparison.OrdinalIgnoreCase);
-        }
-    }
 }

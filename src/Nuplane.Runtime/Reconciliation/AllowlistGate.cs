@@ -3,8 +3,13 @@ using Nuplane.Runtime.Configuration;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-public sealed class AllowlistGate
+/// <summary>
+/// Enforces package allowlist rules by validating requests against the allowed package
+/// identifiers and ensuring install paths are within the trusted store root.
+/// </summary>
+public sealed class AllowlistGate : IAllowlistGate
 {
+    /// <inheritdoc />
     public IReadOnlyList<PackageRequest> Enforce(IReadOnlyList<PackageRequest> requests, SourceTrustOptions trustOptions)
     {
         ArgumentNullException.ThrowIfNull(requests);
@@ -31,6 +36,7 @@ public sealed class AllowlistGate
         return accepted;
     }
 
+    /// <inheritdoc />
     public void EnsureActiveStorePath(string packageId, string activeInstallPath, string rootDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);

@@ -77,7 +77,7 @@ As an operator or host integrator, I can receive change notifications and operat
 - Desired state is sourced from explicit package requests and a directory-based `.nupkg` source.
 - Package resolution for remote retrieval is limited to a single configured feed in this phase.
 - Package identity trust policy is strict allowlist-only for Phase 1.
-- Reconciliation is polling-based with a default interval and a manual trigger.
+- Reconciliation is polling-based with a default interval and a manual trigger. The polling loop is a hosted service (`BackgroundService`) registered via DI; the manual trigger is an `IReconciliationService.TriggerManualAsync` method.
 - Host integration is event-driven and remains host-neutral.
 
 ### Functional Requirements
@@ -87,7 +87,7 @@ As an operator or host integrator, I can receive change notifications and operat
 - **FR-003**: System MUST compute a desired-vs-active diff that identifies added, updated, and removed packages.
 - **FR-004**: System MUST apply package changes as isolated per-package transactions.
 - **FR-005**: System MUST support package removal when a package is no longer present in desired state.
-- **FR-006**: System MUST provide polling-based reconciliation with a configurable interval and a manual trigger.
+- **FR-006**: System MUST provide polling-based reconciliation with a configurable interval and a manual trigger. Polling MUST be implemented as a `BackgroundService` (hosted service) that invokes the reconciliation engine at the configured `PollInterval` using a `PeriodicTimer`. The hosted service MUST be opt-in (disabled by default) and registered conditionally via DI. The reconciliation engine MUST also expose a public `IReconciliationService` interface with a `TriggerManualAsync` method for programmatic on-demand invocation independent of the polling loop.
 - **FR-007**: System MUST ingest desired package changes from a directory containing `.nupkg` files.
 - **FR-008**: System MUST support single-feed package retrieval for this phase.
 - **FR-009**: System MUST persist active-state metadata that survives process restart.
@@ -108,6 +108,7 @@ As an operator or host integrator, I can receive change notifications and operat
 - **OSR-009**: If a desired source is unavailable during a cycle, the system MUST use that source’s last successful snapshot for reconciliation, continue processing, and report degraded health for the cycle.
 - **OSR-010**: Reconciliation execution MUST be single-flight; concurrent cycle execution is prohibited to prevent store/state races (functional behavior defined in FR-011).
 - **OSR-011**: Health status MUST return from degraded to healthy only after a fully successful reconciliation cycle with fresh reads from all configured desired sources.
+- **OSR-012**: Configuration validation MUST use the .NET options pipeline (`IValidateOptions<T>` with `ValidateOnStart()`) and MUST NOT rely on `IsValid()` methods inside options classes.
 
 ### Key Entities *(include if feature involves data)*
 

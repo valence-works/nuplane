@@ -1,9 +1,13 @@
 namespace Nuplane.Store.State;
 
-public sealed class FailureRecorder(StoreRegistry storeRegistry)
+/// <summary>
+/// Records package failures by persisting them to the store registry.
+/// </summary>
+public sealed class FailureRecorder(IStoreRegistry storeRegistry) : IFailureRecorder
 {
-    private readonly StoreRegistry storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
+    private readonly IStoreRegistry storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
 
+    /// <inheritdoc />
     public Task RecordAsync(
         string packageId,
         string stage,

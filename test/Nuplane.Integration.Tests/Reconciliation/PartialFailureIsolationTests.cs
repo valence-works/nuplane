@@ -1,7 +1,6 @@
 using Nuplane.Abstractions;
-using Nuplane.NuGet.Resolution;
-using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Configuration;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
@@ -26,7 +25,7 @@ public sealed class PartialFailureIsolationTests
             new(),
             new(),
             new FailOneResolver("pkg-bad"),
-            new(new(), stateFilePath: null),
+            new(new StoreStateSerializer(), stateFilePath: null),
             new() { MaxRetryAttempts = 0 });
 
         var result = await service.TriggerManualAsync(CancellationToken.None);

@@ -1,9 +1,14 @@
 namespace Nuplane.Store.State;
 
-public sealed class PackageCleanupService(CleanupPolicyEvaluator evaluator)
+/// <summary>
+/// Executes automatic package cleanup by evaluating each version against the configured
+/// cleanup policy, grouping by package and processing in order from newest to oldest.
+/// </summary>
+public sealed class PackageCleanupService(CleanupPolicyEvaluator evaluator) : IPackageCleanupService
 {
     private readonly CleanupPolicyEvaluator evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
 
+    /// <inheritdoc />
     public Task<IReadOnlyList<CleanupDecision>> ExecuteAutomaticAsync(
         IReadOnlyList<PackageVersionEntry> packageVersions,
         CleanupPolicyOptions options,
@@ -37,6 +42,7 @@ public sealed class PackageCleanupService(CleanupPolicyEvaluator evaluator)
 
             for (var index = 0; index < ordered.Length; index++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var item = ordered[index];
                 var decision = evaluator.Evaluate(
                     item.PackageId,

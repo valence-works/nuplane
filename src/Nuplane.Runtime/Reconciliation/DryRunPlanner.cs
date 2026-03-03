@@ -1,13 +1,17 @@
 using Nuplane.Abstractions;
+using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-public sealed record DryRunPlan(PackageChangeSet ChangeSet, bool MutatedState);
 
-public sealed class DryRunPlanner(DesiredActualDiffEngine diffEngine)
+/// <summary>
+/// Builds a dry-run plan by computing the change set without mutating any state.
+/// </summary>
+public sealed class DryRunPlanner(IDesiredActualDiffEngine diffEngine) : IDryRunPlanner
 {
-    private readonly DesiredActualDiffEngine diffEngine = diffEngine ?? throw new ArgumentNullException(nameof(diffEngine));
+    private readonly IDesiredActualDiffEngine diffEngine = diffEngine ?? throw new ArgumentNullException(nameof(diffEngine));
 
+    /// <inheritdoc />
     public Task<DryRunPlan> BuildPlanAsync(
         IReadOnlyCollection<ResolvedPackage> desired,
         IReadOnlyDictionary<string, string> activeVersions,

@@ -1,65 +1,43 @@
 using Nuplane.Abstractions;
 using Nuplane.Loading;
 using Nuplane.Loading.Configuration;
-using Nuplane.NuGet.Resolution;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Observability;
+using Nuplane.Runtime.Reconciliation.Middleware;
 using Nuplane.Runtime.Sources;
 using Nuplane.Store.Activation;
 using Nuplane.Store.State;
 using Nuplane.Store.Transactions;
+using Nuplane.Runtime.Reconciliation.Models;
+using Nuplane.Runtime.Reconciliation.FeedPolicy;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-public sealed record ReconciliationRunResult(
-    bool Skipped,
-    PackageChangeSet ChangeSet,
-    IReadOnlyList<string> FailedPackages,
-    bool IsDegraded);
 
-public sealed class ReconciliationService
+/// <summary>
+/// Orchestrates the Nuplane reconciliation cycle, coordinating desired-state reading,
+/// package resolution, trust and lock evaluation, assembly loading, transaction execution,
+/// unloading, cleanup, and health assessment through a middleware pipeline.
+/// </summary>
+public sealed class ReconciliationService : IReconciliationService
 {
     private static readonly PackageChangeSet EmptyChangeSet = new([], [], [], string.Empty, DateTimeOffset.UtcNow);
 
-    private readonly IReadOnlyList<IDesiredPackageSource> sources;
-    private readonly SourceTrustOptions sourceTrustOptions;
-    private readonly DesiredStateAggregator desiredStateAggregator;
-    private readonly DesiredActualDiffEngine desiredActualDiffEngine;
-    private readonly StoreRegistry storeRegistry;
     private readonly ReconciliationOptions reconciliationOptions;
-    private readonly DesiredSourceSnapshotCache snapshotCache;
-    private readonly ReconciliationRetryPolicy retryPolicy;
-    private readonly AllowlistGate allowlistGate;
-    private readonly PackageApplyExecutor applyExecutor;
-    private readonly PackageChangeEventPublisher changeEventPublisher;
-    private readonly ObserverNotifier observerNotifier;
-    private readonly ReconciliationHealthEvaluator healthEvaluator;
-    private readonly ReconciliationLogger logger;
-    private readonly ReconciliationMetrics metrics;
-    private readonly FailureRecorder failureRecorder;
-    private readonly FeedResolutionOptions feedResolutionOptions;
-    private readonly FeedTrustPolicyOptions feedTrustPolicyOptions;
-    private readonly LockFileOptions lockFileOptions;
-    private readonly CleanupPolicyOptions cleanupPolicyOptions;
-    private readonly LoadingOptions loadingOptions;
-    private readonly IPackageLoader packageLoader;
-    private readonly IPackageUnloadCoordinator packageUnloadCoordinator;
-    private readonly FeedTrustPolicyEvaluator feedTrustPolicyEvaluator;
-    private readonly LockFileCoordinator lockFileCoordinator;
-    private readonly DryRunPlanner dryRunPlanner;
-    private readonly PackageCleanupService packageCleanupService;
+    private readonly ReconciliationPipeline pipeline;
     private readonly SemaphoreSlim cycleLock = new(1, 1);
-    private readonly Dictionary<string, PackageLoadContextHandle> pendingUnloads = new(StringComparer.OrdinalIgnoreCase);
     private int inFlight;
 
-    public ReconciliationService(
+    /// <summary>Initializes a new instance of the reconciliation service.</summary>
+    /// <summary>Initializes a new instance of the reconciliation service.</summary>
+public ReconciliationService(
         IEnumerable<IDesiredPackageSource> sources,
         SourceTrustOptions sourceTrustOptions,
         DesiredStateAggregator desiredStateAggregator,
         DesiredActualDiffEngine desiredActualDiffEngine,
-        INuGetPackageResolver packageResolver,
+        IPackageResolver packageResolver,
         StoreRegistry storeRegistry,
         ReconciliationOptions reconciliationOptions)
         : this(
@@ -70,29 +48,30 @@ public sealed class ReconciliationService
             packageResolver,
             storeRegistry,
             reconciliationOptions,
-            new(Array.Empty<INuplaneObserver>()),
-            new(Array.Empty<INuplaneObserver>()),
-            new(),
-            new(),
-                new(new()),
+        new ObserverEventDispatcher(Array.Empty<INuplaneObserver>()),
+        new ReconciliationHealthEvaluator(),
+        new ReconciliationLogger(),
+        new ReconciliationMetrics(new()),
+                new(),
                 new(),
                 new(),
                 new())
     {
     }
 
-    public ReconciliationService(
+    /// <summary>Initializes a new instance of the reconciliation service.</summary>
+    /// <summary>Initializes a new instance of the reconciliation service.</summary>
+public ReconciliationService(
         IEnumerable<IDesiredPackageSource> sources,
         SourceTrustOptions sourceTrustOptions,
         DesiredStateAggregator desiredStateAggregator,
         DesiredActualDiffEngine desiredActualDiffEngine,
-        INuGetPackageResolver packageResolver,
+        IPackageResolver packageResolver,
         StoreRegistry storeRegistry,
         ReconciliationOptions reconciliationOptions,
-        PackageChangeEventPublisher changeEventPublisher,
-        ObserverNotifier observerNotifier,
+        ObserverEventDispatcher observerEventDispatcher,
         ReconciliationHealthEvaluator healthEvaluator,
-        ReconciliationLogger? logger = null,
+        IReconciliationLogger? logger = null,
         ReconciliationMetrics? metrics = null,
         FeedResolutionOptions? feedResolutionOptions = null,
         FeedTrustPolicyOptions? feedTrustPolicyOptions = null,
@@ -102,44 +81,77 @@ public sealed class ReconciliationService
         IPackageLoader? packageLoader = null,
         IPackageUnloadCoordinator? packageUnloadCoordinator = null)
     {
-        this.sources = sources?.ToArray() ?? throw new ArgumentNullException(nameof(sources));
-        this.sourceTrustOptions = sourceTrustOptions ?? throw new ArgumentNullException(nameof(sourceTrustOptions));
-        this.desiredStateAggregator = desiredStateAggregator ?? throw new ArgumentNullException(nameof(desiredStateAggregator));
-        this.desiredActualDiffEngine = desiredActualDiffEngine ?? throw new ArgumentNullException(nameof(desiredActualDiffEngine));
-        this.storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
+        var sourcesList = sources?.ToArray() ?? throw new ArgumentNullException(nameof(sources));
+        sourceTrustOptions = sourceTrustOptions ?? throw new ArgumentNullException(nameof(sourceTrustOptions));
+        IDesiredStateAggregator desiredStateAgg = desiredStateAggregator ?? throw new ArgumentNullException(nameof(desiredStateAggregator));
+        IDesiredActualDiffEngine diffEngine = desiredActualDiffEngine ?? throw new ArgumentNullException(nameof(desiredActualDiffEngine));
+        IStoreRegistry storeReg = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
         this.reconciliationOptions = reconciliationOptions ?? throw new ArgumentNullException(nameof(reconciliationOptions));
-        this.changeEventPublisher = changeEventPublisher ?? throw new ArgumentNullException(nameof(changeEventPublisher));
-        this.observerNotifier = observerNotifier ?? throw new ArgumentNullException(nameof(observerNotifier));
-        this.healthEvaluator = healthEvaluator ?? throw new ArgumentNullException(nameof(healthEvaluator));
-        this.logger = logger ?? new ReconciliationLogger();
-        this.metrics = metrics ?? new ReconciliationMetrics(new());
-        this.feedResolutionOptions = feedResolutionOptions ?? new FeedResolutionOptions();
-        this.feedTrustPolicyOptions = feedTrustPolicyOptions ?? new FeedTrustPolicyOptions();
-        this.lockFileOptions = lockFileOptions ?? new LockFileOptions();
-        this.cleanupPolicyOptions = cleanupPolicyOptions ?? new CleanupPolicyOptions();
-        this.loadingOptions = loadingOptions ?? new LoadingOptions();
-        this.packageLoader = packageLoader ?? new NoOpPackageLoader();
-        this.packageUnloadCoordinator = packageUnloadCoordinator ?? new NoOpPackageUnloadCoordinator();
-        feedTrustPolicyEvaluator = new();
-        lockFileCoordinator = new(new(this.lockFileOptions.Path), this.lockFileOptions);
-        dryRunPlanner = new(this.desiredActualDiffEngine);
-        packageCleanupService = new(new());
+        IObserverEventDispatcher eventDispatcher = observerEventDispatcher ?? throw new ArgumentNullException(nameof(observerEventDispatcher));
+        IReconciliationHealthEvaluator healthEval = healthEvaluator ?? throw new ArgumentNullException(nameof(healthEvaluator));
+        var loggerInstance = logger ?? new ReconciliationLogger();
+        var metricsInstance = metrics ?? new ReconciliationMetrics(new());
+        var feedResOpts = feedResolutionOptions ?? new FeedResolutionOptions();
+        var feedTrustOpts = feedTrustPolicyOptions ?? new FeedTrustPolicyOptions();
+        var lockOpts = lockFileOptions ?? new LockFileOptions();
+        var cleanupOpts = cleanupPolicyOptions ?? new CleanupPolicyOptions();
+        var loadOpts = loadingOptions ?? new LoadingOptions();
+        var loader = packageLoader ?? new NoOpPackageLoader();
+        var unloadCoordinator = packageUnloadCoordinator ?? new NoOpPackageUnloadCoordinator();
+        IFeedTrustPolicyEvaluator feedTrustPolicyEvaluator = new FeedTrustPolicyEvaluator();
+        ILockFileCoordinator lockFileCoordinator = new LockFileCoordinator(new(lockOpts.Path), lockOpts);
+        IDryRunPlanner dryRunPlanner = new DryRunPlanner(diffEngine);
+        IPackageCleanupService packageCleanupService = new PackageCleanupService(new());
 
-        var failureRecorder = new FailureRecorder(this.storeRegistry);
-        this.failureRecorder = failureRecorder;
+        var failureRecorder = new FailureRecorder(storeReg);
+        IFailureRecorder failureRec = failureRecorder;
         var pointerSwitcher = new AtomicPointerSwitcher();
         var transactionCoordinator = new PackageTransactionCoordinator(pointerSwitcher, failureRecorder);
 
-        retryPolicy = new(this.reconciliationOptions);
-        snapshotCache = new(this.storeRegistry);
-        allowlistGate = new();
-        applyExecutor = new(
+        IReconciliationRetryPolicy retryPolicy = new ReconciliationRetryPolicy(this.reconciliationOptions);
+        var snapshotCache = new DesiredSourceSnapshotCache(storeReg);
+        IAllowlistGate allowlistGate = new AllowlistGate();
+        IPackageApplyExecutor applyExecutor = new PackageApplyExecutor(
             packageResolver ?? throw new ArgumentNullException(nameof(packageResolver)),
             transactionCoordinator,
             retryPolicy,
             failureRecorder);
+
+        var pendingUnloads = new Dictionary<string, PackageLoadContextHandle>(StringComparer.OrdinalIgnoreCase);
+
+        pipeline = new ReconciliationPipeline();
+        pipeline.Use(new DesiredStateReadMiddleware(
+            sourcesList, sourceTrustOptions, desiredStateAgg, allowlistGate,
+            retryPolicy, snapshotCache, failureRec, loggerInstance));
+        pipeline.Use(new PackageResolutionMiddleware(applyExecutor, loggerInstance));
+        pipeline.Use(new TrustAndLockGateMiddleware(
+            feedResOpts, feedTrustOpts, feedTrustPolicyEvaluator,
+            lockFileCoordinator, retryPolicy, failureRec, loggerInstance));
+        pipeline.Use(new PackageLoadingMiddleware(
+            loadOpts, loader, allowlistGate, applyExecutor,
+            eventDispatcher, loggerInstance, metricsInstance));
+        pipeline.Use(new DiffAndChangeEventMiddleware(
+            diffEngine, dryRunPlanner, retryPolicy,
+            storeReg, eventDispatcher, metricsInstance));
+        pipeline.Use(new TransactionExecutionMiddleware(
+            applyExecutor, diffEngine, eventDispatcher));
+        pipeline.Use(new UnloadMiddleware(
+            loadOpts, loader, unloadCoordinator,
+            pendingUnloads, loggerInstance, metricsInstance));
+        pipeline.Use(new CleanupMiddleware(
+            diffEngine, storeReg, packageCleanupService,
+            cleanupOpts, metricsInstance));
+        pipeline.Use(new HealthAndMetricsMiddleware(
+            healthEval, eventDispatcher, loggerInstance, metricsInstance));
     }
 
+    /// <summary>
+    /// Triggers a manual reconciliation cycle. If single-flight is enabled, concurrent
+    /// invocations are skipped. Returns the result of the cycle including applied changes
+    /// and health status.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The reconciliation run result.</returns>
     public async Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken cancellationToken)
     {
         if (reconciliationOptions.EnableSingleFlight && Interlocked.CompareExchange(ref inFlight, 1, 0) != 0)
@@ -152,298 +164,21 @@ public sealed class ReconciliationService
         {
             var cycleStartedAt = DateTimeOffset.UtcNow;
             var correlationId = CorrelationContext.CreateNew();
-            using var _ = CorrelationContext.BeginScope(correlationId);
+            using var scope = CorrelationContext.BeginScope(correlationId);
 
-            var readResult = await ReadDesiredRequestsWithFallbackAsync(correlationId, cancellationToken);
-            var desiredRequests = await desiredStateAggregator.AggregateAsync(
-                [new StaticDesiredSource(readResult.Requests)],
-                sourceTrustOptions,
-                cancellationToken);
-            var allowlistedRequests = allowlistGate.Enforce(desiredRequests, sourceTrustOptions);
-            logger.LogCycleStarted(correlationId, allowlistedRequests.Count);
+            // Prefer the Activity-assigned ID when tracing is active
+            var effectiveCorrelationId = System.Diagnostics.Activity.Current?.Id ?? correlationId;
 
-            // Phase 1: Resolve packages to determine the desired target versions
-            var resolutionResult = await applyExecutor.ResolveAsync(allowlistedRequests, correlationId, cancellationToken);
-            foreach (var decision in resolutionResult.FeedDecisions)
+            var context = new ReconciliationCycleContext
             {
-                logger.LogFeedDecision(decision);
-            }
+                CorrelationId = effectiveCorrelationId,
+                CycleStartedAt = cycleStartedAt,
+                CancellationToken = cancellationToken
+            };
 
-            var requestByPackageId = allowlistedRequests
-                .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
+            await pipeline.ExecuteAsync(context);
 
-            var trustFailures = 0;
-            var lockFailures = 0;
-            var trustAndLockPassed = new List<ResolvedPackage>();
-            var combinedFailures = new HashSet<string>(resolutionResult.FailedPackageIds, StringComparer.OrdinalIgnoreCase);
-
-            foreach (var resolved in resolutionResult.ResolvedPackages)
-            {
-                var request = requestByPackageId.TryGetValue(resolved.Id, out var matchedRequest)
-                    ? matchedRequest
-                    : new(resolved.Id, resolved.Version, resolved.FeedName, PackageUpdatePolicy.Exact, resolved.SourceName);
-
-                var feed = feedResolutionOptions.Feeds.FirstOrDefault(x =>
-                    string.Equals(x.Name, resolved.FeedName, StringComparison.OrdinalIgnoreCase))
-                    ?? new FeedDefinition(resolved.FeedName, new("https://unknown.invalid"), FeedTrustLevel.Trusted);
-
-                var trustOutcome = feedTrustPolicyEvaluator.Evaluate(
-                    request,
-                    feed,
-                    feedTrustPolicyOptions,
-                    validatorPassed: true);
-
-                logger.LogTrustPolicyOutcome(correlationId, resolved.Id, trustOutcome);
-
-                if (!trustOutcome.Allowed)
-                {
-                    trustFailures++;
-                    combinedFailures.Add(resolved.Id);
-                    await failureRecorder.RecordAsync(resolved.Id, "trust", trustOutcome.ReasonCode, correlationId, cancellationToken);
-                    continue;
-                }
-
-                var lockOutcome = await retryPolicy.ExecuteForLockEvaluationAsync(
-                    ct => lockFileCoordinator.EvaluateAsync(resolved, ct),
-                    cancellationToken);
-
-                logger.LogLockOutcome(correlationId, resolved.Id, lockOutcome);
-
-                if (!lockOutcome.Allowed || lockOutcome.EffectivePackage is null)
-                {
-                    lockFailures++;
-                    combinedFailures.Add(resolved.Id);
-                    await failureRecorder.RecordAsync(resolved.Id, "lock", lockOutcome.ReasonCode, correlationId, cancellationToken);
-                    continue;
-                }
-
-                trustAndLockPassed.Add(lockOutcome.EffectivePackage);
-            }
-
-            if (loadingOptions.Enabled && trustAndLockPassed.Count > 0)
-            {
-                // Validate install paths are within the trusted store root before loading
-                if (!string.IsNullOrWhiteSpace(loadingOptions.ActiveStoreRoot))
-                {
-                    foreach (var package in trustAndLockPassed)
-                    {
-                        allowlistGate.EnsureActiveStorePath(package.Id, package.InstallPath, loadingOptions.ActiveStoreRoot);
-                    }
-                }
-
-                var sharedPolicy = loadingOptions.SharedAssemblies
-                    .Select(x => new SharedAssemblyPolicyEntry(x.Name, x.PublicKeyToken, x.MajorVersion))
-                    .ToArray();
-
-                foreach (var package in trustAndLockPassed)
-                {
-                    metrics.RecordLoadAttemptStarted();
-                }
-
-                var loadResult = await packageLoader.EnsureLoadedAsync(trustAndLockPassed, sharedPolicy, cancellationToken);
-
-                var failedLoadIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                foreach (var package in trustAndLockPassed)
-                {
-                    if (loadResult.FailedByPackageId.TryGetValue(package.Id, out var reason))
-                    {
-                        failedLoadIds.Add(package.Id);
-                        combinedFailures.Add(package.Id);
-                        metrics.RecordLoadFailed();
-                        logger.LogLoadOutcome(correlationId, package.Id, succeeded: false, reason);
-                        await applyExecutor.RecordLoadingFailureNonMutatingAsync(package.Id, correlationId, reason, cancellationToken);
-                        await observerNotifier.NotifyPackageFailedAsync(
-                            package.Id,
-                            new InvalidOperationException(reason),
-                            correlationId,
-                            cancellationToken);
-                    }
-                    else
-                    {
-                        metrics.RecordLoadSucceeded();
-                        logger.LogLoadOutcome(correlationId, package.Id, succeeded: true, reason: null);
-                    }
-                }
-
-                trustAndLockPassed = trustAndLockPassed
-                    .Where(x => !failedLoadIds.Contains(x.Id))
-                    .ToList();
-            }
-
-            resolutionResult = new(
-                trustAndLockPassed,
-                combinedFailures.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray(),
-                resolutionResult.FeedDecisions);
-
-            // Compute diff against pre-apply active state so Changing fires with accurate data
-            var activeVersions = await storeRegistry.GetActiveVersionsAsync(cancellationToken);
-
-            var dryRunPlan = await retryPolicy.ExecuteForDryRunAsync(
-                ct => dryRunPlanner.BuildPlanAsync(
-                    resolutionResult.ResolvedPackages,
-                    activeVersions,
-                    correlationId,
-                    ct),
-                cancellationToken);
-            metrics.RecordDryRun(dryRunPlan);
-
-            var changeSet = desiredActualDiffEngine.Compute(resolutionResult.ResolvedPackages, activeVersions, correlationId, DateTimeOffset.UtcNow);
-
-            // Emit Changing before transactions begin (observer contract)
-            if (changeSet.Added.Count + changeSet.Updated.Count + changeSet.Removed.Count > 0)
-            {
-                await changeEventPublisher.PublishChangingAsync(changeSet, cancellationToken);
-            }
-
-            // Phase 2: Execute transactions for resolved packages
-            var applyResult = await applyExecutor.ExecuteTransactionsAsync(resolutionResult, correlationId, cancellationToken);
-
-            foreach (var failedPackage in applyResult.FailedPackageIds)
-            {
-                await observerNotifier.NotifyPackageFailedAsync(
-                    failedPackage,
-                    new InvalidOperationException($"Package '{failedPackage}' failed to apply."),
-                    correlationId,
-                    cancellationToken);
-            }
-
-            // Merge applied packages into existing active state: preserve active versions for packages that failed
-            var appliedVersions = desiredActualDiffEngine.BuildNextActiveVersions(applyResult.AppliedPackages);
-            var mergedActive = new Dictionary<string, string>(activeVersions, StringComparer.OrdinalIgnoreCase);
-            foreach (var (id, version) in appliedVersions)
-            {
-                mergedActive[id] = version;
-            }
-
-            // Only remove packages that are truly no longer desired (not in the request list at all)
-            // Resolution/transaction failures should preserve the previous active version
-            var requestedIds = new HashSet<string>(
-                allowlistedRequests.Select(r => r.Id),
-                StringComparer.OrdinalIgnoreCase);
-            var unloadPendingCount = 0;
-
-            // Retry previously pending unloads from prior cycles
-            var completedPending = new List<string>();
-            foreach (var (pendingKey, pendingContext) in pendingUnloads)
-            {
-                metrics.RecordUnloadAttempted();
-
-                var (_, retryUnload) = await packageUnloadCoordinator.AttemptUnloadAsync(
-                    pendingKey,
-                    pendingContext,
-                    loadingOptions.DeactivationTimeout,
-                    correlationId,
-                    cancellationToken);
-
-                if (retryUnload.Outcome == UnloadOutcome.Unloaded)
-                {
-                    completedPending.Add(pendingKey);
-                    metrics.RecordUnloadSucceeded();
-                    logger.LogUnloadOutcome(correlationId, pendingKey, "unloaded", retryUnload.PendingReason);
-                }
-                else
-                {
-                    metrics.RecordUnloadPending();
-                    unloadPendingCount++;
-                    logger.LogUnloadOutcome(correlationId, pendingKey, "unload-pending-retry", retryUnload.PendingReason);
-                }
-            }
-
-            foreach (var completed in completedPending)
-            {
-                pendingUnloads.Remove(completed);
-            }
-
-            foreach (var activeId in activeVersions.Keys)
-            {
-                if (!requestedIds.Contains(activeId))
-                {
-                    if (loadingOptions.Enabled &&
-                        activeVersions.TryGetValue(activeId, out var activeVersion) &&
-                        packageLoader.TryRemoveContext(activeId, activeVersion, out var context) &&
-                        context is not null)
-                    {
-                        metrics.RecordUnloadAttempted();
-
-                        var (deactivation, unload) = await packageUnloadCoordinator.AttemptUnloadAsync(
-                            activeId,
-                            context,
-                            loadingOptions.DeactivationTimeout,
-                            correlationId,
-                            cancellationToken);
-
-                        if (deactivation.TimedOut)
-                        {
-                            metrics.RecordDeactivationTimeout();
-                        }
-
-                        switch (unload.Outcome)
-                        {
-                            case UnloadOutcome.Unloaded:
-                                metrics.RecordUnloadSucceeded();
-                                logger.LogUnloadOutcome(correlationId, activeId, "unloaded", unload.PendingReason);
-                                break;
-                            case UnloadOutcome.UnloadPending:
-                                metrics.RecordUnloadPending();
-                                unloadPendingCount++;
-                                pendingUnloads[$"{activeId}@{activeVersion}"] = context;
-                                logger.LogUnloadOutcome(correlationId, activeId, "unload-pending", unload.PendingReason);
-                                break;
-                            default:
-                                metrics.RecordUnloadPending();
-                                unloadPendingCount++;
-                                pendingUnloads[$"{activeId}@{activeVersion}"] = context;
-                                logger.LogUnloadOutcome(correlationId, activeId, "unload-failed", unload.PendingReason);
-                                break;
-                        }
-                    }
-
-                    mergedActive.Remove(activeId);
-                }
-            }
-
-            await storeRegistry.PersistActiveVersionsAsync(mergedActive, appliedVersions, correlationId, cancellationToken);
-
-            var storeState = await storeRegistry.GetStateAsync(cancellationToken);
-            var cleanupInputs = mergedActive
-                .Select(x => new PackageVersionEntry(
-                    x.Key,
-                    x.Value,
-                    storeState.UpdatedAt,
-                    IsLastKnownGood: storeState.LastKnownGoodById.TryGetValue(x.Key, out var lkgVersion) &&
-                        string.Equals(lkgVersion, x.Value, StringComparison.OrdinalIgnoreCase)))
-                .ToArray();
-
-            var cleanupResults = await packageCleanupService.ExecuteAutomaticAsync(
-                cleanupInputs,
-                cleanupPolicyOptions,
-                correlationId,
-                triggerOnSuccessfulReconciliation: applyResult.FailedPackageIds.Count == 0,
-                cancellationToken);
-            metrics.RecordCleanup(cleanupResults);
-            var cleanupFailures = cleanupResults.Count(x => x.Action == CleanupAction.Blocked);
-
-            if (changeSet.Added.Count + changeSet.Updated.Count + changeSet.Removed.Count > 0)
-            {
-                await changeEventPublisher.PublishChangedAsync(changeSet, cancellationToken);
-            }
-
-            var hadFailures = readResult.UsedFallback || applyResult.FailedPackageIds.Count > 0;
-            metrics.SetUnloadPendingPackages(unloadPendingCount);
-            var isDegraded = healthEvaluator.Evaluate(
-                hadFailures,
-                readResult.AllSourcesFresh,
-                trustFailures,
-                lockFailures,
-                cleanupFailures,
-                unloadPendingCount);
-            var cycleDuration = DateTimeOffset.UtcNow - cycleStartedAt;
-            metrics.RecordCycle(changeSet, applyResult.FailedPackageIds.Count, cycleDuration, mergedActive.Count);
-            logger.LogCycleCompleted(correlationId, isDegraded, applyResult.FailedPackageIds.Count);
-
-            return new(false, changeSet, applyResult.FailedPackageIds, isDegraded);
+            return context.Result!;
         }
         finally
         {
@@ -451,63 +186,5 @@ public sealed class ReconciliationService
             Interlocked.Exchange(ref inFlight, 0);
         }
     }
-
-    private async Task<DesiredReadResult> ReadDesiredRequestsWithFallbackAsync(string correlationId, CancellationToken cancellationToken)
-    {
-        var requests = new List<PackageRequest>();
-        var usedFallback = false;
-        var freshReads = 0;
-
-        var orderedSources = sources
-            .Select(source => new
-            {
-                Source = source,
-                SourceName = source.GetType().FullName ?? source.GetType().Name
-            })
-            .OrderBy(x => x.SourceName, StringComparer.Ordinal)
-            .ToArray();
-
-        foreach (var entry in orderedSources)
-        {
-            var source = entry.Source;
-            var sourceName = entry.SourceName;
-            try
-            {
-                var fromSource = await retryPolicy.ExecuteForFeedResolutionAsync(ct => source.GetDesiredAsync(ct), cancellationToken);
-                await snapshotCache.SaveAsync(sourceName, fromSource, cancellationToken);
-                requests.AddRange(fromSource);
-                freshReads++;
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                usedFallback = true;
-                await failureRecorder.RecordAsync(sourceName, "source-read", ex.Message, correlationId, cancellationToken);
-
-                var fallback = await snapshotCache.LoadSnapshotAsync(sourceName, cancellationToken);
-                if (fallback is not null)
-                {
-                    requests.AddRange(fallback);
-                }
-            }
-        }
-
-        return new(
-            requests,
-            usedFallback,
-                AllSourcesFresh: freshReads == orderedSources.Length);
-    }
-
-    private sealed record DesiredReadResult(
-        IReadOnlyList<PackageRequest> Requests,
-        bool UsedFallback,
-        bool AllSourcesFresh);
-
-    private sealed class StaticDesiredSource(IReadOnlyList<PackageRequest> requests) : IDesiredPackageSource
-    {
-        public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct) => Task.FromResult(requests);
-    }
 }
+

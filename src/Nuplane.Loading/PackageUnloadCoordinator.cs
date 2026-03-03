@@ -2,10 +2,17 @@ using System.Collections.Concurrent;
 
 namespace Nuplane.Loading;
 
+/// <summary>
+/// Coordinates the unloading of package assembly load contexts, including deactivation
+/// timeout management, GC-assisted unload verification, and retry tracking.
+/// </summary>
 public sealed class PackageUnloadCoordinator : IPackageUnloadCoordinator
 {
     private readonly ConcurrentDictionary<string, int> attempts = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Attempts to unload a package assembly load context directly.
+    /// </summary>
     public Task<(DeactivationAttempt deactivation, UnloadOutcomeRecord unload)> AttemptUnloadAsync(
         string packageId,
         PackageAssemblyLoadContext context,
@@ -23,6 +30,7 @@ public sealed class PackageUnloadCoordinator : IPackageUnloadCoordinator
             cancellationToken);
     }
 
+    /// <inheritdoc />
     public async Task<(DeactivationAttempt deactivation, UnloadOutcomeRecord unload)> AttemptUnloadAsync(
         string packageId,
         PackageLoadContextHandle context,

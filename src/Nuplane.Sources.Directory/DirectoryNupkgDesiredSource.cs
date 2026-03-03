@@ -3,6 +3,13 @@ using Nuplane.Abstractions;
 
 namespace Nuplane.Sources.Directory;
 
+/// <summary>
+/// A desired-state source that discovers NuGet packages from <c>.nupkg</c> files in a
+/// directory, optionally filtering by an allowlisted set of package identifiers.
+/// </summary>
+/// <param name="sourceName">A descriptive name for this desired-state source.</param>
+/// <param name="directoryPath">The directory to scan for <c>.nupkg</c> files.</param>
+/// <param name="allowlistedPackageIds">An optional set of allowed package identifiers. If <see langword="null"/> or empty, all packages are allowed.</param>
 public sealed class DirectoryNupkgDesiredSource(string sourceName, string directoryPath, IEnumerable<string>? allowlistedPackageIds = null) : IDesiredPackageSource
 {
     private static readonly Regex PackageFileNamePattern = new(
@@ -15,6 +22,7 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
         ? new(StringComparer.OrdinalIgnoreCase)
         : new HashSet<string>(allowlistedPackageIds, StringComparer.OrdinalIgnoreCase);
 
+    /// <inheritdoc />
     public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();

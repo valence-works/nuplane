@@ -9,14 +9,14 @@ public sealed class FeedRuleDryRunParityTests
     [Fact]
     public async Task BuildPlanAsync_PerformsFullDiffWithoutMutatingState()
     {
-        var store = new StoreRegistry(new(), stateFilePath: null);
+        var store = new StoreRegistry(new StoreStateSerializer(), stateFilePath: null);
         await store.PersistActiveVersionsAsync(
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Pkg.A"] = "1.0.0" },
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Pkg.A"] = "1.0.0" },
             "corr-seed",
             CancellationToken.None);
 
-        var planner = new DryRunPlanner(new());
+        var planner = new DryRunPlanner(new DesiredActualDiffEngine());
         var desired = new[]
         {
             new ResolvedPackage("Pkg.A", "2.0.0", "feed", "/tmp/a", DateTimeOffset.UtcNow, "source"),

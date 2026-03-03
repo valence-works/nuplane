@@ -1,6 +1,5 @@
-using Nuplane.NuGet.Resolution;
-using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Sources;
 using Nuplane.Store.State;
 
@@ -23,7 +22,7 @@ public sealed class FeedRuleMaxLimitTests
             new(),
             new(),
             new NuGetPackageResolver(),
-            new(new(), stateFilePath: null),
+            new(new StoreStateSerializer(), stateFilePath: null),
             new() { MaxRetryAttempts = 0 });
 
         var result = await service.TriggerManualAsync(CancellationToken.None);

@@ -2,8 +2,19 @@ using Nuplane.Abstractions;
 
 namespace Nuplane.Runtime.Configuration;
 
+/// <summary>
+/// Validates feed credential and trust configuration across feed resolution, trust policy,
+/// and source trust options to ensure consistency and supply-chain safety.
+/// </summary>
 public sealed class FeedCredentialOptionsValidator
 {
+    /// <summary>
+    /// Validates the combined feed configuration and returns a list of validation errors.
+    /// </summary>
+    /// <param name="feedResolution">The feed resolution options to validate.</param>
+    /// <param name="trustPolicy">The feed trust policy options to validate.</param>
+    /// <param name="sourceTrust">The source trust options to validate.</param>
+    /// <returns>An empty list if the configuration is valid; otherwise a list of error descriptions.</returns>
     public IReadOnlyList<string> Validate(
         FeedResolutionOptions feedResolution,
         FeedTrustPolicyOptions trustPolicy,

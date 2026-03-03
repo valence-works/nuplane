@@ -1,9 +1,8 @@
 using Nuplane.Abstractions;
-using Nuplane.NuGet.Resolution;
+using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Reconciliation;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Contracts;
@@ -20,10 +19,9 @@ public sealed class ObserverContractTests
             new(),
             new(),
             new NuGetPackageResolver(),
-            new(new(), stateFilePath: null),
+            new(new StoreStateSerializer(), stateFilePath: null),
             new(),
-            new([observer]),
-            new([observer]),
+            new ObserverEventDispatcher([observer]),
             new());
 
         var result = await service.TriggerManualAsync(CancellationToken.None);

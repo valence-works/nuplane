@@ -2,61 +2,92 @@ using System.Diagnostics.Metrics;
 
 namespace Nuplane.Runtime.Observability;
 
+/// <summary>
+/// Provides OpenTelemetry-compatible counters, histograms, and gauges for
+/// tracking reconciliation, trust policy, lock file, cleanup, and assembly loading metrics.
+/// </summary>
 public sealed class ReconciliationTelemetry : IDisposable
 {
     private readonly Meter meter = new("Nuplane.Runtime", "0.1.0");
 
+    /// <summary>Counter for packages added during reconciliation.</summary>
     public Counter<long> AddedPackagesCounter { get; }
 
+    /// <summary>Counter for packages updated during reconciliation.</summary>
     public Counter<long> UpdatedPackagesCounter { get; }
 
+    /// <summary>Counter for packages removed during reconciliation.</summary>
     public Counter<long> RemovedPackagesCounter { get; }
 
+    /// <summary>Counter for packages that failed during reconciliation.</summary>
     public Counter<long> FailedPackagesCounter { get; }
 
+    /// <summary>Counter for packages allowed by trust policy.</summary>
     public Counter<long> TrustPolicyAllowedCounter { get; }
 
+    /// <summary>Counter for packages blocked by trust policy.</summary>
     public Counter<long> TrustPolicyBlockedCounter { get; }
 
+    /// <summary>Counter for lock file generate-mode evaluations.</summary>
     public Counter<long> LockGenerateCounter { get; }
 
+    /// <summary>Counter for lock file enforce-mode evaluations.</summary>
     public Counter<long> LockEnforceCounter { get; }
 
+    /// <summary>Counter for lock file strict-mode failures.</summary>
     public Counter<long> LockStrictFailureCounter { get; }
 
+    /// <summary>Counter for lock file hash mismatch detections.</summary>
     public Counter<long> LockHashMismatchCounter { get; }
 
+    /// <summary>Counter for packages planned during dry runs.</summary>
     public Counter<long> DryRunPlannedPackagesCounter { get; }
 
+    /// <summary>Counter for cleanup deletions.</summary>
     public Counter<long> CleanupDeletedCounter { get; }
 
+    /// <summary>Counter for cleanup retentions.</summary>
     public Counter<long> CleanupKeptCounter { get; }
 
+    /// <summary>Counter for cleanup blocked operations.</summary>
     public Counter<long> CleanupFailedCounter { get; }
 
+    /// <summary>Counter for package loading attempts started.</summary>
     public Counter<long> LoadingStartedCounter { get; }
 
+    /// <summary>Counter for successful package loads.</summary>
     public Counter<long> LoadingSucceededCounter { get; }
 
+    /// <summary>Counter for failed package loads.</summary>
     public Counter<long> LoadingFailedCounter { get; }
 
+    /// <summary>Counter for package unload attempts.</summary>
     public Counter<long> UnloadAttemptedCounter { get; }
 
+    /// <summary>Counter for successful package unloads.</summary>
     public Counter<long> UnloadSucceededCounter { get; }
 
+    /// <summary>Counter for pending package unloads.</summary>
     public Counter<long> UnloadPendingCounter { get; }
 
+    /// <summary>Counter for deactivation timeouts.</summary>
     public Counter<long> DeactivationTimeoutCounter { get; }
 
+    /// <summary>Histogram recording transaction duration in milliseconds.</summary>
     public Histogram<double> TransactionDurationMilliseconds { get; }
 
+    /// <summary>Gauge tracking the number of currently active packages.</summary>
     public ObservableGauge<long> ActivePackagesGauge { get; }
 
+    /// <summary>Gauge tracking the number of packages with pending unloads.</summary>
     public ObservableGauge<long> UnloadPendingPackagesGauge { get; }
 
     private long activePackages;
     private long unloadPendingPackages;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ReconciliationTelemetry"/> class.
+    /// </summary>
     public ReconciliationTelemetry()
     {
         AddedPackagesCounter = meter.CreateCounter<long>("nuplane.reconciliation.added");
@@ -85,16 +116,23 @@ public sealed class ReconciliationTelemetry : IDisposable
         UnloadPendingPackagesGauge = meter.CreateObservableGauge<long>("nuplane.loading.unload.pending.active", () => unloadPendingPackages);
     }
 
+    /// <summary>
+    /// Sets the gauge value for active packages.
+    /// </summary>
     public void SetActivePackages(long count)
     {
         activePackages = Math.Max(0, count);
     }
 
+    /// <summary>
+    /// Sets the gauge value for packages with pending unloads.
+    /// </summary>
     public void SetUnloadPendingPackages(long count)
     {
         unloadPendingPackages = Math.Max(0, count);
     }
 
+    /// <inheritdoc />
     public void Dispose()
     {
         meter.Dispose();

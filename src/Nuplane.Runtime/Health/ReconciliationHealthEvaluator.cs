@@ -1,56 +1,42 @@
 namespace Nuplane.Runtime.Health;
 
-public sealed class ReconciliationHealthEvaluator
+/// <summary>
+/// Evaluates reconciliation health by tracking trust, lock, cleanup, and unload failures.
+/// </summary>
+public sealed class ReconciliationHealthEvaluator : IReconciliationHealthEvaluator
 {
+    /// <inheritdoc />
     public bool IsDegraded { get; private set; }
 
+    /// <inheritdoc />
     public int LastTrustFailureCount { get; private set; }
 
+    /// <inheritdoc />
     public int LastLockFailureCount { get; private set; }
 
+    /// <inheritdoc />
     public int LastCleanupFailureCount { get; private set; }
 
+    /// <inheritdoc />
     public int LastUnloadPendingCount { get; private set; }
 
-    public bool Evaluate(bool hadAnyFailures, bool allSourcesFresh)
+    /// <inheritdoc />
+    public bool Evaluate(ReconciliationHealthInput input)
     {
-        if (hadAnyFailures || !allSourcesFresh)
-        {
-            IsDegraded = true;
-            return IsDegraded;
-        }
+        ArgumentNullException.ThrowIfNull(input);
 
-        IsDegraded = false;
+        LastTrustFailureCount = Math.Max(0, input.TrustFailures);
+        LastLockFailureCount = Math.Max(0, input.LockFailures);
+        LastCleanupFailureCount = Math.Max(0, input.CleanupFailures);
+        LastUnloadPendingCount = Math.Max(0, input.UnloadPendingCount);
+
+        var hadFailures = input.HadAnyFailures
+            || input.TrustFailures > 0
+            || input.LockFailures > 0
+            || input.CleanupFailures > 0
+            || input.UnloadPendingCount > 0;
+
+        IsDegraded = hadFailures || !input.AllSourcesFresh;
         return IsDegraded;
-    }
-
-    public bool Evaluate(bool hadAnyFailures, bool allSourcesFresh, int trustFailures, int lockFailures)
-    {
-        LastTrustFailureCount = Math.Max(0, trustFailures);
-        LastLockFailureCount = Math.Max(0, lockFailures);
-        return Evaluate(hadAnyFailures || trustFailures > 0 || lockFailures > 0, allSourcesFresh);
-    }
-
-    public bool Evaluate(bool hadAnyFailures, bool allSourcesFresh, int trustFailures, int lockFailures, int cleanupFailures)
-    {
-        LastCleanupFailureCount = Math.Max(0, cleanupFailures);
-        return Evaluate(hadAnyFailures || cleanupFailures > 0, allSourcesFresh, trustFailures, lockFailures);
-    }
-
-    public bool Evaluate(
-        bool hadAnyFailures,
-        bool allSourcesFresh,
-        int trustFailures,
-        int lockFailures,
-        int cleanupFailures,
-        int unloadPendingCount)
-    {
-        LastUnloadPendingCount = Math.Max(0, unloadPendingCount);
-        return Evaluate(
-            hadAnyFailures || unloadPendingCount > 0,
-            allSourcesFresh,
-            trustFailures,
-            lockFailures,
-            cleanupFailures);
     }
 }

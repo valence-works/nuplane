@@ -56,7 +56,8 @@
 - [x] T018 [P] [US1] Implement deterministic desired-vs-actual diff engine in src/Nuplane.Runtime/Reconciliation/DesiredActualDiffEngine.cs
 - [x] T019 [P] [US1] Implement single-feed package resolution adapter in src/Nuplane.NuGet/Resolution/NuGetPackageResolver.cs
 - [x] T020 [P] [US1] Implement directory `.nupkg` desired source in src/Nuplane.Sources.Directory/DirectoryNupkgDesiredSource.cs
-- [x] T021 [US1] Implement reconciliation loop with manual trigger entrypoint in src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
+- [x] T021 [US1] Implement reconciliation engine with manual trigger entrypoint (`IReconciliationService.TriggerManualAsync`) in src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
+- [x] T021b [US1] Implement polling hosted service (`ReconciliationHostedService : BackgroundService`) that invokes `IReconciliationService.TriggerManualAsync` on a `PeriodicTimer` at the configured `PollInterval`. Register conditionally via `ReconciliationOptions.EnableAutomaticReconciliation`. File: src/Nuplane/ReconciliationHostedService.cs (FR-006)
 - [x] T022 [US1] Persist active-state outcomes after successful apply in src/Nuplane.Store/State/StoreRegistry.cs
 - [x] T023 [US1] Wire runtime/source/nuget DI registration in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
 

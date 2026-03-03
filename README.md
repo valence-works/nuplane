@@ -234,6 +234,10 @@ Nuplane is modular:
 
 See `docs/roadmap.md` for detailed phase breakdown.
 
+## 📐 Coding Conventions
+
+See [`docs/coding-conventions.md`](docs/coding-conventions.md) for project coding standards and conventions.
+
 ---
 
 ## License
