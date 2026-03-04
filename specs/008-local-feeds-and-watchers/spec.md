@@ -5,6 +5,33 @@
 **Status**: Draft  
 **Input**: User description: "Analyze current Nuplane runtime design and specs, focusing on feed resolution and directory drop-folder behavior. Produce a new/updated specification markdown file describing a design where drop folders act as feed sources and are observed in real time, and where configured feeds are also polled. The spec should address the reported exception when no feeds are configured and a package is dropped. Do not implement code; only write the spec (md) into an appropriate location in /specs (suggest next phase or new spec). Include requirements, user stories, edge cases, and acceptance criteria. Consider how file watchers might apply to local directory feeds, and how polling applies to all feeds."
 
+## Glossary *(normative definitions for this spec)*
+
+- **Feed**: A configured source of packages that Nuplane can use to *acquire artifacts* and/or *derive desired state*.
+
+- **Feed kind**: The category of a feed. This feature defines (at minimum):
+  - **Remote feed**: Network-accessed package source.
+  - **Local directory feed**: A folder on disk containing `.nupkg` artifacts.
+
+- **Local directory feed (legacy alias: “drop folder”)**: A local feed that presents `.nupkg` files as package artifacts and (optionally) as desired-state inputs.
+  - The term “drop folder” is considered legacy/user-facing wording; internally and in documentation, Nuplane standardizes on “local directory feed”.
+
+- **Eligibility**: A feed’s capability in a particular role:
+  - **Discoverable**: can be scanned to produce desired package requests (e.g., enumerate `.nupkg` files).
+  - **Acquirable**: can provide the actual package artifact bytes for activation (e.g., local `.nupkg` file path).
+  - **Watchable**: can emit near real-time change signals suitable for triggering reconciliation (typically local directory feeds).
+  - **Pollable**: can be checked periodically to ensure convergence (remote feeds and local feeds).
+
+- **Desired state**: The set of packages that Nuplane intends to have active, computed from configured inputs.
+
+- **Resolution**: The decision-making step that selects an eligible feed for each desired package request.
+
+- **Acquisition**: The step that retrieves the package artifact from the resolved feed.
+
+- **Observation**: Detecting that an input’s state has changed (watchers for local directory feeds, polling for remote feeds).
+
+- **Convergence**: Reconciling actual state to desired state on a schedule (even if no observation event occurred).
+
 ## Refactor Intent & Current-State Mapping *(mandatory for implementation)*
 
 This feature is a **refactoring of the existing codebase**, not a greenfield subsystem.
@@ -26,6 +53,11 @@ This means “local packages” are incorrectly treated as “identifiers that m
 
 - A **local directory feed** is a feed: it can both **contribute desired packages** and **provide the artifact** for acquisition.
 - Nuplane MUST be able to run with **zero remote feeds configured** and still activate packages provided by local directory feeds.
+
+### Compatibility note (non-normative)
+
+- Existing integrations and docs may still refer to “drop folders”. This feature standardizes the concept as a *local directory feed*.
+- The intent is to preserve the current user-visible experience (“drop a `.nupkg` into a folder”) while fixing the architecture so that the folder is treated as a feed (artifact source) rather than merely a list of IDs.
 
 ### Implementation guidance (non-normative but explicit)
 

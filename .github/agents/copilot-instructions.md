@@ -13,6 +13,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-03
 - N/A for test code; `LockFileCoordinatorTests` uses `Path.GetTempFileName()` for transient JSON lock files (006-test-backfill)
 - C# on .NET multi-targeting (`net8.0;net9.0;net10.0`) + `Microsoft.Extensions.*` (DI/Options/Hosting/Logging), xUnit, NSubstitute (004-phase4-operational-enhancements)
 - Node-local package/store on filesystem (immutable versioned artifacts + active pointer metadata) (004-phase4-operational-enhancements)
+- C# on .NET multi-targeting (`net8.0;net9.0;net10.0`) + `Microsoft.Extensions.*` (DI/Options/Hosting/Logging), `System.IO.FileSystemWatcher`, `System.Threading.Channels`, xUnit, NSubstitute (008-local-feeds-and-watchers)
+- Node-local filesystem store with transactional activation semantics (stage/validate/publish/atomic switch + LKG fallback) (008-local-feeds-and-watchers)
 
 - C# on .NET 8 (LTS) + `NuGet.Protocol`/NuGet Client SDK, `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Logging`, `System.Diagnostics.Metrics` (001-phase1-runtime-baseline)
 
@@ -32,9 +34,9 @@ test/
 C# on .NET 8 (LTS): Follow standard conventions
 
 ## Recent Changes
+- 008-local-feeds-and-watchers: Added C# on .NET multi-targeting (`net8.0;net9.0;net10.0`) + `Microsoft.Extensions.*` (DI/Options/Hosting/Logging), `System.IO.FileSystemWatcher`, `System.Threading.Channels`, xUnit, NSubstitute
 - 004-phase4-operational-enhancements: Added C# on .NET multi-targeting (`net8.0;net9.0;net10.0`) + `Microsoft.Extensions.*` (DI/Options/Hosting/Logging), xUnit, NSubstitute
 - 006-test-backfill: Added C# 13 / .NET 10 + xUnit 2.9.3, `Microsoft.NET.Test.Sdk`, `coverlet.collector` (all centrally managed via `Directory.Packages.props`)
-- 004-phase4-operational-enhancements: Added C# on .NET 8 (LTS) + `Microsoft.Extensions.*` hosting/options/logging/health, `System.Diagnostics.Metrics`, existing NuGet client integration in `Nuplane.NuGet`
 
 
 <!-- MANUAL ADDITIONS START -->
