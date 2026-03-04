@@ -60,14 +60,14 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<DirectorySourceOptions>>().Value);
 
         services.AddSingleton<IDesiredPackageSource>(sp =>
-{
-    var opts = sp.GetRequiredService<DirectorySourceOptions>();
-    return new DirectoryNupkgDesiredSource(
-        opts.SourceName,
-        opts.DirectoryPath,
-        opts.AllowlistedPackageIds,
-        sp.GetService<ILogger<DirectoryNupkgDesiredSource>>());
-});
+        {
+            var opts = sp.GetRequiredService<DirectorySourceOptions>();
+            return new DirectoryNupkgDesiredSource(
+                opts.SourceName,
+                opts.DirectoryPath,
+                opts.AllowlistedPackageIds,
+                sp.GetService<ILogger<DirectoryNupkgDesiredSource>>());
+        });
 
         // Preview options to conditionally register the hosted service.
         var preview = new DirectorySourceOptions();
@@ -75,7 +75,7 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
 
         if (preview.TriggerReconciliationOnChange)
         {
-            var capturedOptions = normalizedOptions;
+            var capturedOptions = preview;
             services.AddSingleton<IHostedService>(sp =>
                 new DirectorySourceReconciliationTriggerHostedService(
                     capturedOptions,
@@ -92,10 +92,12 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService : Backgr
     private readonly DirectorySourceOptions options;
     private readonly IReconciliationService reconciliationService;
     private readonly ILogger<DirectorySourceReconciliationTriggerHostedService> logger;
+
     private readonly Channel<bool> changes = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
     {
         FullMode = BoundedChannelFullMode.DropOldest
     });
+
     private FileSystemWatcher? watcher;
 
     public DirectorySourceReconciliationTriggerHostedService(
