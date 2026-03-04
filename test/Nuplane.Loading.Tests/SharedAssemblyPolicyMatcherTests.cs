@@ -30,7 +30,7 @@ public sealed class SharedAssemblyPolicyMatcherTests
     }
 
     [Fact]
-    public void IsMatch_NoMatchingEntry_ReturnsNull()
+    public void IsMatch_NoMatchingEntry_ReturnsFalse()
     {
         var entries = new[] { new SharedAssemblyPolicyEntry("OtherLib", "", 9) };
         var assembly = new AssemblyName { Name = "MyLib", Version = new Version(9, 0, 0, 0) };
