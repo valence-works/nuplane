@@ -22,7 +22,7 @@ public sealed class HealthRecoveryTests
             new NuGetPackageResolver(),
             new(new StoreStateSerializer(), stateFilePath: null),
             new() { MaxRetryAttempts = 0 },
-            new ObserverEventDispatcher([]),
+            new([]),
             evaluator);
 
         source.FailReads = true;

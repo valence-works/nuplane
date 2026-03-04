@@ -4,7 +4,7 @@ namespace Nuplane.Store.Tests.State;
 
 public sealed class PackageCleanupServiceTests
 {
-    private readonly PackageCleanupService _sut = new(new CleanupPolicyEvaluator());
+    private readonly PackageCleanupService _sut = new(new());
 
     [Fact]
     public async Task ExecuteAutomaticAsync_NoCleanupNeeded_AllDecisionsKept()

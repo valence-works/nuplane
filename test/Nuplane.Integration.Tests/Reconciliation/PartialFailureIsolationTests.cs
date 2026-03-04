@@ -17,7 +17,7 @@ public sealed class PartialFailureIsolationTests
         ]);
 
         var service = new ReconciliationService(
-            new[] { source },
+            [source],
             new()
             {
                 AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-good", "pkg-bad" }

@@ -19,7 +19,7 @@ public sealed class RetryExhaustionTests
         };
 
         var service = new ReconciliationService(
-            new[] { source },
+            [source],
             new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
             new(),
             new(),

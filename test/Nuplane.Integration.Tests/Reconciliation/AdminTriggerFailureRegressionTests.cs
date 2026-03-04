@@ -15,7 +15,7 @@ public sealed class AdminTriggerFailureRegressionTests
     public async Task Rejected_DoesNotMutateState()
     {
         var service = new FakeReconciliationService(
-            new ReconciliationRunResult(true, EmptyChangeSet(), [], false));
+            new(true, EmptyChangeSet(), [], false));
         var logger = new SpyReconciliationLogger();
         var coordinator = new ManualReconcileCoordinator(service, logger);
 
@@ -31,7 +31,7 @@ public sealed class AdminTriggerFailureRegressionTests
     public async Task Rejected_EmitsExplicitOutcomeCode()
     {
         var service = new FakeReconciliationService(
-            new ReconciliationRunResult(true, EmptyChangeSet(), [], false));
+            new(true, EmptyChangeSet(), [], false));
         var logger = new SpyReconciliationLogger();
         var coordinator = new ManualReconcileCoordinator(service, logger);
 
@@ -73,7 +73,7 @@ public sealed class AdminTriggerFailureRegressionTests
     public async Task MultipleRejections_AllNonMutating()
     {
         var service = new FakeReconciliationService(
-            new ReconciliationRunResult(true, EmptyChangeSet(), [], false));
+            new(true, EmptyChangeSet(), [], false));
         var logger = new SpyReconciliationLogger();
         var coordinator = new ManualReconcileCoordinator(service, logger);
 

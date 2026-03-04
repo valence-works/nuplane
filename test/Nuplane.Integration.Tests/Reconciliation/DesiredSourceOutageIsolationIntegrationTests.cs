@@ -19,7 +19,7 @@ public sealed class DesiredSourceOutageIsolationIntegrationTests
     public async Task OneSourceDown_HealthySourcePackages_StillConverge()
     {
         var healthy = new StaticSource([
-            new PackageRequest("healthy-pkg", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "healthy-source")
+            new("healthy-pkg", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "healthy-source")
         ]);
         var faulting = new FaultingSource(new InvalidOperationException("source offline"));
 
@@ -35,7 +35,7 @@ public sealed class DesiredSourceOutageIsolationIntegrationTests
     public async Task OneSourceDown_IsDegradedSignaled()
     {
         var healthy = new StaticSource([
-            new PackageRequest("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "healthy-source")
+            new("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "healthy-source")
         ]);
         var faulting = new FaultingSource(new InvalidOperationException("gone"));
 
@@ -50,10 +50,10 @@ public sealed class DesiredSourceOutageIsolationIntegrationTests
     public async Task AllSourcesHealthy_NoDegradedSignal()
     {
         var srcA = new StaticSource([
-            new PackageRequest("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "src-a")
+            new("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "src-a")
         ]);
         var srcB = new StaticSource([
-            new PackageRequest("pkg-b", "2.0.0", "feed-2", PackageUpdatePolicy.Exact, "src-b")
+            new("pkg-b", "2.0.0", "feed-2", PackageUpdatePolicy.Exact, "src-b")
         ]);
 
         var service = CreateService([srcA, srcB]);
@@ -67,7 +67,7 @@ public sealed class DesiredSourceOutageIsolationIntegrationTests
     public async Task SourceOutage_DoesNotAffectPreviouslyActiveFromHealthySource()
     {
         var healthy = new StaticSource([
-            new PackageRequest("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "healthy-source")
+            new("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "healthy-source")
         ]);
         var faulting = new FaultingSource(new InvalidOperationException("offline"));
 
@@ -100,16 +100,16 @@ public sealed class DesiredSourceOutageIsolationIntegrationTests
 
     private static ReconciliationService CreateService(IDesiredPackageSource[] sources)
     {
-        return new ReconciliationService(
+        return new(
             sources,
-            new SourceTrustOptions { RejectUnallowlistedPackages = false },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
+            new() { RejectUnallowlistedPackages = false },
+            new(),
+            new(),
             new NuGetPackageResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions(),
-            new ObserverEventDispatcher(Array.Empty<INuplaneObserver>()),
-            new ReconciliationHealthEvaluator());
+            new(new StoreStateSerializer(), stateFilePath: null),
+            new(),
+            new([]),
+            new());
     }
 
     private sealed class StaticSource(IReadOnlyList<PackageRequest> requests) : IDesiredPackageSource

@@ -34,7 +34,7 @@ public sealed class PackageTypeScanner : IPackageTypeScanner
         if (!packageLoader.TryGetContext(packageId, version, out var contextHandle) ||
             contextHandle?.Context is not AssemblyLoadContext loadContext)
         {
-            return Array.Empty<Type>();
+            return [];
         }
 
         var discovered = new List<Type>();

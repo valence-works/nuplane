@@ -29,7 +29,7 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
 
         if (!System.IO.Directory.Exists(directoryPath))
         {
-            return Task.FromResult<IReadOnlyList<PackageRequest>>(Array.Empty<PackageRequest>());
+            return Task.FromResult<IReadOnlyList<PackageRequest>>([]);
         }
 
         var requests = System.IO.Directory

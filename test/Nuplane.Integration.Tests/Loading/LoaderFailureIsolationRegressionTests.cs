@@ -116,7 +116,7 @@ public sealed class LoaderFailureIsolationRegressionTests
                 p => p.Id,
                 _ => exception.Message,
                 StringComparer.OrdinalIgnoreCase);
-            return Task.FromResult(new PackageLoadResult(Array.Empty<PackageLoadSession>(), failed));
+            return Task.FromResult(new PackageLoadResult([], failed));
         }
 
         public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
@@ -144,7 +144,7 @@ public sealed class LoaderFailureIsolationRegressionTests
             IEnumerable<string> failIds,
             string failReason = "simulated-load-failure")
         {
-            _failIds = new HashSet<string>(failIds, StringComparer.OrdinalIgnoreCase);
+            _failIds = new(failIds, StringComparer.OrdinalIgnoreCase);
             _failReason = failReason;
         }
 
@@ -164,7 +164,7 @@ public sealed class LoaderFailureIsolationRegressionTests
                 }
                 else
                 {
-                    loaded.Add(new PackageLoadSession(
+                    loaded.Add(new(
                         pkg.Id, pkg.Version, pkg.InstallPath,
                         $"ctx-{pkg.Id}", DateTimeOffset.UtcNow, true, null));
                 }

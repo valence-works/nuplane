@@ -48,10 +48,10 @@ public ReconciliationService(
             packageResolver,
             storeRegistry,
             reconciliationOptions,
-        new ObserverEventDispatcher(Array.Empty<INuplaneObserver>()),
-        new ReconciliationHealthEvaluator(),
+        new([]),
+        new(),
         new ReconciliationLogger(),
-        new ReconciliationMetrics(new()),
+        new(new()),
                 new(),
                 new(),
                 new(),
@@ -119,7 +119,7 @@ public ReconciliationService(
 
         var pendingUnloads = new Dictionary<string, PackageLoadContextHandle>(StringComparer.OrdinalIgnoreCase);
 
-        pipeline = new ReconciliationPipeline();
+        pipeline = new();
         pipeline.Use(new DesiredStateReadMiddleware(
             sourcesList, sourceTrustOptions, desiredStateAgg, allowlistGate,
             retryPolicy, snapshotCache, failureRec, loggerInstance, metricsInstance));
@@ -156,7 +156,7 @@ public ReconciliationService(
     {
         if (reconciliationOptions.EnableSingleFlight && Interlocked.CompareExchange(ref inFlight, 1, 0) != 0)
         {
-            return new(true, EmptyChangeSet, Array.Empty<string>(), IsDegraded: false);
+            return new(true, EmptyChangeSet, [], IsDegraded: false);
         }
 
         await cycleLock.WaitAsync(cancellationToken);

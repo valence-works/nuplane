@@ -20,7 +20,7 @@ public sealed class ObserverIsolationTests
             new NuGetPackageResolver(),
             new(new StoreStateSerializer(), stateFilePath: null),
             new(),
-            new ObserverEventDispatcher([new ThrowingObserver()]),
+            new([new ThrowingObserver()]),
             new());
 
         var result = await service.TriggerManualAsync(CancellationToken.None);

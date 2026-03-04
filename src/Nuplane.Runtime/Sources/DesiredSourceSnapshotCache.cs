@@ -42,7 +42,7 @@ public sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
             return true;
         }
 
-        requests = Array.Empty<PackageRequest>();
+        requests = [];
         return false;
     }
 

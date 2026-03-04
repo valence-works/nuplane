@@ -21,7 +21,7 @@ internal sealed class NoOpPackageLoader : IPackageLoader
                 _ => "Loading services are not registered. Call AddNuplaneLoading() from Nuplane.Loading.",
                 StringComparer.OrdinalIgnoreCase);
 
-        return Task.FromResult(new PackageLoadResult(Array.Empty<PackageLoadSession>(), failed));
+        return Task.FromResult(new PackageLoadResult([], failed));
     }
 
     public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)

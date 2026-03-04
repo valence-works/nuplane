@@ -156,7 +156,7 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<ReconciliationHealthEvaluator>();
         services.AddSingleton<IReconciliationHealthEvaluator>(sp => sp.GetRequiredService<ReconciliationHealthEvaluator>());
         services.AddSingleton<ObserverEventDispatcher>(sp =>
-            new ObserverEventDispatcher(
+            new(
                 sp.GetServices<INuplaneObserver>(),
                 sp.GetRequiredService<IReconciliationLogger>()));
         services.AddSingleton<IObserverEventDispatcher>(sp => sp.GetRequiredService<ObserverEventDispatcher>());
@@ -165,7 +165,7 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<IStoreStateSerializer>(sp => sp.GetRequiredService<StoreStateSerializer>());
         services.AddSingleton(new StoreRegistryOptions { StateFilePath = stateFilePath });
         services.AddSingleton<StoreRegistry>(sp =>
-            new StoreRegistry(
+            new(
                 sp.GetRequiredService<IStoreStateSerializer>(),
                 sp.GetRequiredService<StoreRegistryOptions>()));
         services.AddSingleton<IStoreRegistry>(sp => sp.GetRequiredService<StoreRegistry>());

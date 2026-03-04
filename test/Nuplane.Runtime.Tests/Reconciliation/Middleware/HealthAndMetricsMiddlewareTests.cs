@@ -41,7 +41,7 @@ public sealed class HealthAndMetricsMiddlewareTests
         var evaluator = new FakeHealthEvaluator(isDegraded: true);
 
         var ctx = Ctx(changeSet);
-        ctx.ApplyResult = new PackageApplyExecutionResult([], ["failed-pkg"]);
+        ctx.ApplyResult = new([], ["failed-pkg"]);
         await Build(evaluator: evaluator).InvokeAsync(ctx, () => Task.CompletedTask);
 
         Assert.NotNull(ctx.Result);
@@ -67,7 +67,7 @@ public sealed class HealthAndMetricsMiddlewareTests
         new(evaluator ?? new FakeHealthEvaluator(false),
             dispatcher ?? new NullDispatcher(),
             new NullLogger(),
-            new ReconciliationMetrics(new ReconciliationTelemetry()));
+            new(new()));
 
     private static ReconciliationCycleContext Ctx(PackageChangeSet changeSet)
     {
@@ -78,10 +78,10 @@ public sealed class HealthAndMetricsMiddlewareTests
             CancellationToken = CancellationToken.None
         };
         ctx.ChangeSet = changeSet;
-        ctx.ReadResult = new DesiredReadResult([], UsedFallback: false, AllSourcesFresh: true);
-        ctx.ApplyResult = new PackageApplyExecutionResult([], []);
+        ctx.ReadResult = new([], UsedFallback: false, AllSourcesFresh: true);
+        ctx.ApplyResult = new([], []);
         ctx.ActiveVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        ctx.MergedActive = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        ctx.MergedActive = new(StringComparer.OrdinalIgnoreCase);
         return ctx;
     }
 

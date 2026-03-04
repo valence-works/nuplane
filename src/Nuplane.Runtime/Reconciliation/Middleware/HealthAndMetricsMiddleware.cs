@@ -23,7 +23,7 @@ internal sealed class HealthAndMetricsMiddleware(
 
         var hadFailures = context.ReadResult!.UsedFallback || context.ApplyResult!.FailedPackageIds.Count > 0;
         metrics.SetUnloadPendingPackages(context.UnloadPendingCount);
-        var isDegraded = healthEvaluator.Evaluate(new ReconciliationHealthInput(
+        var isDegraded = healthEvaluator.Evaluate(new(
             hadFailures,
             context.ReadResult.AllSourcesFresh,
             context.TrustFailureCount,
@@ -41,7 +41,7 @@ internal sealed class HealthAndMetricsMiddleware(
         }
         logger.LogCycleCompleted(context.CorrelationId, isDegraded, applyResult.FailedPackageIds.Count);
 
-        context.Result = new ReconciliationRunResult(false, changeSet, applyResult.FailedPackageIds, isDegraded);
+        context.Result = new(false, changeSet, applyResult.FailedPackageIds, isDegraded);
 
         await next();
     }

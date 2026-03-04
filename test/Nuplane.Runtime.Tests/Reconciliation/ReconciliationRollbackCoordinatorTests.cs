@@ -12,7 +12,7 @@ public sealed class ReconciliationRollbackCoordinatorTests
 
     public ReconciliationRollbackCoordinatorTests()
     {
-        _sut = new ReconciliationRollbackCoordinator(_logger);
+        _sut = new(_logger);
     }
 
     [Fact]

@@ -58,7 +58,6 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
             }
         }
 
-        services.AddSingleton(normalizedOptions);
         services.AddSingleton<IDesiredPackageSource>(sp =>
             new DirectoryNupkgDesiredSource(
                 normalizedOptions.SourceName,
@@ -67,7 +66,12 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
 
         if (normalizedOptions.TriggerReconciliationOnChange)
         {
-            services.AddHostedService<DirectorySourceReconciliationTriggerHostedService>();
+            var capturedOptions = normalizedOptions;
+            services.AddSingleton<IHostedService>(sp =>
+                new DirectorySourceReconciliationTriggerHostedService(
+                    capturedOptions,
+                    sp.GetRequiredService<IReconciliationService>(),
+                    sp.GetRequiredService<ILogger<DirectorySourceReconciliationTriggerHostedService>>()));
         }
 
         return services;
@@ -96,7 +100,7 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService : Backgr
     {
         Directory.CreateDirectory(options.DirectoryPath);
 
-        watcher = new FileSystemWatcher(options.DirectoryPath, "*.nupkg")
+        watcher = new(options.DirectoryPath, "*.nupkg")
         {
             IncludeSubdirectories = false,
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.LastWrite,

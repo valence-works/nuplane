@@ -9,7 +9,7 @@ public sealed class LoadingHealthProjectionTests
     {
         var evaluator = new ReconciliationHealthEvaluator();
 
-        var degraded = evaluator.Evaluate(new ReconciliationHealthInput(
+        var degraded = evaluator.Evaluate(new(
             HadAnyFailures: false,
             AllSourcesFresh: true,
             TrustFailures: 0,

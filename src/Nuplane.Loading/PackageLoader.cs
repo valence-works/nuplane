@@ -97,7 +97,7 @@ public sealed class PackageLoader : IPackageLoader
 
         if (contexts.TryRemove(key, out var removed) && removed is not null)
         {
-            context = new PackageLoadContextHandle(key, removed);
+            context = new(key, removed);
             return true;
         }
 
@@ -111,7 +111,7 @@ public sealed class PackageLoader : IPackageLoader
         var key = BuildKey(packageId, version);
         if (contexts.TryGetValue(key, out var existing) && existing is not null)
         {
-            context = new PackageLoadContextHandle(key, existing);
+            context = new(key, existing);
             return true;
         }
 

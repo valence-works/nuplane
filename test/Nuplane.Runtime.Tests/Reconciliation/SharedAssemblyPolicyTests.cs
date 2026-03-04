@@ -14,7 +14,7 @@ public sealed class SharedAssemblyPolicyTests
 
         var result = matcher.IsMatch(
             name,
-            [new SharedAssemblyPolicyEntry(name.Name!, token, name.Version!.Major)]);
+            [new(name.Name!, token, name.Version!.Major)]);
 
         Assert.True(result);
     }
@@ -25,10 +25,10 @@ public sealed class SharedAssemblyPolicyTests
         var matcher = new SharedAssemblyPolicyMatcher();
         var name = new AssemblyName("Nuplane.Abstractions")
         {
-            Version = new Version(2, 0, 0, 0)
+            Version = new(2, 0, 0, 0)
         };
 
-        var result = matcher.IsMatch(name, [new SharedAssemblyPolicyEntry("Nuplane.Abstractions", "31bf3856ad364e35", 1)]);
+        var result = matcher.IsMatch(name, [new("Nuplane.Abstractions", "31bf3856ad364e35", 1)]);
 
         Assert.False(result);
     }

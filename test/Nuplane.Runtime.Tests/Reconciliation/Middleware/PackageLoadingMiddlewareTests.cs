@@ -17,7 +17,7 @@ public sealed class PackageLoadingMiddlewareTests
     public async Task InvokeAsync_LoadingDisabled_NextCalledWithoutLoading()
     {
         var loader = new FakePackageLoader();
-        var middleware = Build(new LoadingOptions { Enabled = false }, loader);
+        var middleware = Build(new() { Enabled = false }, loader);
 
         var ctx = Ctx([Pkg("alpha")]);
         await middleware.InvokeAsync(ctx, () => Task.CompletedTask);
@@ -29,8 +29,8 @@ public sealed class PackageLoadingMiddlewareTests
     public async Task InvokeAsync_LoadingEnabledAllSucceed_TrustAndLockPassedRetainsFull()
     {
         var packages = new[] { Pkg("alpha"), Pkg("beta") };
-        var middleware = Build(new LoadingOptions { Enabled = true },
-            new FakePackageLoader(successIds: ["alpha", "beta"]));
+        var middleware = Build(new() { Enabled = true },
+            new(successIds: ["alpha", "beta"]));
 
         var ctx = Ctx(packages);
         await middleware.InvokeAsync(ctx, () => Task.CompletedTask);
@@ -42,8 +42,8 @@ public sealed class PackageLoadingMiddlewareTests
     public async Task InvokeAsync_OnePackageFails_PackageRemovedFromTrustAndLockPassed()
     {
         var packages = new[] { Pkg("alpha"), Pkg("beta") };
-        var middleware = Build(new LoadingOptions { Enabled = true },
-            new FakePackageLoader(successIds: ["alpha"], failedIds: ["beta"]));
+        var middleware = Build(new() { Enabled = true },
+            new(successIds: ["alpha"], failedIds: ["beta"]));
 
         var ctx = Ctx(packages);
         await middleware.InvokeAsync(ctx, () => Task.CompletedTask);
@@ -56,7 +56,7 @@ public sealed class PackageLoadingMiddlewareTests
     public async Task InvokeAsync_EmptyTrustAndLockPassed_LoadNotCalled()
     {
         var loader = new FakePackageLoader();
-        var middleware = Build(new LoadingOptions { Enabled = true }, loader);
+        var middleware = Build(new() { Enabled = true }, loader);
 
         var ctx = Ctx([]);
         await middleware.InvokeAsync(ctx, () => Task.CompletedTask);
@@ -66,7 +66,7 @@ public sealed class PackageLoadingMiddlewareTests
 
     private static PackageLoadingMiddleware Build(LoadingOptions options, FakePackageLoader loader) =>
         new(options, loader, new PassthroughAllowlistGate(), new NoOpApplyExecutor(),
-            new NullDispatcher(), new NullLogger(), new ReconciliationMetrics(new ReconciliationTelemetry()));
+            new NullDispatcher(), new NullLogger(), new(new()));
 
     private static ReconciliationCycleContext Ctx(ResolvedPackage[] packages)
     {
@@ -79,7 +79,7 @@ public sealed class PackageLoadingMiddlewareTests
         ctx.TrustAndLockPassed = packages.ToList();
         ctx.AllowlistedRequests = packages.Select(p =>
             new PackageRequest(p.Id, p.Version, p.FeedName, PackageUpdatePolicy.Exact, p.SourceName ?? "src")).ToArray();
-        ctx.ResolutionResult = new PackageResolutionResult(packages, [], []);
+        ctx.ResolutionResult = new(packages, [], []);
         return ctx;
     }
 

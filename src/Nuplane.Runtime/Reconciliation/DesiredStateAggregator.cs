@@ -80,7 +80,7 @@ public sealed class DesiredStateAggregator : IDesiredStateAggregator
             .ThenBy(r => r.FeedName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return new DesiredAggregateResult(deduped, sourceErrors);
+        return new(deduped, sourceErrors);
     }
 
     private static string GetSourceTypeName(IDesiredPackageSource source) => source.GetType().FullName ?? source.GetType().Name;

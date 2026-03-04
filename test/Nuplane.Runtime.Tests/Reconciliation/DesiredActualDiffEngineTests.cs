@@ -26,9 +26,9 @@ public sealed class DesiredActualDiffEngineTests
 
         var changeSet = engine.Compute(desired, active, "corr-1", timestamp);
 
-        Assert.Equal(new[] { "delta" }, changeSet.Added.Select(x => x.Id));
-        Assert.Equal(new[] { "beta" }, changeSet.Updated.Select(x => x.Id));
-        Assert.Equal(new[] { "gamma" }, changeSet.Removed);
+        Assert.Equal(["delta"], changeSet.Added.Select(x => x.Id));
+        Assert.Equal(["beta"], changeSet.Updated.Select(x => x.Id));
+        Assert.Equal(["gamma"], changeSet.Removed);
     }
 
     [Fact]

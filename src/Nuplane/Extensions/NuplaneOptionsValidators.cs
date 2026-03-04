@@ -74,12 +74,7 @@ internal sealed class FeedResolutionOptionsValidator : IValidateOptions<FeedReso
 {
     public ValidateOptionsResult Validate(string? name, FeedResolutionOptions options)
     {
-        if (options.Feeds.Count == 0)
-        {
-            return ValidateOptionsResult.Fail("At least one feed must be configured.");
-        }
-
-        if (options.ValidateDeterministicOrdering && !options.DeterministicFeedOrder)
+        if (options.Feeds.Count > 0 && options.ValidateDeterministicOrdering && !options.DeterministicFeedOrder)
         {
             return ValidateOptionsResult.Fail("Deterministic feed ordering validation is enabled, but DeterministicFeedOrder is false.");
         }

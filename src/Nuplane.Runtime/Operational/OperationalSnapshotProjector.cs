@@ -38,7 +38,7 @@ public sealed class OperationalSnapshotProjector
         ArgumentNullException.ThrowIfNull(result);
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
-        _lastReconcile = new LastReconcileOutcome(
+        _lastReconcile = new(
             correlationId,
             DateTimeOffset.UtcNow,
             result.Skipped,
@@ -66,7 +66,7 @@ public sealed class OperationalSnapshotProjector
         var health = _healthEvaluator.IsDegraded ? HealthState.Degraded : HealthState.Healthy;
         var degradedReasons = BuildDegradedReasons();
 
-        return new OperationalSnapshot(
+        return new(
             DateTimeOffset.UtcNow,
             activePackages,
             _lastReconcile,

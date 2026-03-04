@@ -82,7 +82,8 @@ public sealed class FeedCredentialOptionsValidator
             }
         }
 
-        if (feedResolution.PolicyMode == FeedResolutionPolicyMode.Strict &&
+        if (feedResolution.Feeds.Count > 0 &&
+            feedResolution.PolicyMode == FeedResolutionPolicyMode.Strict &&
             !feedResolution.StopOnFirstSuccessfulFeed &&
             feedResolution.Feeds.All(x => x.TrustLevel == FeedTrustLevel.Untrusted))
         {

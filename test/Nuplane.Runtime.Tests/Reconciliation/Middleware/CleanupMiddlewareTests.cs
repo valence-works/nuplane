@@ -61,8 +61,8 @@ public sealed class CleanupMiddlewareTests
         IDesiredActualDiffEngine diffEngine,
         IStoreRegistry storeRegistry,
         IPackageCleanupService cleanupService) =>
-        new(diffEngine, storeRegistry, cleanupService, new CleanupPolicyOptions(),
-            new ReconciliationMetrics(new ReconciliationTelemetry()));
+        new(diffEngine, storeRegistry, cleanupService, new(),
+            new(new()));
 
     private static ReconciliationCycleContext Ctx(ResolvedPackage[] packages)
     {
@@ -72,7 +72,7 @@ public sealed class CleanupMiddlewareTests
             CycleStartedAt = DateTimeOffset.UtcNow,
             CancellationToken = CancellationToken.None
         };
-        ctx.ApplyResult = new PackageApplyExecutionResult(packages, []);
+        ctx.ApplyResult = new(packages, []);
         ctx.MergedActive = packages.ToDictionary(p => p.Id, p => p.Version, StringComparer.OrdinalIgnoreCase);
         return ctx;
     }

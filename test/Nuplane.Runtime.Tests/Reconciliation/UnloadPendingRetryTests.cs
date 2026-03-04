@@ -24,6 +24,6 @@ public sealed class UnloadPendingRetryTests
         var targetAssembly = Path.Combine(root, Path.GetFileName(sourceAssembly));
         File.Copy(sourceAssembly, targetAssembly, overwrite: true);
 
-        return new PackageAssemblyLoadContext(targetAssembly, [], new SharedAssemblyPolicyMatcher());
+        return new(targetAssembly, [], new());
     }
 }

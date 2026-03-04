@@ -78,7 +78,7 @@ public sealed class ManualReconcileCoordinator
             {
                 _logger.LogAdminTriggerOutcome(correlationId, nameof(ManualReconcileOutcomeCode.Rejected), "single-flight-active");
                 _metrics?.RecordAdminTrigger(rejected: true);
-                return new ManualReconcileOutcome(
+                return new(
                     ManualReconcileOutcomeCode.Rejected,
                     correlationId,
                     result,
@@ -87,7 +87,7 @@ public sealed class ManualReconcileCoordinator
 
             _logger.LogAdminTriggerOutcome(correlationId, nameof(ManualReconcileOutcomeCode.Completed), null);
             _metrics?.RecordAdminTrigger(rejected: false);
-            return new ManualReconcileOutcome(
+            return new(
                 ManualReconcileOutcomeCode.Completed,
                 correlationId,
                 result,
@@ -103,7 +103,7 @@ public sealed class ManualReconcileCoordinator
         {
             _logger.LogAdminTriggerOutcome(correlationId, nameof(ManualReconcileOutcomeCode.Unavailable), ex.Message);
             _metrics?.RecordAdminTrigger(rejected: false);
-            return new ManualReconcileOutcome(
+            return new(
                 ManualReconcileOutcomeCode.Unavailable,
                 correlationId,
                 null,

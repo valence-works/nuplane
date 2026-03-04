@@ -78,7 +78,7 @@ public sealed class TransactionExecutionMiddlewareTests
             CycleStartedAt = DateTimeOffset.UtcNow,
             CancellationToken = CancellationToken.None
         };
-        ctx.ResolutionResult = new PackageResolutionResult(packages, [], []);
+        ctx.ResolutionResult = new(packages, [], []);
         ctx.ActiveVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         return ctx;
     }

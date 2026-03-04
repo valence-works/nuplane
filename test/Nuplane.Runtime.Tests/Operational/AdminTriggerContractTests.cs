@@ -15,7 +15,7 @@ public sealed class AdminTriggerContractTests
     public async Task Trigger_CompletedCycle_ReturnsCompleted()
     {
         var service = new FakeReconciliationService(
-            new ReconciliationRunResult(false, EmptyChangeSet(), [], false));
+            new(false, EmptyChangeSet(), [], false));
         var logger = new SpyLogger();
         var coordinator = new ManualReconcileCoordinator(service, logger);
 
@@ -31,7 +31,7 @@ public sealed class AdminTriggerContractTests
     public async Task Trigger_SkippedCycle_ReturnsRejected()
     {
         var service = new FakeReconciliationService(
-            new ReconciliationRunResult(true, EmptyChangeSet(), [], false));
+            new(true, EmptyChangeSet(), [], false));
         var logger = new SpyLogger();
         var coordinator = new ManualReconcileCoordinator(service, logger);
 
@@ -72,7 +72,7 @@ public sealed class AdminTriggerContractTests
     public async Task Trigger_CompletedCycle_LogsOutcome()
     {
         var service = new FakeReconciliationService(
-            new ReconciliationRunResult(false, EmptyChangeSet(), [], false));
+            new(false, EmptyChangeSet(), [], false));
         var logger = new SpyLogger();
         var coordinator = new ManualReconcileCoordinator(service, logger);
 
@@ -86,7 +86,7 @@ public sealed class AdminTriggerContractTests
     public async Task Trigger_RejectedCycle_LogsRejection()
     {
         var service = new FakeReconciliationService(
-            new ReconciliationRunResult(true, EmptyChangeSet(), [], false));
+            new(true, EmptyChangeSet(), [], false));
         var logger = new SpyLogger();
         var coordinator = new ManualReconcileCoordinator(service, logger);
 
@@ -100,7 +100,7 @@ public sealed class AdminTriggerContractTests
     public async Task Trigger_NullCorrelationId_Throws()
     {
         var service = new FakeReconciliationService(
-            new ReconciliationRunResult(false, EmptyChangeSet(), [], false));
+            new(false, EmptyChangeSet(), [], false));
         var coordinator = new ManualReconcileCoordinator(service, new SpyLogger());
 
         await Assert.ThrowsAsync<ArgumentNullException>(

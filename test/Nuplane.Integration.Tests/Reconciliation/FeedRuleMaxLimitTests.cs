@@ -17,7 +17,7 @@ public sealed class FeedRuleMaxLimitTests
             availablePackageIds: ["Pkg.C", "Pkg.A", "Pkg.B"]);
 
         var service = new ReconciliationService(
-            new[] { source },
+            [source],
             new() { RejectUnallowlistedPackages = false },
             new(),
             new(),

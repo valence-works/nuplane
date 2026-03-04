@@ -11,7 +11,7 @@ public sealed class SharedAssemblyMismatchRegressionTests
         var matcher = new SharedAssemblyPolicyMatcher();
         var asm = typeof(string).Assembly.GetName();
 
-        var isMatch = matcher.IsMatch(asm, [new SharedAssemblyPolicyEntry(asm.Name!, "", 0)]);
+        var isMatch = matcher.IsMatch(asm, [new(asm.Name!, "", 0)]);
 
         Assert.False(isMatch);
     }

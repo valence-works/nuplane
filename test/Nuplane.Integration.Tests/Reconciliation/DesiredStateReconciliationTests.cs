@@ -13,13 +13,12 @@ public sealed class DesiredStateReconciliationTests
     public async Task ManualTrigger_RepeatedRun_IsIdempotentOnSecondCycle()
     {
         var timestamp = DateTimeOffset.UtcNow;
-        var source = new StaticSource(new[]
-        {
-            new PackageRequest("pkg-a", "1.2.3", "feed-1", PackageUpdatePolicy.Exact, "source-a")
-        });
+        var source = new StaticSource([
+            new("pkg-a", "1.2.3", "feed-1", PackageUpdatePolicy.Exact, "source-a")
+        ]);
 
         var service = new ReconciliationService(
-            new[] { source },
+            [source],
             new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
             new(),
             new(),
@@ -40,13 +39,12 @@ public sealed class DesiredStateReconciliationTests
     [Fact]
     public async Task ManualTrigger_WhenFeedDefinitionMissing_UsesPermissiveFallback()
     {
-        var source = new StaticSource(new[]
-        {
-            new PackageRequest("pkg-a", "1.2.3", "feed-missing", PackageUpdatePolicy.Exact, "source-a")
-        });
+        var source = new StaticSource([
+            new("pkg-a", "1.2.3", "feed-missing", PackageUpdatePolicy.Exact, "source-a")
+        ]);
 
         var service = new ReconciliationService(
-            new[] { source },
+            [source],
             new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
             new(),
             new(),
@@ -65,29 +63,28 @@ public sealed class DesiredStateReconciliationTests
     [Fact]
     public async Task ManualTrigger_WhenFeedConfiguredUntrusted_FailsClosedByDefault()
     {
-        var source = new StaticSource(new[]
-        {
-            new PackageRequest("pkg-a", "1.2.3", "feed-untrusted", PackageUpdatePolicy.Exact, "source-a")
-        });
+        var source = new StaticSource([
+            new("pkg-a", "1.2.3", "feed-untrusted", PackageUpdatePolicy.Exact, "source-a")
+        ]);
 
         var feedResolutionOptions = new FeedResolutionOptions();
-        feedResolutionOptions.Feeds.Add(new FeedDefinition(
+        feedResolutionOptions.Feeds.Add(new(
             "feed-untrusted",
-            new Uri("https://feed-untrusted.example/v3/index.json"),
+            new("https://feed-untrusted.example/v3/index.json"),
             FeedTrustLevel.Untrusted));
 
         var service = new ReconciliationService(
-            new[] { source },
+            [source],
             new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
             new(),
             new(),
             new NuGetPackageResolver(),
             new(new StoreStateSerializer(), stateFilePath: null),
             new(),
-            new ObserverEventDispatcher(Array.Empty<INuplaneObserver>()),
+            new([]),
             new(),
             feedResolutionOptions: feedResolutionOptions,
-            feedTrustPolicyOptions: new FeedTrustPolicyOptions
+            feedTrustPolicyOptions: new()
             {
                 AllowUntrustedWithScopedOverride = false,
                 RequireOverrideReason = true
