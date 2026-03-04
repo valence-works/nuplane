@@ -35,7 +35,7 @@ public sealed class PackageLoaderTests : IDisposable
         var result = await loader.EnsureLoadedAsync([pkg], [], CancellationToken.None);
 
         Assert.Single(result.Loaded);
-        Assert.Equal(1, loader.Sessions.Count); // no duplicate session
+        Assert.Single(loader.Sessions); // no duplicate session
     }
 
     [Fact]
