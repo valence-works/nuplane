@@ -63,7 +63,8 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
             new DirectoryNupkgDesiredSource(
                 normalizedOptions.SourceName,
                 normalizedOptions.DirectoryPath,
-                normalizedOptions.AllowlistedPackageIds));
+                normalizedOptions.AllowlistedPackageIds,
+                sp.GetService<ILogger<DirectoryNupkgDesiredSource>>()));
 
         if (normalizedOptions.TriggerReconciliationOnChange)
         {

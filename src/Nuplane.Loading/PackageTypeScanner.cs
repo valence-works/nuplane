@@ -39,7 +39,7 @@ public sealed class PackageTypeScanner : IPackageTypeScanner
 
         var discovered = new List<Type>();
 
-        foreach (var assembly in loadContext.Assemblies)
+        foreach (var assembly in loadContext.Assemblies.ToArray())
         {
             Type[] candidates;
             try

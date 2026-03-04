@@ -89,6 +89,10 @@ public sealed class PackageUnloadCoordinator : IPackageUnloadCoordinator
             loadContext.Unload();
             loadContext = null!;
 
+            // Null out the context parameter so the async state machine does not retain a strong
+            // reference to the load context through the captured parameter during the GC loop.
+            context = null!;
+
             const int maxUnloadChecks = 10;
             for (var i = 0; i < maxUnloadChecks && weakReference.IsAlive; i++)
             {
