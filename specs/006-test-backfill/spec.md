@@ -23,6 +23,27 @@ Spec 005 deferred three groups of tests (FR-019–FR-021) until the middleware p
 
 ---
 
+## Decisions
+
+### Decision 1 — Mocking Infrastructure
+
+**Question**: What mocking framework (if any) should be used in the test suite?
+
+**Original Assumption**: Spec 005's code-quality review assumed hand-rolled fake inner classes consistent with the then-existing test corpus, which contained no mocking framework dependency.
+
+**Finding**: Phase 005 extracted 11+ interfaces across the solution. Testing these interfaces with hand-rolled fakes quickly becomes tedious and verbose, especially for verifying call ordering and argument capture (e.g., FR-005 requires asserting that `PublishChangingAsync` is called before the next stage delegate). A lightweight mocking framework significantly improves test readability and maintainability without adding heavyweight infrastructure.
+
+**Decision**: Adopt NSubstitute as the standard mocking framework. It is registered in `Directory.Packages.props` and available to all test projects going forward. New test classes (FR-001–FR-019) use NSubstitute for constructing mocked interfaces and verifying call order / arguments. Existing tests may be refactored to use NSubstitute as a follow-on improvement (not mandated here).
+
+**Rationale**: NSubstitute offers a clean fluent API, excellent documentation, and no ceremony around record/replay setup. Its lightweight nature aligns with .NET conventions. It is widely used in the .NET community and has no heavy transitive dependency tree. Call-order and argument-capture assertions are idiomatic.
+
+**Alternatives considered**:
+- Continue hand-rolled fakes — rejected; violates DRY, makes call-order assertions error-prone, and requires boilerplate inner classes in every test file.
+- Use Moq — acceptable alternative, but NSubstitute's fluent syntax is cleaner for this codebase.
+- Use FakeItEasy — acceptable alternative, but NSubstitute's argument-matching API is more intuitive.
+
+---
+
 ## User Scenarios & Testing
 
 ### User Story 1 — Safe Middleware Refactoring (Priority: P1)
@@ -138,7 +159,7 @@ Each of the following test classes MUST be created in `test/Nuplane.Runtime.Test
 
 - The middleware pipeline (Phase C of spec 005) is stable. No middleware stage signatures are expected to change during this backfill.
 - `FeedTrustPolicyEvaluatorTests.cs` is already complete and does not require extension under this spec.
-- The existing test projects use xUnit and hand-rolled fake inner classes. No mocking framework (NSubstitute, Moq, FakeItEasy) is present in the solution. `Nuplane.Loading.Tests` adopts the same hand-rolled fake pattern.
+- All test projects use xUnit. Starting with this spec, NSubstitute is introduced as the standard mocking framework across the test suite. It is registered in `Directory.Packages.props` and available to all new and existing test projects.
 - `test/Directory.Build.props` already propagates `TreatWarningsAsErrors` and `GenerateDocumentationFile` to all test projects; the new project requires no special overrides.
 - `PackageResolutionMiddlewareTests` (FR-002) is included even though it was omitted from the original T024 list in spec 005's tasks.md — the middleware class (`PackageResolutionMiddleware.cs`) exists and requires coverage.
 - `Nuplane.Loading.Tests.Fixtures` is a minimal class library with no production dependencies; its sole purpose is to provide a concrete, reproducible DLL path for ALC load and collectibility tests. It is not a test project itself and contains no xUnit tests.
