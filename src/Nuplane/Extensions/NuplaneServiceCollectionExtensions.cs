@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Extensions;
@@ -173,6 +174,7 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<IFailureRecorder>(sp => sp.GetRequiredService<FailureRecorder>());
         services.AddSingleton<ReconciliationRetryPolicy>();
         services.AddSingleton<IReconciliationRetryPolicy>(sp => sp.GetRequiredService<ReconciliationRetryPolicy>());
+        services.TryAddSingleton<WatcherDegradationTracker>();
         services.AddSingleton<ReconciliationService>();
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
 

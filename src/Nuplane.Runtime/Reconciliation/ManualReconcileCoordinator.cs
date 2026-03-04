@@ -72,7 +72,8 @@ public sealed class ManualReconcileCoordinator
 
         try
         {
-            var result = await _reconciliationService.TriggerManualAsync(cancellationToken);
+            var trigger = new ReconciliationTrigger(TriggerType.Manual, CorrelationId: correlationId);
+            var result = await _reconciliationService.TriggerAsync(trigger, cancellationToken);
 
             if (result.Skipped)
             {

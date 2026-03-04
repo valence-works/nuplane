@@ -154,6 +154,11 @@ internal sealed class DirectorySourceOptionsValidator : IValidateOptions<Directo
     {
         var errors = new List<string>();
 
+        if (string.IsNullOrWhiteSpace(options.FeedName))
+        {
+            errors.Add("FeedName is required for directory source registration.");
+        }
+
         if (string.IsNullOrWhiteSpace(options.DirectoryPath))
         {
             errors.Add("DirectoryPath is required for directory source registration.");

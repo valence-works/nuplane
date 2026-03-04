@@ -53,7 +53,12 @@ public sealed class PackageApplyExecutor(
             catch (Exception ex)
             {
                 failed.Add(request.Id);
-                var stage = ex is FeedUnavailableException ? "resolve-feed-unavailable" : "resolve";
+                var stage = ex switch
+                {
+                    FeedUnavailableException => "resolve-feed-unavailable",
+                    NoEligibleFeedException => "resolve-no-eligible-feed",
+                    _ => "resolve"
+                };
                 await failureRecorder.RecordAsync(request.Id, stage, ex.Message, correlationId, cancellationToken);
 
                 if (packageResolver is MultiFeedPackageResolver multiFeedResolver &&

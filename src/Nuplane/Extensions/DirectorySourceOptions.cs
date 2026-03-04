@@ -11,7 +11,15 @@ public sealed class DirectorySourceOptions
     public string DirectoryPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the name of the local directory feed that this source represents.
+    /// Used as the <c>FeedName</c> on produced <see cref="Nuplane.Abstractions.PackageRequest"/> values
+    /// so that resolution can target this local feed explicitly.
+    /// </summary>
+    public string FeedName { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets the logical source name emitted on produced package requests.
+    /// Defaults to <see cref="FeedName"/> when not explicitly set.
     /// </summary>
     public string SourceName { get; set; } = "Directory.Drop";
 

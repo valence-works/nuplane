@@ -1,4 +1,5 @@
 using Nuplane.Abstractions;
+using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Observability;
@@ -67,7 +68,8 @@ public sealed class HealthAndMetricsMiddlewareTests
         new(evaluator ?? new FakeHealthEvaluator(false),
             dispatcher ?? new NullDispatcher(),
             new NullLogger(),
-            new(new()));
+            new(new()),
+            new FeedResolutionOptions());
 
     private static ReconciliationCycleContext Ctx(PackageChangeSet changeSet)
     {
@@ -143,5 +145,8 @@ public sealed class HealthAndMetricsMiddlewareTests
         public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode) { }
         public void LogAdminTriggerOutcome(string correlationId, string outcomeCode, string? reasonCode) { }
         public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState) { }
+        public void LogTrigger(string correlationId, string triggerType, string? triggerSource) { }
+        public void LogIdleModeEntered() { }
+        public void LogIdleModeExited() { }
     }
 }

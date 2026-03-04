@@ -13,7 +13,9 @@ namespace Nuplane.Sources.Directory;
 /// <param name="directoryPath">The directory to scan for <c>.nupkg</c> files.</param>
 /// <param name="allowlistedPackageIds">An optional set of allowed package identifiers. If <see langword="null"/> or empty, all packages are allowed.</param>
 /// <param name="logger">An optional logger for diagnostic output.</param>
-public sealed class DirectoryNupkgDesiredSource(string sourceName, string directoryPath, IEnumerable<string>? allowlistedPackageIds = null, ILogger<DirectoryNupkgDesiredSource>? logger = null) : IDesiredPackageSource
+/// <param name="feedName">The optional local directory feed name to set on produced package requests.</param>
+/// <param name="stabilityProbe">An optional stability probe for partial-write safety. When provided, each discovered <c>.nupkg</c> file is probed for stability before being included.</param>
+public sealed class DirectoryNupkgDesiredSource(string sourceName, string directoryPath, IEnumerable<string>? allowlistedPackageIds = null, ILogger<DirectoryNupkgDesiredSource>? logger = null, string? feedName = null, NupkgFileStabilityProbe? stabilityProbe = null) : IDesiredPackageSource
 {
     private static readonly Regex PackageFileNamePattern = new(
         "^(?<id>.+)\\.(?<version>\\d+\\.\\d+\\.\\d+(?:[-+][A-Za-z0-9\\.-]+)?)$",
@@ -21,42 +23,72 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
 
     private readonly string sourceName = string.IsNullOrWhiteSpace(sourceName) ? throw new ArgumentException("Source name is required.", nameof(sourceName)) : sourceName;
     private readonly string directoryPath = string.IsNullOrWhiteSpace(directoryPath) ? throw new ArgumentException("Directory path is required.", nameof(directoryPath)) : directoryPath;
+    private readonly string? feedName = string.IsNullOrWhiteSpace(feedName) ? null : feedName;
     private readonly HashSet<string> allowlistedPackageIds = allowlistedPackageIds is null
         ? new(StringComparer.OrdinalIgnoreCase)
         : new HashSet<string>(allowlistedPackageIds, StringComparer.OrdinalIgnoreCase);
     private readonly ILogger<DirectoryNupkgDesiredSource> logger = logger ?? NullLogger<DirectoryNupkgDesiredSource>.Instance;
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
+    public async Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
 
         if (!System.IO.Directory.Exists(directoryPath))
         {
-            return Task.FromResult<IReadOnlyList<PackageRequest>>([]);
+            return [];
         }
 
-        PackageRequest[] requests;
+        string[] filePaths;
         try
         {
-            requests = System.IO.Directory
+            filePaths = System.IO.Directory
                 .EnumerateFiles(directoryPath, "*.nupkg", SearchOption.TopDirectoryOnly)
-                .Select(Path.GetFileNameWithoutExtension)
-                .Where(fileName => !string.IsNullOrWhiteSpace(fileName))
-                .Select(fileName => CreateRequest(fileName!))
-                .Where(request => request is not null)
-                .Cast<PackageRequest>()
-                .OrderBy(request => request.Id, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(request => request.VersionRange, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         }
         catch (IOException ex)
         {
             logger.LogWarning(ex, "Failed to enumerate .nupkg files in '{DirectoryPath}'. Returning empty desired state.", directoryPath);
-            return Task.FromResult<IReadOnlyList<PackageRequest>>(Array.Empty<PackageRequest>());
+            return Array.Empty<PackageRequest>();
         }
 
-        return Task.FromResult<IReadOnlyList<PackageRequest>>(requests);
+        var requests = new List<PackageRequest>();
+        foreach (var filePath in filePaths)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (stabilityProbe is not null)
+            {
+                var isStable = await stabilityProbe.IsStableAsync(filePath, ct);
+                if (!isStable)
+                {
+                    logger.LogDebug(
+                        "Skipping unstable file '{FilePath}' — it may still be in the process of being written.",
+                        filePath);
+                    continue;
+                }
+            }
+
+            var fileName = Path.GetFileNameWithoutExtension(filePath);
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                continue;
+            }
+
+            var request = CreateRequest(fileName);
+            if (request is not null)
+            {
+                requests.Add(request);
+            }
+        }
+
+        requests.Sort((a, b) =>
+        {
+            var idCmp = StringComparer.OrdinalIgnoreCase.Compare(a.Id, b.Id);
+            return idCmp != 0 ? idCmp : StringComparer.OrdinalIgnoreCase.Compare(a.VersionRange, b.VersionRange);
+        });
+
+        return requests;
     }
 
     private PackageRequest? CreateRequest(string fileNameWithoutExtension)
@@ -74,6 +106,6 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
         }
 
         var version = match.Groups["version"].Value;
-        return new(packageId, version, null, PackageUpdatePolicy.Exact, sourceName);
+        return new(packageId, version, feedName, PackageUpdatePolicy.Exact, sourceName);
     }
 }

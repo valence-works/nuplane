@@ -40,21 +40,37 @@ public sealed class FeedCredentialOptionsValidator
                 errors.Add($"Duplicate feed name '{feed.Name}'.");
             }
 
-            if (feed.ServiceIndex is null || !feed.ServiceIndex.IsAbsoluteUri || feed.ServiceIndex.Scheme != Uri.UriSchemeHttps)
-            {
-                errors.Add($"Feed '{feed.Name}' service index must be an absolute HTTPS URI.");
-            }
+            // Local directory feeds use file:// URIs; they must not have credentials.
+            var isLocalFeed = feed.ServiceIndex is not null
+                && feed.ServiceIndex.IsAbsoluteUri
+                && string.Equals(feed.ServiceIndex.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase);
 
-            if (!string.IsNullOrWhiteSpace(feed.Credentials))
+            if (isLocalFeed)
             {
-                if (!sourceTrust.AllowRuntimeCredentialResolution)
+                if (!string.IsNullOrWhiteSpace(feed.Credentials))
                 {
-                    errors.Add($"Feed '{feed.Name}' configures credentials but runtime credential resolution is disabled.");
+                    errors.Add($"Feed '{feed.Name}' uses a file:// URI and must not configure credentials.");
+                }
+                // Skip HTTPS enforcement for file:// feeds.
+            }
+            else
+            {
+                if (feed.ServiceIndex is null || !feed.ServiceIndex.IsAbsoluteUri || feed.ServiceIndex.Scheme != Uri.UriSchemeHttps)
+                {
+                    errors.Add($"Feed '{feed.Name}' service index must be an absolute HTTPS URI.");
                 }
 
-                if (!feed.Credentials.StartsWith("secrets://", StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrWhiteSpace(feed.Credentials))
                 {
-                    errors.Add($"Feed '{feed.Name}' credentials must use a secret reference (secrets://...).");
+                    if (!sourceTrust.AllowRuntimeCredentialResolution)
+                    {
+                        errors.Add($"Feed '{feed.Name}' configures credentials but runtime credential resolution is disabled.");
+                    }
+
+                    if (!feed.Credentials.StartsWith("secrets://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        errors.Add($"Feed '{feed.Name}' credentials must use a secret reference (secrets://...).");
+                    }
                 }
             }
 

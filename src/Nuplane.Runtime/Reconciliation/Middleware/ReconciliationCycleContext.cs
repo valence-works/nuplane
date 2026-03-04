@@ -10,6 +10,9 @@ internal sealed class ReconciliationCycleContext
     public required DateTimeOffset CycleStartedAt { get; init; }
     public required CancellationToken CancellationToken { get; init; }
 
+    // Trigger metadata
+    public ReconciliationTrigger? Trigger { get; set; }
+
     // Desired state
     public IReadOnlyList<PackageRequest> DesiredRequests { get; set; } = [];
     public IReadOnlyList<PackageRequest> AllowlistedRequests { get; set; } = [];

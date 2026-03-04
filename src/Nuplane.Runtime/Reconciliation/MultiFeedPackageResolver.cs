@@ -78,7 +78,7 @@ public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, Feed
             feedUnavailable: true,
             failureReason: "No candidate feed was available.");
 
-        throw new InvalidOperationException($"No available feed could resolve package '{request.Id}'.");
+        throw new NoEligibleFeedException(request.Id, "No candidate feed was available.");
     }
 
     /// <summary>

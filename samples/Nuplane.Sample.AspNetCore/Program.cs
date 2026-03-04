@@ -9,8 +9,9 @@ using Nuplane.Store.State;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var dropDirectory = builder.Configuration["NuplaneSample:DropDirectory"] ?? "drop-folder";
-var sourceName = builder.Configuration["NuplaneSample:SourceName"] ?? "Sample.DropFolder";
+var dropDirectory = builder.Configuration["NuplaneSample:DropDirectory"] ?? "packages";
+var feedName = builder.Configuration["NuplaneSample:FeedName"] ?? "local-packages";
+var sourceName = builder.Configuration["NuplaneSample:SourceName"] ?? "Sample.LocalFeed";
 var debounceMs = ParseDebounceMilliseconds(builder.Configuration["NuplaneSample:DebounceMilliseconds"]);
 var allowlistedPackageIds = builder.Configuration
     .GetSection("NuplaneSample:AllowlistedPackageIds")
@@ -47,6 +48,7 @@ builder.Services.AddNuplane(
 builder.Services.AddNuplaneDirectorySource(options =>
 {
 	options.DirectoryPath = dropDirectory;
+	options.FeedName = feedName;
 	options.SourceName = sourceName;
 	options.TriggerReconciliationOnChange = true;
 	options.DebounceWindow = TimeSpan.FromMilliseconds(debounceMs);
@@ -68,7 +70,7 @@ builder.Services.AddSingleton<INuplaneObserver, PluginDiscoveryObserver>();
 
 var app = builder.Build();
 
-app.MapGet("/", () => "Drop a .nupkg into the configured drop-folder to trigger reconcile, load assemblies, and discover IPlugin types.");
+app.MapGet("/", () => "Drop a .nupkg into the configured local directory feed to trigger reconcile, load assemblies, and discover IPlugin types.");
 
 app.Run();
 

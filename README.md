@@ -14,7 +14,7 @@ It provides infrastructure for package reconciliation — nothing more, nothing 
 ## ✨ What Nuplane Does
 
 - Resolve packages from NuGet v3 feeds
-- Support `.nupkg` drop-folder deployment
+- Support `.nupkg` local directory feed deployment
 - Maintain a deterministic on-disk package store
 - Reconcile desired vs actual package state
 - Apply atomic per-package updates
@@ -70,7 +70,7 @@ builder.Services.AddNuplane(options =>
         VersionRange: "[1.0.0,2.0.0)"
     ));
 
-    options.Desired.FromNupkgDirectory("drop-folder");
+    options.Desired.FromNupkgDirectory("packages");
 });
 ````
 
@@ -126,10 +126,10 @@ Nuplane supports multiple ways to declare desired packages:
 options.Packages.Add(new PackageRequest("My.Plugin", "[1.0.0,2.0.0)"));
 ```
 
-### Directory-Based (.nupkg Drop Folder)
+### Directory-Based (.nupkg Local Directory Feed)
 
 ```csharp
-options.Desired.FromNupkgDirectory("drop-folder");
+options.Desired.FromNupkgDirectory("packages");
 ```
 
 Dropping a `.nupkg` into the folder adds it.
@@ -139,7 +139,7 @@ Removing the file removes it.
 
 The sample app now demonstrates the full lifecycle:
 
-1. Directory-based desired state (`drop-folder`)
+1. Directory-based desired state (`packages` local directory feed)
 2. File-change-triggered reconcile (watcher + debounce)
 3. `INuplaneObserver` notifications on completion
 4. Assembly loading via `IPackageLoaderBoundary`
@@ -163,15 +163,15 @@ dotnet run --project samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore
 
 The app is configured (via `NuplaneSample` settings in `appsettings.json`) to watch:
 
-- `drop-folder`
+- `packages`
 
 ### Trigger reconciliation by dropping a package
 
 In another shell:
 
 ```bash
-mkdir -p drop-folder
-cp samples/Nuplane.Sample.Plugin/bin/Debug/Nuplane.Sample.Plugin.1.0.0.nupkg drop-folder/
+mkdir -p packages
+cp samples/Nuplane.Sample.Plugin/bin/Debug/Nuplane.Sample.Plugin.1.0.0.nupkg packages/
 ```
 
 Expected behavior:
@@ -180,7 +180,7 @@ Expected behavior:
 - Nuplane applies any changes and emits `PackageChangeSet` events.
 - `PluginDiscoveryObserver` scans changed package contexts for `IPlugin` and logs discovered type names (for example, `Nuplane.Sample.Plugin.HelloPlugin`).
 
-To trigger another cycle, update/remove packages in `drop-folder`.
+To trigger another cycle, update/remove packages in `packages`.
 
 ## ⚙️ Phase 2 Operator Guidance
 

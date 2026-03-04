@@ -121,5 +121,23 @@ public interface IReconciliationLogger
     /// <param name="activePackageCount">The number of active packages in the snapshot.</param>
     /// <param name="healthState">The health state of the runtime.</param>
     void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState);
+
+    /// <summary>
+    /// Logs a reconciliation trigger event with its type and optional source.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for this reconciliation cycle.</param>
+    /// <param name="triggerType">The type of trigger (Scheduled, DirectoryChange, Manual, Startup).</param>
+    /// <param name="triggerSource">The optional source attribution for the trigger (e.g., local feed name).</param>
+    void LogTrigger(string correlationId, string triggerType, string? triggerSource);
+
+    /// <summary>
+    /// Logs that the runtime has entered idle mode because no feeds are configured.
+    /// </summary>
+    void LogIdleModeEntered();
+
+    /// <summary>
+    /// Logs that the runtime has exited idle mode because feeds are now configured.
+    /// </summary>
+    void LogIdleModeExited();
 }
 

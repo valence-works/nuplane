@@ -4,7 +4,10 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Sources.Directory;
 
 namespace Nuplane.Extensions;
@@ -15,8 +18,8 @@ namespace Nuplane.Extensions;
 public static class NuplaneDirectorySourceServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers a directory-based desired-state source and, optionally, a file-change watcher
-    /// that triggers manual reconciliation when <c>.nupkg</c> files change.
+    /// Registers a directory-based desired-state source as a local directory feed and,
+    /// optionally, a file-change watcher that triggers reconciliation when <c>.nupkg</c> files change.
     /// </summary>
     /// <param name="services">The service collection to add to.</param>
     /// <param name="configure">The options configuration callback.</param>
@@ -41,9 +44,17 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
                     options.DirectoryPath = Path.GetFullPath(options.DirectoryPath);
                 }
 
-                if (string.IsNullOrWhiteSpace(options.SourceName))
+                // Default SourceName to FeedName when not explicitly set (T006).
+                if (string.IsNullOrWhiteSpace(options.SourceName) || options.SourceName == "Directory.Drop")
                 {
-                    options.SourceName = "Directory.Drop";
+                    if (!string.IsNullOrWhiteSpace(options.FeedName))
+                    {
+                        options.SourceName = options.FeedName;
+                    }
+                    else
+                    {
+                        options.SourceName = "Directory.Drop";
+                    }
                 }
 
                 var validIds = options.AllowlistedPackageIds
@@ -59,19 +70,42 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
 
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<DirectorySourceOptions>>().Value);
 
+        // Register the local directory feed into FeedResolutionOptions (T007).
+        // Preview options eagerly to get the FeedName and directory path.
+        var preview = new DirectorySourceOptions();
+        configure(preview);
+
+        if (!string.IsNullOrWhiteSpace(preview.FeedName) && !string.IsNullOrWhiteSpace(preview.DirectoryPath))
+        {
+            var normalizedPath = Path.GetFullPath(preview.DirectoryPath);
+            var feedUri = new Uri("file://" + normalizedPath.Replace('\\', '/'));
+            services.PostConfigure<FeedResolutionOptions>(feedOpts =>
+            {
+                // Only add if not already present (idempotent).
+                if (!feedOpts.Feeds.Any(f => string.Equals(f.Name, preview.FeedName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    feedOpts.Feeds.Add(new FeedDefinition(
+                        preview.FeedName,
+                        feedUri,
+                        FeedTrustLevel.Trusted,
+                        Credentials: null));
+                }
+            });
+        }
+
         services.AddSingleton<IDesiredPackageSource>(sp =>
         {
             var opts = sp.GetRequiredService<DirectorySourceOptions>();
+            var probeLogger = sp.GetService<ILogger<NupkgFileStabilityProbe>>();
+            var probe = probeLogger is not null ? new NupkgFileStabilityProbe(probeLogger) : null;
             return new DirectoryNupkgDesiredSource(
                 opts.SourceName,
                 opts.DirectoryPath,
                 opts.AllowlistedPackageIds,
-                sp.GetService<ILogger<DirectoryNupkgDesiredSource>>());
+                sp.GetService<ILogger<DirectoryNupkgDesiredSource>>(),
+                opts.FeedName,
+                probe);
         });
-
-        // Preview options to conditionally register the hosted service.
-        var preview = new DirectorySourceOptions();
-        configure(preview);
 
         if (preview.TriggerReconciliationOnChange)
         {
@@ -80,7 +114,8 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
                 new DirectorySourceReconciliationTriggerHostedService(
                     capturedOptions,
                     sp.GetRequiredService<IReconciliationService>(),
-                    sp.GetRequiredService<ILogger<DirectorySourceReconciliationTriggerHostedService>>()));
+                    sp.GetRequiredService<ILogger<DirectorySourceReconciliationTriggerHostedService>>(),
+                    sp.GetService<WatcherDegradationTracker>()));
         }
 
         return services;
@@ -92,6 +127,7 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService : Backgr
     private readonly DirectorySourceOptions options;
     private readonly IReconciliationService reconciliationService;
     private readonly ILogger<DirectorySourceReconciliationTriggerHostedService> logger;
+    private readonly WatcherDegradationTracker? watcherDegradationTracker;
 
     private readonly Channel<bool> changes = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
     {
@@ -103,33 +139,50 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService : Backgr
     public DirectorySourceReconciliationTriggerHostedService(
         DirectorySourceOptions options,
         IReconciliationService reconciliationService,
-        ILogger<DirectorySourceReconciliationTriggerHostedService> logger)
+        ILogger<DirectorySourceReconciliationTriggerHostedService> logger,
+        WatcherDegradationTracker? watcherDegradationTracker = null)
     {
         this.options = options ?? throw new ArgumentNullException(nameof(options));
         this.reconciliationService = reconciliationService ?? throw new ArgumentNullException(nameof(reconciliationService));
         this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        this.watcherDegradationTracker = watcherDegradationTracker;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         Directory.CreateDirectory(options.DirectoryPath);
 
-        watcher = new(options.DirectoryPath, "*.nupkg")
+        try
         {
-            IncludeSubdirectories = false,
-            NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.LastWrite
-        };
+            watcher = new(options.DirectoryPath, "*.nupkg")
+            {
+                IncludeSubdirectories = false,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.LastWrite
+            };
 
-        watcher.Created += OnChanged;
-        watcher.Changed += OnChanged;
-        watcher.Deleted += OnChanged;
-        watcher.Renamed += OnRenamed;
-        watcher.EnableRaisingEvents = true;
+            watcher.Created += OnChanged;
+            watcher.Changed += OnChanged;
+            watcher.Deleted += OnChanged;
+            watcher.Renamed += OnRenamed;
+            watcher.EnableRaisingEvents = true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Directory watcher failed to start for feed '{FeedName}' at '{DirectoryPath}'. Falling back to scheduled reconciliation only.",
+                options.FeedName,
+                options.DirectoryPath);
+            watcherDegradationTracker?.MarkDegraded();
+            return;
+        }
 
         logger.LogInformation(
-            "Directory watcher enabled for Nuplane desired-state source at '{DirectoryPath}' with debounce {DebounceMs}ms.",
+            "Directory watcher enabled for feed '{FeedName}' at '{DirectoryPath}' (debounce: {DebounceMs}ms, trigger type: {TriggerType}).",
+            options.FeedName,
             options.DirectoryPath,
-            (int)options.DebounceWindow.TotalMilliseconds);
+            (int)options.DebounceWindow.TotalMilliseconds,
+            nameof(TriggerType.DirectoryChange));
 
         try
         {
@@ -149,7 +202,8 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService : Backgr
 
                 try
                 {
-                    var result = await reconciliationService.TriggerManualAsync(stoppingToken);
+                    var trigger = new ReconciliationTrigger(TriggerType.DirectoryChange, Source: options.FeedName);
+                    var result = await reconciliationService.TriggerAsync(trigger, stoppingToken);
                     logger.LogInformation(
                         "Directory-triggered reconcile completed. Skipped={Skipped}, Degraded={IsDegraded}.",
                         result.Skipped,

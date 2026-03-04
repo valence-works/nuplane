@@ -166,5 +166,8 @@ public sealed class TrustAndLockGateMiddlewareTests
         public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode) { }
         public void LogAdminTriggerOutcome(string correlationId, string outcomeCode, string? reasonCode) { }
         public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState) { }
+        public void LogTrigger(string correlationId, string triggerType, string? triggerSource) { }
+        public void LogIdleModeEntered() { }
+        public void LogIdleModeExited() { }
     }
 }

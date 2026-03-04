@@ -129,11 +129,17 @@ public sealed class ManualReconcileObservabilityIntegrationTests
     {
         public Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken ct) =>
             Task.FromResult(result);
+
+        public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken ct) =>
+            Task.FromResult(result);
     }
 
     private sealed class ThrowingReconciliationService(Exception exception) : IReconciliationService
     {
         public Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken ct) =>
+            throw exception;
+
+        public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken ct) =>
             throw exception;
     }
 
@@ -157,5 +163,8 @@ public sealed class ManualReconcileObservabilityIntegrationTests
         public void LogAggregationOutcome(string correlationId, int packageCount, int failedSourceCount) { }
         public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode) { }
         public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState) { }
+        public void LogTrigger(string correlationId, string triggerType, string? triggerSource) { }
+        public void LogIdleModeEntered() { }
+        public void LogIdleModeExited() { }
     }
 }
