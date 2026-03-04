@@ -1,77 +1,124 @@
 # Data Model — Phase 4 Cluster-Convergent Runtime Loading (Lean)
 
 ## Entity: DesiredManifest
-- Purpose: Deterministic desired-state artifact that drives convergence across replicas.
+
+- Purpose: Canonical deterministic desired-state document shared by replicas.
 - Fields:
   - `schemaVersion` (string, required)
-  - `generatedAt` (datetime, required)
-  - `packages` (list, required)
-    - `id` (string, required)
-    - `version` (string, required; exact)
-    - `sourceHint` (string, optional; e.g., feed name / container path)
-    - `sha512` (string, optional)
-- Validation rules:
-  - Duplicate `id` entries are not permitted within one manifest.
-  - Exact versions are required for deterministic convergence.
+  - `generatedAtUtc` (datetime, required)
+  - `packages` (array, required, stable-sorted by `id` then `version`)
+    - `id` (string, required, case-insensitive identity)
+    - `version` (string, required, exact semantic/package version)
+    - `sourceHint` (string, optional)
+    - `sha512` (string, optional integrity hint)
+- Validation:
+  - Duplicate package IDs in one manifest are invalid.
+  - Version ranges/floating versions are invalid.
+  - Invalid manifest read/parse is degraded and non-mutating.
 
 ## Entity: DesiredManifestReadResult
-- Purpose: Captures manifest read/parse outcome for one cycle.
+
+- Purpose: Result envelope for manifest acquisition/parsing for a single cycle.
 - Fields:
-  - `status` (enum: `Succeeded`, `NotFound`, `Unreadable`, `Invalid`)
+  - `status` (`Succeeded | NotFound | Unreadable | Invalid`)
   - `reasonCode` (string, required)
+  - `sourceId` (string, required)
   - `correlationId` (string, required)
-  - `observedAt` (datetime, required)
-- Validation rules:
-  - `Invalid` and `Unreadable` must produce degraded, non-mutating outcomes.
+  - `observedAtUtc` (datetime, required)
 
 ## Entity: DesiredAggregationOutcome
-- Purpose: Deterministic aggregation result across desired sources.
+
+- Purpose: Deterministic desired package set built from all configured desired sources.
 - Fields:
-  - `requestedPackages` (list, required)
-  - `duplicateResolution` (list, optional)
+  - `requestedPackages` (array of package requests, required, deterministic ordering)
+  - `duplicateResolution` (array, optional)
     - `packageId` (string, required)
-    - `selectedSource` (string, required)
+    - `winningSourceId` (string, required)
+    - `losingSourceIds` (array, required)
     - `reasonCode` (string, required)
+  - `degradedSources` (array, optional)
   - `correlationId` (string, required)
-- Validation rules:
-  - Identical inputs must yield identical `requestedPackages` ordering and content.
+- Validation:
+  - Identical source inputs produce byte-for-byte equivalent request projection.
+  - Source outage is isolated to impacted source/package requests.
+
+## Entity: ReconciliationCycleOutcome
+
+- Purpose: Top-level reconciliation cycle summary for logs/metrics/health/admin views.
+- Fields:
+  - `cycleId` (string, required)
+  - `correlationId` (string, required)
+  - `triggerType` (`Startup | Polling | Manual`)
+  - `status` (`Succeeded | Degraded | FailedNonMutating`)
+  - `startedAtUtc` (datetime, required)
+  - `completedAtUtc` (datetime, required)
+  - `reasonCodes` (array, optional)
 
 ## Entity: AcquisitionOutcome
-- Purpose: Captures per-package acquisition/activation boundary result.
+
+- Purpose: Per-package acquisition + activation stage result.
 - Fields:
   - `packageId` (string, required)
   - `version` (string, required)
-  - `status` (enum: `Acquired`, `Activated`, `Failed`, `Skipped`)
-  - `stage` (enum: `Resolve`, `Download`, `Validate`, `Activate`)
+  - `stage` (`Resolve | Download | Validate | Activate`)
+  - `status` (`Succeeded | Failed | Skipped`)
   - `reasonCode` (string, required)
   - `correlationId` (string, required)
-- Validation rules:
-  - Any failure must preserve active/LKG pointers.
+- Validation:
+  - Any stage failure preserves LKG active pointer.
+  - Unrelated package requests continue where safe.
 
 ## Entity: LoaderOutcome
-- Purpose: Captures per-package loader boundary outcome when loader is enabled.
+
+- Purpose: Optional loader-boundary execution result per activated package.
 - Fields:
   - `packageId` (string, required)
   - `version` (string, required)
-  - `status` (enum: `Loaded`, `Failed`, `Skipped`)
+  - `status` (`Loaded | Failed | Skipped`)
   - `reasonCode` (string, required)
   - `correlationId` (string, required)
-- Validation rules:
-  - Loader failures do not crash the host and do not corrupt the store.
+- Validation:
+  - Loader failure is isolated and cannot crash host process.
 
 ## Entity: OperationalSnapshot
-- Purpose: Operator-facing point-in-time state projection.
+
+- Purpose: Operator-facing consistent read model.
 - Fields:
-  - `snapshotAt` (datetime, required)
-  - `activePackages` (list, required)
-  - `lastReconcileOutcome` (object, required)
-  - `healthState` (enum: `Healthy`, `Degraded`)
+  - `snapshotAtUtc` (datetime, required)
+  - `activePackages` (array, required)
+  - `lastReconcile` (`ReconciliationCycleOutcome`, required)
+  - `healthState` (`Healthy | Degraded`)
+  - `degradedReasons` (array, optional)
   - `correlationId` (string, required)
-- Validation rules:
-  - Snapshot must be internally consistent for one correlation scope.
+
+## Entity: Phase4OperationalOptions
+
+- Purpose: Root configuration object for manifest/admin/loader/polling behaviors.
+- Fields (representative):
+  - `Manifest` (nested options)
+  - `Admin` (nested options)
+  - `Loader` (nested options)
+  - `PollInterval` (timespan)
+  - `Retry` (nested bounded retry/backoff options)
+- Validation:
+  - Enforced via `IValidateOptions<T>` validators.
+  - Required options fail startup via `ValidateOnStart()`.
 
 ## Relationships
-- One `DesiredManifestReadResult` influences one `DesiredAggregationOutcome` per cycle.
-- One `DesiredAggregationOutcome` produces zero or more `AcquisitionOutcome` results.
-- When loader is enabled, each activated package may produce a `LoaderOutcome`.
-- One `OperationalSnapshot` summarizes the last reconcile outcome, active set, and current health.
+
+- One `DesiredManifestReadResult` contributes to one `DesiredAggregationOutcome` per cycle.
+- One `DesiredAggregationOutcome` drives one `ReconciliationCycleOutcome` and many `AcquisitionOutcome` rows.
+- Successful activation may emit one `LoaderOutcome` per package when loader is enabled.
+- `OperationalSnapshot` projects active state + `ReconciliationCycleOutcome` + health for admin reads.
+
+## State Transitions
+
+### Reconciliation cycle
+
+`Idle -> CollectDesiredState -> AggregateDesiredState -> AcquireAndValidate -> PublishAndSwitch -> (OptionalLoad) -> EmitObservability -> Idle`
+
+Failure branches:
+
+- Manifest/source failure: transition to `EmitObservability` with `Degraded` and non-mutating result for impacted scope.
+- Acquisition/activation failure: rollback to LKG pointer, then `EmitObservability` with degraded reason.
+- Loader failure: keep active package state unchanged, mark loader failure, continue cycle completion.

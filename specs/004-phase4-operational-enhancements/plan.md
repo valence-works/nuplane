@@ -1,51 +1,49 @@
 # Implementation Plan: Phase 4 Cluster-Convergent Runtime Loading (Lean)
 
-**Branch**: `004-phase4-operational-enhancements` | **Date**: 2026-03-03 | **Spec**: `/specs/004-phase4-operational-enhancements/spec.md`
+**Branch**: `004-phase4-operational-enhancements` | **Date**: 2026-03-04 | **Spec**: `/specs/004-phase4-operational-enhancements/spec.md`
 **Input**: Feature specification from `/specs/004-phase4-operational-enhancements/spec.md`
 
 ## Summary
 
-Deliver a lean Phase 4 that enables clusters of identical replicas to converge on the same active NuGet package set over time by:
-
-- adding a deterministic shared desired manifest input (exact versions)
-- ensuring deterministic aggregation across multiple desired sources
-- supporting startup + polling reconciliation plus explicit reconcile triggers
-- keeping the store node-local with transactional/LKG safety
-- providing an optional admin surface (read snapshot + trigger reconcile)
-- providing an optional loader boundary integration point (separate module)
-
-Explicitly defer progressive delivery concepts (channels/staged promotion workflows/canary targeting) to a later phase.
+Implement deterministic cluster convergence using a shared desired manifest and deterministic multi-source aggregation, with startup + periodic + explicit reconciliation triggers, optional loader integration, and an optional admin operational surface. Preserve transactional store safety (stage/validate/publish/atomic-switch), LKG fallback, and degraded non-mutating behavior for manifest/source/acquisition/loader/admin failures, all with correlation-linked observability.
 
 ## Technical Context
 
-**Language/Version**: C# on .NET 8 (LTS)
-**Primary Dependencies**: `Microsoft.Extensions.*` hosting/options/logging/health, `System.Diagnostics.Metrics`
-**Dependency Management**: NuGet Central Package Management via `Directory.Packages.props`
-**Storage**: Deterministic file-based store (`state.json`, immutable package folders, active pointers) per node
-**Testing**: xUnit unit tests + integration tests across runtime/store/nuget/hosting boundaries
-**Target Platform**: Cross-platform .NET 8 hosts (Linux/macOS/Windows)
-**Constraints**:
-- deterministic/idempotent repeated reconciliation cycles for identical inputs
-- transactional activation safety with last-known-good (LKG) fallback
-- failure isolation: source/manifest/acquisition/loader/admin failures do not force unrelated packages to fail
-- host-neutral: admin auth and cluster fan-out are integration concerns
+**Language/Version**: C# on .NET multi-targeting (`net8.0;net9.0;net10.0`)  
+**Primary Dependencies**: `Microsoft.Extensions.*` (DI/Options/Hosting/Logging), xUnit, NSubstitute  
+**Storage**: Node-local package/store on filesystem (immutable versioned artifacts + active pointer metadata)  
+**Testing**: `dotnet test` with unit tests in `test/Nuplane.Runtime.Tests` and boundary/integration tests in `test/Nuplane.Integration.Tests`  
+**Target Platform**: Cross-platform .NET host processes (Linux/macOS/Windows server/worker hosts)
+**Project Type**: Multi-project .NET library/runtime + optional hosting/admin integration packages  
+**Performance Goals**: Converge within bounded poll interval + retry window (`SC-001`), admin read+trigger p95 within 120s end-to-end (`SC-003`)  
+**Constraints**: Deterministic idempotent reconciliation, bounded retries/backoff, no distributed locks/election, host-neutral auth and activation semantics  
+**Scale/Scope**: Fleet replicas reading shared desired-state inputs, each with node-local store; Phase 4 scope limited to convergence + operability baseline
 
 ## Constitution Check
 
-### Pre-Research Gate Assessment
+*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Deterministic reconciliation: PASS — manifest format uses exact versions; aggregation tie-break rules are required and testable.
-- Transactional store safety: PASS — no changes to atomic activation/LKG semantics; new failure modes must be non-mutating.
-- Source integrity: PASS — no new secret handling requirements; admin auth remains host-supplied; manifest/source inputs are explicitly configured.
-- Observability: PASS — correlation-linked logs/metrics/health plus failure observer events required for new boundaries (manifest/source/loader/admin).
-- Test discipline: PASS — unit + integration tests required for determinism, degraded paths, and boundary behaviors.
+### Pre-Design Gate Assessment
 
-### Post-Design Gate Re-check
+- Deterministic reconciliation: PASS — plan uses exact-version manifest + deterministic aggregation ordering and explicit duplicate tie-break rules; apply path remains idempotent with bounded retry windows.
+- Transactional store safety: PASS — reconciliation keeps stage/validate/publish/atomic-switch semantics and explicit LKG preservation on any failure.
+- Source & supply chain integrity: PASS — only configured trusted sources influence desired state; package identity/version validation remains mandatory; secrets remain out of source control.
+- Observability & operability: PASS — each cycle requires correlation ID, structured logs, metrics baseline, health projection, and explicit failure observer events.
+- Test & contract discipline: PASS — unit + integration/contract coverage is required for determinism, boundaries, and regression paths.
+- Decomposition discipline: PASS — mechanism and invocation drivers are separated in tasks; one-artifact-per-task decomposition is present; config properties have consumer tasks.
+- Options validation discipline: PASS — options stay data-only; validation routed through `IValidateOptions<T>` with fail-fast startup registration (`ValidateOnStart`).
 
-- Deterministic reconciliation: PASS — contracts and tests enforce canonicalization and tie-break determinism.
-- Transactional store safety: PASS — injected failures (manifest parse, source outage, loader failure) do not corrupt store or violate LKG.
-- Observability: PASS — explicit reason codes and correlation IDs surface failures as events + logs/metrics/health.
-- Host neutrality: PASS — avoids leader election/distributed locks; cluster-wide triggering is integration-level.
+### Post-Design Re-Check
+
+- Deterministic reconciliation: PASS
+- Transactional store safety: PASS
+- Source & supply chain integrity: PASS
+- Observability & operability: PASS
+- Test & contract discipline: PASS
+- Decomposition discipline: PASS
+- Options validation discipline: PASS
+
+No constitution violations require exception tracking.
 
 ## Project Structure
 
@@ -57,12 +55,7 @@ specs/004-phase4-operational-enhancements/
 ├── research.md
 ├── data-model.md
 ├── quickstart.md
-├── quickstart-validation.md
 ├── contracts/
-│   ├── desired-manifest-contract.md
-│   ├── desired-aggregation-contract.md
-│   ├── loader-boundary-contract.md
-│   └── admin-operations-contract.md
 └── tasks.md
 ```
 
@@ -72,28 +65,26 @@ specs/004-phase4-operational-enhancements/
 src/
 ├── Nuplane.Abstractions/
 ├── Nuplane.Runtime/
-│   ├── Configuration/
-│   ├── Desired/
-│   ├── Reconciliation/
-│   ├── Observability/
-│   └── Health/
 ├── Nuplane.Store/
-├── Nuplane.NuGet/
-├── Nuplane.Hosting/
 ├── Nuplane.Sources.Directory/
-└── Nuplane.Loading/              # optional module
+├── Nuplane.Loading.Abstractions/
+├── Nuplane.Loading/
+├── Nuplane.Hosting/
+└── Nuplane.Admin.AspNetCore/        # optional admin surface package (Phase 4)
 
 test/
 ├── Nuplane.Runtime.Tests/
+├── Nuplane.Integration.Tests/
 ├── Nuplane.Store.Tests/
-├── Nuplane.NuGet.Tests/
-└── Nuplane.Integration.Tests/
+└── Nuplane.Loading.Tests/
+
+samples/
+├── Nuplane.Sample.Console/
+└── Nuplane.Sample.AspNetCore/
 ```
+
+**Structure Decision**: Use the existing multi-project runtime/library structure. Add only focused Phase 4 artifacts within `Nuplane.Abstractions`, `Nuplane.Runtime`, optional `Nuplane.Hosting`/`Nuplane.Admin.AspNetCore`, and corresponding unit/integration test projects.
 
 ## Complexity Tracking
 
-> No constitution violations identified for this feature plan.
-
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| *(none)*  |            |                                     |
+No constitution gate violations or complexity exceptions identified.
