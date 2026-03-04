@@ -37,6 +37,8 @@ public static class NuplaneLoadingServiceCollectionExtensions
         services.AddSingleton<SharedAssemblyPolicyMatcher>();
         services.AddSingleton<PackageLoader>();
         services.AddSingleton<IPackageLoader>(sp => sp.GetRequiredService<PackageLoader>());
+        services.AddSingleton<PackageTypeScanner>();
+        services.AddSingleton<IPackageTypeScanner>(sp => sp.GetRequiredService<PackageTypeScanner>());
         services.AddSingleton<PackageUnloadCoordinator>();
         services.AddSingleton<IPackageUnloadCoordinator>(sp => sp.GetRequiredService<PackageUnloadCoordinator>());
 

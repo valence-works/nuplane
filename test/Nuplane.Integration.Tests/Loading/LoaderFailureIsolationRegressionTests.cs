@@ -124,6 +124,12 @@ public sealed class LoaderFailureIsolationRegressionTests
             context = null;
             return false;
         }
+
+        public bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context)
+        {
+            context = null;
+            return false;
+        }
     }
 
     /// <summary>
@@ -168,6 +174,12 @@ public sealed class LoaderFailureIsolationRegressionTests
         }
 
         public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
+        {
+            context = null;
+            return false;
+        }
+
+        public bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context)
         {
             context = null;
             return false;

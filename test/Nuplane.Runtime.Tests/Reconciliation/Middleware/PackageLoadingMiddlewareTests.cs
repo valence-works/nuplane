@@ -112,6 +112,12 @@ public sealed class PackageLoadingMiddlewareTests
             context = null;
             return false;
         }
+
+        public bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context)
+        {
+            context = null;
+            return false;
+        }
     }
 
     private sealed class PassthroughAllowlistGate : IAllowlistGate

@@ -167,5 +167,11 @@ public sealed class LoaderBoundaryContractTests
             context = null;
             return false;
         }
+
+        public bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context)
+        {
+            context = null;
+            return false;
+        }
     }
 }

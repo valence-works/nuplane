@@ -29,6 +29,12 @@ internal sealed class NoOpPackageLoader : IPackageLoader
         context = null;
         return false;
     }
+
+    public bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context)
+    {
+        context = null;
+        return false;
+    }
 }
 
 internal sealed class NoOpPackageUnloadCoordinator : IPackageUnloadCoordinator

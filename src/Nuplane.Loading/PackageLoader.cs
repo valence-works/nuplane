@@ -105,6 +105,20 @@ public sealed class PackageLoader : IPackageLoader
         return false;
     }
 
+    /// <inheritdoc />
+    public bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context)
+    {
+        var key = BuildKey(packageId, version);
+        if (contexts.TryGetValue(key, out var existing) && existing is not null)
+        {
+            context = new PackageLoadContextHandle(key, existing);
+            return true;
+        }
+
+        context = null;
+        return false;
+    }
+
     private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";
 
     private static string ResolveMainAssemblyPath(string installPath)

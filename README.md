@@ -135,6 +135,53 @@ options.Desired.FromNupkgDirectory("drop-folder");
 Dropping a `.nupkg` into the folder adds it.
 Removing the file removes it.
 
+## 🧪 End-to-End ASP.NET Plugin Demo
+
+The sample app now demonstrates the full lifecycle:
+
+1. Directory-based desired state (`drop-folder`)
+2. File-change-triggered reconcile (watcher + debounce)
+3. `INuplaneObserver` notifications on completion
+4. Assembly loading via `IPackageLoaderBoundary`
+5. Type discovery for `IPlugin` implementations
+
+### Build and pack the sample plugin
+
+```bash
+dotnet pack samples/Nuplane.Sample.Plugin/Nuplane.Sample.Plugin.csproj -c Debug
+```
+
+This produces a `.nupkg` like:
+
+- `samples/Nuplane.Sample.Plugin/bin/Debug/Nuplane.Sample.Plugin.1.0.0.nupkg`
+
+### Start the ASP.NET sample
+
+```bash
+dotnet run --project samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj
+```
+
+The app is configured (via `NuplaneSample` settings in `appsettings.json`) to watch:
+
+- `drop-folder`
+
+### Trigger reconciliation by dropping a package
+
+In another shell:
+
+```bash
+mkdir -p drop-folder
+cp samples/Nuplane.Sample.Plugin/bin/Debug/Nuplane.Sample.Plugin.1.0.0.nupkg drop-folder/
+```
+
+Expected behavior:
+
+- The file watcher detects the new `.nupkg` and triggers manual reconcile asynchronously.
+- Nuplane applies any changes and emits `PackageChangeSet` events.
+- `PluginDiscoveryObserver` scans changed package contexts for `IPlugin` and logs discovered type names (for example, `Nuplane.Sample.Plugin.HelloPlugin`).
+
+To trigger another cycle, update/remove packages in `drop-folder`.
+
 ## ⚙️ Phase 2 Operator Guidance
 
 Use these conventions when enabling advanced feed governance:

@@ -130,6 +130,39 @@ public interface IPackageLoader
     /// <param name="context">When successful, receives the removed load context handle.</param>
     /// <returns><see langword="true"/> if the context was found and removed; otherwise <see langword="false"/>.</returns>
     bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context);
+
+    /// <summary>
+    /// Attempts to get the active assembly load context for a specific package version without removing it.
+    /// </summary>
+    /// <param name="packageId">The package identifier.</param>
+    /// <param name="version">The package version.</param>
+    /// <param name="context">When successful, receives the active load context handle.</param>
+    /// <returns><see langword="true"/> if the context exists; otherwise <see langword="false"/>.</returns>
+    bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context);
+}
+
+/// <summary>
+/// Provides package-scoped type discovery over assemblies loaded into package load contexts.
+/// </summary>
+public interface IPackageTypeScanner
+{
+    /// <summary>
+    /// Finds concrete, non-abstract types within the loaded package that implement <typeparamref name="TInterface"/>.
+    /// </summary>
+    /// <typeparam name="TInterface">The contract type to scan for.</typeparam>
+    /// <param name="packageId">The package identifier.</param>
+    /// <param name="version">The package version.</param>
+    /// <returns>The discovered matching types.</returns>
+    IReadOnlyList<Type> FindTypes<TInterface>(string packageId, string version);
+
+    /// <summary>
+    /// Finds concrete, non-abstract types within the loaded package that implement the provided contract type.
+    /// </summary>
+    /// <param name="interfaceType">The interface or base type to scan for.</param>
+    /// <param name="packageId">The package identifier.</param>
+    /// <param name="version">The package version.</param>
+    /// <returns>The discovered matching types.</returns>
+    IReadOnlyList<Type> FindTypes(Type interfaceType, string packageId, string version);
 }
 
 /// <summary>

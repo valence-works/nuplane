@@ -121,6 +121,12 @@ public sealed class UnloadMiddlewareTests
             context = removalSucceeds ? new PackageLoadContextHandle($"{packageId}@{version}", new object()) : null;
             return removalSucceeds;
         }
+
+        public bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context)
+        {
+            context = removalSucceeds ? new PackageLoadContextHandle($"{packageId}@{version}", new object()) : null;
+            return removalSucceeds;
+        }
     }
 
     private sealed class FakeCoordinator(UnloadOutcome outcome) : IPackageUnloadCoordinator
