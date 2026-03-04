@@ -108,10 +108,9 @@ public sealed class NupkgFileStabilityProbeTests
 
         await probeTask; // ensure our mutation task completes
 
-        // File changed size between checks, but with only 2 attempts
-        // it may or may not catch both sizes. This test verifies no exceptions.
-        // The probe handles this gracefully either way.
-        Assert.True(result || !result); // Probe doesn't crash
+        // The file was mutated during probing. The probe should handle this
+        // gracefully without throwing, returning false because the size changed.
+        Assert.False(result);
     }
 
     [Fact]

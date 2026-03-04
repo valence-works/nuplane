@@ -29,13 +29,13 @@ public sealed class ReconciliationHostedService : BackgroundService
         ReconciliationOptions options,
         ConvergenceOptions convergenceOptions,
         ILogger<ReconciliationHostedService> logger,
-        ReconciliationMetrics? metrics = null)
+        ReconciliationMetrics metrics)
     {
         _reconciliationService = reconciliationService ?? throw new ArgumentNullException(nameof(reconciliationService));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _convergenceOptions = convergenceOptions ?? throw new ArgumentNullException(nameof(convergenceOptions));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _metrics = metrics ?? new ReconciliationMetrics(new ReconciliationTelemetry());
+        _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
     }
 
     /// <inheritdoc />
