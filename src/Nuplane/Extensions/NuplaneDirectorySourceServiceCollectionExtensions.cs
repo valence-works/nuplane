@@ -60,13 +60,14 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<DirectorySourceOptions>>().Value);
 
         services.AddSingleton<IDesiredPackageSource>(sp =>
-        {
-            var opts = sp.GetRequiredService<DirectorySourceOptions>();
-            return new DirectoryNupkgDesiredSource(
-                opts.SourceName,
-                opts.DirectoryPath,
-                opts.AllowlistedPackageIds);
-        });
+{
+    var opts = sp.GetRequiredService<DirectorySourceOptions>();
+    return new DirectoryNupkgDesiredSource(
+        opts.SourceName,
+        opts.DirectoryPath,
+        opts.AllowlistedPackageIds,
+        sp.GetService<ILogger<DirectoryNupkgDesiredSource>>());
+});
 
         // Preview options to conditionally register the hosted service.
         var preview = new DirectorySourceOptions();

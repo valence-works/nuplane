@@ -184,12 +184,6 @@ internal sealed class TrustedSourcePolicyOptionsValidator : IValidateOptions<Tru
             errors.Add("TrustedSourcePolicy is enabled but no trusted source names are configured. All sources will be rejected.");
         }
 
-        if (options.AllowSecretReferences && options.RejectInlineCredentials == false)
-        {
-            // Not an error, but both allowing secrets and inline credentials is a weak security posture.
-            // We still allow it — validation only enforces hard invariants.
-        }
-
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
     }
 }
