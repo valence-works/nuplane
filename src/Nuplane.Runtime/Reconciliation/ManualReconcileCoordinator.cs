@@ -42,18 +42,22 @@ public sealed class ManualReconcileCoordinator
 {
     private readonly IReconciliationService _reconciliationService;
     private readonly IReconciliationLogger _logger;
+    private readonly ReconciliationMetrics? _metrics;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ManualReconcileCoordinator"/> class.
     /// </summary>
     /// <param name="reconciliationService">The reconciliation service to trigger.</param>
     /// <param name="logger">The reconciliation logger for diagnostics.</param>
+    /// <param name="metrics">Optional reconciliation metrics to record admin trigger outcomes.</param>
     public ManualReconcileCoordinator(
         IReconciliationService reconciliationService,
-        IReconciliationLogger logger)
+        IReconciliationLogger logger,
+        ReconciliationMetrics? metrics = null)
     {
         _reconciliationService = reconciliationService ?? throw new ArgumentNullException(nameof(reconciliationService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _metrics = metrics;
     }
 
     /// <summary>
@@ -73,6 +77,7 @@ public sealed class ManualReconcileCoordinator
             if (result.Skipped)
             {
                 _logger.LogAdminTriggerOutcome(correlationId, nameof(ManualReconcileOutcomeCode.Rejected), "single-flight-active");
+                _metrics?.RecordAdminTrigger(rejected: true);
                 return new ManualReconcileOutcome(
                     ManualReconcileOutcomeCode.Rejected,
                     correlationId,
@@ -81,6 +86,7 @@ public sealed class ManualReconcileCoordinator
             }
 
             _logger.LogAdminTriggerOutcome(correlationId, nameof(ManualReconcileOutcomeCode.Completed), null);
+            _metrics?.RecordAdminTrigger(rejected: false);
             return new ManualReconcileOutcome(
                 ManualReconcileOutcomeCode.Completed,
                 correlationId,
@@ -96,6 +102,7 @@ public sealed class ManualReconcileCoordinator
 #pragma warning restore CA1031
         {
             _logger.LogAdminTriggerOutcome(correlationId, nameof(ManualReconcileOutcomeCode.Unavailable), ex.Message);
+            _metrics?.RecordAdminTrigger(rejected: false);
             return new ManualReconcileOutcome(
                 ManualReconcileOutcomeCode.Unavailable,
                 correlationId,

@@ -15,12 +15,14 @@ internal sealed class DesiredStateReadMiddleware(
     IReconciliationRetryPolicy retryPolicy,
     DesiredSourceSnapshotCache snapshotCache,
     IFailureRecorder failureRecorder,
-    IReconciliationLogger logger) : IReconciliationMiddleware
+    IReconciliationLogger logger,
+    ReconciliationMetrics metrics) : IReconciliationMiddleware
 {
     public async Task InvokeAsync(ReconciliationCycleContext context, Func<Task> next)
     {
-        var readResult = await ReadDesiredRequestsWithFallbackAsync(context.CorrelationId, context.CancellationToken);
+        var (readResult, sourceOutageCount) = await ReadDesiredRequestsWithFallbackAsync(context.CorrelationId, context.CancellationToken);
         context.ReadResult = readResult;
+        context.SourceOutageCount = sourceOutageCount;
 
         var aggregateResult = await desiredStateAggregator.AggregateAsync(
             [new StaticDesiredSource(readResult.Requests)],
@@ -32,13 +34,13 @@ internal sealed class DesiredStateReadMiddleware(
         {
             await failureRecorder.RecordAsync(sourceName, "source-aggregate", ex.Message, context.CorrelationId, context.CancellationToken);
             logger.LogSourceOutage(context.CorrelationId, sourceName, ex.Message);
+            metrics.RecordSourceOutage();
+            context.SourceOutageCount++;
         }
 
-        context.SourceOutageCount = aggregateResult.SourceErrors.Count;
-
-        if (aggregateResult.SourceErrors.Count > 0)
+        if (context.SourceOutageCount > 0)
         {
-            logger.LogAggregationOutcome(context.CorrelationId, aggregateResult.Requests.Count, aggregateResult.SourceErrors.Count);
+            logger.LogAggregationOutcome(context.CorrelationId, aggregateResult.Requests.Count, context.SourceOutageCount);
         }
 
         var allowlistedRequests = allowlistGate.Enforce(aggregateResult.Requests, sourceTrustOptions);
@@ -49,11 +51,12 @@ internal sealed class DesiredStateReadMiddleware(
         await next();
     }
 
-    private async Task<DesiredReadResult> ReadDesiredRequestsWithFallbackAsync(string correlationId, CancellationToken cancellationToken)
+    private async Task<(DesiredReadResult Result, int SourceOutageCount)> ReadDesiredRequestsWithFallbackAsync(string correlationId, CancellationToken cancellationToken)
     {
         var requests = new List<PackageRequest>();
         var usedFallback = false;
         var freshReads = 0;
+        var sourceOutageCount = 0;
 
         var orderedSources = sources
             .Select(source => new
@@ -82,7 +85,10 @@ internal sealed class DesiredStateReadMiddleware(
             catch (Exception ex)
             {
                 usedFallback = true;
+                sourceOutageCount++;
                 await failureRecorder.RecordAsync(sourceName, "source-read", ex.Message, correlationId, cancellationToken);
+                logger.LogSourceOutage(correlationId, sourceName, ex.Message);
+                metrics.RecordSourceOutage();
 
                 var fallback = await snapshotCache.LoadSnapshotAsync(sourceName, cancellationToken);
                 if (fallback is not null)
@@ -92,10 +98,10 @@ internal sealed class DesiredStateReadMiddleware(
             }
         }
 
-        return new(
+        return (new(
             requests,
             usedFallback,
-            AllSourcesFresh: freshReads == orderedSources.Length);
+            AllSourcesFresh: freshReads == orderedSources.Length), sourceOutageCount);
     }
 }
 

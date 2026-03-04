@@ -122,7 +122,7 @@ public ReconciliationService(
         pipeline = new ReconciliationPipeline();
         pipeline.Use(new DesiredStateReadMiddleware(
             sourcesList, sourceTrustOptions, desiredStateAgg, allowlistGate,
-            retryPolicy, snapshotCache, failureRec, loggerInstance));
+            retryPolicy, snapshotCache, failureRec, loggerInstance, metricsInstance));
         pipeline.Use(new PackageResolutionMiddleware(applyExecutor, loggerInstance));
         pipeline.Use(new TrustAndLockGateMiddleware(
             feedResOpts, feedTrustOpts, feedTrustPolicyEvaluator,

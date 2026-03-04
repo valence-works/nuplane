@@ -77,7 +77,8 @@ public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
     public void RecordSourceOutage() => telemetry.SourceOutageCounter.Add(1);
 
     /// <summary>Records a package acquisition failure.</summary>
-    public void RecordAcquisitionFailed() => telemetry.AcquisitionFailedCounter.Add(1);
+    /// <param name="count">Number of acquisition failures to record. Defaults to 1.</param>
+    public void RecordAcquisitionFailed(int count = 1) => telemetry.AcquisitionFailedCounter.Add(count);
 
     /// <summary>Records a completed convergence cycle.</summary>
     /// <param name="degraded">Whether the cycle completed in degraded state.</param>

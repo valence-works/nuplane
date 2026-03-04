@@ -21,6 +21,7 @@ internal sealed class PackageLoadingMiddleware(
         if (!loadingOptions.Enabled || context.TrustAndLockPassed.Count == 0)
         {
             // Emit boundary Skipped outcomes for all packages when loading is disabled
+            var skippedCount = context.TrustAndLockPassed.Count;
             foreach (var package in context.TrustAndLockPassed)
             {
                 logger.LogLoaderBoundaryOutcome(
@@ -28,6 +29,11 @@ internal sealed class PackageLoadingMiddleware(
                     package.Id,
                     nameof(PackageLoaderOutcome.Skipped),
                     "loader-disabled");
+            }
+
+            if (skippedCount > 0)
+            {
+                metrics.RecordLoaderBoundaryOutcome(succeeded: 0, failed: 0, skipped: skippedCount);
             }
 
             await next();
@@ -55,12 +61,15 @@ internal sealed class PackageLoadingMiddleware(
         var loadResult = await packageLoader.EnsureLoadedAsync(context.TrustAndLockPassed, sharedPolicy, context.CancellationToken);
 
         var failedLoadIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var loaderSucceeded = 0;
+        var loaderFailed = 0;
 
         foreach (var package in context.TrustAndLockPassed)
         {
             if (loadResult.FailedByPackageId.TryGetValue(package.Id, out var reason))
             {
                 failedLoadIds.Add(package.Id);
+                loaderFailed++;
                 metrics.RecordLoadFailed();
                 logger.LogLoadOutcome(context.CorrelationId, package.Id, succeeded: false, reason);
                 logger.LogLoaderBoundaryOutcome(
@@ -77,6 +86,7 @@ internal sealed class PackageLoadingMiddleware(
             }
             else
             {
+                loaderSucceeded++;
                 metrics.RecordLoadSucceeded();
                 logger.LogLoadOutcome(context.CorrelationId, package.Id, succeeded: true, reason: null);
                 logger.LogLoaderBoundaryOutcome(
@@ -86,6 +96,8 @@ internal sealed class PackageLoadingMiddleware(
                     null);
             }
         }
+
+        metrics.RecordLoaderBoundaryOutcome(loaderSucceeded, loaderFailed, skipped: 0);
 
         // Update trust-and-lock-passed to exclude load failures
         context.TrustAndLockPassed = context.TrustAndLockPassed

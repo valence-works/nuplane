@@ -20,11 +20,16 @@ public sealed class DesiredManifestReader
     /// <param name="filePath">The path to the shared desired manifest JSON file.</param>
     /// <param name="correlationId">The correlation identifier for the current cycle.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <param name="expectedSchemaVersion">
+    /// When non-null and non-empty, the manifest's <c>SchemaVersion</c> field must match this value
+    /// (case-insensitive); a mismatch is treated as <see cref="ManifestReadStatus.Invalid"/>.
+    /// </param>
     /// <returns>A <see cref="DesiredManifestReadResult"/> describing the outcome.</returns>
     public async Task<DesiredManifestReadResult> ReadAsync(
         string filePath,
         string correlationId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? expectedSchemaVersion = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
@@ -76,6 +81,18 @@ public sealed class DesiredManifestReader
         }
 
         if (model is null || model.Packages is null || string.IsNullOrWhiteSpace(model.SchemaVersion))
+        {
+            return new DesiredManifestReadResult(
+                ManifestReadStatus.Invalid,
+                ConvergenceReasonCodes.ManifestInvalid,
+                filePath,
+                correlationId,
+                now);
+        }
+
+        // Enforce expected schema version when configured
+        if (!string.IsNullOrWhiteSpace(expectedSchemaVersion) &&
+            !string.Equals(model.SchemaVersion, expectedSchemaVersion, StringComparison.OrdinalIgnoreCase))
         {
             return new DesiredManifestReadResult(
                 ManifestReadStatus.Invalid,

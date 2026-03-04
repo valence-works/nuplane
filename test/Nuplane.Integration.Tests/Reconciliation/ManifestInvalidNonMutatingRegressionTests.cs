@@ -215,7 +215,8 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
 
         var source = new DesiredManifestPackageSource(new DesiredManifestReader(), options);
 
-        await source.GetDesiredAsync(CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => source.GetDesiredAsync(CancellationToken.None));
 
         Assert.NotNull(source.LastReadResult);
         Assert.Equal(ManifestReadStatus.Invalid, source.LastReadResult!.Status);

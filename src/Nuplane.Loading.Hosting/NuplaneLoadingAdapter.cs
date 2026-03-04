@@ -35,6 +35,7 @@ public sealed class NuplaneLoadingAdapter : IPackageLoaderBoundary
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(packages);
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
         if (!_loadingOptions.Enabled || packages.Count == 0)
         {

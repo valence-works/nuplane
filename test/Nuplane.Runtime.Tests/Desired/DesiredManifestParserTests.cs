@@ -292,4 +292,50 @@ public sealed class DesiredManifestParserTests : IDisposable
         Assert.Equal(ManifestReadStatus.Succeeded, result.Status);
         Assert.Single(result.Manifest!.Packages);
     }
+
+    [Fact]
+    public async Task ReadAsync_MatchingExpectedSchemaVersion_ReturnsSucceeded()
+    {
+        var path = WriteManifest(new
+        {
+            SchemaVersion = "1.0",
+            GeneratedAtUtc = DateTimeOffset.UtcNow,
+            Packages = new[] { new { Id = "Pkg", Version = "1.0.0" } }
+        });
+
+        var result = await _reader.ReadAsync(path, CorrelationId, CancellationToken.None, expectedSchemaVersion: "1.0");
+
+        Assert.Equal(ManifestReadStatus.Succeeded, result.Status);
+    }
+
+    [Fact]
+    public async Task ReadAsync_MismatchedExpectedSchemaVersion_ReturnsInvalid()
+    {
+        var path = WriteManifest(new
+        {
+            SchemaVersion = "1.0",
+            GeneratedAtUtc = DateTimeOffset.UtcNow,
+            Packages = new[] { new { Id = "Pkg", Version = "1.0.0" } }
+        });
+
+        var result = await _reader.ReadAsync(path, CorrelationId, CancellationToken.None, expectedSchemaVersion: "2.0");
+
+        Assert.Equal(ManifestReadStatus.Invalid, result.Status);
+        Assert.Equal(ConvergenceReasonCodes.ManifestInvalid, result.ReasonCode);
+    }
+
+    [Fact]
+    public async Task ReadAsync_NullExpectedSchemaVersion_DoesNotEnforceVersion()
+    {
+        var path = WriteManifest(new
+        {
+            SchemaVersion = "9.9",
+            GeneratedAtUtc = DateTimeOffset.UtcNow,
+            Packages = new[] { new { Id = "Pkg", Version = "1.0.0" } }
+        });
+
+        var result = await _reader.ReadAsync(path, CorrelationId, CancellationToken.None, expectedSchemaVersion: null);
+
+        Assert.Equal(ManifestReadStatus.Succeeded, result.Status);
+    }
 }
