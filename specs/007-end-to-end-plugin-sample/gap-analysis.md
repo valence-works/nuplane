@@ -31,31 +31,49 @@ Enable the `Nuplane.Sample.AspNetCore` project to demonstrate the full plugin li
 
 ## Identified Gaps
 
-### Gap 1 — No DI / Fluent Registration for `DirectoryNupkgDesiredSource`
+### Gap 1 — No DI / Fluent Registration for `DirectoryNupkgDesiredSource` ✅ RESOLVED
 
 **What's missing**: `DirectoryNupkgDesiredSource` exists but there is **no extension method** or configuration callback to register it as an `IDesiredPackageSource` in the DI container. The `AddNuplane` method only registers `DesiredManifestPackageSource` (conditionally, when `ConvergenceOptions.Manifest.Enabled` is `true`). The README references a `FromNupkgDirectory("drop-folder")` fluent API that **does not exist** in the codebase.
 
-**Impact**: The sample app cannot declaratively wire up the directory source without manually constructing and registering the instance.
+**Resolution**: Implemented `AddNuplaneDirectorySource(Action<DirectorySourceOptions>)` extension method that registers each directory source as a separate `IDesiredPackageSource` and its own optional `FileSystemWatcher`-backed hosted service. Supports multiple directory sources via repeated calls. See NuplaneDirectorySourceServiceCollectionExtensions.cs.
 
-**What to build**:
-- An extension method (e.g. `AddNuplaneDirectorySource(Action<DirectorySourceOptions>)`) or a configuration callback on `AddNuplane` that registers a `DirectoryNupkgDesiredSource` as `IDesiredPackageSource` in DI.
-- A `DirectorySourceOptions` model containing `DirectoryPath`, `SourceName`, and optional `AllowlistedPackageIds`.
-- Alternatively, a parameter on `AddNuplane` such as `configureDirectorySource` that sets the directory path and the source gets registered automatically.
+**What was built**:
+- ✅ Extension method `AddNuplaneDirectorySource(Action<DirectorySourceOptions>)` that registers `DirectoryNupkgDesiredSource` as `IDesiredPackageSource` in DI.
+- ✅ `DirectorySourceOptions` model containing `DirectoryPath`, `SourceName`, `AllowlistedPackageIds`, `TriggerReconciliationOnChange`, and `DebounceWindow`.
+- ✅ Support for multiple directory sources via repeated `AddNuplaneDirectorySource` calls, each with independent file watchers.
 
 ---
 
-### Gap 2 — No File-System Watcher to Trigger Reconciliation on Package Drop
+### Gap 2 — No File-System Watcher to Trigger Reconciliation on Package Drop ✅ RESOLVED
 
 **What's missing**: The current reconciliation trigger model is **polling-only** (`PeriodicTimer` in `ReconciliationHostedService`) or manual (`TriggerManualAsync`). There is **no `FileSystemWatcher`** anywhere in the codebase. Dropping a `.nupkg` into the directory does nothing until the next poll tick (which could be up to 60 seconds later).
 
-**Impact**: The user requirement is that reconciliation begins **immediately** when a file is dropped. This is a reactive trigger, not a periodic one.
+**Resolution**: Implemented `DirectorySourceReconciliationTriggerHostedService` as an optional component registered per directory source. Watches the directory for `*.nupkg` file changes with configurable debounce window, then triggers manual reconciliation.
 
-**What to build**:
-- A `FileSystemWatcher`-based hosted service (or component within the directory source registration) that:
+**What was built**:
+- ✅ `DirectorySourceReconciliationTriggerHostedService` (BackgroundService) that:
   - Watches the configured drop directory for `*.nupkg` file creation/rename/delete events.
-  - Debounces rapid file events (e.g. 500ms–2s coalescing window) to avoid triggering multiple cycles for a batch drop.
+  - Debounces rapid file events via configurable `DebounceWindow` (default 1s) to avoid triggering multiple cycles for a batch drop.
   - Calls `IReconciliationService.TriggerManualAsync` when the debounce window elapses.
-- This should be opt-in (only registered when the directory source is configured) and composable with the existing polling service (the watcher acts as an _additional_ trigger, not a replacement).
+- ✅ Optional registration (only when `TriggerReconciliationOnChange` is enabled in DirectorySourceOptions).
+- ✅ Composable with polling service—the watcher acts as an additional trigger, not a replacement.
+
+---
+
+### Gap 3 — Feeds Required to be Configured ✅ RESOLVED
+
+**What's missing**: The `FeedResolutionOptionsValidator` enforces "At least one feed must be configured," which prevents drop-folder-only scenarios where users want to define desired state via directory source without any remote feeds.
+
+**Resolution**: Removed the "at least one feed required" validation. Feeds are now optional. The system supports:
+- Drop-folder-only scenarios (no feeds configured).
+- Mixed scenarios (directory sources + feeds).
+- Multiple directory sources (by repeated `AddNuplaneDirectorySource` calls).
+
+**What was built**:
+- ✅ Modified `FeedResolutionOptionsValidator` to allow zero feeds.
+- ✅ Updated `FeedCredentialOptionsValidator` to guard strict-mode-all-untrusted check so it only applies when feeds are configured.
+- ✅ Updated sample Program.cs to demonstrate drop-folder-only (no feeds) scenario.
+- ✅ Updated test `CoreRuntimeRegistrationIsolationTests` to verify AddNuplane works without feeds.
 
 ---
 
@@ -136,23 +154,28 @@ The `PackageLoader.contexts` dictionary (which maps package keys to `PackageAsse
 
 ## Summary Matrix
 
-| # | Gap | Severity | Layer |
-|---|---|---|---|
-| 1 | No DI registration for `DirectoryNupkgDesiredSource` | Medium | `Nuplane.Sources.Directory` / `Nuplane` |
-| 2 | No `FileSystemWatcher` trigger for immediate reconciliation | High | New component (e.g. `Nuplane.Sources.Directory` or `Nuplane`) |
-| 3 | No `IPackageLoaderBoundary` DI registration | Medium | `Nuplane.Loading` / `Nuplane.Loading.Hosting` |
-| 4 | No type discovery / scanning service for loaded assemblies | High | `Nuplane.Loading` / `Nuplane.Loading.Abstractions` |
-| 5 | Sample project not wired for end-to-end scenario | Medium | `Nuplane.Sample.AspNetCore` |
-| 6 | No shared plugin interface or sample plugin package | Medium | New project(s) |
+| # | Gap | Status | Severity | Layer |
+|---|---|---|---|---|
+| 1 | No DI registration for `DirectoryNupkgDesiredSource` | ✅ RESOLVED | Medium | `Nuplane.Sources.Directory` / `Nuplane` |
+| 2 | No `FileSystemWatcher` trigger for immediate reconciliation | ✅ RESOLVED | High | `Nuplane.Sources.Directory` |
+| 3 | Feeds required to be configured | ✅ RESOLVED | High | `Nuplane.Extensions` / `Nuplane.Runtime.Configuration` |
+| 4 | No `IPackageLoaderBoundary` DI registration | Open | Medium | `Nuplane.Loading` / `Nuplane.Loading.Hosting` |
+| 5 | No type discovery / scanning service for loaded assemblies | Open | High | `Nuplane.Loading` / `Nuplane.Loading.Abstractions` |
+| 6 | Sample project not wired for end-to-end scenario | Partial | Medium | `Nuplane.Sample.AspNetCore` |
+| 7 | No shared plugin interface or sample plugin package | Open | Medium | New project(s) |
 
 ---
 
 ## Recommended Implementation Order
 
-1. **Gap 6** — Define the shared `IPlugin` interface and create a sample plugin package.
-2. **Gap 4** — Build the type discovery service (core capability; highest complexity).
-3. **Gap 1** — Add DI registration for the directory source (low effort; enables sample wiring).
-4. **Gap 3** — Wire `IPackageLoaderBoundary` registration into DI (low effort; enables loading pipeline).
-5. **Gap 2** — Build the `FileSystemWatcher`-based trigger (medium effort; enables reactive reconciliation).
-6. **Gap 5** — Wire the sample app end-to-end (integration; depends on all above).
+1. **Gap 5** — Build the type discovery service (core capability; highest complexity).
+2. **Gap 4** — Wire `IPackageLoaderBoundary` registration into DI (low effort; enables loading pipeline).
+3. **Gap 7** — Define the shared `IPlugin` interface and create a sample plugin package.
+4. **Gap 6** — Wire the sample app end-to-end (integration; depends on all above).
+
+**Completed**:
+- ✅ **Gap 1** — `AddNuplaneDirectorySource` extension method now registers directory sources as `IDesiredPackageSource` and optional file watchers.
+- ✅ **Gap 2** — `DirectorySourceReconciliationTriggerHostedService` watches drop directories and triggers reconciliation on package changes.
+- ✅ **Gap 3** — Feeds are now optional; drop-folder-only and multiple-directory scenarios are supported.
+
 
