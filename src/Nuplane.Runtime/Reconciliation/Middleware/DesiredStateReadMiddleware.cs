@@ -22,13 +22,18 @@ internal sealed class DesiredStateReadMiddleware(
         var readResult = await ReadDesiredRequestsWithFallbackAsync(context.CorrelationId, context.CancellationToken);
         context.ReadResult = readResult;
 
-        var desiredRequests = await desiredStateAggregator.AggregateAsync(
+        var aggregateResult = await desiredStateAggregator.AggregateAsync(
             [new StaticDesiredSource(readResult.Requests)],
             sourceTrustOptions,
             context.CancellationToken);
-        context.DesiredRequests = desiredRequests;
+        context.DesiredRequests = aggregateResult.Requests;
 
-        var allowlistedRequests = allowlistGate.Enforce(desiredRequests, sourceTrustOptions);
+        foreach (var (sourceName, ex) in aggregateResult.SourceErrors)
+        {
+            await failureRecorder.RecordAsync(sourceName, "source-aggregate", ex.Message, context.CorrelationId, context.CancellationToken);
+        }
+
+        var allowlistedRequests = allowlistGate.Enforce(aggregateResult.Requests, sourceTrustOptions);
         context.AllowlistedRequests = allowlistedRequests;
 
         logger.LogCycleStarted(context.CorrelationId, allowlistedRequests.Count);

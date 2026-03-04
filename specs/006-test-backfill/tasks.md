@@ -16,8 +16,8 @@
 
 **Purpose**: Create the two new projects and register them in the solution before any test can be authored.
 
-- [ ] T001 [P] Create `test/Nuplane.Loading.Tests.Fixtures/Nuplane.Loading.Tests.Fixtures.csproj` (net10.0 class library, `IsPackable=false`) and `FixtureMarker.cs` (single `public static class FixtureMarker {}`); add project to `Nuplane.sln`
-- [ ] T002 [P] Create `test/Nuplane.Loading.Tests/Nuplane.Loading.Tests.csproj` (net10.0 xUnit test project referencing `src/Nuplane.Loading/`, `src/Nuplane.Loading.Abstractions/`, and `test/Nuplane.Loading.Tests.Fixtures/`); add project to `Nuplane.sln`
+- [X] T001 [P] Create `test/Nuplane.Loading.Tests.Fixtures/Nuplane.Loading.Tests.Fixtures.csproj` (net10.0 class library, `IsPackable=false`) and `FixtureMarker.cs` (single `public static class FixtureMarker {}`); add project to `Nuplane.sln`
+- [X] T002 [P] Create `test/Nuplane.Loading.Tests/Nuplane.Loading.Tests.csproj` (net10.0 xUnit test project referencing `src/Nuplane.Loading/`, `src/Nuplane.Loading.Abstractions/`, and `test/Nuplane.Loading.Tests.Fixtures/`); add project to `Nuplane.sln`
 
 **Checkpoint**: `dotnet build` succeeds for both new projects with zero warnings.
 
@@ -29,10 +29,10 @@
 
 **⚠️ CRITICAL**: Phase 3 (US1 middleware tests for `DesiredStateReadMiddleware`) and Phase 4 (US2 `DesiredStateAggregatorTests`) cannot compile until T005–T006 are done.
 
-- [ ] T003 Create `src/Nuplane.Runtime/Reconciliation/Models/DesiredAggregateResult.cs` — `sealed record` with `IReadOnlyList<PackageRequest> Requests` and `IReadOnlyDictionary<string, Exception> SourceErrors`
-- [ ] T004 Update `src/Nuplane.Runtime/Reconciliation/IDesiredStateAggregator.cs` — change `AggregateAsync` return type from `Task<IReadOnlyList<PackageRequest>>` to `Task<DesiredAggregateResult>`
-- [ ] T005 Update `src/Nuplane.Runtime/Reconciliation/DesiredStateAggregator.cs` — wrap each source's `GetDesiredAsync` in a `try/catch`; accumulate healthy requests; populate `SourceErrors` dict; return `new DesiredAggregateResult(requests, sourceErrors)`
-- [ ] T006 Update `src/Nuplane.Runtime/Reconciliation/Middleware/DesiredStateReadMiddleware.cs` — unpack `result.Requests` for `context.DesiredRequests`; iterate `result.SourceErrors` and call `failureRecorder.RecordAsync(...)` per entry
+- [X] T003 Create `src/Nuplane.Runtime/Reconciliation/Models/DesiredAggregateResult.cs` — `sealed record` with `IReadOnlyList<PackageRequest> Requests` and `IReadOnlyDictionary<string, Exception> SourceErrors`
+- [X] T004 Update `src/Nuplane.Runtime/Reconciliation/IDesiredStateAggregator.cs` — change `AggregateAsync` return type from `Task<IReadOnlyList<PackageRequest>>` to `Task<DesiredAggregateResult>`
+- [X] T005 Update `src/Nuplane.Runtime/Reconciliation/DesiredStateAggregator.cs` — wrap each source's `GetDesiredAsync` in a `try/catch`; accumulate healthy requests; populate `SourceErrors` dict; return `new DesiredAggregateResult(requests, sourceErrors)`
+- [X] T006 Update `src/Nuplane.Runtime/Reconciliation/Middleware/DesiredStateReadMiddleware.cs` — unpack `result.Requests` for `context.DesiredRequests`; iterate `result.SourceErrors` and call `failureRecorder.RecordAsync(...)` per entry
 
 **Checkpoint**: `dotnet build` passes with zero warnings across the full solution. All 56 pre-existing tests pass.
 
@@ -46,15 +46,15 @@
 
 **Required tests** (FR-001–FR-009): Each class MUST include (a) happy-path invocation, (b) context mutation assertions, (c) `next` was called assertion, (d) at least one exception/edge path.
 
-- [ ] T007 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/DesiredStateReadMiddlewareTests.cs` — covers: context populated with aggregated requests; empty desired set (next still called); source-read exception propagates
-- [ ] T008 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/PackageResolutionMiddlewareTests.cs` — covers: `ResolutionResult` populated on success; partial resolution (some packages unresolvable); feed-unavailable exception propagates
-- [ ] T009 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/TrustAndLockGateMiddlewareTests.cs` — covers: all packages pass trust + lock; one package excluded by trust policy (recorded, next called); lock-file violation filtered; combined trust + lock violation (both recorded)
-- [ ] T010 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/PackageLoadingMiddlewareTests.cs` — covers: `LoadResults` populated on success; one package fails to load (partial failure, next called); load-session exception propagates
-- [ ] T011 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/DiffAndChangeEventMiddlewareTests.cs` — covers: diff produces add + update + remove; empty diff (no-op, next called); `PublishChangingAsync` called on `FakeObserverEventDispatcher` before `next` is invoked (call-order assertion)
-- [ ] T012 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/TransactionExecutionMiddlewareTests.cs` — covers: all transactions succeed; one transaction fails (LKG retained, next called); all transactions fail (full no-op, next called)
-- [ ] T013 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/UnloadMiddlewareTests.cs` — covers: obsolete handles unloaded; unload timeout records `TimedOut` without throw; empty unload set is a no-op (next called)
-- [ ] T014 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/CleanupMiddlewareTests.cs` — covers: old versions cleaned per policy; zero cleanup when policy retains all; cleanup error recorded without aborting pipeline (next called)
-- [ ] T015 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/HealthAndMetricsMiddlewareTests.cs` — covers: healthy outcome when all transactions succeeded; degraded outcome when one package failed; metrics recorded regardless of health state
+- [X] T007 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/DesiredStateReadMiddlewareTests.cs` — covers: context populated with aggregated requests; empty desired set (next still called); source-read exception propagates
+- [X] T008 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/PackageResolutionMiddlewareTests.cs` — covers: `ResolutionResult` populated on success; partial resolution (some packages unresolvable); feed-unavailable exception propagates
+- [X] T009 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/TrustAndLockGateMiddlewareTests.cs` — covers: all packages pass trust + lock; one package excluded by trust policy (recorded, next called); lock-file violation filtered; combined trust + lock violation (both recorded)
+- [X] T010 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/PackageLoadingMiddlewareTests.cs` — covers: `LoadResults` populated on success; one package fails to load (partial failure, next called); load-session exception propagates
+- [X] T011 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/DiffAndChangeEventMiddlewareTests.cs` — covers: diff produces add + update + remove; empty diff (no-op, next called); `PublishChangingAsync` called on `FakeObserverEventDispatcher` before `next` is invoked (call-order assertion)
+- [X] T012 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/TransactionExecutionMiddlewareTests.cs` — covers: all transactions succeed; one transaction fails (LKG retained, next called); all transactions fail (full no-op, next called)
+- [X] T013 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/UnloadMiddlewareTests.cs` — covers: obsolete handles unloaded; unload timeout records `TimedOut` without throw; empty unload set is a no-op (next called)
+- [X] T014 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/CleanupMiddlewareTests.cs` — covers: old versions cleaned per policy; zero cleanup when policy retains all; cleanup error recorded without aborting pipeline (next called)
+- [X] T015 [P] [US1] Implement `test/Nuplane.Runtime.Tests/Reconciliation/Middleware/HealthAndMetricsMiddlewareTests.cs` — covers: healthy outcome when all transactions succeeded; degraded outcome when one package failed; metrics recorded regardless of health state
 
 **Checkpoint**: All 9 middleware test classes pass. `dotnet test --filter "FullyQualifiedName~Reconciliation.Middleware"` ≥ 36 new passing tests.
 
@@ -68,11 +68,11 @@
 
 **Required tests** (FR-010–FR-014): Each class ≥ 4 test cases.
 
-- [ ] T016 [P] [US2] Implement `test/Nuplane.Runtime.Tests/Reconciliation/DesiredStateAggregatorTests.cs` — covers: single-source aggregation; multi-source merge (all healthy); one source throws (`SourceErrors` populated, healthy requests still returned); zero sources (empty `Requests`, empty `SourceErrors`, no exception)
-- [ ] T017 [P] [US2] Implement `test/Nuplane.Runtime.Tests/Reconciliation/AllowlistGateTests.cs` — covers: all packages permitted (list returned, no throw); one package blocked (asserts `AggregateException` with inner `InvalidOperationException`); all packages blocked (asserts `AggregateException`); `RejectUnallowlistedPackages = false` (all returned, no throw)
-- [ ] T018 [P] [US2] Implement `test/Nuplane.Runtime.Tests/LockFile/LockFileCoordinatorTests.cs` — covers: lock file absent (all resolutions permitted); lock file present, version matches (permitted); lock file present, version mismatches (version overridden via `Enforce` mode); strict mode + missing entry (`RequireEntryInStrictMode=true`, false returned); uses `Path.GetTempFileName()` + `IDisposable` cleanup
-- [ ] T019 [P] [US2] Implement `test/Nuplane.Store.Tests/Packages/PackageCleanupServiceTests.cs` — covers: no cleanup needed (all decisions `Kept`); two versions eligible (both scheduled for removal); policy satisfied after one version removed; already-cancelled `CancellationToken` throws `OperationCanceledException` before any evaluation; uses real `CleanupPolicyEvaluator` constructed directly
-- [ ] T020 [P] [US2] Implement `test/Nuplane.Runtime.Tests/Sources/DesiredSourceSnapshotCacheTests.cs` — covers: `TryGetSnapshot` returns false before save; `TryGetSnapshot` returns true after `SaveAsync` (same reference); `LoadSnapshotAsync` returns `null` when absent from memory and store; `LoadSnapshotAsync` returns stored snapshot from mocked `IStoreRegistry` when absent from memory; two concurrent `SaveAsync` calls for different keys both complete and are retrievable
+- [X] T016 [P] [US2] Implement `test/Nuplane.Runtime.Tests/Reconciliation/DesiredStateAggregatorTests.cs` — covers: single-source aggregation; multi-source merge (all healthy); one source throws (`SourceErrors` populated, healthy requests still returned); zero sources (empty `Requests`, empty `SourceErrors`, no exception)
+- [X] T017 [P] [US2] Implement `test/Nuplane.Runtime.Tests/Reconciliation/AllowlistGateTests.cs` — covers: all packages permitted (list returned, no throw); one package blocked (asserts `AggregateException` with inner `InvalidOperationException`); all packages blocked (asserts `AggregateException`); `RejectUnallowlistedPackages = false` (all returned, no throw)
+- [X] T018 [P] [US2] Implement `test/Nuplane.Runtime.Tests/LockFile/LockFileCoordinatorTests.cs` — covers: lock file absent (all resolutions permitted); lock file present, version matches (permitted); lock file present, version mismatches (version overridden via `Enforce` mode); strict mode + missing entry (`RequireEntryInStrictMode=true`, false returned); uses `Path.GetTempFileName()` + `IDisposable` cleanup
+- [X] T019 [P] [US2] Implement `test/Nuplane.Store.Tests/Packages/PackageCleanupServiceTests.cs` — covers: no cleanup needed (all decisions `Kept`); two versions eligible (both scheduled for removal); policy satisfied after one version removed; already-cancelled `CancellationToken` throws `OperationCanceledException` before any evaluation; uses real `CleanupPolicyEvaluator` constructed directly
+- [X] T020 [P] [US2] Implement `test/Nuplane.Runtime.Tests/Sources/DesiredSourceSnapshotCacheTests.cs` — covers: `TryGetSnapshot` returns false before save; `TryGetSnapshot` returns true after `SaveAsync` (same reference); `LoadSnapshotAsync` returns `null` when absent from memory and store; `LoadSnapshotAsync` returns stored snapshot from mocked `IStoreRegistry` when absent from memory; two concurrent `SaveAsync` calls for different keys both complete and are retrievable
 
 **Checkpoint**: All 5 concrete test classes pass. ≥ 20 new passing tests across this phase.
 
@@ -86,10 +86,10 @@
 
 **Required tests** (FR-016–FR-019): Each class ≥ 4 test cases.
 
-- [ ] T021 [P] [US3] Implement `test/Nuplane.Loading.Tests/PackageLoaderTests.cs` — covers: `EnsureLoadedAsync` succeeds for valid package path (session registered); already-loaded package returns existing session (no double load); invalid/missing path results in failure entry in `PackageLoadResult.Failed` (no exception to caller)
-- [ ] T022 [P] [US3] Implement `test/Nuplane.Loading.Tests/PackageUnloadCoordinatorTests.cs` — covers: successful unload within timeout produces `Completed` outcome; unload timeout produces `TimedOut` `UnloadOutcomeRecord` without throwing; repeated unload of same handle (idempotent, second call is a no-op)
-- [ ] T023 [P] [US3] Implement `test/Nuplane.Loading.Tests/SharedAssemblyPolicyMatcherTests.cs` — covers: exact version match returns shared assembly reference; range match (`>= 13.0`) with satisfying version returns shared assembly; no matching policy entry returns `null`; multiple policies, first match wins (second policy not evaluated)
-- [ ] T024 [US3] Implement `test/Nuplane.Loading.Tests/PackageAssemblyLoadContextTests.cs` — covers: assembly loaded via `typeof(FixtureMarker).Assembly.Location` (resolved at test time, not hardcoded); ALC collectible after `Unload()` + forced GC using `[MethodImpl(NoInlining)]` helper + `WeakReference` + bounded 10-iteration GC loop; main-assembly path resolution returns correct `AssemblyName`; double `Unload()` is a no-op (no throw)
+- [X] T021 [P] [US3] Implement `test/Nuplane.Loading.Tests/PackageLoaderTests.cs` — covers: `EnsureLoadedAsync` succeeds for valid package path (session registered); already-loaded package returns existing session (no double load); invalid/missing path results in failure entry in `PackageLoadResult.Failed` (no exception to caller)
+- [X] T022 [P] [US3] Implement `test/Nuplane.Loading.Tests/PackageUnloadCoordinatorTests.cs` — covers: successful unload within timeout produces `Completed` outcome; unload timeout produces `TimedOut` `UnloadOutcomeRecord` without throwing; repeated unload of same handle (idempotent, second call is a no-op)
+- [X] T023 [P] [US3] Implement `test/Nuplane.Loading.Tests/SharedAssemblyPolicyMatcherTests.cs` — covers: exact version match returns shared assembly reference; range match (`>= 13.0`) with satisfying version returns shared assembly; no matching policy entry returns `null`; multiple policies, first match wins (second policy not evaluated)
+- [X] T024 [US3] Implement `test/Nuplane.Loading.Tests/PackageAssemblyLoadContextTests.cs` — covers: assembly loaded via `typeof(FixtureMarker).Assembly.Location` (resolved at test time, not hardcoded); ALC collectible after `Unload()` + forced GC using `[MethodImpl(NoInlining)]` helper + `WeakReference` + bounded 10-iteration GC loop; main-assembly path resolution returns correct `AssemblyName`; double `Unload()` is a no-op (no throw)
 
 **Checkpoint**: All 4 loading test classes pass. `dotnet test test/Nuplane.Loading.Tests/` ≥ 16 new passing tests, runs in < 30s.
 
@@ -97,8 +97,8 @@
 
 ## Final Phase: Polish & Validation
 
-- [ ] T025 Run `dotnet build` on the full solution and resolve any remaining warnings — zero CS1591 warnings, zero nullable warnings, zero `TreatWarningsAsErrors` failures
-- [ ] T026 Run `dotnet test` on the full solution — verify all pre-existing tests still pass AND all new tests pass; record final test count delta in a comment on this task
+- [X] T025 Run `dotnet build` on the full solution and resolve any remaining warnings — zero CS1591 warnings, zero nullable warnings, zero `TreatWarningsAsErrors` failures
+- [X] T026 Run `dotnet test` on the full solution — verify all pre-existing tests still pass AND all new tests pass; record final test count delta in a comment on this task
 
 ---
 

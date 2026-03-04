@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nuplane.Loading\Nuplane.Loading.csproj" />
+    <ProjectReference Include="..\..\src\Nuplane.Loading.Abstractions\Nuplane.Loading.Abstractions.csproj" />
+    <ProjectReference Include="..\Nuplane.Loading.Tests.Fixtures\Nuplane.Loading.Tests.Fixtures.csproj" />
+  </ItemGroup>
+
+</Project>
