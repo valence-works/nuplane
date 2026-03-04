@@ -40,7 +40,7 @@ This spec introduces one new production type and no new entities in the store or
 
 | Project | Kind | Purpose |
 |---------|------|---------|
-| `test/Nuplane.Loading.Tests.Fixtures/` | Class library (`net10.0`) | Provides `SomeFixtureClass` (minimal exportable type) so tests can resolve a real DLL path without hardcoding |
+| `test/Nuplane.Loading.Tests.Fixtures/` | Class library (`net10.0`) | Provides `FixtureMarker` (minimal exportable type) so tests can resolve a real DLL path without hardcoding |
 | `test/Nuplane.Loading.Tests/` | xUnit test project (`net10.0`) | Unit tests for `Nuplane.Loading` and `Nuplane.Loading.Abstractions` |
 
 ---
