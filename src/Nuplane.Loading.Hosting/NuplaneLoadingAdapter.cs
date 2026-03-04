@@ -41,7 +41,7 @@ public sealed class NuplaneLoadingAdapter : IPackageLoaderBoundary
         {
             var skipped = packages.Select(p => new PackageLoaderBoundaryEntry(
                 p.Id, p.Version, PackageLoaderOutcome.Skipped, "loader-disabled")).ToList();
-            return new PackageLoaderBoundaryResult(skipped);
+            return new(skipped);
         }
 
         var sharedPolicy = _loadingOptions.SharedAssemblies
@@ -55,16 +55,16 @@ public sealed class NuplaneLoadingAdapter : IPackageLoaderBoundary
         {
             if (loadResult.FailedByPackageId.TryGetValue(package.Id, out var reason))
             {
-                entries.Add(new PackageLoaderBoundaryEntry(
+                entries.Add(new(
                     package.Id, package.Version, PackageLoaderOutcome.Failed, reason));
             }
             else
             {
-                entries.Add(new PackageLoaderBoundaryEntry(
+                entries.Add(new(
                     package.Id, package.Version, PackageLoaderOutcome.Loaded, null));
             }
         }
 
-        return new PackageLoaderBoundaryResult(entries);
+        return new(entries);
     }
 }

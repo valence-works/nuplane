@@ -109,6 +109,9 @@ public sealed class ReconciliationTelemetry : IDisposable
     /// <summary>Counter for loader boundary skips.</summary>
     public Counter<long> LoaderBoundarySkippedCounter { get; }
 
+    /// <summary>Counter for reconciliation triggers by type (Scheduled, DirectoryChange, Manual, Startup).</summary>
+    public Counter<long> TriggerCounter { get; }
+
     /// <summary>Histogram recording transaction duration in milliseconds.</summary>
     public Histogram<double> TransactionDurationMilliseconds { get; }
 
@@ -118,8 +121,12 @@ public sealed class ReconciliationTelemetry : IDisposable
     /// <summary>Gauge tracking the number of packages with pending unloads.</summary>
     public ObservableGauge<long> UnloadPendingPackagesGauge { get; }
 
+    /// <summary>Gauge tracking whether the runtime is in idle mode (1 = idle, 0 = active).</summary>
+    public ObservableGauge<int> IdleModeGauge { get; }
+
     private long activePackages;
     private long unloadPendingPackages;
+    private int idleMode;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ReconciliationTelemetry"/> class.
@@ -159,9 +166,11 @@ public sealed class ReconciliationTelemetry : IDisposable
         LoaderBoundarySucceededCounter = meter.CreateCounter<long>("nuplane.convergence.loader.succeeded");
         LoaderBoundaryFailedCounter = meter.CreateCounter<long>("nuplane.convergence.loader.failed");
         LoaderBoundarySkippedCounter = meter.CreateCounter<long>("nuplane.convergence.loader.skipped");
+        TriggerCounter = meter.CreateCounter<long>("nuplane.convergence.trigger");
         TransactionDurationMilliseconds = meter.CreateHistogram<double>("nuplane.reconciliation.transaction.duration.ms");
         ActivePackagesGauge = meter.CreateObservableGauge<long>("nuplane.reconciliation.active", () => activePackages);
         UnloadPendingPackagesGauge = meter.CreateObservableGauge<long>("nuplane.loading.unload.pending.active", () => unloadPendingPackages);
+        IdleModeGauge = meter.CreateObservableGauge<int>("nuplane.runtime.idle", () => idleMode);
     }
 
     /// <summary>
@@ -178,6 +187,14 @@ public sealed class ReconciliationTelemetry : IDisposable
     public void SetUnloadPendingPackages(long count)
     {
         unloadPendingPackages = Math.Max(0, count);
+    }
+
+    /// <summary>
+    /// Sets the idle mode gauge value. 1 = idle (no feeds configured), 0 = active.
+    /// </summary>
+    public void SetIdleMode(bool isIdle)
+    {
+        idleMode = isIdle ? 1 : 0;
     }
 
     /// <inheritdoc />

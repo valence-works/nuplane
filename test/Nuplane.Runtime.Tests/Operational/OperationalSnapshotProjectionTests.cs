@@ -45,7 +45,7 @@ public sealed class OperationalSnapshotProjectionTests
     public async Task ProjectAsync_HealthyState_NoDegradedReasons()
     {
         var (projector, evaluator) = CreateProjector([]);
-        evaluator.Evaluate(new ReconciliationHealthInput(false, true, 0, 0, 0, 0));
+        evaluator.Evaluate(new(false, true, 0, 0, 0, 0));
 
         var snapshot = await projector.ProjectAsync("corr-1", CancellationToken.None);
 
@@ -57,7 +57,7 @@ public sealed class OperationalSnapshotProjectionTests
     public async Task ProjectAsync_DegradedState_IncludesDegradedReasons()
     {
         var (projector, evaluator) = CreateProjector([]);
-        evaluator.Evaluate(new ReconciliationHealthInput(true, false, 2, 1, 0, 0));
+        evaluator.Evaluate(new(true, false, 2, 1, 0, 0));
 
         var snapshot = await projector.ProjectAsync("corr-1", CancellationToken.None);
 

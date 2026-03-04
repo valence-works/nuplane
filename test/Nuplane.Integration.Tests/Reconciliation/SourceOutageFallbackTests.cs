@@ -26,7 +26,7 @@ public sealed class SourceOutageFallbackTests
     private static ReconciliationService CreateService(IDesiredPackageSource source, ReconciliationOptions options)
     {
         return new(
-            new[] { source },
+            [source],
             new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
             new(),
             new(),

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Extensions;
@@ -156,7 +157,7 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<ReconciliationHealthEvaluator>();
         services.AddSingleton<IReconciliationHealthEvaluator>(sp => sp.GetRequiredService<ReconciliationHealthEvaluator>());
         services.AddSingleton<ObserverEventDispatcher>(sp =>
-            new ObserverEventDispatcher(
+            new(
                 sp.GetServices<INuplaneObserver>(),
                 sp.GetRequiredService<IReconciliationLogger>()));
         services.AddSingleton<IObserverEventDispatcher>(sp => sp.GetRequiredService<ObserverEventDispatcher>());
@@ -165,7 +166,7 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<IStoreStateSerializer>(sp => sp.GetRequiredService<StoreStateSerializer>());
         services.AddSingleton(new StoreRegistryOptions { StateFilePath = stateFilePath });
         services.AddSingleton<StoreRegistry>(sp =>
-            new StoreRegistry(
+            new(
                 sp.GetRequiredService<IStoreStateSerializer>(),
                 sp.GetRequiredService<StoreRegistryOptions>()));
         services.AddSingleton<IStoreRegistry>(sp => sp.GetRequiredService<StoreRegistry>());
@@ -173,6 +174,7 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<IFailureRecorder>(sp => sp.GetRequiredService<FailureRecorder>());
         services.AddSingleton<ReconciliationRetryPolicy>();
         services.AddSingleton<IReconciliationRetryPolicy>(sp => sp.GetRequiredService<ReconciliationRetryPolicy>());
+        services.TryAddSingleton<WatcherDegradationTracker>();
         services.AddSingleton<ReconciliationService>();
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
 

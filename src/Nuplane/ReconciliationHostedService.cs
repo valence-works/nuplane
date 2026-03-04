@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane;
 
@@ -16,6 +18,7 @@ public sealed class ReconciliationHostedService : BackgroundService
     private readonly IReconciliationService _reconciliationService;
     private readonly ReconciliationOptions _options;
     private readonly ConvergenceOptions _convergenceOptions;
+    private readonly ReconciliationMetrics _metrics;
     private readonly ILogger<ReconciliationHostedService> _logger;
 
     /// <summary>
@@ -25,12 +28,14 @@ public sealed class ReconciliationHostedService : BackgroundService
         IReconciliationService reconciliationService,
         ReconciliationOptions options,
         ConvergenceOptions convergenceOptions,
-        ILogger<ReconciliationHostedService> logger)
+        ILogger<ReconciliationHostedService> logger,
+        ReconciliationMetrics metrics)
     {
         _reconciliationService = reconciliationService ?? throw new ArgumentNullException(nameof(reconciliationService));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _convergenceOptions = convergenceOptions ?? throw new ArgumentNullException(nameof(convergenceOptions));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
     }
 
     /// <inheritdoc />
@@ -48,10 +53,14 @@ public sealed class ReconciliationHostedService : BackgroundService
         {
             try
             {
-                var result = await _reconciliationService.TriggerManualAsync(stoppingToken);
+                var trigger = new ReconciliationTrigger(TriggerType.Scheduled);
+                var result = await _reconciliationService.TriggerAsync(trigger, stoppingToken);
 
                 if (result.Skipped)
                 {
+                    // Record the trigger attempt even when single-flight skips the cycle,
+                    // so metrics accurately reflect all scheduled trigger attempts.
+                    _metrics.RecordTrigger(nameof(TriggerType.Scheduled));
                     _logger.LogDebug("Reconciliation cycle skipped (single-flight active)");
                 }
                 else if (result.IsDegraded)

@@ -32,16 +32,16 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
 
     private static ReconciliationService CreateService(IDesiredPackageSource source)
     {
-        return new ReconciliationService(
-            new[] { source },
-            new SourceTrustOptions { RejectUnallowlistedPackages = false },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
+        return new(
+            [source],
+            new() { RejectUnallowlistedPackages = false },
+            new(),
+            new(),
             new NuGetPackageResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions(),
-            new ObserverEventDispatcher(Array.Empty<INuplaneObserver>()),
-            new ReconciliationHealthEvaluator());
+            new(new StoreStateSerializer(), stateFilePath: null),
+            new(),
+            new([]),
+            new());
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
             Manifest = { Enabled = true, Path = Path.Combine(_tempDir, "missing.json") }
         };
 
-        var source = new DesiredManifestPackageSource(new DesiredManifestReader(), options);
+        var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
         var result = await service.TriggerManualAsync(CancellationToken.None);
@@ -73,7 +73,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
             Manifest = { Enabled = true, Path = path }
         };
 
-        var source = new DesiredManifestPackageSource(new DesiredManifestReader(), options);
+        var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
         var result = await service.TriggerManualAsync(CancellationToken.None);
@@ -103,7 +103,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
             Manifest = { Enabled = true, Path = path }
         };
 
-        var source = new DesiredManifestPackageSource(new DesiredManifestReader(), options);
+        var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
         var result = await service.TriggerManualAsync(CancellationToken.None);
@@ -132,7 +132,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
             Manifest = { Enabled = true, Path = path }
         };
 
-        var source = new DesiredManifestPackageSource(new DesiredManifestReader(), options);
+        var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
         var result = await service.TriggerManualAsync(CancellationToken.None);
@@ -150,7 +150,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
             Manifest = { Enabled = false, Path = "/does/not/matter" }
         };
 
-        var source = new DesiredManifestPackageSource(new DesiredManifestReader(), options);
+        var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
         var result = await service.TriggerManualAsync(CancellationToken.None);
@@ -181,7 +181,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
             Manifest = { Enabled = true, Path = manifestPath }
         };
 
-        var source = new DesiredManifestPackageSource(new DesiredManifestReader(), options);
+        var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
         var established = await service.TriggerManualAsync(CancellationToken.None);
@@ -213,7 +213,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
             Manifest = { Enabled = true, Path = path }
         };
 
-        var source = new DesiredManifestPackageSource(new DesiredManifestReader(), options);
+        var source = new DesiredManifestPackageSource(new(), options);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => source.GetDesiredAsync(CancellationToken.None));

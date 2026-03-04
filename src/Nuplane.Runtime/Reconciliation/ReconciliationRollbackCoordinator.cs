@@ -74,7 +74,7 @@ public sealed class ReconciliationRollbackCoordinator
             _metrics?.RecordRollbackPerformed();
         }
 
-        return new RollbackResult(
+        return new(
             RollbackPerformed: rollbackPerformed,
             RolledBackPackages: rolledBack,
             PreservedPackages: preserved,

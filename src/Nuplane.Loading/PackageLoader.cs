@@ -97,7 +97,21 @@ public sealed class PackageLoader : IPackageLoader
 
         if (contexts.TryRemove(key, out var removed) && removed is not null)
         {
-            context = new PackageLoadContextHandle(key, removed);
+            context = new(key, removed);
+            return true;
+        }
+
+        context = null;
+        return false;
+    }
+
+    /// <inheritdoc />
+    public bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context)
+    {
+        var key = BuildKey(packageId, version);
+        if (contexts.TryGetValue(key, out var existing) && existing is not null)
+        {
+            context = new(key, existing);
             return true;
         }
 

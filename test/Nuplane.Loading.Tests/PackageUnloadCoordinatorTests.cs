@@ -74,7 +74,7 @@ public sealed class PackageUnloadCoordinatorTests : IDisposable
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static PackageAssemblyLoadContext CreateContext(string assemblyPath) =>
-        new(assemblyPath, [], new SharedAssemblyPolicyMatcher());
+        new(assemblyPath, [], new());
 
     private string CopyFixtureAssembly(string pkgName)
     {

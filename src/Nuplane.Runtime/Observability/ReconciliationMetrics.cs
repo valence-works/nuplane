@@ -115,4 +115,18 @@ public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
         telemetry.LoaderBoundaryFailedCounter.Add(failed);
         telemetry.LoaderBoundarySkippedCounter.Add(skipped);
     }
+
+    /// <summary>Records a reconciliation trigger by type.</summary>
+    /// <param name="triggerType">The trigger type label (e.g., "Scheduled", "DirectoryChange", "Manual").</param>
+    public void RecordTrigger(string triggerType)
+    {
+        telemetry.TriggerCounter.Add(1, new KeyValuePair<string, object?>("trigger_type", triggerType));
+    }
+
+    /// <summary>Sets the idle mode gauge.</summary>
+    /// <param name="isIdle">Whether the runtime is in idle mode (no feeds configured).</param>
+    public void SetIdleMode(bool isIdle)
+    {
+        telemetry.SetIdleMode(isIdle);
+    }
 }

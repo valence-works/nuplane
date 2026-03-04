@@ -22,7 +22,7 @@ public sealed class StrictFeedOutageIsolationTests
         feedOptions.UnavailableFeeds.Add("feed-down");
 
         var service = new ReconciliationService(
-            new[] { source },
+            [source],
             new()
             {
                 AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-impacted", "pkg-ok" }

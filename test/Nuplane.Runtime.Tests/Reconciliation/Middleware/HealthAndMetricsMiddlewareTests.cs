@@ -1,4 +1,5 @@
 using Nuplane.Abstractions;
+using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Observability;
@@ -41,7 +42,7 @@ public sealed class HealthAndMetricsMiddlewareTests
         var evaluator = new FakeHealthEvaluator(isDegraded: true);
 
         var ctx = Ctx(changeSet);
-        ctx.ApplyResult = new PackageApplyExecutionResult([], ["failed-pkg"]);
+        ctx.ApplyResult = new([], ["failed-pkg"]);
         await Build(evaluator: evaluator).InvokeAsync(ctx, () => Task.CompletedTask);
 
         Assert.NotNull(ctx.Result);
@@ -67,7 +68,8 @@ public sealed class HealthAndMetricsMiddlewareTests
         new(evaluator ?? new FakeHealthEvaluator(false),
             dispatcher ?? new NullDispatcher(),
             new NullLogger(),
-            new ReconciliationMetrics(new ReconciliationTelemetry()));
+            new(new()),
+            new FeedResolutionOptions());
 
     private static ReconciliationCycleContext Ctx(PackageChangeSet changeSet)
     {
@@ -78,10 +80,10 @@ public sealed class HealthAndMetricsMiddlewareTests
             CancellationToken = CancellationToken.None
         };
         ctx.ChangeSet = changeSet;
-        ctx.ReadResult = new DesiredReadResult([], UsedFallback: false, AllSourcesFresh: true);
-        ctx.ApplyResult = new PackageApplyExecutionResult([], []);
+        ctx.ReadResult = new([], UsedFallback: false, AllSourcesFresh: true);
+        ctx.ApplyResult = new([], []);
         ctx.ActiveVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        ctx.MergedActive = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        ctx.MergedActive = new(StringComparer.OrdinalIgnoreCase);
         return ctx;
     }
 
@@ -143,5 +145,8 @@ public sealed class HealthAndMetricsMiddlewareTests
         public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode) { }
         public void LogAdminTriggerOutcome(string correlationId, string outcomeCode, string? reasonCode) { }
         public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState) { }
+        public void LogTrigger(string correlationId, string triggerType, string? triggerSource) { }
+        public void LogIdleModeEntered() { }
+        public void LogIdleModeExited() { }
     }
 }

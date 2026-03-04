@@ -15,7 +15,7 @@ public sealed class PackageAssemblyLoadContextTests : IDisposable
     public void LoadFromAssemblyName_AssemblyInContext_LoadSucceeds()
     {
         var path = CopyFixtureAssembly("alc-load");
-        var ctx = new PackageAssemblyLoadContext(path, [], new SharedAssemblyPolicyMatcher());
+        var ctx = new PackageAssemblyLoadContext(path, [], new());
         var name = AssemblyName.GetAssemblyName(path);
 
         var assembly = ctx.LoadFromAssemblyName(name);
@@ -39,7 +39,7 @@ public sealed class PackageAssemblyLoadContextTests : IDisposable
     public void Ctor_MainAssemblyPath_ResolvesPackageName()
     {
         var path = CopyFixtureAssembly("alc-name");
-        var ctx = new PackageAssemblyLoadContext(path, [], new SharedAssemblyPolicyMatcher());
+        var ctx = new PackageAssemblyLoadContext(path, [], new());
 
         Assert.Contains("nuplane:", ctx.Name, StringComparison.OrdinalIgnoreCase);
 
@@ -50,7 +50,7 @@ public sealed class PackageAssemblyLoadContextTests : IDisposable
     public void Unload_CalledTwice_DoesNotThrow()
     {
         var path = CopyFixtureAssembly("alc-double-unload");
-        var ctx = new PackageAssemblyLoadContext(path, [], new SharedAssemblyPolicyMatcher());
+        var ctx = new PackageAssemblyLoadContext(path, [], new());
 
         ctx.Unload();
         var ex = Record.Exception(() => ctx.Unload());
@@ -61,7 +61,7 @@ public sealed class PackageAssemblyLoadContextTests : IDisposable
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static WeakReference CreateAndUnload(string path)
     {
-        var ctx = new PackageAssemblyLoadContext(path, [], new SharedAssemblyPolicyMatcher());
+        var ctx = new PackageAssemblyLoadContext(path, [], new());
         var weakRef = new WeakReference(ctx, trackResurrection: true);
         ctx.Unload();
         return weakRef;

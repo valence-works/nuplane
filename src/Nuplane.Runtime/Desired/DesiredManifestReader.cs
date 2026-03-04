@@ -38,7 +38,7 @@ public sealed class DesiredManifestReader
 
         if (!File.Exists(filePath))
         {
-            return new DesiredManifestReadResult(
+            return new(
                 ManifestReadStatus.NotFound,
                 ConvergenceReasonCodes.ManifestNotFound,
                 filePath,
@@ -57,7 +57,7 @@ public sealed class DesiredManifestReader
         }
         catch (Exception)
         {
-            return new DesiredManifestReadResult(
+            return new(
                 ManifestReadStatus.Unreadable,
                 ConvergenceReasonCodes.ManifestUnreadable,
                 filePath,
@@ -72,7 +72,7 @@ public sealed class DesiredManifestReader
         }
         catch (JsonException)
         {
-            return new DesiredManifestReadResult(
+            return new(
                 ManifestReadStatus.Invalid,
                 ConvergenceReasonCodes.ManifestInvalid,
                 filePath,
@@ -82,7 +82,7 @@ public sealed class DesiredManifestReader
 
         if (model is null || model.Packages is null || string.IsNullOrWhiteSpace(model.SchemaVersion))
         {
-            return new DesiredManifestReadResult(
+            return new(
                 ManifestReadStatus.Invalid,
                 ConvergenceReasonCodes.ManifestInvalid,
                 filePath,
@@ -94,7 +94,7 @@ public sealed class DesiredManifestReader
         if (!string.IsNullOrWhiteSpace(expectedSchemaVersion) &&
             !string.Equals(model.SchemaVersion, expectedSchemaVersion, StringComparison.OrdinalIgnoreCase))
         {
-            return new DesiredManifestReadResult(
+            return new(
                 ManifestReadStatus.Invalid,
                 ConvergenceReasonCodes.ManifestInvalid,
                 filePath,
@@ -108,7 +108,7 @@ public sealed class DesiredManifestReader
         {
             if (string.IsNullOrWhiteSpace(pkg.Id))
             {
-                return new DesiredManifestReadResult(
+                return new(
                     ManifestReadStatus.Invalid,
                     ConvergenceReasonCodes.ManifestInvalid,
                     filePath,
@@ -118,7 +118,7 @@ public sealed class DesiredManifestReader
 
             if (!seenIds.Add(pkg.Id))
             {
-                return new DesiredManifestReadResult(
+                return new(
                     ManifestReadStatus.Invalid,
                     ConvergenceReasonCodes.ManifestInvalid,
                     filePath,
@@ -128,7 +128,7 @@ public sealed class DesiredManifestReader
 
             if (string.IsNullOrWhiteSpace(pkg.Version))
             {
-                return new DesiredManifestReadResult(
+                return new(
                     ManifestReadStatus.Invalid,
                     ConvergenceReasonCodes.ManifestInvalid,
                     filePath,
@@ -139,7 +139,7 @@ public sealed class DesiredManifestReader
             // Validate: no version ranges (must be exact)
             if (pkg.Version.Contains('*') || pkg.Version.Contains('[') || pkg.Version.Contains('('))
             {
-                return new DesiredManifestReadResult(
+                return new(
                     ManifestReadStatus.Invalid,
                     ConvergenceReasonCodes.ManifestInvalid,
                     filePath,
@@ -160,7 +160,7 @@ public sealed class DesiredManifestReader
             model.GeneratedAtUtc,
             entries);
 
-        return new DesiredManifestReadResult(
+        return new(
             ManifestReadStatus.Succeeded,
             ConvergenceReasonCodes.ManifestSucceeded,
             filePath,

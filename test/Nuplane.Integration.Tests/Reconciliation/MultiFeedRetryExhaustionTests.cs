@@ -27,7 +27,7 @@ public sealed class MultiFeedRetryExhaustionTests
         var resolver = new MultiFeedPackageResolver(feedOptions, new(feedOptions));
 
         var service = new ReconciliationService(
-            new[] { source },
+            [source],
             new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg" } },
             new(),
             new(),

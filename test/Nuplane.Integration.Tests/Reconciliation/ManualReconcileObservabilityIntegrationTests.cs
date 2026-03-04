@@ -19,7 +19,7 @@ public sealed class ManualReconcileObservabilityIntegrationTests
     [Fact]
     public async Task ManualTrigger_CompletedCycle_SnapshotReflectsOutcome()
     {
-        var storeRegistry = CreateInMemoryStoreRegistry(new Dictionary<string, string>
+        var storeRegistry = CreateInMemoryStoreRegistry(new()
         {
             ["pkg-a"] = "1.0.0"
         });
@@ -45,7 +45,7 @@ public sealed class ManualReconcileObservabilityIntegrationTests
     {
         var storeRegistry = CreateInMemoryStoreRegistry([]);
         var healthEvaluator = new ReconciliationHealthEvaluator();
-        healthEvaluator.Evaluate(new ReconciliationHealthInput(
+        healthEvaluator.Evaluate(new(
             true, false, 1, 0, 0, 0, ManifestFailures: 1));
         var projector = new OperationalSnapshotProjector(storeRegistry, healthEvaluator);
 
@@ -63,7 +63,7 @@ public sealed class ManualReconcileObservabilityIntegrationTests
     public async Task ManualTrigger_Coordinator_LogsOutcome()
     {
         var service = new FakeReconciliationService(
-            new ReconciliationRunResult(false, EmptyChangeSet(), [], false));
+            new(false, EmptyChangeSet(), [], false));
         var logger = new SpyReconciliationLogger();
         var coordinator = new ManualReconcileCoordinator(service, logger);
 
@@ -78,7 +78,7 @@ public sealed class ManualReconcileObservabilityIntegrationTests
     public async Task ManualTrigger_Rejected_LogsRejection()
     {
         var service = new FakeReconciliationService(
-            new ReconciliationRunResult(true, EmptyChangeSet(), [], false));
+            new(true, EmptyChangeSet(), [], false));
         var logger = new SpyReconciliationLogger();
         var coordinator = new ManualReconcileCoordinator(service, logger);
 
@@ -129,11 +129,17 @@ public sealed class ManualReconcileObservabilityIntegrationTests
     {
         public Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken ct) =>
             Task.FromResult(result);
+
+        public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken ct) =>
+            Task.FromResult(result);
     }
 
     private sealed class ThrowingReconciliationService(Exception exception) : IReconciliationService
     {
         public Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken ct) =>
+            throw exception;
+
+        public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken ct) =>
             throw exception;
     }
 
@@ -157,5 +163,8 @@ public sealed class ManualReconcileObservabilityIntegrationTests
         public void LogAggregationOutcome(string correlationId, int packageCount, int failedSourceCount) { }
         public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode) { }
         public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState) { }
+        public void LogTrigger(string correlationId, string triggerType, string? triggerSource) { }
+        public void LogIdleModeEntered() { }
+        public void LogIdleModeExited() { }
     }
 }

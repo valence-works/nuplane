@@ -101,7 +101,7 @@ public sealed class DesiredSourceSnapshotCacheTests
         {
             var state = StoreStateRecord.Empty();
             state.LastSuccessfulSourceSnapshots[sourceName] =
-                new SourceSnapshotRef(Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow, requests);
+                new(Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow, requests);
             return Task.FromResult(state);
         }
 

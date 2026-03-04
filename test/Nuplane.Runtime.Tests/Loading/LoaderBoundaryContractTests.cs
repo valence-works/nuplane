@@ -45,7 +45,7 @@ public sealed class LoaderBoundaryContractTests
     public async Task Enabled_FailedLoad_ReturnsFailedOutcomeWithReason()
     {
         var options = new LoadingOptions { Enabled = true };
-        var loader = new FakeLoader(failedIds: new Dictionary<string, string>
+        var loader = new FakeLoader(failedIds: new()
         {
             ["pkg-a"] = "assembly-not-found"
         });
@@ -65,7 +65,7 @@ public sealed class LoaderBoundaryContractTests
         var options = new LoadingOptions { Enabled = true };
         var loader = new FakeLoader(
             successIds: ["pkg-a"],
-            failedIds: new Dictionary<string, string> { ["pkg-b"] = "load-error" });
+            failedIds: new() { ["pkg-b"] = "load-error" });
         var adapter = new NuplaneLoadingAdapter(options, loader);
         var packages = new[] { Pkg("pkg-a", "1.0.0"), Pkg("pkg-b", "2.0.0") };
 
@@ -116,7 +116,7 @@ public sealed class LoaderBoundaryContractTests
     public void NullLoader_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new NuplaneLoadingAdapter(new LoadingOptions(), null!));
+            new NuplaneLoadingAdapter(new(), null!));
     }
 
     private static ResolvedPackage Pkg(string id, string version) =>
@@ -132,7 +132,7 @@ public sealed class LoaderBoundaryContractTests
             Dictionary<string, string>? failedIds = null)
         {
             _successIds = successIds is not null
-                ? new HashSet<string>(successIds, StringComparer.OrdinalIgnoreCase)
+                ? new(successIds, StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             _failedIds = failedIds ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
@@ -153,7 +153,7 @@ public sealed class LoaderBoundaryContractTests
                 }
                 else if (_successIds.Contains(pkg.Id))
                 {
-                    loaded.Add(new PackageLoadSession(
+                    loaded.Add(new(
                         pkg.Id, pkg.Version, pkg.InstallPath,
                         $"ctx-{pkg.Id}", DateTimeOffset.UtcNow, true, null));
                 }
@@ -163,6 +163,12 @@ public sealed class LoaderBoundaryContractTests
         }
 
         public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
+        {
+            context = null;
+            return false;
+        }
+
+        public bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context)
         {
             context = null;
             return false;

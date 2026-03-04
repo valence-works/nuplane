@@ -1,11 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Nuplane.Abstractions\Nuplane.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Nuplane\Nuplane.csproj" />
+    <ProjectReference Include="..\..\src\Nuplane.Loading\Nuplane.Loading.csproj" />
+    <ProjectReference Include="..\..\src\Nuplane.Loading.Hosting\Nuplane.Loading.Hosting.csproj" />
+    <ProjectReference Include="..\Nuplane.Sample.Abstractions\Nuplane.Sample.Abstractions.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>

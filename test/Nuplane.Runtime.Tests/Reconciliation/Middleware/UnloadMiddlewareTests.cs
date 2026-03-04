@@ -18,11 +18,11 @@ public sealed class UnloadMiddlewareTests
         var loader = new FakePackageLoader(removalSucceeds: true);
 
         var ctx = Ctx(
-            active: new Dictionary<string, string> { ["orphan"] = "1.0.0" },
+            active: new() { ["orphan"] = "1.0.0" },
             requested: []);
-        ctx.MergedActive = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["orphan"] = "1.0.0" };
+        ctx.MergedActive = new(StringComparer.OrdinalIgnoreCase) { ["orphan"] = "1.0.0" };
 
-        await Build(new LoadingOptions { Enabled = true }, loader, coordinator, pendingUnloads)
+        await Build(new() { Enabled = true }, loader, coordinator, pendingUnloads)
             .InvokeAsync(ctx, () => Task.CompletedTask);
 
         Assert.False(ctx.MergedActive.ContainsKey("orphan"));
@@ -37,11 +37,11 @@ public sealed class UnloadMiddlewareTests
         var pkg = Pkg("alpha");
 
         var ctx = Ctx(
-            active: new Dictionary<string, string> { ["alpha"] = "1.0.0" },
+            active: new() { ["alpha"] = "1.0.0" },
             requested: [pkg]);
-        ctx.MergedActive = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["alpha"] = "1.0.0" };
+        ctx.MergedActive = new(StringComparer.OrdinalIgnoreCase) { ["alpha"] = "1.0.0" };
 
-        await Build(new LoadingOptions { Enabled = true }, loader, coordinator, pendingUnloads)
+        await Build(new() { Enabled = true }, loader, coordinator, pendingUnloads)
             .InvokeAsync(ctx, () => Task.CompletedTask);
 
         Assert.Equal(0, coordinator.AttemptUnloadCallCount);
@@ -56,11 +56,11 @@ public sealed class UnloadMiddlewareTests
         var loader = new FakePackageLoader(removalSucceeds: true);
 
         var ctx = Ctx(
-            active: new Dictionary<string, string> { ["orphan"] = "1.0.0" },
+            active: new() { ["orphan"] = "1.0.0" },
             requested: []);
-        ctx.MergedActive = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["orphan"] = "1.0.0" };
+        ctx.MergedActive = new(StringComparer.OrdinalIgnoreCase) { ["orphan"] = "1.0.0" };
 
-        await Build(new LoadingOptions { Enabled = true }, loader, coordinator, pendingUnloads)
+        await Build(new() { Enabled = true }, loader, coordinator, pendingUnloads)
             .InvokeAsync(ctx, () => Task.CompletedTask);
 
         Assert.NotEmpty(pendingUnloads);
@@ -75,11 +75,11 @@ public sealed class UnloadMiddlewareTests
         var loader = new FakePackageLoader(removalSucceeds: true);
 
         var ctx = Ctx(
-            active: new Dictionary<string, string> { ["orphan"] = "1.0.0" },
+            active: new() { ["orphan"] = "1.0.0" },
             requested: []);
-        ctx.MergedActive = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["orphan"] = "1.0.0" };
+        ctx.MergedActive = new(StringComparer.OrdinalIgnoreCase) { ["orphan"] = "1.0.0" };
 
-        await Build(new LoadingOptions { Enabled = false }, loader, coordinator, pendingUnloads)
+        await Build(new() { Enabled = false }, loader, coordinator, pendingUnloads)
             .InvokeAsync(ctx, () => Task.CompletedTask);
 
         Assert.Equal(0, coordinator.AttemptUnloadCallCount);
@@ -91,7 +91,7 @@ public sealed class UnloadMiddlewareTests
         IPackageUnloadCoordinator coordinator,
         Dictionary<string, PackageLoadContextHandle> pendingUnloads) =>
         new(options, loader, coordinator, pendingUnloads, new NullLogger(),
-            new ReconciliationMetrics(new ReconciliationTelemetry()));
+            new(new()));
 
     private static ReconciliationCycleContext Ctx(
         Dictionary<string, string> active,
@@ -118,7 +118,13 @@ public sealed class UnloadMiddlewareTests
 
         public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
         {
-            context = removalSucceeds ? new PackageLoadContextHandle($"{packageId}@{version}", new object()) : null;
+            context = removalSucceeds ? new PackageLoadContextHandle($"{packageId}@{version}", new()) : null;
+            return removalSucceeds;
+        }
+
+        public bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context)
+        {
+            context = removalSucceeds ? new PackageLoadContextHandle($"{packageId}@{version}", new()) : null;
             return removalSucceeds;
         }
     }
@@ -163,5 +169,8 @@ public sealed class UnloadMiddlewareTests
         public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode) { }
         public void LogAdminTriggerOutcome(string correlationId, string outcomeCode, string? reasonCode) { }
         public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState) { }
+        public void LogTrigger(string correlationId, string triggerType, string? triggerSource) { }
+        public void LogIdleModeEntered() { }
+        public void LogIdleModeExited() { }
     }
 }

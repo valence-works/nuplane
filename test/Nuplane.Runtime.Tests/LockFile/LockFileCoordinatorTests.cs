@@ -83,8 +83,8 @@ public sealed class LockFileCoordinatorTests : IDisposable
     }
 
     private static LockFileCoordinator Build(string path, LockFileMode mode, bool requireEntry = false) =>
-        new(new LockFileStore(path),
-            new LockFileOptions { Mode = mode, RequireEntryInStrictMode = requireEntry });
+        new(new(path),
+            new() { Mode = mode, RequireEntryInStrictMode = requireEntry });
 
     private static ResolvedPackage Pkg(string id, string version, string feed) =>
         new(id, version, feed, $"/store/{id}", DateTimeOffset.UtcNow, id);

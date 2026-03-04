@@ -11,7 +11,7 @@ public sealed class ConvergenceOptionsValidatorTests
     [Fact]
     public void Validate_DefaultOptions_Succeeds()
     {
-        var result = _sut.Validate(null, new ConvergenceOptions());
+        var result = _sut.Validate(null, new());
 
         Assert.True(result.Succeeded);
     }

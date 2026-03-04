@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Nuplane.Sample.Abstractions\Nuplane.Sample.Abstractions.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackageId>Nuplane.Sample.Plugin</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Nuplane Sample</Authors>
+    <Description>Sample plugin package for end-to-end Nuplane loading demo.</Description>
+  </PropertyGroup>
+
+</Project>

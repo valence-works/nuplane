@@ -18,9 +18,9 @@ public sealed class DesiredAggregationContractTests
     {
         var sut = new DesiredStateAggregator();
         var src = new FakeSource("src", [
-            new PackageRequest("zebra", "1.0.0", "feed-b", PackageUpdatePolicy.Exact, "src"),
-            new PackageRequest("alpha", "1.0.0", "feed-a", PackageUpdatePolicy.Exact, "src"),
-            new PackageRequest("mango", "1.0.0", "feed-c", PackageUpdatePolicy.Exact, "src")
+            new("zebra", "1.0.0", "feed-b", PackageUpdatePolicy.Exact, "src"),
+            new("alpha", "1.0.0", "feed-a", PackageUpdatePolicy.Exact, "src"),
+            new("mango", "1.0.0", "feed-c", PackageUpdatePolicy.Exact, "src")
         ]);
 
         var result = await sut.AggregateAsync([src], _permissive, CancellationToken.None);
@@ -34,11 +34,11 @@ public sealed class DesiredAggregationContractTests
     public async Task IdenticalInputs_TwoAggregatorInstances_ProduceSameOutput()
     {
         var srcA = new FakeSource("alpha", [
-            new PackageRequest("pkg-b", "2.0.0", "feed-1", PackageUpdatePolicy.Exact, "alpha"),
-            new PackageRequest("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "alpha")
+            new("pkg-b", "2.0.0", "feed-1", PackageUpdatePolicy.Exact, "alpha"),
+            new("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "alpha")
         ]);
         var srcB = new FakeSource("beta", [
-            new PackageRequest("pkg-c", "3.0.0", "feed-2", PackageUpdatePolicy.Exact, "beta")
+            new("pkg-c", "3.0.0", "feed-2", PackageUpdatePolicy.Exact, "beta")
         ]);
 
         var agg1 = new DesiredStateAggregator();
@@ -61,7 +61,7 @@ public sealed class DesiredAggregationContractTests
     {
         var sut = new DesiredStateAggregator();
         var healthy = new FakeSource("alpha", [
-            new PackageRequest("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "alpha")
+            new("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "alpha")
         ]);
         var faulting = new FaultingSource("beta", new InvalidOperationException("offline"));
 
@@ -105,13 +105,13 @@ public sealed class DesiredAggregationContractTests
     {
         var sut = new DesiredStateAggregator();
         var src = new FakeSource("src", [
-            new PackageRequest("allowed-pkg", "1.0.0", "feed", PackageUpdatePolicy.Exact, "src"),
-            new PackageRequest("disallowed-pkg", "1.0.0", "feed", PackageUpdatePolicy.Exact, "src")
+            new("allowed-pkg", "1.0.0", "feed", PackageUpdatePolicy.Exact, "src"),
+            new("disallowed-pkg", "1.0.0", "feed", PackageUpdatePolicy.Exact, "src")
         ]);
         var opts = new SourceTrustOptions
         {
             RejectUnallowlistedPackages = true,
-            AllowedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "allowed-pkg" }
+            AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "allowed-pkg" }
         };
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -123,9 +123,9 @@ public sealed class DesiredAggregationContractTests
     {
         var sut = new DesiredStateAggregator();
         var src = new FakeSource("src", [
-            new PackageRequest("valid", "1.0.0", "feed", PackageUpdatePolicy.Exact, "src"),
-            new PackageRequest("", "1.0.0", "feed", PackageUpdatePolicy.Exact, "src"),
-            new PackageRequest("  ", "1.0.0", "feed", PackageUpdatePolicy.Exact, "src")
+            new("valid", "1.0.0", "feed", PackageUpdatePolicy.Exact, "src"),
+            new("", "1.0.0", "feed", PackageUpdatePolicy.Exact, "src"),
+            new("  ", "1.0.0", "feed", PackageUpdatePolicy.Exact, "src")
         ]);
 
         var result = await sut.AggregateAsync([src], _permissive, CancellationToken.None);

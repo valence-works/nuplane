@@ -6,6 +6,7 @@
     <ProjectReference Include="..\..\src\Nuplane\Nuplane.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Loading\Nuplane.Loading.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Loading.Hosting\Nuplane.Loading.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\Nuplane.Sources.Directory\Nuplane.Sources.Directory.csproj" />
   </ItemGroup>
 
 </Project>

@@ -40,16 +40,16 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
 
     private static ReconciliationService CreateService(IDesiredPackageSource source)
     {
-        return new ReconciliationService(
-            new[] { source },
-            new SourceTrustOptions { RejectUnallowlistedPackages = false },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
+        return new(
+            [source],
+            new() { RejectUnallowlistedPackages = false },
+            new(),
+            new(),
             new NuGetPackageResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions(),
-            new ObserverEventDispatcher(Array.Empty<INuplaneObserver>()),
-            new ReconciliationHealthEvaluator());
+            new(new StoreStateSerializer(), stateFilePath: null),
+            new(),
+            new([]),
+            new());
     }
 
     [Fact]
@@ -69,8 +69,8 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
 
         var options = new ConvergenceOptions { Manifest = { Enabled = true, Path = manifestPath } };
 
-        var source1 = new DesiredManifestPackageSource(new DesiredManifestReader(), options);
-        var source2 = new DesiredManifestPackageSource(new DesiredManifestReader(), options);
+        var source1 = new DesiredManifestPackageSource(new(), options);
+        var source2 = new DesiredManifestPackageSource(new(), options);
 
         var service1 = CreateService(source1);
         var service2 = CreateService(source2);
@@ -104,7 +104,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
             }
         }));
 
-        var source = new DesiredManifestPackageSource(new DesiredManifestReader(), options);
+        var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
         var first = await service.TriggerManualAsync(CancellationToken.None);
@@ -146,7 +146,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
             }
         }));
 
-        var source = new DesiredManifestPackageSource(new DesiredManifestReader(), options);
+        var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
         await service.TriggerManualAsync(CancellationToken.None);

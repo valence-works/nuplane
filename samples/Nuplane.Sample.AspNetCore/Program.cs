@@ -1,75 +1,85 @@
 using Nuplane.Abstractions;
+using Nuplane.Extensions;
+using Nuplane.Hosting;
+using Nuplane.Loading.Hosting;
 using Nuplane;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Sample.AspNetCore;
 using Nuplane.Store.State;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var dropDirectory = builder.Configuration["NuplaneSample:DropDirectory"] ?? "packages";
+var feedName = builder.Configuration["NuplaneSample:FeedName"] ?? "local-packages";
+var sourceName = builder.Configuration["NuplaneSample:SourceName"] ?? "Sample.LocalFeed";
+var debounceMs = ParseDebounceMilliseconds(builder.Configuration["NuplaneSample:DebounceMilliseconds"]);
+var allowlistedPackageIds = builder.Configuration
+    .GetSection("NuplaneSample:AllowlistedPackageIds")
+    .Get<string[]>()
+    ?? ["Nuplane.Sample.Plugin"];
+
 builder.Services.AddNuplane(
 	configureSourceTrust: trust =>
 	{
-		trust.AllowedSourceNames.Add("NuGet.Main");
-		trust.AllowedPackageIds.Add("Nuplane.Sample.Plugin");
+		trust.AllowedSourceNames.Add(sourceName);
+		foreach (var packageId in allowlistedPackageIds)
+		{
+			trust.AllowedPackageIds.Add(packageId);
+		}
 	},
-	configureFeedResolution: feedResolution =>
+	configureReconciliation: reconciliation =>
 	{
-		feedResolution.PolicyMode = FeedResolutionPolicyMode.Strict;
-		feedResolution.StopOnFirstSuccessfulFeed = false;
-		feedResolution.DeterministicFeedOrder = true;
-	},
-	configureFeedTrustPolicy: trustPolicy =>
-	{
-		trustPolicy.DefaultRestrictedValidatorRequired = true;
-		trustPolicy.RequireOverrideReason = true;
-		trustPolicy.AllowUntrustedWithScopedOverride = true;
+		reconciliation.PollInterval = TimeSpan.FromSeconds(60);
+		reconciliation.MaxRetryAttempts = 3;
 	},
 	configureLockFile: lockFile =>
 	{
-		lockFile.Mode = LockFileMode.Strict;
+		lockFile.Mode = LockFileMode.Enforce;
 		lockFile.Path = "state/nuplane.lock.json";
 		lockFile.FailOnHashMismatch = true;
 	},
 	configureCleanupPolicy: cleanup =>
 	{
-		cleanup.Mode = CleanupExecutionMode.ManualOnly;
-		cleanup.ProtectLastKnownGood = true;
-	},
-	configureFeeds: feeds =>
-	{
-		feeds.Add(new(
-			Name: "NuGet.Main",
-			ServiceIndex: new("https://api.nuget.org/v3/index.json"),
-			TrustLevel: FeedTrustLevel.Restricted,
-			Credentials: "secrets://nuget/main"));
+		cleanup.Mode = CleanupExecutionMode.Automatic;
+		cleanup.RetainLastNVersions = 3;
+		cleanup.RetainYoungerThanDays = 14;
 	});
 
-// Phase 3 optional loading (register via Nuplane.Loading — fully wired):
-// builder.Services.AddNuplaneLoading(loading =>
-// {
-// 	loading.Enabled = true;
-// 	loading.DeactivationTimeout = TimeSpan.FromSeconds(15);
-// 	loading.SharedAssemblies.Add(new("Nuplane.Abstractions", "31bf3856ad364e35", 1));
-// });
+builder.Services.AddNuplaneDirectorySource(options =>
+{
+	options.DirectoryPath = dropDirectory;
+	options.FeedName = feedName;
+	options.SourceName = sourceName;
+	options.TriggerReconciliationOnChange = true;
+	options.DebounceWindow = TimeSpan.FromMilliseconds(debounceMs);
+	foreach (var packageId in allowlistedPackageIds)
+	{
+		options.AllowlistedPackageIds.Add(packageId);
+	}
+});
 
-// Phase 4 convergent runtime loading with admin surface:
-// builder.Services.AddNuplane(
-// 	configureConvergence: convergence =>
-// 	{
-// 		convergence.Manifest.Path = "state/desired-manifest.json";
-// 		convergence.Manifest.Enabled = true;
-// 		convergence.PollInterval = TimeSpan.FromSeconds(30);
-// 		convergence.Retry.MaxAttempts = 3;
-// 		convergence.Retry.InitialBackoff = TimeSpan.FromSeconds(2);
-// 		convergence.Retry.MaxBackoff = TimeSpan.FromSeconds(30);
-// 		convergence.Loader.Enabled = true;
-// 		convergence.Admin.Enabled = true;
-// 	});
+builder.Services.AddNuplaneLoading(loading =>
+{
+	loading.Enabled = true;
+	loading.DeactivationTimeout = TimeSpan.FromSeconds(15);
+	loading.SharedAssemblies.Add(new("Nuplane.Abstractions", "31bf3856ad364e35", 1));
+});
 
-// Phase 4 optional admin endpoints (register via Nuplane.Admin.AspNetCore — when available):
-// app.MapNuplaneAdmin(); // maps GET /nuplane/packages, GET /nuplane/state, POST /nuplane/reconcile, GET /nuplane/health
+builder.Services.AddNuplaneLoadingHosting();
+builder.Services.AddSingleton<INuplaneObserver, PluginDiscoveryObserver>();
 
 var app = builder.Build();
 
-app.MapGet("/", () => "Nuplane Sample ASP.NET configured for Phase 2 governance options (plus Phase 3/4 example comments).");
+app.MapGet("/", () => "Drop a .nupkg into the configured local directory feed to trigger reconcile, load assemblies, and discover IPlugin types.");
 
 app.Run();
+
+static int ParseDebounceMilliseconds(string? configuredValue)
+{
+	if (int.TryParse(configuredValue, out var milliseconds) && milliseconds > 0)
+	{
+		return milliseconds;
+	}
+
+	return 1000;
+}

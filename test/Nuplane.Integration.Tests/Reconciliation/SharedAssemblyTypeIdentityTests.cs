@@ -12,7 +12,7 @@ public sealed class SharedAssemblyTypeIdentityTests
         var asm = typeof(string).Assembly.GetName();
         var token = string.Concat(asm.GetPublicKeyToken()!.Select(x => x.ToString("x2")));
 
-        var isMatch = matcher.IsMatch(asm, [new SharedAssemblyPolicyEntry(asm.Name!, token, asm.Version!.Major)]);
+        var isMatch = matcher.IsMatch(asm, [new(asm.Name!, token, asm.Version!.Major)]);
 
         Assert.True(isMatch);
     }
@@ -23,7 +23,7 @@ public sealed class SharedAssemblyTypeIdentityTests
         var matcher = new SharedAssemblyPolicyMatcher();
         var asm = typeof(string).Assembly.GetName();
 
-        var isMatch = matcher.IsMatch(asm, [new SharedAssemblyPolicyEntry(asm.Name!, "0000000000000000", asm.Version!.Major)]);
+        var isMatch = matcher.IsMatch(asm, [new(asm.Name!, "0000000000000000", asm.Version!.Major)]);
 
         Assert.False(isMatch);
     }

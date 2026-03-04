@@ -21,7 +21,7 @@ public sealed class ObserverContractTests
             new NuGetPackageResolver(),
             new(new StoreStateSerializer(), stateFilePath: null),
             new(),
-            new ObserverEventDispatcher([observer]),
+            new([observer]),
             new());
 
         var result = await service.TriggerManualAsync(CancellationToken.None);

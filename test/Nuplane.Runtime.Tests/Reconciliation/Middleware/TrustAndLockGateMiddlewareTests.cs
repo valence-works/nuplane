@@ -86,8 +86,8 @@ public sealed class TrustAndLockGateMiddlewareTests
         FakeLockCoordinator? lockCoordinator = null,
         IFailureRecorder? failureRecorder = null) =>
         new(
-            new FeedResolutionOptions(),
-            new FeedTrustPolicyOptions(),
+            new(),
+            new(),
             trustEvaluator ?? new FakeTrustEvaluator([]),
             lockCoordinator ?? new FakeLockCoordinator([]),
             new PassthroughRetryPolicy(),
@@ -103,7 +103,7 @@ public sealed class TrustAndLockGateMiddlewareTests
             CancellationToken = CancellationToken.None
         };
         ctx.AllowlistedRequests = resolved.Select(r => new PackageRequest(r.Id, r.Version, r.FeedName, PackageUpdatePolicy.Exact, r.SourceName ?? "src")).ToArray();
-        ctx.ResolutionResult = new PackageResolutionResult(resolved, [], []);
+        ctx.ResolutionResult = new(resolved, [], []);
         return ctx;
     }
 
@@ -166,5 +166,8 @@ public sealed class TrustAndLockGateMiddlewareTests
         public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode) { }
         public void LogAdminTriggerOutcome(string correlationId, string outcomeCode, string? reasonCode) { }
         public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState) { }
+        public void LogTrigger(string correlationId, string triggerType, string? triggerSource) { }
+        public void LogIdleModeEntered() { }
+        public void LogIdleModeExited() { }
     }
 }

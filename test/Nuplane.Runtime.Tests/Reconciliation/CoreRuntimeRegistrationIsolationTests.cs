@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Nuplane.Abstractions;
 using Nuplane;
 using Nuplane.Runtime.Reconciliation;
 
@@ -21,17 +20,9 @@ public sealed class CoreRuntimeRegistrationIsolationTests
                 trust.AllowedSourceNames.Add("NuGet.Main");
                 trust.AllowedPackageIds.Add("Test.Package");
             },
-            configureFeeds: feeds =>
-            {
-                feeds.Add(new FeedDefinition(
-                    Name: "NuGet.Main",
-                    ServiceIndex: new Uri("https://api.nuget.org/v3/index.json"),
-                    TrustLevel: FeedTrustLevel.Trusted,
-                    Credentials: "secrets://nuget/main"));
-            },
             stateFilePath: stateFilePath);
 
-        using var provider = services.BuildServiceProvider();
+        await using var provider = services.BuildServiceProvider();
 
         var runtime = provider.GetRequiredService<ReconciliationService>();
         var result = await runtime.TriggerManualAsync(CancellationToken.None);

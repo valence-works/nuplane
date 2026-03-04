@@ -87,7 +87,7 @@ public sealed class DiffAndChangeEventMiddlewareTests
         IStoreRegistry store,
         IObserverEventDispatcher dispatcher) =>
         new(diff, new PassthroughDryRunPlanner(), new PassthroughRetryPolicy(), store, dispatcher,
-            new ReconciliationMetrics(new ReconciliationTelemetry()));
+            new(new()));
 
     private static ReconciliationCycleContext Ctx(ResolvedPackage[] packages)
     {
@@ -97,7 +97,7 @@ public sealed class DiffAndChangeEventMiddlewareTests
             CycleStartedAt = DateTimeOffset.UtcNow,
             CancellationToken = CancellationToken.None
         };
-        ctx.ResolutionResult = new PackageResolutionResult(packages, [], []);
+        ctx.ResolutionResult = new(packages, [], []);
         return ctx;
     }
 
@@ -126,7 +126,7 @@ public sealed class DiffAndChangeEventMiddlewareTests
             string correlationId,
             CancellationToken ct) =>
             Task.FromResult(new DryRunPlan(
-                new PackageChangeSet([], [], [], correlationId, DateTimeOffset.UtcNow),
+                new([], [], [], correlationId, DateTimeOffset.UtcNow),
                 MutatedState: false));
     }
 

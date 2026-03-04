@@ -10,13 +10,12 @@ public sealed class SingleFlightOverlapTests
     [Fact]
     public async Task OverlappingManualTriggers_SkipSecondRunWhenSingleFlightEnabled()
     {
-        var source = new StaticSource(new[]
-        {
-            new PackageRequest("pkg-a", "1.2.3", "feed-1", PackageUpdatePolicy.Exact, "source-a")
-        });
+        var source = new StaticSource([
+            new("pkg-a", "1.2.3", "feed-1", PackageUpdatePolicy.Exact, "source-a")
+        ]);
 
         var service = new ReconciliationService(
-            new[] { source },
+            [source],
             new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
             new(),
             new(),

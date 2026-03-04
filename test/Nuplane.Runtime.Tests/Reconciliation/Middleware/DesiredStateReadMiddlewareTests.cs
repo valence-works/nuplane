@@ -18,7 +18,7 @@ public sealed class DesiredStateReadMiddlewareTests
         var packages = new[] { Pkg("alpha"), Pkg("beta") };
         var middleware = BuildMiddleware(
             sources: [new FakeSource(packages)],
-            aggregatorResult: req => new DesiredAggregateResult(req, Empty));
+            aggregatorResult: req => new(req, Empty));
 
         var ctx = Ctx();
         await middleware.InvokeAsync(ctx, () => { nextCalled = true; return Task.CompletedTask; });
@@ -36,7 +36,7 @@ public sealed class DesiredStateReadMiddlewareTests
         var nextCalled = false;
         var middleware = BuildMiddleware(
             sources: [new FakeSource([])],
-            aggregatorResult: _ => new DesiredAggregateResult([], Empty));
+            aggregatorResult: _ => new([], Empty));
 
         var ctx = Ctx();
         await middleware.InvokeAsync(ctx, () => { nextCalled = true; return Task.CompletedTask; });
@@ -52,7 +52,7 @@ public sealed class DesiredStateReadMiddlewareTests
         var recorder = new FakeFailureRecorder();
         var middleware = BuildMiddleware(
             sources: [new FaultingSource(new InvalidOperationException("feed down"))],
-            aggregatorResult: _ => new DesiredAggregateResult([], Empty),
+            aggregatorResult: _ => new([], Empty),
             failureRecorder: recorder);
 
         var ctx = Ctx();
@@ -70,7 +70,7 @@ public sealed class DesiredStateReadMiddlewareTests
         var err = new Exception("test-source-error");
         var middleware = BuildMiddleware(
             sources: [new FakeSource([Pkg("alpha")])],
-            aggregatorResult: req => new DesiredAggregateResult(req, new Dictionary<string, Exception>
+            aggregatorResult: req => new(req, new Dictionary<string, Exception>
             {
                 ["FaultySource"] = err
             }.AsReadOnly()),
@@ -89,16 +89,16 @@ public sealed class DesiredStateReadMiddlewareTests
     {
         var fakeStore = new FakeStoreRegistry();
         var snapshotCache = new DesiredSourceSnapshotCache(fakeStore);
-        return new DesiredStateReadMiddleware(
+        return new(
             sources ?? [],
-            new SourceTrustOptions(),
-            new FakeAggregator(aggregatorResult ?? (req => new DesiredAggregateResult(req, Empty))),
+            new(),
+            new FakeAggregator(aggregatorResult ?? (req => new(req, Empty))),
             new PassthroughAllowlistGate(),
             new PassthroughRetryPolicy(),
             snapshotCache,
             failureRecorder ?? new FakeFailureRecorder(),
             new NullLogger(),
-            new ReconciliationMetrics(new ReconciliationTelemetry()));
+            new(new()));
     }
 
     private static ReconciliationCycleContext Ctx() => new()
@@ -180,6 +180,9 @@ public sealed class DesiredStateReadMiddlewareTests
         public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode) { }
         public void LogAdminTriggerOutcome(string correlationId, string outcomeCode, string? reasonCode) { }
         public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState) { }
+        public void LogTrigger(string correlationId, string triggerType, string? triggerSource) { }
+        public void LogIdleModeEntered() { }
+        public void LogIdleModeExited() { }
     }
 
     private sealed class FakeStoreRegistry : IStoreRegistry

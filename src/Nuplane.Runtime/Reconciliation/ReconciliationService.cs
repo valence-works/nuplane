@@ -48,10 +48,10 @@ public ReconciliationService(
             packageResolver,
             storeRegistry,
             reconciliationOptions,
-        new ObserverEventDispatcher(Array.Empty<INuplaneObserver>()),
-        new ReconciliationHealthEvaluator(),
+        new([]),
+        new(),
         new ReconciliationLogger(),
-        new ReconciliationMetrics(new()),
+        new(new()),
                 new(),
                 new(),
                 new(),
@@ -79,7 +79,8 @@ public ReconciliationService(
         CleanupPolicyOptions? cleanupPolicyOptions = null,
         LoadingOptions? loadingOptions = null,
         IPackageLoader? packageLoader = null,
-        IPackageUnloadCoordinator? packageUnloadCoordinator = null)
+        IPackageUnloadCoordinator? packageUnloadCoordinator = null,
+        WatcherDegradationTracker? watcherDegradationTracker = null)
     {
         var sourcesList = sources?.ToArray() ?? throw new ArgumentNullException(nameof(sources));
         sourceTrustOptions = sourceTrustOptions ?? throw new ArgumentNullException(nameof(sourceTrustOptions));
@@ -119,7 +120,7 @@ public ReconciliationService(
 
         var pendingUnloads = new Dictionary<string, PackageLoadContextHandle>(StringComparer.OrdinalIgnoreCase);
 
-        pipeline = new ReconciliationPipeline();
+        pipeline = new();
         pipeline.Use(new DesiredStateReadMiddleware(
             sourcesList, sourceTrustOptions, desiredStateAgg, allowlistGate,
             retryPolicy, snapshotCache, failureRec, loggerInstance, metricsInstance));
@@ -142,28 +143,35 @@ public ReconciliationService(
             diffEngine, storeReg, packageCleanupService,
             cleanupOpts, metricsInstance));
         pipeline.Use(new HealthAndMetricsMiddleware(
-            healthEval, eventDispatcher, loggerInstance, metricsInstance));
+            healthEval, eventDispatcher, loggerInstance, metricsInstance,
+            feedResOpts, watcherDegradationTracker));
     }
 
     /// <summary>
-    /// Triggers a manual reconciliation cycle. If single-flight is enabled, concurrent
-    /// invocations are skipped. Returns the result of the cycle including applied changes
-    /// and health status.
+    /// Triggers a manual reconciliation cycle (backward-compatible; uses Manual trigger type).
     /// </summary>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The reconciliation run result.</returns>
-    public async Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken cancellationToken)
+    public Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken cancellationToken)
     {
+        return TriggerAsync(new ReconciliationTrigger(Models.TriggerType.Manual), cancellationToken);
+    }
+
+    /// <summary>
+    /// Triggers a reconciliation cycle with explicit trigger metadata.
+    /// </summary>
+    public async Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(trigger);
+
         if (reconciliationOptions.EnableSingleFlight && Interlocked.CompareExchange(ref inFlight, 1, 0) != 0)
         {
-            return new(true, EmptyChangeSet, Array.Empty<string>(), IsDegraded: false);
+            return new(true, EmptyChangeSet, [], IsDegraded: false);
         }
 
         await cycleLock.WaitAsync(cancellationToken);
         try
         {
             var cycleStartedAt = DateTimeOffset.UtcNow;
-            var correlationId = CorrelationContext.CreateNew();
+            var correlationId = trigger.CorrelationId ?? CorrelationContext.CreateNew();
             using var scope = CorrelationContext.BeginScope(correlationId);
 
             // Prefer the Activity-assigned ID when tracing is active
@@ -173,7 +181,8 @@ public ReconciliationService(
             {
                 CorrelationId = effectiveCorrelationId,
                 CycleStartedAt = cycleStartedAt,
-                CancellationToken = cancellationToken
+                CancellationToken = cancellationToken,
+                Trigger = trigger
             };
 
             await pipeline.ExecuteAsync(context);

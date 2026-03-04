@@ -296,4 +296,43 @@ public sealed partial class ReconciliationLogger : IReconciliationLogger
         Level = LogLevel.Information,
         Message = "Admin snapshot read [CorrelationId={CorrelationId}, ActivePackageCount={ActivePackageCount}, HealthState={HealthState}]")]
     private static partial void AdminSnapshotReadLog(ILogger logger, string correlationId, int activePackageCount, string healthState);
+
+    /// <inheritdoc />
+    public void LogTrigger(string correlationId, string triggerType, string? triggerSource)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(triggerType);
+
+        TriggerLog(_logger, correlationId, triggerType, triggerSource);
+    }
+
+    [LoggerMessage(
+        EventId = 1015,
+        Level = LogLevel.Information,
+        Message = "Reconciliation triggered [CorrelationId={CorrelationId}, TriggerType={TriggerType}, TriggerSource={TriggerSource}]")]
+    private static partial void TriggerLog(ILogger logger, string correlationId, string triggerType, string? triggerSource);
+
+    /// <inheritdoc />
+    public void LogIdleModeEntered()
+    {
+        IdleModeEnteredLog(_logger);
+    }
+
+    [LoggerMessage(
+        EventId = 1016,
+        Level = LogLevel.Warning,
+        Message = "Runtime entered idle mode: no feeds are configured. Reconciliation cycles will produce no work.")]
+    private static partial void IdleModeEnteredLog(ILogger logger);
+
+    /// <inheritdoc />
+    public void LogIdleModeExited()
+    {
+        IdleModeExitedLog(_logger);
+    }
+
+    [LoggerMessage(
+        EventId = 1017,
+        Level = LogLevel.Information,
+        Message = "Runtime exited idle mode: feeds are now configured.")]
+    private static partial void IdleModeExitedLog(ILogger logger);
 }
