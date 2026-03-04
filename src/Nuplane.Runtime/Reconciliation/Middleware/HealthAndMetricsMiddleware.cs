@@ -29,7 +29,8 @@ internal sealed class HealthAndMetricsMiddleware(
             context.TrustFailureCount,
             context.LockFailureCount,
             context.CleanupFailureCount,
-            context.UnloadPendingCount));
+            context.UnloadPendingCount,
+            SourceOutages: context.SourceOutageCount));
         var cycleDuration = DateTimeOffset.UtcNow - context.CycleStartedAt;
         var applyResult = context.ApplyResult!;
         metrics.RecordCycle(changeSet, applyResult.FailedPackageIds.Count, cycleDuration, context.MergedActive!.Count);

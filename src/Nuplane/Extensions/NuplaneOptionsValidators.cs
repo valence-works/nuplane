@@ -1,8 +1,44 @@
 using Microsoft.Extensions.Options;
+using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Store.State;
 
 namespace Nuplane.Extensions;
+
+internal sealed class ConvergenceOptionsValidator : IValidateOptions<ConvergenceOptions>
+{
+    public ValidateOptionsResult Validate(string? name, ConvergenceOptions options)
+    {
+        var errors = new List<string>();
+
+        if (options.PollInterval <= TimeSpan.Zero)
+        {
+            errors.Add("Convergence PollInterval must be greater than zero.");
+        }
+
+        if (options.Retry.MaxAttempts < 0)
+        {
+            errors.Add("Convergence Retry.MaxAttempts must be greater than or equal to zero.");
+        }
+
+        if (options.Retry.InitialBackoff <= TimeSpan.Zero)
+        {
+            errors.Add("Convergence Retry.InitialBackoff must be greater than zero.");
+        }
+
+        if (options.Retry.MaxBackoff < options.Retry.InitialBackoff)
+        {
+            errors.Add("Convergence Retry.MaxBackoff must be greater than or equal to Retry.InitialBackoff.");
+        }
+
+        if (options.Manifest.Enabled && string.IsNullOrWhiteSpace(options.Manifest.Path))
+        {
+            errors.Add("Convergence Manifest.Path must be provided when Manifest.Enabled is true.");
+        }
+
+        return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
+    }
+}
 
 internal sealed class ReconciliationOptionsValidator : IValidateOptions<ReconciliationOptions>
 {
@@ -113,6 +149,27 @@ internal sealed class FeedCredentialCompositeValidator(
     public ValidateOptionsResult Validate(string? name, FeedResolutionOptions options)
     {
         var errors = credentialValidator.Validate(options, trustPolicyOptions.Value, sourceTrustOptions.Value);
+        return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
+    }
+}
+
+internal sealed class TrustedSourcePolicyOptionsValidator : IValidateOptions<TrustedSourcePolicyOptions>
+{
+    public ValidateOptionsResult Validate(string? name, TrustedSourcePolicyOptions options)
+    {
+        var errors = new List<string>();
+
+        if (options.Enabled && options.TrustedSourceNames.Count == 0)
+        {
+            errors.Add("TrustedSourcePolicy is enabled but no trusted source names are configured. All sources will be rejected.");
+        }
+
+        if (options.AllowSecretReferences && options.RejectInlineCredentials == false)
+        {
+            // Not an error, but both allowing secrets and inline credentials is a weak security posture.
+            // We still allow it — validation only enforces hard invariants.
+        }
+
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
     }
 }

@@ -73,6 +73,42 @@ public sealed class ReconciliationTelemetry : IDisposable
     /// <summary>Counter for deactivation timeouts.</summary>
     public Counter<long> DeactivationTimeoutCounter { get; }
 
+    /// <summary>Counter for manifest read successes.</summary>
+    public Counter<long> ManifestSucceededCounter { get; }
+
+    /// <summary>Counter for manifest read failures.</summary>
+    public Counter<long> ManifestFailedCounter { get; }
+
+    /// <summary>Counter for source outage events.</summary>
+    public Counter<long> SourceOutageCounter { get; }
+
+    /// <summary>Counter for acquisition failures by stage.</summary>
+    public Counter<long> AcquisitionFailedCounter { get; }
+
+    /// <summary>Counter for convergence cycles completed.</summary>
+    public Counter<long> ConvergenceCycleCounter { get; }
+
+    /// <summary>Counter for convergence cycles that completed in degraded state.</summary>
+    public Counter<long> ConvergenceDegradedCounter { get; }
+
+    /// <summary>Counter for admin trigger attempts.</summary>
+    public Counter<long> AdminTriggerCounter { get; }
+
+    /// <summary>Counter for admin trigger rejections.</summary>
+    public Counter<long> AdminRejectedCounter { get; }
+
+    /// <summary>Counter for rollback operations performed.</summary>
+    public Counter<long> RollbackPerformedCounter { get; }
+
+    /// <summary>Counter for loader boundary successes.</summary>
+    public Counter<long> LoaderBoundarySucceededCounter { get; }
+
+    /// <summary>Counter for loader boundary failures.</summary>
+    public Counter<long> LoaderBoundaryFailedCounter { get; }
+
+    /// <summary>Counter for loader boundary skips.</summary>
+    public Counter<long> LoaderBoundarySkippedCounter { get; }
+
     /// <summary>Histogram recording transaction duration in milliseconds.</summary>
     public Histogram<double> TransactionDurationMilliseconds { get; }
 
@@ -111,6 +147,18 @@ public sealed class ReconciliationTelemetry : IDisposable
         UnloadSucceededCounter = meter.CreateCounter<long>("nuplane.loading.unload.succeeded");
         UnloadPendingCounter = meter.CreateCounter<long>("nuplane.loading.unload.pending");
         DeactivationTimeoutCounter = meter.CreateCounter<long>("nuplane.loading.deactivation.timeout");
+        ManifestSucceededCounter = meter.CreateCounter<long>("nuplane.convergence.manifest.succeeded");
+        ManifestFailedCounter = meter.CreateCounter<long>("nuplane.convergence.manifest.failed");
+        SourceOutageCounter = meter.CreateCounter<long>("nuplane.convergence.source.outage");
+        AcquisitionFailedCounter = meter.CreateCounter<long>("nuplane.convergence.acquisition.failed");
+        ConvergenceCycleCounter = meter.CreateCounter<long>("nuplane.convergence.cycle.total");
+        ConvergenceDegradedCounter = meter.CreateCounter<long>("nuplane.convergence.cycle.degraded");
+        AdminTriggerCounter = meter.CreateCounter<long>("nuplane.convergence.admin.trigger");
+        AdminRejectedCounter = meter.CreateCounter<long>("nuplane.convergence.admin.rejected");
+        RollbackPerformedCounter = meter.CreateCounter<long>("nuplane.convergence.rollback.performed");
+        LoaderBoundarySucceededCounter = meter.CreateCounter<long>("nuplane.convergence.loader.succeeded");
+        LoaderBoundaryFailedCounter = meter.CreateCounter<long>("nuplane.convergence.loader.failed");
+        LoaderBoundarySkippedCounter = meter.CreateCounter<long>("nuplane.convergence.loader.skipped");
         TransactionDurationMilliseconds = meter.CreateHistogram<double>("nuplane.reconciliation.transaction.duration.ms");
         ActivePackagesGauge = meter.CreateObservableGauge<long>("nuplane.reconciliation.active", () => activePackages);
         UnloadPendingPackagesGauge = meter.CreateObservableGauge<long>("nuplane.loading.unload.pending.active", () => unloadPendingPackages);

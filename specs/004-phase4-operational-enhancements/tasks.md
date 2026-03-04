@@ -1,151 +1,225 @@
 # Tasks: Phase 4 Cluster-Convergent Runtime Loading (Lean)
 
 **Input**: Design documents from `/specs/004-phase4-operational-enhancements/`
+**Prerequisites**: `plan.md` (required), `spec.md` (required), `research.md`, `data-model.md`, `contracts/`
 
-**Scope**: Shared desired manifest + deterministic multi-source aggregation + explicit reconcile triggers + optional admin surface + optional loader boundary.
+**Tests**: Test tasks are REQUIRED for changed behavior and boundaries. Each story includes unit tests and boundary tests (integration and/or contract), plus regression tests for failure-prone paths.
 
-**Non-scope**: Channels, staged promotion workflows, canary rollout, leader election, distributed locks.
+**Organization**: Tasks are grouped by user story so each story can be implemented and validated independently.
 
-**Tests**: Test tasks are REQUIRED for changed behavior and boundaries. Each user story includes unit tests and boundary tests (integration and/or contract), plus regression coverage for failure-prone paths.
+## Phase 1: Setup (Project + Docs + Samples)
 
-## Phase 1: Setup (Docs + Samples)
+**Purpose**: Align docs and sample hosts with lean Phase 4 behavior.
 
-**Purpose**: Provide minimal operator/developer guidance and sample wiring for the lean Phase 4 behavior.
-
-- [ ] T001 Update docs/roadmap.md Phase 4 summary to reflect lean convergence + manifest + admin (no channels/canary)
-- [ ] T002 Update README.md with a short “Convergent runtime loading” section (manifest + polling + explicit trigger)
-- [ ] T003 [P] Add sample manifest-driven desired source configuration to samples/Nuplane.Sample.Console/Program.cs
-- [ ] T004 [P] Add sample admin surface wiring to samples/Nuplane.Sample.AspNetCore/Program.cs
+- [X] T001 Update Phase 4 scope summary in docs/roadmap.md
+- [X] T002 Add convergent runtime loading guidance in ./README.md
+- [X] T003 [P] Add manifest-driven sample configuration in samples/Nuplane.Sample.Console/Program.cs
+- [X] T004 [P] Add optional admin-surface sample wiring in samples/Nuplane.Sample.AspNetCore/Program.cs
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Core infrastructure required before user story implementation.
+**Purpose**: Core infrastructure required before user stories.
 
-- [ ] T005 Define Phase 4 options root (manifest + admin + loader boundary) in src/Nuplane.Abstractions/Phase4OperationalOptions.cs
-- [ ] T006 [P] Add shared Phase 4 reason codes and outcomes in src/Nuplane.Abstractions/Phase4OperationalStates.cs
-- [ ] T007 [P] Add runtime options validator for manifest/admin/loader invariants in src/Nuplane.Runtime/Configuration/Phase4OptionsValidator.cs
+- [X] T005 Define convergence options root and nested options in src/Nuplane.Runtime/Configuration/ConvergenceOptions.cs
+- [X] T006 [P] Define convergence reason codes and outcome enums in src/Nuplane.Abstractions/ConvergenceStates.cs
+- [X] T007 [P] Implement options validator via IValidateOptions for convergence options in src/Nuplane/Extensions/NuplaneOptionsValidators.cs
+- [X] T008 Wire ValidateOnStart and all convergence validator registrations in src/Nuplane/Extensions/NuplaneServiceCollectionExtensions.cs
+- [X] T009 Add trusted source policy options and secret-source boundaries in src/Nuplane.Abstractions/TrustedSourcePolicyOptions.cs
+- [X] T010 Implement trusted source policy evaluator consumer in src/Nuplane.Runtime/Configuration/TrustedSourcePolicyEvaluator.cs
+- [X] T011 [P] Implement options validator via IValidateOptions for trusted source policy options in src/Nuplane/Extensions/NuplaneOptionsValidators.cs
+- [X] T012 Add transactional rollback/LKG policy coordinator in src/Nuplane.Runtime/Reconciliation/ReconciliationRollbackCoordinator.cs
+- [X] T013 [P] Extend observer failure event contract for source/acquisition/loader/admin scopes in src/Nuplane.Abstractions/INuplaneObserver.cs
+- [X] T014 [P] Add baseline reconciliation telemetry contracts with correlation fields in src/Nuplane.Runtime/Observability/ReconciliationTelemetry.cs
+- [X] T015 [P] Add baseline convergence metrics projection in src/Nuplane.Runtime/Observability/ReconciliationMetrics.cs
+- [X] T016 [P] Add baseline health evaluator for degraded reason projection in src/Nuplane.Runtime/Health/ReconciliationHealthEvaluator.cs
 
-- [ ] T008 Add desired aggregation deterministic tie-break policy (duplicate ID resolution) in src/Nuplane.Runtime/Reconciliation/DesiredStateAggregator.cs
-- [ ] T009 [P] Add correlation-linked telemetry contracts for manifest/source/acquisition/loader/admin outcomes in src/Nuplane.Runtime/Observability/ReconciliationTelemetry.cs
-- [ ] T010 [P] Add Phase 4 metrics baseline (manifest read outcomes, source outages, acquisition failures, loader failures, admin trigger outcomes) in src/Nuplane.Runtime/Observability/ReconciliationMetrics.cs
-- [ ] T011 [P] Add degraded-health reason projection baseline for manifest/source/acquisition/loader/admin failures in src/Nuplane.Runtime/Health/ReconciliationHealthEvaluator.cs
+### Tests for Foundational
 
-- [ ] T012 [P] Extend observer-event contracts for failure outcomes (source/acquisition/loader/admin) in src/Nuplane.Abstractions/INuplaneObserver.cs
-- [ ] T013 [P] Implement Phase 4 failure event publisher with scoped target + reason code in src/Nuplane.Runtime/Observability/ReconciliationEventPublisher.cs
+- [X] T017 [P] Add unit tests for convergence options validator rules in test/Nuplane.Runtime.Tests/Configuration/ConvergenceOptionsValidatorTests.cs
+- [X] T018 [P] Add unit tests for trusted source policy validator and evaluator in test/Nuplane.Runtime.Tests/Configuration/TrustedSourcePolicyTests.cs
+- [X] T019 [P] Add unit tests for rollback/LKG coordinator transactional behavior in test/Nuplane.Runtime.Tests/Reconciliation/ReconciliationRollbackCoordinatorTests.cs
+- [X] T020 [P] Add unit tests for health evaluator degraded reason projection in test/Nuplane.Runtime.Tests/Health/ReconciliationHealthEvaluatorTests.cs
 
-- [ ] T014 Wire Phase 4 options/services in dependency injection in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
-
-**Checkpoint**: Foundation complete; user stories can start.
+**Checkpoint**: Foundation complete; user stories can begin.
 
 ---
 
-## Phase 3: User Story 1 - Converge from a Shared Desired Manifest (P1) 🎯 MVP
+## Phase 3: User Story 1 - Converge from a Shared Desired Manifest (Priority: P1) 🎯 MVP
 
 **Goal**: Deterministic exact-version manifest drives convergence across replicas.
 
-### Tests for User Story 1 ⚠️
+**Independent Test**: Run two replicas against one manifest, update exact versions, and verify eventual same active set with non-mutating degraded behavior on manifest failure.
 
-- [ ] T015 [P] [US1] Add unit tests for manifest parsing + determinism in test/Nuplane.Runtime.Tests/Desired/DesiredManifestParserTests.cs
-- [ ] T016 [P] [US1] Add unit tests for manifest-to-PackageRequest projection (exact versions) in test/Nuplane.Runtime.Tests/Desired/DesiredManifestProjectionTests.cs
-- [ ] T017 [P] [US1] Add integration tests: manifest update causes eventual active convergence (single node) in test/Nuplane.Integration.Tests/Reconciliation/ManifestConvergenceIntegrationTests.cs
-- [ ] T018 [US1] Add regression test: manifest unreadable/invalid is degraded + non-mutating with observer failure event emission in test/Nuplane.Integration.Tests/Reconciliation/ManifestInvalidNonMutatingRegressionTests.cs
+### Tests for User Story 1
+
+- [X] T021 [P] [US1] Add unit tests for manifest schema parsing and exact-version validation in test/Nuplane.Runtime.Tests/Desired/DesiredManifestParserTests.cs
+- [X] T022 [P] [US1] Add unit tests for deterministic manifest projection ordering in test/Nuplane.Runtime.Tests/Desired/DesiredManifestProjectionDeterminismTests.cs
+- [X] T023 [P] [US1] Add contract/integration test for manifest-driven convergence across replicas in test/Nuplane.Integration.Tests/Reconciliation/ManifestConvergenceIntegrationTests.cs
+- [X] T024 [US1] Add regression test for invalid/unreadable manifest degraded non-mutating outcome in test/Nuplane.Integration.Tests/Reconciliation/ManifestInvalidNonMutatingRegressionTests.cs
 
 ### Implementation for User Story 1
 
-- [ ] T019 [P] [US1] Define desired manifest model and schema (JSON) in src/Nuplane.Abstractions/DesiredManifest.cs
-- [ ] T020 [P] [US1] Implement manifest reader abstraction (file/http stream) in src/Nuplane.Runtime/Desired/DesiredManifestReader.cs
-- [ ] T021 [P] [US1] Implement manifest desired source (IDesiredPackageSource) in src/Nuplane.Runtime/Desired/DesiredManifestPackageSource.cs
-- [ ] T022 [US1] Integrate manifest desired source into desired aggregation in src/Nuplane.Runtime/Reconciliation/DesiredStateAggregator.cs
-- [ ] T023 [US1] Emit manifest read and parse outcomes (logs/metrics/health + observer failure events) in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
+- [X] T025 [P] [US1] Implement desired manifest entity model in src/Nuplane.Abstractions/DesiredManifest.cs
+- [X] T026 [P] [US1] Implement manifest reader abstraction and result mapping in src/Nuplane.Runtime/Desired/DesiredManifestReader.cs
+- [X] T027 [P] [US1] Implement manifest desired package source in src/Nuplane.Runtime/Desired/DesiredManifestPackageSource.cs
+- [X] T028 [US1] Integrate manifest source into deterministic aggregation input pipeline in src/Nuplane.Runtime/Reconciliation/DesiredStateAggregator.cs
+- [X] T029 [US1] Emit manifest success/failure observability and failure events in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
+- [X] T030 [US1] Wire manifest desired-state source and PollInterval consumption into reconciliation hosted service in src/Nuplane/ReconciliationHostedService.cs
 
-**Checkpoint**: Manifest-driven desired state is functional and testable.
+**Checkpoint**: Shared-manifest convergence is functional and independently testable.
 
 ---
 
-## Phase 4: User Story 2 - Acquire Packages from Multiple Sources (P2)
+## Phase 4: User Story 2 - Acquire Packages from Multiple Sources (Priority: P2)
 
-**Goal**: Deterministic aggregation across multiple desired sources; failure isolation for outages.
+**Goal**: Deterministic aggregation across sources with scoped outage isolation.
 
-### Tests for User Story 2 ⚠️
+**Independent Test**: Configure multiple desired sources (including duplicate IDs), then verify deterministic tie-break plus degraded non-mutating behavior when one source is unavailable.
 
-- [ ] T024 [P] [US2] Add unit tests for deterministic aggregation tie-break rules (duplicate IDs) in test/Nuplane.Runtime.Tests/Desired/DesiredAggregationDeterminismTests.cs
-- [ ] T025 [P] [US2] Add integration test: one desired source outage is degraded + non-mutating for impacted requests in test/Nuplane.Integration.Tests/Reconciliation/DesiredSourceOutageIsolationIntegrationTests.cs
+### Tests for User Story 2
+
+- [X] T031 [P] [US2] Add unit tests for deterministic duplicate tie-break precedence in test/Nuplane.Runtime.Tests/Desired/DesiredAggregationDeterminismTests.cs
+- [X] T032 [P] [US2] Add contract test for multi-source aggregation output stability in test/Nuplane.Runtime.Tests/Desired/DesiredAggregationContractTests.cs
+- [X] T033 [P] [US2] Add integration test for source outage isolation and unaffected package continuity in test/Nuplane.Integration.Tests/Reconciliation/DesiredSourceOutageIsolationIntegrationTests.cs
+- [X] T034 [US2] Add regression test for duplicate-source nondeterminism prevention in test/Nuplane.Runtime.Tests/Desired/DesiredAggregationDuplicateRegressionTests.cs
 
 ### Implementation for User Story 2
 
-- [ ] T026 [US2] Implement deterministic tie-break rules with reason codes for duplicates in src/Nuplane.Runtime/Reconciliation/DesiredStateAggregator.cs
-- [ ] T027 [US2] Ensure source outage outcomes are correlation-linked and observable in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
+- [X] T035 [US2] Implement deterministic source ordering and tie-break reasons in src/Nuplane.Runtime/Reconciliation/DesiredStateAggregator.cs
+- [X] T036 [US2] Implement source outage scoped failure projection and degraded outcomes in src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
+- [X] T037 [US2] Emit multi-source aggregation and outage diagnostics with correlation in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
 
-**Checkpoint**: Multi-source determinism and outage isolation are testable.
+**Checkpoint**: Multi-source deterministic acquisition is functional and independently testable.
 
 ---
 
-## Phase 5: User Story 3 - Optional Loader Boundary for Activated Packages (P3)
+## Phase 5: User Story 3 - Load Activated Packages via Optional Loader SDK (Priority: P3)
 
-**Goal**: Provide a safe integration boundary to load assemblies/types/services from active packages.
+**Goal**: Optional safe loader boundary for activated packages.
 
-### Tests for User Story 3 ⚠️
+**Independent Test**: Activate known package type with loader enabled, then inject loader failure and verify isolated failure without host crash.
 
-- [ ] T028 [P] [US3] Add unit tests for loader invocation policy (when enabled/disabled) in test/Nuplane.Runtime.Tests/Loading/LoaderBoundaryPolicyTests.cs
-- [ ] T029 [P] [US3] Add integration test: activated package contains known type that becomes loadable via loader in test/Nuplane.Integration.Tests/Loading/LoaderActivatedPackageIntegrationTests.cs
-- [ ] T030 [US3] Add regression test: loader failure is isolated and emits observer failure event (no host crash) in test/Nuplane.Integration.Tests/Loading/LoaderFailureIsolationRegressionTests.cs
+### Tests for User Story 3
+
+- [X] T038 [P] [US3] Add unit tests for loader enable/disable policy behavior in test/Nuplane.Runtime.Tests/Loading/LoaderBoundaryPolicyTests.cs
+- [X] T039 [P] [US3] Add contract test for loader boundary outcomes (Loaded/Failed/Skipped) in test/Nuplane.Runtime.Tests/Loading/LoaderBoundaryContractTests.cs
+- [X] T040 [P] [US3] Add integration test for known type load from active package in test/Nuplane.Integration.Tests/Loading/LoaderActivatedPackageIntegrationTests.cs
+- [X] T041 [US3] Add regression test for isolated loader failure without host crash in test/Nuplane.Integration.Tests/Loading/LoaderFailureIsolationRegressionTests.cs
 
 ### Implementation for User Story 3
 
-- [ ] T031 [P] [US3] Define loader boundary abstraction in src/Nuplane.Runtime/Loading/IPackageLoaderBoundary.cs
-- [ ] T032 [P] [US3] Implement adapter to optional Nuplane.Loading module in src/Nuplane.Loading.Hosting/NuplaneLoadingAdapter.cs
-- [ ] T033 [US3] Wire loader boundary into reconciliation completion flow in src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
-- [ ] T034 [US3] Emit loader outcomes (logs/metrics/health + observer failure events) in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
+- [X] T042 [P] [US3] Define loader boundary interface and outcome contract in src/Nuplane.Runtime/Loading/IPackageLoaderBoundary.cs
+- [X] T043 [P] [US3] Implement optional loading adapter to Nuplane.Loading in src/Nuplane.Loading.Hosting/NuplaneLoadingAdapter.cs
+- [X] T044 [US3] Integrate loader boundary invocation into reconciliation completion pipeline in src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
+- [X] T045 [US3] Emit loader boundary outcomes and failure events in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
 
-**Checkpoint**: Loader boundary is optional, safe, and observable.
+**Checkpoint**: Loader boundary is optional, safe, and independently testable.
 
 ---
 
-## Phase 6: User Story 4 - Operate via Administrative Surfaces (P4)
+## Phase 6: User Story 4 - Operate via Administrative Surfaces (Priority: P4)
 
-**Goal**: Read operational snapshot and trigger reconcile via an optional surface.
+**Goal**: Provide operational snapshot and manual reconcile trigger through optional admin surfaces.
 
-### Tests for User Story 4 ⚠️
+**Independent Test**: Read consistent snapshot and trigger reconcile through in-process/API surfaces with observable outcomes and explicit rejection/unavailable codes.
 
-- [ ] T035 [P] [US4] Add unit tests for operational snapshot projection consistency in test/Nuplane.Runtime.Tests/Operational/OperationalSnapshotProjectionTests.cs
-- [ ] T036 [P] [US4] Add integration tests for manual reconcile trigger observability in test/Nuplane.Integration.Tests/Reconciliation/ManualReconcileObservabilityIntegrationTests.cs
-- [ ] T037 [US4] Add regression test for admin-trigger rejection/unavailable outcome signaling with observer failure event emission in test/Nuplane.Integration.Tests/Reconciliation/AdminTriggerFailureRegressionTests.cs
+### Tests for User Story 4
+
+- [X] T046 [P] [US4] Add unit tests for operational snapshot projection consistency in test/Nuplane.Runtime.Tests/Operational/OperationalSnapshotProjectionTests.cs
+- [X] T047 [P] [US4] Add contract test for admin trigger outcome codes and correlation mapping in test/Nuplane.Runtime.Tests/Operational/AdminTriggerContractTests.cs
+- [X] T048 [P] [US4] Add integration test for manual reconcile trigger observability end-to-end in test/Nuplane.Integration.Tests/Reconciliation/ManualReconcileObservabilityIntegrationTests.cs
+- [X] T049 [US4] Add regression test for rejected/unavailable trigger non-mutating behavior in test/Nuplane.Integration.Tests/Reconciliation/AdminTriggerFailureRegressionTests.cs
 
 ### Implementation for User Story 4
 
-- [ ] T038 [P] [US4] Implement operational snapshot model in src/Nuplane.Runtime/Operational/OperationalSnapshot.cs
-- [ ] T039 [P] [US4] Implement operational snapshot projector in src/Nuplane.Runtime/Operational/OperationalSnapshotProjector.cs
-- [ ] T040 [P] [US4] Implement manual reconcile request coordinator (in-process) in src/Nuplane.Runtime/Reconciliation/ManualReconcileCoordinator.cs
-- [ ] T041 [US4] Add optional admin-facing runtime service contract in src/Nuplane.Hosting/INuplaneOperationalSurface.cs
-- [ ] T042 [US4] Wire optional admin operations into hosting registrations in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
-- [ ] T043 [US4] Implement minimal ASP.NET Core admin endpoints (separate optional package) in src/Nuplane.Admin.AspNetCore/
-- [ ] T044 [US4] Emit manual reconcile outcomes (logs/metrics/health + observer events) in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
+- [X] T050 [P] [US4] Implement operational snapshot read model in src/Nuplane.Runtime/Operational/OperationalSnapshot.cs
+- [X] T051 [P] [US4] Implement operational snapshot projector in src/Nuplane.Runtime/Operational/OperationalSnapshotProjector.cs
+- [X] T052 [P] [US4] Implement manual reconcile coordinator and outcome mapping in src/Nuplane.Runtime/Reconciliation/ManualReconcileCoordinator.cs
+- [X] T053 [US4] Implement in-process admin operational surface contract in src/Nuplane.Hosting/INuplaneOperationalSurface.cs
+- [X] T054 [US4] Wire optional admin operational services in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
+- [X] T055 [US4] Implement optional ASP.NET Core admin endpoints in src/Nuplane.Admin.AspNetCore/
+- [X] T056 [US4] Emit admin read/trigger observability and failure events in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs
 
-**Checkpoint**: Admin surface works end-to-end with host-auth boundary.
+**Checkpoint**: Administrative surfaces are functional and independently testable.
 
 ---
 
-## Phase 7: Polish & Validation Evidence
+## Phase 7: Polish & Cross-Cutting Concerns
 
-**Purpose**: Update validation docs and capture evidence for success criteria.
+**Purpose**: Validate end-to-end outcomes and finalize documentation evidence.
 
-- [ ] T045 [P] Update quickstart validation scenarios for lean Phase 4 in specs/004-phase4-operational-enhancements/quickstart-validation.md
-- [ ] T046 Execute targeted Phase 4 test matrix and capture results in specs/004-phase4-operational-enhancements/quickstart-validation.md
-- [ ] T047 Capture SC-001 to SC-003 validation evidence in specs/004-phase4-operational-enhancements/quickstart-validation.md
+- [X] T057 [P] Update quickstart validation evidence sections in specs/004-phase4-operational-enhancements/quickstart-validation.md
+- [X] T058 Execute targeted test matrix and record outcomes in specs/004-phase4-operational-enhancements/quickstart-validation.md
+- [X] T059 Capture SC-001, SC-002, and SC-003 acceptance evidence in specs/004-phase4-operational-enhancements/quickstart-validation.md
 
 ---
 
 ## Dependencies & Execution Order
 
-- Phase 2 blocks all user stories.
-- US1 is the MVP starting point (manifest-driven convergence).
-- US4 (admin surface) can be implemented after US1, even if loader work is deferred.
+### Phase Dependencies
 
-## Notes on Distributed Systems Concerns
+- Setup (Phase 1) has no dependencies.
+- Foundational (Phase 2) depends on Setup and blocks all user story phases.
+- User stories (Phases 3-6) all depend on Foundational completion.
+- Polish (Phase 7) depends on completion of desired user stories.
 
-- This plan intentionally avoids introducing distributed locks or leader election.
-- Cluster-wide “reconcile now” fan-out is treated as an integration concern:
-  - simplest: admin UI calls each replica’s reconcile endpoint (or a gateway fans out)
-  - robust: host publishes a message and replicas subscribe
+### User Story Dependencies
+
+- US1 (P1) starts immediately after Phase 2 and is the MVP scope.
+- US2 (P2) starts after Phase 2 and can proceed independently of US3/US4.
+- US3 (P3) starts after Phase 2 and can proceed independently of US2/US4.
+- US4 (P4) starts after Phase 2 and can proceed independently, while integrating with US1 outcomes.
+
+### Dependency Graph
+
+- `Setup -> Foundational -> {US1, US2, US3, US4} -> Polish`
+- MVP graph: `Setup -> Foundational -> US1`
+
+---
+
+## Parallel Execution Examples
+
+### Foundational
+
+- Run together: T017, T018, T019, T020
+
+### User Story 1
+
+- Run together: T021, T022, T023
+- Then run together: T025, T026, T027
+
+### User Story 2
+
+- Run together: T031, T032, T033
+- Then implement T035 and T037 in parallel (different files)
+
+### User Story 3
+
+- Run together: T038, T039, T040
+- Then run together: T042, T043
+
+### User Story 4
+
+- Run together: T046, T047, T048
+- Then run together: T050, T051, T052
+
+---
+
+## Implementation Strategy
+
+### MVP First (User Story 1)
+
+1. Complete Phase 1 (Setup).
+2. Complete Phase 2 (Foundational).
+3. Complete Phase 3 (US1).
+4. Validate US1 independently before expanding scope.
+
+### Incremental Delivery
+
+1. Deliver US1 (MVP) after foundational completion.
+2. Add US2 for multi-source determinism.
+3. Add US3 for optional loader boundary.
+4. Add US4 for optional admin operations.
+5. Complete Phase 7 evidence and validation.

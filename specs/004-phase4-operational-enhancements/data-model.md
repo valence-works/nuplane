@@ -91,7 +91,7 @@
   - `degradedReasons` (array, optional)
   - `correlationId` (string, required)
 
-## Entity: Phase4OperationalOptions
+## Entity: ConvergenceOptions
 
 - Purpose: Root configuration object for manifest/admin/loader/polling behaviors.
 - Fields (representative):

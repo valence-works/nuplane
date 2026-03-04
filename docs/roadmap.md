@@ -631,6 +631,42 @@ Recommended baseline for acceptance validation:
 
 Make Nuplane practical for real applications that want to load packages at startup and at runtime across multiple identical replicas, converging on a shared desired state over time, without introducing distributed coordination inside Nuplane itself.
 
+## Phase 4 Implementation Scope
+
+Phase 4 delivers four user stories across runtime, hosting, and optional admin packages:
+
+- **US1 (P1 / MVP)**: Converge from a shared desired manifest — deterministic exact-version manifest drives convergence across replicas.
+- **US2 (P2)**: Acquire packages from multiple sources — deterministic aggregation across sources with scoped outage isolation.
+- **US3 (P3)**: Load activated packages via optional loader SDK — optional safe loader boundary for activated packages.
+- **US4 (P4)**: Operate via administrative surfaces — operational snapshot and manual reconcile trigger through optional admin surfaces.
+
+### New Configuration Surface
+
+`ConvergenceOptions` is the root configuration object for Phase 4 behaviors:
+- `Manifest` — manifest reader/path/polling settings
+- `Admin` — admin surface enable/disable
+- `Loader` — loader boundary enable/disable
+- `PollInterval` — convergence poll interval
+- `Retry` — bounded retry/backoff options
+
+All options are validated via `IValidateOptions<T>` and fail fast at startup with `ValidateOnStart()`.
+
+### New Contracts and Models
+
+- `DesiredManifest` / `DesiredManifestReadResult` — canonical manifest contract with status/reason metadata
+- `DesiredAggregationOutcome` — deterministic multi-source aggregation output
+- `ReconciliationCycleOutcome` — top-level cycle summary for observability
+- `AcquisitionOutcome` / `LoaderOutcome` — per-package stage results
+- `OperationalSnapshot` — operator-facing read model with active set, health, and last reconcile
+- `ConvergenceStates` — convergence reason codes and outcome enums
+
+### Observability Enhancements
+
+- Correlation-linked structured logs for manifest, source, acquisition, loader, and admin operations
+- Metrics baseline covering failures by stage/reason and cycle outcomes
+- Health transitions (`Healthy` ↔ `Degraded`) matching injected faults and recovery
+- Observer events emitted for each failure class with scoped target and reason code
+
 ---
 
 ## 4.1 Shared Desired Manifest (Exact Versions)
@@ -643,6 +679,12 @@ Purpose:
 
 The manifest can be hosted in a shared location (directory, blob/object storage, or HTTPS) and should be updated atomically (upload packages first, write/update manifest last).
 
+Implementation notes:
+- Manifest packages use exact versions only; version ranges and floating versions are invalid.
+- Duplicate package IDs within a single manifest are invalid and produce explicit rejection reason codes.
+- Invalid or unreadable manifests produce degraded, non-mutating cycle outcomes (LKG preserved).
+- Manifest projection ordering is deterministic and stable for identical content.
+
 ---
 
 ## 4.2 Automatic + Explicit Reconciliation
@@ -652,6 +694,11 @@ Allow:
 - explicit reconciliation triggers (in-process API and optional REST)
 
 Polling remains the robustness baseline; explicit triggers enable near real-time updates after package uploads.
+
+Implementation notes:
+- Startup reconciliation executes before hosted service enters polling loop via `ReconciliationHostedService`.
+- Manual reconcile triggers return explicit outcome codes (`Accepted`, `Rejected`, `Unavailable`, `Completed`).
+- Trigger outcomes are correlation-linked and observable through logs, metrics, health, and observer events.
 
 ---
 
@@ -663,6 +710,11 @@ Nuplane remains host-neutral:
 - hosts may opt into loader integration
 - loader failures are observable and must not crash the host
 
+Implementation notes:
+- Loader boundary is default-disabled and opt-in via `ConvergenceOptions.Loader.Enabled`.
+- Loader actions are isolated per package; failures produce `Failed` outcome with reason codes.
+- Loader-disabled mode produces deterministic `Skipped` outcomes without side effects.
+
 ---
 
 ## 4.4 Integrity (Pragmatic Baseline)
@@ -670,6 +722,7 @@ Nuplane remains host-neutral:
 Support pragmatic baseline integrity for runtime loading scenarios:
 - deterministic acquisition and activation boundaries
 - observable non-mutating failures with last-known-good preservation
+- trusted source policy enforcement with secret-source boundaries
 
 Advanced signing/trust policies can be introduced later if needed.
 
@@ -690,6 +743,11 @@ Endpoints:
 
 Authentication left to host.
 
+Implementation notes:
+- In-process admin surface exposes `INuplaneOperationalSurface` for snapshot reads and manual triggers.
+- Admin reads return a consistent snapshot with active packages, last reconcile outcome, and health.
+- Rejected/unavailable triggers produce explicit non-mutating outcome codes and diagnostics.
+
 ---
 
 ## Acceptance Criteria
@@ -698,6 +756,9 @@ Authentication left to host.
 * Reconciliation is safe, deterministic, and observable (logs/metrics/health/events)
 * Admin endpoints expose accurate state and can trigger reconcile
 * Loader integration is optional and safe
+* All convergence within `PollInterval + retry window` under healthy sources (SC-001)
+* No store corruption or LKG violation across failure matrix (SC-002)
+* Admin read+trigger end-to-end within 120s p95 (SC-003)
 
 ---
 

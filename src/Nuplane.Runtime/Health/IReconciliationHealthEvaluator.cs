@@ -31,6 +31,31 @@ public interface IReconciliationHealthEvaluator
     int LastUnloadPendingCount { get; }
 
     /// <summary>
+    /// Gets the number of manifest read failures from the last evaluation.
+    /// </summary>
+    int LastManifestFailureCount { get; }
+
+    /// <summary>
+    /// Gets the number of source outage events from the last evaluation.
+    /// </summary>
+    int LastSourceOutageCount { get; }
+
+    /// <summary>
+    /// Gets the number of acquisition failures from the last evaluation.
+    /// </summary>
+    int LastAcquisitionFailureCount { get; }
+
+    /// <summary>
+    /// Gets the number of loader boundary failures from the last evaluation.
+    /// </summary>
+    int LastLoaderFailureCount { get; }
+
+    /// <summary>
+    /// Gets the number of admin trigger rejections from the last evaluation.
+    /// </summary>
+    int LastAdminRejectionCount { get; }
+
+    /// <summary>
     /// Evaluates the health input and updates the degraded state.
     /// </summary>
     /// <param name="input">The health input data.</param>

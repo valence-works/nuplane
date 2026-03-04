@@ -56,4 +56,18 @@ services.AddNuplane(
 // 	loading.SharedAssemblies.Add(new("Nuplane.Abstractions", "31bf3856ad364e35", 1));
 // });
 
-Console.WriteLine("Nuplane Sample Console configured for Phase 2 governance options (plus Phase 3 loading example comments).");
+// Phase 4 convergent runtime loading (register via ConvergenceOptions — when available):
+// services.AddNuplane(
+// 	configureConvergence: convergence =>
+// 	{
+// 		convergence.Manifest.Path = "state/desired-manifest.json";
+// 		convergence.Manifest.Enabled = true;
+// 		convergence.PollInterval = TimeSpan.FromSeconds(30);
+// 		convergence.Retry.MaxAttempts = 3;
+// 		convergence.Retry.InitialBackoff = TimeSpan.FromSeconds(2);
+// 		convergence.Retry.MaxBackoff = TimeSpan.FromSeconds(30);
+// 		convergence.Loader.Enabled = false;
+// 		convergence.Admin.Enabled = false;
+// 	});
+
+Console.WriteLine("Nuplane Sample Console configured for Phase 2 governance options (plus Phase 3/4 example comments).");

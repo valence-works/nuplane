@@ -31,6 +31,14 @@ internal sealed class DesiredStateReadMiddleware(
         foreach (var (sourceName, ex) in aggregateResult.SourceErrors)
         {
             await failureRecorder.RecordAsync(sourceName, "source-aggregate", ex.Message, context.CorrelationId, context.CancellationToken);
+            logger.LogSourceOutage(context.CorrelationId, sourceName, ex.Message);
+        }
+
+        context.SourceOutageCount = aggregateResult.SourceErrors.Count;
+
+        if (aggregateResult.SourceErrors.Count > 0)
+        {
+            logger.LogAggregationOutcome(context.CorrelationId, aggregateResult.Requests.Count, aggregateResult.SourceErrors.Count);
         }
 
         var allowlistedRequests = allowlistGate.Enforce(aggregateResult.Requests, sourceTrustOptions);

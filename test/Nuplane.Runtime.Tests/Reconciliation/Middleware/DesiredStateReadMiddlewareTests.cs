@@ -173,6 +173,12 @@ public sealed class DesiredStateReadMiddlewareTests
         public void LogLockOutcome(string correlationId, string packageId, LockFileEvaluationResult outcome) { }
         public void LogLoadOutcome(string correlationId, string packageId, bool succeeded, string? reason) { }
         public void LogUnloadOutcome(string correlationId, string packageId, string outcome, string? reason) { }
+        public void LogManifestOutcome(string correlationId, string sourcePath, string status, string reasonCode, int packageCount) { }
+        public void LogSourceOutage(string correlationId, string sourceName, string errorMessage) { }
+        public void LogAggregationOutcome(string correlationId, int packageCount, int failedSourceCount) { }
+        public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode) { }
+        public void LogAdminTriggerOutcome(string correlationId, string outcomeCode, string? reasonCode) { }
+        public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState) { }
     }
 
     private sealed class FakeStoreRegistry : IStoreRegistry

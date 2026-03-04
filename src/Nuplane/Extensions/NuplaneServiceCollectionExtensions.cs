@@ -6,6 +6,8 @@ using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Observability;
+using Nuplane.Runtime.Desired;
+using Nuplane.Runtime.Operational;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.FeedPolicy;
 using Nuplane.Runtime.Sources;
@@ -31,6 +33,7 @@ public static class NuplaneServiceCollectionExtensions
     /// <param name="configureLockFile">An optional action to configure lock file options.</param>
     /// <param name="configureCleanupPolicy">An optional action to configure cleanup policy options.</param>
     /// <param name="configureFeeds">An optional action to configure feed definitions.</param>
+    /// <param name="configureConvergence">An optional action to configure convergence options.</param>
     /// <param name="stateFilePath">The file path for persisting store state, or <see langword="null"/> for in-memory only.</param>
     /// <returns>The service collection for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> is <see langword="null"/>.</exception>
@@ -44,6 +47,7 @@ public static class NuplaneServiceCollectionExtensions
         Action<LockFileOptions>? configureLockFile = null,
         Action<CleanupPolicyOptions>? configureCleanupPolicy = null,
         Action<ICollection<FeedDefinition>>? configureFeeds = null,
+        Action<ConvergenceOptions>? configureConvergence = null,
         string? stateFilePath = null)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -59,6 +63,9 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<IValidateOptions<CleanupPolicyOptions>, CleanupPolicyOptionsValidator>();
         services.AddSingleton<FeedCredentialOptionsValidator>();
         services.AddSingleton<IValidateOptions<FeedResolutionOptions>, FeedCredentialCompositeValidator>();
+
+        services.AddSingleton<IValidateOptions<ConvergenceOptions>, ConvergenceOptionsValidator>();
+        services.AddSingleton<IValidateOptions<TrustedSourcePolicyOptions>, TrustedSourcePolicyOptionsValidator>();
 
         services
             .AddOptions<SourceTrustOptions>()
@@ -93,12 +100,36 @@ public static class NuplaneServiceCollectionExtensions
             .Configure(options => configureCleanupPolicy?.Invoke(options))
             .ValidateOnStart();
 
+        services
+            .AddOptions<ConvergenceOptions>()
+            .Configure(options => configureConvergence?.Invoke(options))
+            .ValidateOnStart();
+
+        services
+            .AddOptions<TrustedSourcePolicyOptions>()
+            .ValidateOnStart();
+
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<SourceTrustOptions>>().Value);
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<ReconciliationOptions>>().Value);
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<FeedResolutionOptions>>().Value);
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<FeedTrustPolicyOptions>>().Value);
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<LockFileOptions>>().Value);
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<CleanupPolicyOptions>>().Value);
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<ConvergenceOptions>>().Value);
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<TrustedSourcePolicyOptions>>().Value);
+        services.AddSingleton<TrustedSourcePolicyEvaluator>();
+
+        services.AddSingleton<DesiredManifestReader>();
+
+        // Preview convergence options to conditionally register the manifest desired-state source.
+        var convergencePreview = new ConvergenceOptions();
+        configureConvergence?.Invoke(convergencePreview);
+
+        if (convergencePreview.Manifest.Enabled)
+        {
+            services.AddSingleton<DesiredManifestPackageSource>();
+            services.AddSingleton<IDesiredPackageSource>(sp => sp.GetRequiredService<DesiredManifestPackageSource>());
+        }
 
         services.AddSingleton<DesiredStateAggregator>();
         services.AddSingleton<IDesiredStateAggregator>(sp => sp.GetRequiredService<DesiredStateAggregator>());
@@ -144,6 +175,11 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<IReconciliationRetryPolicy>(sp => sp.GetRequiredService<ReconciliationRetryPolicy>());
         services.AddSingleton<ReconciliationService>();
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
+
+        // Operational/admin surfaces
+        services.AddSingleton<OperationalSnapshotProjector>();
+        services.AddSingleton<ManualReconcileCoordinator>();
+        services.AddSingleton<INuplaneOperationalSurface, NuplaneOperationalSurface>();
 
         if (reconciliationPreview.EnableAutomaticReconciliation)
         {
