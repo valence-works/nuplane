@@ -2,90 +2,80 @@
 
 ## Goal
 
-Validate Phase 4 behavior for:
-
-- deterministic desired manifest input (exact versions)
-- deterministic multi-source aggregation
-- startup + polling reconciliation plus explicit trigger
-- optional loader boundary integration
-- optional admin operational surface
-- non-mutating, LKG-preserving failure handling
+Validate deterministic convergence, safe transactional apply, optional loader integration, and optional admin operations for Phase 4.
 
 ## Preconditions
 
-- .NET 8 SDK installed.
-- Feature branch checked out: `004-phase4-operational-enhancements`.
-- Baseline reconciliation/store behavior from Phases 1–3 passing locally.
+- Repo root: `nuplane/main`
+- Branch: `004-phase4-operational-enhancements`
+- .NET SDK capable of building repo targets (`net8.0`, `net9.0`, `net10.0`)
+- Two runnable host instances (samples or equivalent host apps)
 
 ## Validation Profile
 
-- Profile name: `phase4-convergent-loading-baseline`.
-- Replicas: 2+ host instances pointing at the same desired manifest.
-- Desired state: exact versions only.
-- Cycle window: 20 identical-input cycles for determinism checks.
-- Failure injection: manifest invalid, desired source outage, acquisition failure, loader failure, admin trigger unavailable.
+- Profile: `phase4-convergent-loading-baseline`
+- Replicas: 2+
+- Desired input: shared manifest with exact package versions
+- Determinism window: 20 unchanged cycles
+- Failure injections: manifest invalid, source outage, package acquisition failure, loader failure, manual trigger unavailable/rejected
 
-## Verification command set
+## Command Set
 
 Run from repository root:
 
 ```bash
-dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
-  --filter "FullyQualifiedName~DesiredManifest|FullyQualifiedName~DesiredAggregation|FullyQualifiedName~LoaderBoundary|FullyQualifiedName~OperationalSnapshot"
-
-dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
-  --filter "FullyQualifiedName~ManifestConvergence|FullyQualifiedName~DesiredSourceOutageIsolation|FullyQualifiedName~ManualReconcile|FullyQualifiedName~LoaderFailureIsolation"
-
+dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj --filter "FullyQualifiedName~DesiredManifest|FullyQualifiedName~DesiredAggregation|FullyQualifiedName~LoaderBoundary|FullyQualifiedName~OperationalSnapshot"
+dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj --filter "FullyQualifiedName~ManifestConvergence|FullyQualifiedName~DesiredSourceOutageIsolation|FullyQualifiedName~ManualReconcile|FullyQualifiedName~LoaderFailureIsolation"
 dotnet test Nuplane.sln
 ./build/validate-secrets.sh
 ```
 
-## 1) Desired manifest determinism
+## Scenario 1: Deterministic manifest projection
 
-1. Configure a desired manifest containing 5–10 packages pinned to exact versions.
-2. Start two host instances configured to read the same manifest.
-3. Run multiple reconciliation cycles with no input changes.
-4. Verify both hosts compute the same desired set and remain idempotent.
+1. Provide shared manifest with exact versions.
+2. Start two replicas with identical desired-source config.
+3. Execute repeated cycles without changing inputs.
+4. Verify both replicas compute identical requested package set and no-op/idempotent apply outcomes.
 
-## 2) Manifest update → eventual convergence
+## Scenario 2: Manifest update to new exact version
 
-1. Upload a new package version to the configured source.
-2. Update the manifest to reference the new exact version.
-3. Trigger reconcile (or wait for polling interval).
-4. Verify each host eventually activates the new version with transactional/LKG safety.
+1. Upload package artifact first.
+2. Update manifest last to point to new exact version.
+3. Trigger manual reconcile or wait one polling interval.
+4. Verify both replicas eventually activate new version while preserving transactional semantics.
 
-## 3) Multi-source aggregation determinism + outage isolation
+## Scenario 3: Multi-source deterministic aggregation and outage isolation
 
-1. Configure two desired sources (e.g., manifest + directory desired source).
-2. Introduce a duplicate package ID across sources.
-3. Verify deterministic tie-break behavior and reason codes.
-4. Simulate one source being unavailable.
-5. Verify degraded outcome and non-mutating behavior for impacted requests.
+1. Configure at least two desired sources (manifest + directory/feed-like source).
+2. Introduce duplicate package ID across sources.
+3. Verify deterministic duplicate winner and reason codes.
+4. Take one source offline.
+5. Verify degraded, non-mutating behavior for impacted scope with unchanged unrelated active packages.
 
-## 4) Optional loader boundary
+## Scenario 4: Optional loader boundary behavior
 
-1. Activate a package containing a known type.
-2. Enable the optional loader boundary.
-3. Verify the host can load the known type from the active package.
-4. Inject a loader failure (e.g., invalid assembly) and verify:
-   - host does not crash
-   - failure is observable (event + correlation)
+1. Enable loader boundary and activate package containing known type.
+2. Verify type load succeeds through loader boundary.
+3. Inject load failure for one package.
+4. Verify host remains alive, failure is scoped to package, and observer event/log/metric signals are emitted.
 
-## 5) Optional admin surface
+## Scenario 5: Optional admin operational surface
 
-1. Read operational snapshot/state via the admin surface.
-2. Verify snapshot is internally consistent and reflects the current active set.
-3. Trigger manual reconcile.
-4. Verify the outcome is observable and reflected in snapshot/telemetry.
+1. Query operational snapshot endpoint/service.
+2. Verify active set + last reconcile + health are internally consistent.
+3. Trigger manual reconcile through admin boundary.
+4. Verify outcome appears in logs/metrics/health/snapshot with matching correlation context.
+5. Exercise rejected/unavailable trigger path and verify explicit non-mutating outcome code.
 
-## Expected evidence
+## Expected Evidence
 
-- Correlation-linked logs for manifest/source outcomes, acquisition/activation outcomes, loader outcomes, and admin trigger outcomes.
-- Metrics for degraded reasons and failure counts by stage.
-- Health state transitions demonstrating degraded behavior on invalid manifest/source outage and recovery when resolved.
+- Correlation-linked structured logs for manifest/source/acquisition/loader/admin operations.
+- Metrics baseline covering failures by stage/reason and cycle outcomes.
+- Health transitions (`Healthy` <-> `Degraded`) matching injected faults and recovery.
+- Observer events emitted for each failure class with scoped target and reason code.
 
-## Success Criteria Validation Checks
+## Success Criteria Mapping
 
-1. Validate replica convergence on identical manifest (`SC-001`).
-2. Validate LKG preservation and non-corruption under injected failures (`SC-002`).
-3. Validate admin read+trigger workflow timing (`SC-003`).
+- `SC-001`: all replicas converge within poll interval + retry window under healthy sources.
+- `SC-002`: no store corruption/LKG violation across injected failure matrix.
+- `SC-003`: admin read+trigger end-to-end timing meets 95/100 within 120s in validation run.

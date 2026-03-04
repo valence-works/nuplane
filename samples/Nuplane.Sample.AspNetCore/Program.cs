@@ -51,8 +51,25 @@ builder.Services.AddNuplane(
 // 	loading.SharedAssemblies.Add(new("Nuplane.Abstractions", "31bf3856ad364e35", 1));
 // });
 
+// Phase 4 convergent runtime loading with admin surface:
+// builder.Services.AddNuplane(
+// 	configureConvergence: convergence =>
+// 	{
+// 		convergence.Manifest.Path = "state/desired-manifest.json";
+// 		convergence.Manifest.Enabled = true;
+// 		convergence.PollInterval = TimeSpan.FromSeconds(30);
+// 		convergence.Retry.MaxAttempts = 3;
+// 		convergence.Retry.InitialBackoff = TimeSpan.FromSeconds(2);
+// 		convergence.Retry.MaxBackoff = TimeSpan.FromSeconds(30);
+// 		convergence.Loader.Enabled = true;
+// 		convergence.Admin.Enabled = true;
+// 	});
+
+// Phase 4 optional admin endpoints (register via Nuplane.Admin.AspNetCore — when available):
+// app.MapNuplaneAdmin(); // maps GET /nuplane/packages, GET /nuplane/state, POST /nuplane/reconcile, GET /nuplane/health
+
 var app = builder.Build();
 
-app.MapGet("/", () => "Nuplane Sample ASP.NET configured for Phase 2 governance options (plus Phase 3 loading example comments).");
+app.MapGet("/", () => "Nuplane Sample ASP.NET configured for Phase 2 governance options (plus Phase 3/4 example comments).");
 
 app.Run();

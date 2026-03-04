@@ -26,6 +26,7 @@ internal sealed class ReconciliationCycleContext
     public int LockFailureCount { get; set; }
     public int CleanupFailureCount { get; set; }
     public int UnloadPendingCount { get; set; }
+    public int SourceOutageCount { get; set; }
 
     // Diff and change
     public PackageChangeSet? ChangeSet { get; set; }

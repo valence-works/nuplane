@@ -1,46 +1,61 @@
 # Phase 0 Research — Phase 4 Cluster-Convergent Runtime Loading (Lean)
 
-## Decision 1: Convergence model (no distributed coordination)
-- Decision: Each replica reconciles independently against shared desired-state inputs and a node-local store. Cluster convergence is achieved via deterministic desired inputs, not via leader election or distributed locks.
-- Rationale: Keeps Nuplane host-neutral and avoids embedding distributed systems primitives.
-- Alternatives considered: leader-based reconciliation (rejected: adds cluster coupling), shared distributed store (rejected: much larger scope/risk).
+## Technical Clarifications Resolved
 
-## Decision 2: Shared desired manifest (exact versions)
-- Decision: Add an optional shared desired manifest input that pins exact package versions.
-- Rationale: Exact versions provide deterministic convergence, simplify troubleshooting, and avoid version-range drift across replicas.
-- Alternatives considered: version ranges in manifest (deferred: requires deterministic resolution policy/lock behavior), “latest” semantics (rejected: nondeterministic without additional controls).
+- Runtime stack is .NET multi-targeted (`net8.0;net9.0;net10.0`) with Microsoft.Extensions options/hosting/logging patterns.
+- Reconciliation storage model is node-local filesystem-based store + metadata pointers (no distributed transaction store).
+- Test strategy uses xUnit/NSubstitute with targeted unit + integration projects already present in repository.
 
-## Decision 3: Manifest update protocol (upload then manifest)
-- Decision: Recommend an update pattern where package blobs are uploaded first, and the manifest is written/overwritten last.
-- Rationale: Minimizes “manifest references missing package” windows and makes failures cleanly retryable.
-- Alternatives considered: implicit discovery by listing storage (rejected: listing can be eventually consistent/unordered, complicates determinism).
+No unresolved `NEEDS CLARIFICATION` items remain.
 
-## Decision 4: Multi-source desired aggregation (deterministic tie-break)
-- Decision: Support multiple desired sources but require deterministic ordering and explicit tie-break rules for duplicates.
-- Rationale: Prevents “flip-flopping” desired sets across cycles and makes behavior testable.
-- Alternatives considered: first-come runtime ordering (rejected: nondeterministic), error on duplicates only (deferred: too strict for early adopters).
+## Decisions
 
-## Decision 5: Triggering reconciliation (polling + explicit)
-- Decision: Keep polling as the robustness baseline and add explicit triggers (in-process and optional REST) for near real-time updates.
-- Rationale: Polling ensures eventual convergence even if triggers fail; explicit triggers reduce operator feedback loop time after uploads.
-- Alternatives considered: triggers-only (rejected: brittle), short polling only (rejected: unnecessary overhead).
+### 1) Deterministic convergence without coordination primitives
+- Decision: Each replica independently reconciles shared desired-state inputs to a node-local store; convergence emerges from deterministic desired-state processing, not lock-step distributed control.
+- Rationale: Preserves host neutrality and keeps runtime infrastructure lightweight while meeting `SC-001` convergence expectations.
+- Alternatives considered: leader election or distributed locking (rejected: added operational coupling and failure modes); centralized active-state store (rejected: broader scope than Phase 4).
 
-## Decision 6: Loader boundary (optional module)
-- Decision: Provide an optional Loader SDK integration boundary (separate module) to load assemblies/types/services from active packages.
-- Rationale: Keeps Nuplane core host-neutral while enabling end-to-end runtime extensibility where desired.
-- Alternatives considered: mandate loading in core runtime (rejected: violates optionality), define a plugin model (rejected: out of scope).
+### 2) Shared desired manifest with exact version pins
+- Decision: Manifest format requires exact package versions and deterministic ordering/projection.
+- Rationale: Exact pins eliminate resolver drift and make replica output reproducible.
+- Alternatives considered: version ranges (deferred: requires lock/selection policy); floating/latest semantics (rejected: non-deterministic).
 
-## Decision 7: Observability and failure surfacing
-- Decision: For manifest/source/acquisition/loader/admin failures, require correlation-linked logs/metrics/health plus explicit observer failure events with scoped targets and reason codes.
-- Rationale: Operational triage requires more than logs; events make failure handling reliable for host integrations.
-- Alternatives considered: logs-only (rejected: weak automation), metrics-only (rejected: poor diagnosability).
+### 3) Deterministic multi-source aggregation policy
+- Decision: Aggregate multiple `IDesiredPackageSource` inputs with explicit source precedence and stable duplicate tie-break reason codes.
+- Rationale: Guarantees identical desired inputs produce identical desired package sets across nodes.
+- Alternatives considered: runtime enumeration order (rejected: unstable); fail-on-duplicate hard stop (deferred: too strict for initial adoption).
 
-## Decision 8: Admin surface is optional and host-authorized
-- Decision: Provide an optional admin surface for read snapshot + trigger reconcile; authentication/authorization is host-supplied.
-- Rationale: Keeps Nuplane host-neutral and usable in different environments.
-- Alternatives considered: embed auth model (rejected: host-specific), no admin surface (rejected: reduces usability/operability).
+### 4) Trigger model combines periodic and explicit invocation
+- Decision: Keep startup + periodic polling as baseline driver and add explicit in-process/admin trigger surfaces.
+- Rationale: Polling ensures eventual convergence; explicit trigger shortens operator feedback loops.
+- Alternatives considered: trigger-only model (rejected: brittle if trigger path unavailable); high-frequency polling only (rejected: unnecessary load/latency trade-off).
 
-## Decision 9: Testing strategy
-- Decision: Require unit tests for determinism (manifest + aggregation) and integration tests for degraded non-mutating behavior and admin/loader boundaries.
-- Rationale: Determinism and failure isolation are easy to regress without explicit tests.
-- Alternatives considered: unit-only (rejected: misses boundary failures), integration-only (rejected: poor failure localization).
+### 5) Transactional/LKG-first failure handling
+- Decision: Enforce stage → validate → publish immutable version → atomic active switch; failures preserve LKG and remain non-mutating for impacted packages.
+- Rationale: Satisfies constitution principle II and `OSR-002/OSR-003` safety requirements.
+- Alternatives considered: in-place overwrite activation (rejected: risks partial/corrupt active state).
+
+### 6) Optional loader integration boundary
+- Decision: Define optional loader boundary interface in runtime with adapter into `Nuplane.Loading` package.
+- Rationale: Delivers runtime loading capability without forcing host/plugin semantics into core runtime.
+- Alternatives considered: mandatory loader in core runtime (rejected: violates optionality); introducing plugin model contracts (rejected: explicitly out-of-scope).
+
+### 7) Optional admin operational surface with host-owned auth
+- Decision: Provide optional read snapshot + manual reconcile operations in hosting/admin packages; authorization concerns remain host-supplied.
+- Rationale: Enables operability while keeping framework host-neutral.
+- Alternatives considered: built-in authz scheme (rejected: host-specific); no admin API (rejected: poor operational UX).
+
+### 8) Observability contract as first-class output
+- Decision: Every cycle and every failure mode emits correlation-linked structured logs, baseline metrics, health transitions, and observer failure events with scoped target + reason code.
+- Rationale: Required for diagnosability and aligns with constitution principle IV.
+- Alternatives considered: logs-only and metrics-only approaches (both rejected due to incomplete operator signal coverage).
+
+### 9) Validation through .NET options pipeline
+- Decision: Validation rules implemented via `IValidateOptions<T>` and startup fail-fast via `ValidateOnStart()` for required Phase 4 options.
+- Rationale: Aligns with constitution section VII and prevents late runtime misconfiguration failures.
+- Alternatives considered: options object `IsValid()` methods (rejected: policy/data coupling and weak DI composition).
+
+### 10) Test evidence strategy
+- Decision: Add unit tests for manifest and aggregation determinism + policy gates, and integration/regression tests for degraded non-mutating behavior, loader isolation, and admin trigger outcomes.
+- Rationale: Covers deterministic core behavior and boundary regressions mandated by constitution principle V.
+- Alternatives considered: unit-only or integration-only suites (both rejected as incomplete).

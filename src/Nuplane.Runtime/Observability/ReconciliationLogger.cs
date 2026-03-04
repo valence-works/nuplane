@@ -207,4 +207,93 @@ public sealed partial class ReconciliationLogger : IReconciliationLogger
         Level = LogLevel.Information,
         Message = "Package unload outcome [CorrelationId={CorrelationId}, PackageId={PackageId}, Outcome={Outcome}, Reason={Reason}]")]
     private static partial void UnloadOutcomeLog(ILogger logger, string correlationId, string packageId, string outcome, string? reason);
+
+    /// <inheritdoc />
+    public void LogManifestOutcome(string correlationId, string sourcePath, string status, string reasonCode, int packageCount)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+
+        ManifestOutcomeLog(_logger, correlationId, sourcePath, status, reasonCode, packageCount);
+    }
+
+    [LoggerMessage(
+        EventId = 1009,
+        Level = LogLevel.Information,
+        Message = "Manifest read outcome [CorrelationId={CorrelationId}, Source={SourcePath}, Status={Status}, ReasonCode={ReasonCode}, PackageCount={PackageCount}]")]
+    private static partial void ManifestOutcomeLog(ILogger logger, string correlationId, string sourcePath, string status, string reasonCode, int packageCount);
+
+    /// <inheritdoc />
+    public void LogSourceOutage(string correlationId, string sourceName, string errorMessage)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceName);
+
+        SourceOutageLog(_logger, correlationId, sourceName, errorMessage);
+    }
+
+    [LoggerMessage(
+        EventId = 1010,
+        Level = LogLevel.Warning,
+        Message = "Source outage [CorrelationId={CorrelationId}, Source={SourceName}]: {ErrorMessage}")]
+    private static partial void SourceOutageLog(ILogger logger, string correlationId, string sourceName, string? errorMessage);
+
+    /// <inheritdoc />
+    public void LogAggregationOutcome(string correlationId, int packageCount, int failedSourceCount)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+
+        AggregationOutcomeLog(_logger, correlationId, packageCount, failedSourceCount);
+    }
+
+    [LoggerMessage(
+        EventId = 1011,
+        Level = LogLevel.Information,
+        Message = "Aggregation outcome [CorrelationId={CorrelationId}, PackageCount={PackageCount}, FailedSources={FailedSourceCount}]")]
+    private static partial void AggregationOutcomeLog(ILogger logger, string correlationId, int packageCount, int failedSourceCount);
+
+    /// <inheritdoc />
+    public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+
+        LoaderBoundaryOutcomeLog(_logger, correlationId, packageId, outcome, reasonCode);
+    }
+
+    [LoggerMessage(
+        EventId = 1012,
+        Level = LogLevel.Information,
+        Message = "Loader boundary outcome [CorrelationId={CorrelationId}, PackageId={PackageId}, Outcome={Outcome}, ReasonCode={ReasonCode}]")]
+    private static partial void LoaderBoundaryOutcomeLog(ILogger logger, string correlationId, string packageId, string outcome, string? reasonCode);
+
+    /// <inheritdoc />
+    public void LogAdminTriggerOutcome(string correlationId, string outcomeCode, string? reasonCode)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(outcomeCode);
+
+        AdminTriggerOutcomeLog(_logger, correlationId, outcomeCode, reasonCode);
+    }
+
+    [LoggerMessage(
+        EventId = 1013,
+        Level = LogLevel.Information,
+        Message = "Admin trigger outcome [CorrelationId={CorrelationId}, OutcomeCode={OutcomeCode}, ReasonCode={ReasonCode}]")]
+    private static partial void AdminTriggerOutcomeLog(ILogger logger, string correlationId, string outcomeCode, string? reasonCode);
+
+    /// <inheritdoc />
+    public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(healthState);
+
+        AdminSnapshotReadLog(_logger, correlationId, activePackageCount, healthState);
+    }
+
+    [LoggerMessage(
+        EventId = 1014,
+        Level = LogLevel.Information,
+        Message = "Admin snapshot read [CorrelationId={CorrelationId}, ActivePackageCount={ActivePackageCount}, HealthState={HealthState}]")]
+    private static partial void AdminSnapshotReadLog(ILogger logger, string correlationId, int activePackageCount, string healthState);
 }

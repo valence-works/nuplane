@@ -70,5 +70,56 @@ public interface IReconciliationLogger
     /// <param name="outcome">The unload outcome description.</param>
     /// <param name="reason">Additional context about the unload result.</param>
     void LogUnloadOutcome(string correlationId, string packageId, string outcome, string? reason);
+
+    /// <summary>
+    /// Logs the outcome of a manifest read operation.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
+    /// <param name="sourcePath">The manifest file path.</param>
+    /// <param name="status">The manifest read status.</param>
+    /// <param name="reasonCode">The reason code for the outcome.</param>
+    /// <param name="packageCount">The number of packages parsed, if successful.</param>
+    void LogManifestOutcome(string correlationId, string sourcePath, string status, string reasonCode, int packageCount);
+
+    /// <summary>
+    /// Logs a source outage event.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
+    /// <param name="sourceName">The name of the source that is unavailable.</param>
+    /// <param name="errorMessage">The error message from the source failure.</param>
+    void LogSourceOutage(string correlationId, string sourceName, string errorMessage);
+
+    /// <summary>
+    /// Logs the outcome of multi-source aggregation when source errors occurred.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
+    /// <param name="packageCount">The number of successfully aggregated packages.</param>
+    /// <param name="failedSourceCount">The number of sources that produced errors.</param>
+    void LogAggregationOutcome(string correlationId, int packageCount, int failedSourceCount);
+
+    /// <summary>
+    /// Logs the outcome of a loader boundary invocation for a single package.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
+    /// <param name="packageId">The package identifier.</param>
+    /// <param name="outcome">The loader boundary outcome (Loaded, Failed, Skipped).</param>
+    /// <param name="reasonCode">The reason code for the outcome, if applicable.</param>
+    void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode);
+
+    /// <summary>
+    /// Logs the outcome of an admin trigger operation.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for the admin operation.</param>
+    /// <param name="outcomeCode">The outcome code (Completed, Accepted, Rejected, Unavailable).</param>
+    /// <param name="reasonCode">The reason code for the outcome, if applicable.</param>
+    void LogAdminTriggerOutcome(string correlationId, string outcomeCode, string? reasonCode);
+
+    /// <summary>
+    /// Logs an admin snapshot read operation.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for the admin operation.</param>
+    /// <param name="activePackageCount">The number of active packages in the snapshot.</param>
+    /// <param name="healthState">The health state of the runtime.</param>
+    void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState);
 }
 

@@ -153,6 +153,28 @@ Use these conventions when enabling advanced feed governance:
 - Use `strict` mode to fail packages missing lock entries and to block hash mismatches.
 - Rotate lock files intentionally and treat lock updates as auditable operational changes.
 
+## ⚙️ Phase 4 Operator Guidance (Convergent Runtime Loading)
+
+Use these conventions when enabling cluster-convergent runtime loading:
+
+- Configure a shared desired manifest with exact version pins for deterministic convergence across replicas.
+- Update manifests atomically: upload package artifacts first, then write/update the manifest last.
+- Use `ConvergenceOptions` to configure manifest path, admin surfaces, optional loader boundary, and poll interval.
+- Keep loader integration opt-in and default-disabled unless the host explicitly wants Nuplane-managed loading.
+- Use `INuplaneOperationalSurface` (in-process) or `Nuplane.Admin.AspNetCore` (HTTP) for admin reads and manual reconcile triggers.
+- Monitor convergence through correlation-linked logs, metrics, health transitions, and observer failure events.
+- Treat degraded cycles as non-mutating: LKG active state is preserved; impacted scope is explicitly reported.
+
+### Phase 4 validation baseline
+
+- Profile: `phase4-convergent-loading-baseline`
+- Replicas: 2+
+- Desired input: shared manifest with exact package versions
+- Determinism window: 20 unchanged cycles
+- Failure injections: manifest invalid, source outage, acquisition failure, loader failure, manual trigger unavailable/rejected
+
+---
+
 ## ⚙️ Phase 3 Operator Guidance (Optional Loading)
 
 Use these conventions when enabling optional in-process loading:

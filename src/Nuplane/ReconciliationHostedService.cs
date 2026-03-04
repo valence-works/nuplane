@@ -6,14 +6,16 @@ using Nuplane.Runtime.Reconciliation;
 namespace Nuplane;
 
 /// <summary>
-/// A background service that periodically triggers reconciliation cycles
-/// at the interval specified by <see cref="ReconciliationOptions.PollInterval"/>.
+/// A background service that periodically triggers reconciliation cycles.
+/// Uses <see cref="ConvergenceOptions.PollInterval"/> when convergence is configured,
+/// otherwise falls back to <see cref="ReconciliationOptions.PollInterval"/>.
 /// Registered automatically when <see cref="ReconciliationOptions.EnableAutomaticReconciliation"/> is <see langword="true"/>.
 /// </summary>
 public sealed class ReconciliationHostedService : BackgroundService
 {
     private readonly IReconciliationService _reconciliationService;
     private readonly ReconciliationOptions _options;
+    private readonly ConvergenceOptions _convergenceOptions;
     private readonly ILogger<ReconciliationHostedService> _logger;
 
     /// <summary>
@@ -22,19 +24,25 @@ public sealed class ReconciliationHostedService : BackgroundService
     public ReconciliationHostedService(
         IReconciliationService reconciliationService,
         ReconciliationOptions options,
+        ConvergenceOptions convergenceOptions,
         ILogger<ReconciliationHostedService> logger)
     {
         _reconciliationService = reconciliationService ?? throw new ArgumentNullException(nameof(reconciliationService));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _convergenceOptions = convergenceOptions ?? throw new ArgumentNullException(nameof(convergenceOptions));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Nuplane automatic reconciliation started with poll interval {PollInterval}", _options.PollInterval);
+        var effectivePollInterval = _convergenceOptions.Manifest.Enabled
+            ? _convergenceOptions.PollInterval
+            : _options.PollInterval;
 
-        using var timer = new PeriodicTimer(_options.PollInterval);
+        _logger.LogInformation("Nuplane automatic reconciliation started with poll interval {PollInterval}", effectivePollInterval);
+
+        using var timer = new PeriodicTimer(effectivePollInterval);
 
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {

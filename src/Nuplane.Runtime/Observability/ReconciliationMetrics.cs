@@ -66,4 +66,53 @@ public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
 
     /// <summary>Sets the gauge value for packages with pending unloads.</summary>
     public void SetUnloadPendingPackages(long count) => telemetry.SetUnloadPendingPackages(count);
+
+    /// <summary>Records a successful manifest read.</summary>
+    public void RecordManifestSucceeded() => telemetry.ManifestSucceededCounter.Add(1);
+
+    /// <summary>Records a failed manifest read.</summary>
+    public void RecordManifestFailed() => telemetry.ManifestFailedCounter.Add(1);
+
+    /// <summary>Records a source outage event.</summary>
+    public void RecordSourceOutage() => telemetry.SourceOutageCounter.Add(1);
+
+    /// <summary>Records a package acquisition failure.</summary>
+    /// <param name="count">Number of acquisition failures to record. Defaults to 1.</param>
+    public void RecordAcquisitionFailed(int count = 1) => telemetry.AcquisitionFailedCounter.Add(count);
+
+    /// <summary>Records a completed convergence cycle.</summary>
+    /// <param name="degraded">Whether the cycle completed in degraded state.</param>
+    public void RecordConvergenceCycle(bool degraded)
+    {
+        telemetry.ConvergenceCycleCounter.Add(1);
+        if (degraded)
+        {
+            telemetry.ConvergenceDegradedCounter.Add(1);
+        }
+    }
+
+    /// <summary>Records an admin trigger attempt.</summary>
+    /// <param name="rejected">Whether the trigger was rejected.</param>
+    public void RecordAdminTrigger(bool rejected)
+    {
+        telemetry.AdminTriggerCounter.Add(1);
+        if (rejected)
+        {
+            telemetry.AdminRejectedCounter.Add(1);
+        }
+    }
+
+    /// <summary>Records a rollback operation.</summary>
+    public void RecordRollbackPerformed() => telemetry.RollbackPerformedCounter.Add(1);
+
+    /// <summary>Records a loader boundary outcome.</summary>
+    /// <param name="succeeded">Number of loaders that succeeded.</param>
+    /// <param name="failed">Number of loaders that failed.</param>
+    /// <param name="skipped">Number of loaders that were skipped.</param>
+    public void RecordLoaderBoundaryOutcome(int succeeded, int failed, int skipped)
+    {
+        telemetry.LoaderBoundarySucceededCounter.Add(succeeded);
+        telemetry.LoaderBoundaryFailedCounter.Add(failed);
+        telemetry.LoaderBoundarySkippedCounter.Add(skipped);
+    }
 }
