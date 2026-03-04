@@ -153,6 +153,26 @@ internal sealed class FeedCredentialCompositeValidator(
     }
 }
 
+internal sealed class DirectorySourceOptionsValidator : IValidateOptions<DirectorySourceOptions>
+{
+    public ValidateOptionsResult Validate(string? name, DirectorySourceOptions options)
+    {
+        var errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(options.DirectoryPath))
+        {
+            errors.Add("DirectoryPath is required for directory source registration.");
+        }
+
+        if (options.DebounceWindow <= TimeSpan.Zero)
+        {
+            errors.Add("DebounceWindow must be greater than zero.");
+        }
+
+        return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
+    }
+}
+
 internal sealed class TrustedSourcePolicyOptionsValidator : IValidateOptions<TrustedSourcePolicyOptions>
 {
     public ValidateOptionsResult Validate(string? name, TrustedSourcePolicyOptions options)
