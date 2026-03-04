@@ -18,14 +18,15 @@
 
 - If watcher establishment fails (permissions, invalid path, OS limitations):
   - scheduled reconciliation remains active (convergence still occurs)
-  - an explicit degraded signal is emitted (health + logs)
+  - an explicit degraded signal is emitted (health + operator snapshot + logs)
+    - the operator snapshot MUST include a degraded reason via `source-outages:N` (N>0) for cycle(s) where observation is degraded
   - the system must not silently stop reconciling
 
 ## Observability Contract
 
 - Directory observation MUST emit:
   - a startup log indicating watcher enabled/disabled and effective debounce window
-  - degraded-state logs with the last error
+  - degraded-state logs with the local directory feed name and last error
   - trigger attribution for directory-based reconciliation cycles
 
 ## Test Contract

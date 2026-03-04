@@ -46,8 +46,8 @@ description: "Task list for implementing local directory feeds + watchers"
 - [ ] T010 Propagate trigger metadata through reconciliation execution and single-flight skips in src/Nuplane.Runtime/Reconciliation/ReconciliationService.cs
 - [ ] T011 Store trigger metadata on cycle context in src/Nuplane.Runtime/Reconciliation/Middleware/ReconciliationCycleContext.cs
 
-- [ ] T012 Emit Scheduled triggers from the periodic host in src/Nuplane/ReconciliationHostedService.cs
-- [ ] T013 Emit DirectoryChange triggers from the directory watcher host in src/Nuplane/Extensions/NuplaneDirectorySourceServiceCollectionExtensions.cs
+- [ ] T012 Emit Scheduled triggers from the periodic host in src/Nuplane/ReconciliationHostedService.cs (TriggerSource SHOULD be omitted)
+- [ ] T013 Emit DirectoryChange triggers from the directory watcher host in src/Nuplane/Extensions/NuplaneDirectorySourceServiceCollectionExtensions.cs (TriggerSource MUST be local directory FeedName)
 - [ ] T014 Emit Manual triggers (preserving provided correlation id) in src/Nuplane.Runtime/Reconciliation/ManualReconcileCoordinator.cs
 
 - [ ] T015 Add trigger counters + idle-mode gauge to telemetry in src/Nuplane.Runtime/Observability/ReconciliationTelemetry.cs
@@ -90,11 +90,12 @@ description: "Task list for implementing local directory feeds + watchers"
 ### Tests for User Story 2 ⚠️
 
 - [ ] T025 [P] [US2] Add integration test: Scheduled trigger attribution is observable end-to-end in test/Nuplane.Integration.Tests/Reconciliation/ScheduledTriggerAttributionIntegrationTests.cs
-- [ ] T026 [P] [US2] Add integration test: watcher degraded falls back to scheduled reconciliation in test/Nuplane.Integration.Tests/Reconciliation/DirectoryWatcherDegradedFallbackIntegrationTests.cs
+- [ ] T026 [P] [US2] Add integration test: watcher degraded falls back to scheduled reconciliation and surfaces `source-outages:N` degraded reason in test/Nuplane.Integration.Tests/Reconciliation/DirectoryWatcherDegradedFallbackIntegrationTests.cs
 
 ### Implementation for User Story 2
 
-- [ ] T027 [US2] Make watcher establishment failures non-fatal and emit degraded signal in src/Nuplane/Extensions/NuplaneDirectorySourceServiceCollectionExtensions.cs
+- [ ] T027a [US2] Make watcher establishment failures non-fatal and emit degraded-state logs with last error in src/Nuplane/Extensions/NuplaneDirectorySourceServiceCollectionExtensions.cs
+- [ ] T027b [US2] Surface watcher establishment degradation into health degraded reasons via `SourceOutages` so it appears as `source-outages:N` in OperationalSnapshot.DegradedReasons in src/Nuplane.Runtime/Reconciliation/Middleware/HealthAndMetricsMiddleware.cs
 - [ ] T028 [US2] Record attempted Scheduled triggers even when single-flight skips cycles in src/Nuplane/ReconciliationHostedService.cs
 
 **Checkpoint**: User Stories 1 and 2 both work independently (watcher fast path + scheduled reliability).

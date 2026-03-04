@@ -26,7 +26,17 @@
 
 - **Resolution**: The decision-making step that selects an eligible feed for each desired package request.
 
-- **Acquisition**: The step that retrieves the package artifact from the resolved feed.
+- **Acquisition**: The step that determines and records the artifact *location* for activation.
+  - For a local directory feed, this is typically a local `.nupkg` path.
+  - For a remote feed, this is typically a remote feed identifier/URI and a concrete version.
+  - This feature does not require implementing new NuGet download/extraction mechanics; it requires that directory-originating requests are resolvable without remote feeds and produce explicit outcomes.
+
+- **TriggerType**: The category of driver that initiated a reconciliation cycle: `Scheduled`, `DirectoryChange`, `Manual`, or `Startup`.
+
+- **TriggerSource**: Optional stable identifier for where the trigger came from.
+  - For `DirectoryChange`, this MUST be the local directory feed name (not a filesystem path).
+  - For `Scheduled`, this SHOULD be omitted.
+  - For `Manual`, this MAY be an operator-provided label.
 
 - **Observation**: Detecting that an input’s state has changed (watchers for local directory feeds, polling for remote feeds).
 
@@ -188,7 +198,7 @@ As an operator, I can run Nuplane with only local directory feeds configured (no
 
 - **FR-001**: The system MUST support configuring feeds of multiple types, including remote feeds and local directory feeds.
 
-- **FR-002**: The system MUST treat local directory feeds as first-class sources that can both (a) contribute desired-state requests and (b) provide package artifacts for acquisition.
+- **FR-002**: The system MUST treat local directory feeds as first-class sources that can both (a) contribute desired-state requests and (b) provide eligible artifact locations for acquisition/activation.
 
 - **FR-003**: The system MUST detect changes in configured local directory feeds in near real time and trigger a reconciliation cycle when `.nupkg` file state changes are detected (create/update/delete/rename).
 
@@ -211,7 +221,7 @@ As an operator, I can run Nuplane with only local directory feeds configured (no
 
 - **FR-011**: The system MUST expose an operator-visible record of why reconciliation ran (scheduled vs directory change), suitable for troubleshooting and auditing.
 
-- **FR-012**: For any desired package that originates from a local directory feed, Nuplane MUST treat that local feed as an eligible acquisition source for the artifact (even if no remote feeds are configured).
+- **FR-012**: For any desired package that originates from a local directory feed, Nuplane MUST treat that local feed as an eligible acquisition source for an artifact location (even if no remote feeds are configured).
 
 ### Operational & Safety Requirements *(mandatory)*
 
@@ -229,6 +239,10 @@ As an operator, I can run Nuplane with only local directory feeds configured (no
   - diagnostics for invalid packages or unreadable directories,
   - measurements for trigger counts, reconciliation durations, and failure reasons,
   - and a health signal that indicates when real-time directory detection is degraded/unavailable.
+  - degraded watcher establishment MUST surface via:
+    - health: overall runtime health transitions to Degraded and the operator snapshot includes a degraded reason via `source-outages:N` (N>0) for the cycle(s) where observation is degraded,
+    - logs: include the local directory feed name and last watcher error with correlation context,
+    - and scheduled convergence remains active.
 
 - **OSR-005**: The feature MUST include automated tests:
   - tests for deterministic combination of repeated directory change notifications and partial-write handling,
@@ -236,6 +250,10 @@ As an operator, I can run Nuplane with only local directory feeds configured (no
   - and a regression test for the reported “no feeds configured + package dropped” exception (fails before fix, passes after).
 
 - **OSR-006**: If real-time directory detection cannot be established (permissions, path invalid, OS limitations), Nuplane MUST fall back to scheduled convergence and MUST emit a degraded signal; it MUST NOT silently stop reconciling.
+
+#### Requirement Clarifications (non-normative)
+
+- FR-002/FR-012 “acquisition” is satisfied when directory-originating requests resolve deterministically without remote feeds and the system can attribute a usable local artifact location for activation; this spec does not require introducing new remote acquisition mechanics.
 
 ## Key Entities *(include if feature involves data)*
 

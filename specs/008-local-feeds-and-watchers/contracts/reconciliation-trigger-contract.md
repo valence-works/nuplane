@@ -22,7 +22,7 @@
 - Logs MUST include:
   - `CorrelationId`
   - `TriggerType`
-  - optional `TriggerSource` (e.g., feed name / directory path)
+  - optional `TriggerSource` (e.g., local directory feed name; avoid filesystem paths)
 - Metrics MUST include:
   - trigger counts by type
   - cycle duration distribution
