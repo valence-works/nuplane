@@ -5,7 +5,7 @@
 **Created**: 2026-03-03
 
 **Notes**:
-- All test files use hand-rolled fake inner classes — no external mocking library is present in the solution.
+- All test files use NSubstitute for mocking interfaces (see Decision 1 in spec.md). NSubstitute 5.3.0 is registered in `Directory.Packages.props` and available to all test projects via `test/Directory.Build.props`.
 - FR-010 requires a production contract change (`DesiredAggregateResult`) before any `DesiredStateAggregatorTests` can compile. This is the only production code change in Phase 2.
 - `PackageCleanupServiceTests` lives in `test/Nuplane.Store.Tests/` (not `Nuplane.Runtime.Tests/`) because `PackageCleanupService` is in `src/Nuplane.Store/`.
 - `PackageResolutionMiddlewareTests` is included despite being absent from the original T024 list in spec 005 — the class exists and requires coverage (see Assumptions in spec.md).

@@ -54,7 +54,7 @@ public sealed class PackageCleanupServiceTests
         Assert.Contains(deleted, d => d.Version == "2.0.0");
         Assert.Contains(deleted, d => d.Version == "1.0.0");
 
-        var kept = Assert.Single(results.Where(d => d.Action == CleanupAction.Kept));
+        var kept = Assert.Single(results, d => d.Action == CleanupAction.Kept);
         Assert.Equal("3.0.0", kept.Version);
     }
 

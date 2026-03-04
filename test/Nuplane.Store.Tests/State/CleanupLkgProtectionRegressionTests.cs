@@ -26,7 +26,7 @@ public sealed class CleanupLkgProtectionRegressionTests
             triggerOnSuccessfulReconciliation: true,
             CancellationToken.None);
 
-        var lkg = Assert.Single(results.Where(x => x.PackageId == "pkg" && x.Version == "1.0.0"));
+        var lkg = Assert.Single(results, x => x.PackageId == "pkg" && x.Version == "1.0.0");
         Assert.Equal(CleanupAction.Kept, lkg.Action);
         Assert.Equal("protected-lkg", lkg.Reason);
     }

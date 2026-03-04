@@ -16,7 +16,7 @@ public sealed class PackageLoadingSessionTests
 
         Assert.Single(first.Loaded);
         Assert.Single(second.Loaded);
-        Assert.Equal(1, loader.Sessions.Count);
+        Assert.Single(loader.Sessions);
         Assert.Empty(first.FailedByPackageId);
         Assert.Empty(second.FailedByPackageId);
     }

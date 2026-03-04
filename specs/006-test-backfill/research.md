@@ -9,13 +9,13 @@
 
 **Question**: The spec assumed NSubstitute is available. Which mocking strategy is in use?
 
-**Finding**: `Directory.Packages.props` contains no NSubstitute, Moq, or FakeItEasy entry. All existing test projects use hand-rolled fakes or construct real instances with in-memory inputs (`FeedTrustPolicyEvaluatorTests`, `DesiredActualDiffEngineTests`). No mocking framework is registered anywhere in the solution.
+**Finding**: `Directory.Packages.props` originally contained no NSubstitute, Moq, or FakeItEasy entry. All existing test projects used hand-rolled fakes or construct real instances with in-memory inputs (`FeedTrustPolicyEvaluatorTests`, `DesiredActualDiffEngineTests`).
 
-**Decision**: Continue the hand-rolled fake pattern. Each test file provides minimal `Fake*` inner classes or records implementing the required interface with configurable return values. No third-party mocking library is introduced. The spec assumption about NSubstitute is incorrect and is corrected here.
+**Decision**: Adopt NSubstitute as the standard mocking framework. NSubstitute 5.3.0 is registered in `Directory.Packages.props` and referenced from `test/Directory.Build.props`, making it available to all test projects. New test classes use NSubstitute for constructing mocked interfaces and verifying call order/arguments. Existing tests may be refactored to use NSubstitute as a follow-on improvement (not mandated here).
 
-**Rationale**: Consistency with the existing test corpus; no new dependency in `Directory.Packages.props`.
+**Rationale**: Phase 005 extracted 11+ interfaces across the solution. Testing these with hand-rolled fakes quickly becomes tedious and verbose, especially for verifying call ordering and argument capture (e.g., FR-005 requires asserting that `PublishChangingAsync` is called before the next stage delegate). NSubstitute offers a clean fluent API, excellent documentation, and no ceremony around record/replay setup. Its lightweight nature aligns with .NET conventions.
 
-**Alternatives considered**: Adding NSubstitute — rejected; would require updating `Directory.Packages.props`, introduces a framework that the rest of the team is not currently using, and adds unnecessary complexity for the simple one-method stub fakes needed here.
+**Alternatives considered**: Continue hand-rolled fakes — rejected; violates DRY, makes call-order assertions error-prone, and requires boilerplate inner classes in every test file. Moq — acceptable, but NSubstitute's fluent syntax is cleaner. FakeItEasy — acceptable, but NSubstitute's argument-matching API is more intuitive.
 
 ---
 
@@ -101,10 +101,10 @@ Update `IDesiredStateAggregator.AggregateAsync` to return `Task<DesiredAggregate
 
 **Decision**: For each middleware unit test:
 1. `next` delegate is a captured `bool`-setting lambda: `bool nextCalled = false; Func<Task> next = () => { nextCalled = true; return Task.CompletedTask; };`
-2. Collaborators are hand-rolled inner `Fake*` classes implementing the required interface with configurable return values (e.g., `FakeDesiredStateAggregator(IReadOnlyList<PackageRequest> result)`)
+2. Collaborator dependencies are mocked using NSubstitute (`Substitute.For<IInterface>()`) with configurable return values and call-order verification via `Received.InOrder()`
 3. Simple value dependencies (e.g., `SourceTrustOptions`, `LockFileOptions`) are constructed directly with test values
 
-**Rationale**: Consistent with existing hand-rolled fake pattern (Decision 1). Clean and readable with minimal boilerplate.
+**Rationale**: NSubstitute (Decision 1) provides clean, readable test setup. The `next` delegate remains a simple lambda since it is a `Func<Task>`, not an interface.
 
 ---
 

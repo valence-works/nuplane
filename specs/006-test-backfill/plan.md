@@ -5,19 +5,19 @@
 
 ## Summary
 
-Deliver the Phase F test backfill deferred by spec 005: (1) focused unit tests for each of the 9 middleware pipeline stages, (2) isolated unit tests for the 5 concretes that became testable after interface extraction, and (3) a new `Nuplane.Loading.Tests` project with 4 test classes covering assembly load/unload lifecycle. The one contract change required: `IDesiredStateAggregator.AggregateAsync` returns a new `DesiredAggregateResult` type that exposes per-source errors alongside the aggregated request list, enabling the error-isolation test case. All tests use xUnit with hand-rolled fakes (no external mocking framework).
+Deliver the Phase F test backfill deferred by spec 005: (1) focused unit tests for each of the 9 middleware pipeline stages, (2) isolated unit tests for the 5 concretes that became testable after interface extraction, and (3) a new `Nuplane.Loading.Tests` project with 4 test classes covering assembly load/unload lifecycle. The one contract change required: `IDesiredStateAggregator.AggregateAsync` returns a new `DesiredAggregateResult` type that exposes per-source errors alongside the aggregated request list, enabling the error-isolation test case. All tests use xUnit with NSubstitute for mocking interfaces and verifying call order (see Decision 1).
 
 ## Technical Context
 
 **Language/Version**: C# 13 / .NET 10  
-**Primary Dependencies**: xUnit 2.9.3, `Microsoft.NET.Test.Sdk`, `coverlet.collector` (all centrally managed via `Directory.Packages.props`)  
+**Primary Dependencies**: xUnit 2.9.3, NSubstitute 5.3.0, `Microsoft.NET.Test.Sdk`, `coverlet.collector` (all centrally managed via `Directory.Packages.props`)  
 **Storage**: N/A for test code; `LockFileCoordinatorTests` uses `Path.GetTempFileName()` for transient JSON lock files  
-**Testing**: xUnit with hand-rolled fake inner classes; no external mocking library  
+**Testing**: xUnit with NSubstitute for mocking interfaces and verifying call order/arguments (see Decision 1)  
 **Target Platform**: net10.0 (consistent with all other projects in the solution)  
 **Project Type**: Test projects (xUnit) + one minimal fixture class library (`Nuplane.Loading.Tests.Fixtures`)  
 **Performance Goals**: All new test classes complete in under 30 seconds; no live I/O or network access except the transient temp-file in `LockFileCoordinatorTests`  
 **Constraints**: `TreatWarningsAsErrors=true`, `GenerateDocumentationFile=true` inherited from `test/Directory.Build.props`; zero warnings at first commit  
-**Scale/Scope**: ~72 new test cases across 3 new source files groups; 2 new projects (`Nuplane.Loading.Tests`, `Nuplane.Loading.Tests.Fixtures`); 1 contract change (`IDesiredStateAggregator`)
+**Scale/Scope**: ~72 new test cases across 3 new source file groups; 2 new projects (`Nuplane.Loading.Tests`, `Nuplane.Loading.Tests.Fixtures`); 1 contract change (`IDesiredStateAggregator`)
 
 ## Constitution Check
 
