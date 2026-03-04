@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Sources.Directory;
@@ -21,7 +22,6 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
     /// <param name="configure">The options configuration callback.</param>
     /// <returns>The service collection for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when arguments are <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">Thrown when configured options are invalid.</exception>
     public static IServiceCollection AddNuplaneDirectorySource(
         this IServiceCollection services,
         Action<DirectorySourceOptions> configure)
@@ -29,43 +29,50 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configure);
 
-        var configuredOptions = new DirectorySourceOptions();
-        configure(configuredOptions);
+        services.AddSingleton<IValidateOptions<DirectorySourceOptions>, DirectorySourceOptionsValidator>();
 
-        if (string.IsNullOrWhiteSpace(configuredOptions.DirectoryPath))
-        {
-            throw new ArgumentException("DirectoryPath is required for directory source registration.", nameof(configure));
-        }
-
-        if (configuredOptions.DebounceWindow <= TimeSpan.Zero)
-        {
-            throw new ArgumentException("DebounceWindow must be greater than zero.", nameof(configure));
-        }
-
-        var normalizedOptions = new DirectorySourceOptions
-        {
-            DirectoryPath = Path.GetFullPath(configuredOptions.DirectoryPath),
-            SourceName = string.IsNullOrWhiteSpace(configuredOptions.SourceName) ? "Directory.Drop" : configuredOptions.SourceName,
-            TriggerReconciliationOnChange = configuredOptions.TriggerReconciliationOnChange,
-            DebounceWindow = configuredOptions.DebounceWindow
-        };
-
-        foreach (var packageId in configuredOptions.AllowlistedPackageIds)
-        {
-            if (!string.IsNullOrWhiteSpace(packageId))
+        services
+            .AddOptions<DirectorySourceOptions>()
+            .Configure(configure)
+            .PostConfigure(options =>
             {
-                normalizedOptions.AllowlistedPackageIds.Add(packageId);
-            }
-        }
+                if (!string.IsNullOrWhiteSpace(options.DirectoryPath))
+                {
+                    options.DirectoryPath = Path.GetFullPath(options.DirectoryPath);
+                }
 
-        services.AddSingleton(normalizedOptions);
+                if (string.IsNullOrWhiteSpace(options.SourceName))
+                {
+                    options.SourceName = "Directory.Drop";
+                }
+
+                var validIds = options.AllowlistedPackageIds
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .ToList();
+                options.AllowlistedPackageIds.Clear();
+                foreach (var id in validIds)
+                {
+                    options.AllowlistedPackageIds.Add(id);
+                }
+            })
+            .ValidateOnStart();
+
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<DirectorySourceOptions>>().Value);
+
         services.AddSingleton<IDesiredPackageSource>(sp =>
-            new DirectoryNupkgDesiredSource(
-                normalizedOptions.SourceName,
-                normalizedOptions.DirectoryPath,
-                normalizedOptions.AllowlistedPackageIds));
+        {
+            var opts = sp.GetRequiredService<DirectorySourceOptions>();
+            return new DirectoryNupkgDesiredSource(
+                opts.SourceName,
+                opts.DirectoryPath,
+                opts.AllowlistedPackageIds);
+        });
 
-        if (normalizedOptions.TriggerReconciliationOnChange)
+        // Preview options to conditionally register the hosted service.
+        var preview = new DirectorySourceOptions();
+        configure(preview);
+
+        if (preview.TriggerReconciliationOnChange)
         {
             services.AddHostedService<DirectorySourceReconciliationTriggerHostedService>();
         }
@@ -79,7 +86,10 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService : Backgr
     private readonly DirectorySourceOptions options;
     private readonly IReconciliationService reconciliationService;
     private readonly ILogger<DirectorySourceReconciliationTriggerHostedService> logger;
-    private readonly Channel<bool> changes = Channel.CreateUnbounded<bool>();
+    private readonly Channel<bool> changes = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
+    {
+        FullMode = BoundedChannelFullMode.DropOldest
+    });
     private FileSystemWatcher? watcher;
 
     public DirectorySourceReconciliationTriggerHostedService(
@@ -99,14 +109,14 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService : Backgr
         watcher = new FileSystemWatcher(options.DirectoryPath, "*.nupkg")
         {
             IncludeSubdirectories = false,
-            NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.LastWrite,
-            EnableRaisingEvents = true
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.LastWrite
         };
 
         watcher.Created += OnChanged;
         watcher.Changed += OnChanged;
         watcher.Deleted += OnChanged;
         watcher.Renamed += OnRenamed;
+        watcher.EnableRaisingEvents = true;
 
         logger.LogInformation(
             "Directory watcher enabled for Nuplane desired-state source at '{DirectoryPath}' with debounce {DebounceMs}ms.",
