@@ -21,7 +21,10 @@ builder.Services.AddNuplane(
 	configureSourceTrust: trust =>
 	{
 		trust.AllowedSourceNames.Add(sourceName);
-		trust.AllowedPackageIds.Add("Nuplane.Sample.Plugin");
+		foreach (var packageId in allowlistedPackageIds)
+		{
+			trust.AllowedPackageIds.Add(packageId);
+		}
 	},
 	configureReconciliation: reconciliation =>
 	{

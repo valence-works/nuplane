@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Nuplane.Abstractions;
 
 namespace Nuplane.Sources.Directory;
@@ -10,7 +12,8 @@ namespace Nuplane.Sources.Directory;
 /// <param name="sourceName">A descriptive name for this desired-state source.</param>
 /// <param name="directoryPath">The directory to scan for <c>.nupkg</c> files.</param>
 /// <param name="allowlistedPackageIds">An optional set of allowed package identifiers. If <see langword="null"/> or empty, all packages are allowed.</param>
-public sealed class DirectoryNupkgDesiredSource(string sourceName, string directoryPath, IEnumerable<string>? allowlistedPackageIds = null) : IDesiredPackageSource
+/// <param name="logger">An optional logger for diagnostic output.</param>
+public sealed class DirectoryNupkgDesiredSource(string sourceName, string directoryPath, IEnumerable<string>? allowlistedPackageIds = null, ILogger<DirectoryNupkgDesiredSource>? logger = null) : IDesiredPackageSource
 {
     private static readonly Regex PackageFileNamePattern = new(
         "^(?<id>.+)\\.(?<version>\\d+\\.\\d+\\.\\d+(?:[-+][A-Za-z0-9\\.-]+)?)$",
@@ -21,6 +24,7 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
     private readonly HashSet<string> allowlistedPackageIds = allowlistedPackageIds is null
         ? new(StringComparer.OrdinalIgnoreCase)
         : new HashSet<string>(allowlistedPackageIds, StringComparer.OrdinalIgnoreCase);
+    private readonly ILogger<DirectoryNupkgDesiredSource> logger = logger ?? NullLogger<DirectoryNupkgDesiredSource>.Instance;
 
     /// <inheritdoc />
     public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
@@ -32,16 +36,25 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
             return Task.FromResult<IReadOnlyList<PackageRequest>>([]);
         }
 
-        var requests = System.IO.Directory
-            .EnumerateFiles(directoryPath, "*.nupkg", SearchOption.TopDirectoryOnly)
-            .Select(Path.GetFileNameWithoutExtension)
-            .Where(fileName => !string.IsNullOrWhiteSpace(fileName))
-            .Select(fileName => CreateRequest(fileName!))
-            .Where(request => request is not null)
-            .Cast<PackageRequest>()
-            .OrderBy(request => request.Id, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(request => request.VersionRange, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        PackageRequest[] requests;
+        try
+        {
+            requests = System.IO.Directory
+                .EnumerateFiles(directoryPath, "*.nupkg", SearchOption.TopDirectoryOnly)
+                .Select(Path.GetFileNameWithoutExtension)
+                .Where(fileName => !string.IsNullOrWhiteSpace(fileName))
+                .Select(fileName => CreateRequest(fileName!))
+                .Where(request => request is not null)
+                .Cast<PackageRequest>()
+                .OrderBy(request => request.Id, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(request => request.VersionRange, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        catch (IOException ex)
+        {
+            logger.LogWarning(ex, "Failed to enumerate .nupkg files in '{DirectoryPath}'. Returning empty desired state.", directoryPath);
+            return Task.FromResult<IReadOnlyList<PackageRequest>>(Array.Empty<PackageRequest>());
+        }
 
         return Task.FromResult<IReadOnlyList<PackageRequest>>(requests);
     }

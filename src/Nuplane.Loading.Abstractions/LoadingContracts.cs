@@ -144,6 +144,20 @@ public interface IPackageLoader
 /// <summary>
 /// Provides package-scoped type discovery over assemblies loaded into package load contexts.
 /// </summary>
+/// <remarks>
+/// <para>
+/// The <see cref="Type"/> instances returned by methods on this interface originate from assemblies
+/// loaded into collectible <see cref="System.Runtime.Loader.AssemblyLoadContext"/> instances.
+/// Holding references to these types (or derived reflection artifacts such as
+/// <see cref="System.Reflection.MethodInfo"/>, <see cref="System.Reflection.PropertyInfo"/>, etc.)
+/// will prevent the owning load context from being garbage collected and unloaded.
+/// </para>
+/// <para>
+/// Callers should use returned types immediately (e.g., to create instances via
+/// <see cref="Activator.CreateInstance(Type)"/>) and avoid caching them beyond the current
+/// reconciliation cycle to preserve runtime unload behavior.
+/// </para>
+/// </remarks>
 public interface IPackageTypeScanner
 {
     /// <summary>
