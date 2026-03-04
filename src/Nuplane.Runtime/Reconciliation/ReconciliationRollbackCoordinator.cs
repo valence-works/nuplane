@@ -11,14 +11,17 @@ namespace Nuplane.Runtime.Reconciliation;
 public sealed class ReconciliationRollbackCoordinator
 {
     private readonly IReconciliationLogger _logger;
+    private readonly ReconciliationMetrics? _metrics;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ReconciliationRollbackCoordinator"/>.
     /// </summary>
     /// <param name="logger">The structured reconciliation logger.</param>
-    public ReconciliationRollbackCoordinator(IReconciliationLogger logger)
+    /// <param name="metrics">Optional reconciliation metrics to record rollback outcomes.</param>
+    public ReconciliationRollbackCoordinator(IReconciliationLogger logger, ReconciliationMetrics? metrics = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _metrics = metrics;
     }
 
     /// <summary>
@@ -52,7 +55,6 @@ public sealed class ReconciliationRollbackCoordinator
                 // LKG is preserved by not switching the active pointer.
                 // The store transaction semantics guarantee we never wrote partial state.
                 rolledBack.Add(outcome.PackageId);
-                _logger.LogCycleCompleted(correlationId, degraded: true, failedCount: 1);
             }
             else
             {
@@ -65,6 +67,12 @@ public sealed class ReconciliationRollbackCoordinator
         var reasonCode = rollbackPerformed
             ? ConvergenceReasonCodes.RollbackPerformed
             : ConvergenceReasonCodes.RollbackNotRequired;
+
+        if (rollbackPerformed)
+        {
+            _logger.LogCycleCompleted(correlationId, degraded: true, failedCount: rolledBack.Count);
+            _metrics?.RecordRollbackPerformed();
+        }
 
         return new RollbackResult(
             RollbackPerformed: rollbackPerformed,

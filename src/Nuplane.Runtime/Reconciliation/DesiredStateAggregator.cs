@@ -67,8 +67,8 @@ public sealed class DesiredStateAggregator : IDesiredStateAggregator
 
         // Deterministic duplicate tie-break:
         // Group by case-insensitive package ID, then select the winner using:
-        //   1. Source precedence: first source in deterministic ordering wins
-        //   2. Tie-break by SourceName (alphabetical), then VersionRange (alphabetical)
+        //   1. SourceName (alphabetical, case-insensitive) — lowest sort order wins
+        //   2. Tie-break by VersionRange (alphabetical, case-insensitive)
         var deduped = collected
             .GroupBy(r => r.Id, StringComparer.OrdinalIgnoreCase)
             .Select(g => g

@@ -1,5 +1,6 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Observability;
 
 namespace Nuplane.Runtime.Desired;
 
@@ -12,6 +13,7 @@ public sealed class DesiredManifestPackageSource : IDesiredPackageSource
 {
     private readonly DesiredManifestReader _reader;
     private readonly ConvergenceOptions _options;
+    private readonly ReconciliationMetrics? _metrics;
     private DesiredManifestReadResult? _lastReadResult;
 
     /// <summary>
@@ -25,10 +27,12 @@ public sealed class DesiredManifestPackageSource : IDesiredPackageSource
     /// </summary>
     /// <param name="reader">The manifest reader.</param>
     /// <param name="options">The convergence options containing manifest configuration.</param>
-    public DesiredManifestPackageSource(DesiredManifestReader reader, ConvergenceOptions options)
+    /// <param name="metrics">Optional reconciliation metrics to record manifest read outcomes.</param>
+    public DesiredManifestPackageSource(DesiredManifestReader reader, ConvergenceOptions options, ReconciliationMetrics? metrics = null)
     {
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _metrics = metrics;
     }
 
     /// <inheritdoc />
@@ -42,15 +46,26 @@ public sealed class DesiredManifestPackageSource : IDesiredPackageSource
             return [];
         }
 
-        var correlationId = Guid.NewGuid().ToString("N");
-        var result = await _reader.ReadAsync(_options.Manifest.Path, correlationId, ct);
+        var correlationId = string.IsNullOrEmpty(CorrelationContext.Current)
+            ? Guid.NewGuid().ToString("N")
+            : CorrelationContext.Current;
+
+        var result = await _reader.ReadAsync(
+            _options.Manifest.Path,
+            correlationId,
+            ct,
+            _options.Manifest.SchemaVersion);
         _lastReadResult = result;
 
         if (result.Status != ManifestReadStatus.Succeeded || result.Manifest is null)
         {
-            // Degraded non-mutating: return empty to avoid mutation
-            return [];
+            _metrics?.RecordManifestFailed();
+            throw new InvalidOperationException(
+                $"Failed to read desired manifest from '{_options.Manifest.Path}' " +
+                $"(status: {result.Status}, correlationId: {correlationId}).");
         }
+
+        _metrics?.RecordManifestSucceeded();
 
         return result.Manifest.Packages
             .Select(entry => new PackageRequest(

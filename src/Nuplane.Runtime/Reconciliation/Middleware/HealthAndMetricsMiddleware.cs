@@ -34,6 +34,11 @@ internal sealed class HealthAndMetricsMiddleware(
         var cycleDuration = DateTimeOffset.UtcNow - context.CycleStartedAt;
         var applyResult = context.ApplyResult!;
         metrics.RecordCycle(changeSet, applyResult.FailedPackageIds.Count, cycleDuration, context.MergedActive!.Count);
+        metrics.RecordConvergenceCycle(isDegraded);
+        if (applyResult.FailedPackageIds.Count > 0)
+        {
+            metrics.RecordAcquisitionFailed(applyResult.FailedPackageIds.Count);
+        }
         logger.LogCycleCompleted(context.CorrelationId, isDegraded, applyResult.FailedPackageIds.Count);
 
         context.Result = new ReconciliationRunResult(false, changeSet, applyResult.FailedPackageIds, isDegraded);

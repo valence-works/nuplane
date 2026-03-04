@@ -97,7 +97,8 @@ public sealed class DesiredStateReadMiddlewareTests
             new PassthroughRetryPolicy(),
             snapshotCache,
             failureRecorder ?? new FakeFailureRecorder(),
-            new NullLogger());
+            new NullLogger(),
+            new ReconciliationMetrics(new ReconciliationTelemetry()));
     }
 
     private static ReconciliationCycleContext Ctx() => new()
