@@ -53,8 +53,7 @@ public sealed class LocalDirectoryFeedContractTests
 
         var request = new PackageRequest("MyPlugin", "1.0.0", FeedName: null, PackageUpdatePolicy.Exact, "local-source");
 
-        // Should throw (currently InvalidOperationException, will become NoEligibleFeedException)
-        await Assert.ThrowsAnyAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<NoEligibleFeedException>(
             () => resolver.ResolveAsync(request, CancellationToken.None));
     }
 

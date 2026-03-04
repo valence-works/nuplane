@@ -77,8 +77,8 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
 
         if (!string.IsNullOrWhiteSpace(preview.FeedName) && !string.IsNullOrWhiteSpace(preview.DirectoryPath))
         {
-            var normalizedPath = Path.GetFullPath(preview.DirectoryPath);
-            var feedUri = new Uri("file://" + normalizedPath.Replace('\\', '/'));
+            var normalizedPath = Path.GetFullPath(preview.DirectoryPath).Replace('\\', '/');
+            var feedUri = new Uri("file:///" + normalizedPath.TrimStart('/'));
             services.PostConfigure<FeedResolutionOptions>(feedOpts =>
             {
                 // Only add if not already present (idempotent).
