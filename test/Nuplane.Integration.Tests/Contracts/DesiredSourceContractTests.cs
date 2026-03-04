@@ -28,9 +28,9 @@ public sealed class DesiredSourceContractTests
             })
         };
 
-        var requests = await aggregator.AggregateAsync(sources, trust, CancellationToken.None);
+        var result = await aggregator.AggregateAsync(sources, trust, CancellationToken.None);
 
-        Assert.Equal(new[] { "a", "b", "c" }, requests.Select(x => x.Id));
+        Assert.Equal(new[] { "a", "b", "c" }, result.Requests.Select(x => x.Id));
     }
 
     [Fact]

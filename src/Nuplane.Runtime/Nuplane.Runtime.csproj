@@ -8,4 +8,8 @@
     <ProjectReference Include="..\Nuplane.Loading.Abstractions\Nuplane.Loading.Abstractions.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Nuplane.Runtime.Tests" />
+  </ItemGroup>
+
 </Project>
