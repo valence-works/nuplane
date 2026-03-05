@@ -12,6 +12,7 @@ using Nuplane.Store.State;
 using Nuplane.Store.Transactions;
 using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Runtime.Reconciliation.FeedPolicy;
+#pragma warning disable IDE0005 // Remove unnecessary usings — Loading usings kept for UnloadMiddleware
 
 namespace Nuplane.Runtime.Reconciliation;
 
@@ -128,9 +129,6 @@ public ReconciliationService(
         pipeline.Use(new TrustAndLockGateMiddleware(
             feedResOpts, feedTrustOpts, feedTrustPolicyEvaluator,
             lockFileCoordinator, retryPolicy, failureRec, loggerInstance));
-        pipeline.Use(new PackageLoadingMiddleware(
-            loadOpts, loader, allowlistGate, applyExecutor,
-            eventDispatcher, loggerInstance, metricsInstance));
         pipeline.Use(new DiffAndChangeEventMiddleware(
             diffEngine, dryRunPlanner, retryPolicy,
             storeReg, eventDispatcher, metricsInstance));
