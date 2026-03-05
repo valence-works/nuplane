@@ -54,7 +54,10 @@ dotnet test Nuplane.sln
 4. Verify:
    - a reconciliation cycle runs,
    - feed resolution selects the local directory feed,
+   - the `.nupkg` is extracted to a versioned install directory under the feed path (e.g., `{feedDir}/.installed/{packageId}/{version}/`),
+   - the resolved `InstallPath` points to a real directory on disk containing assemblies,
    - no `InvalidOperationException: No available feed could resolve package ...` is thrown,
+   - no `DirectoryNotFoundException: Install path '...' does not exist.` is thrown from the loader boundary,
    - the outcome is observable (logs/health/metrics) with correlation id.
 
 ## Scenario 2: Watcher-triggered reconciliation (near real time)
