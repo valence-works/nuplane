@@ -158,17 +158,7 @@ As a host application developer, I want the startup reconciliation cycle to prod
 - **SC-006**: On startup reconciliation failure, the host remains operational and the failure is visible in structured logs with a correlation identifier.
 
 
-**Why this priority**: Without startup reconciliation, hosts that rely on pre-deployed packages experience a dead window after launch where no plugins are available. This is the most impactful gap — it blocks real-world production usage.
-
-**Independent Test**: Deploy a package to the configured source before starting the host. Start the host with automatic reconciliation enabled. Verify that the package is loaded and available for type scanning before the first periodic timer tick fires.
-
-**Acceptance Scenarios**:
-
-1. **Given** a package exists in a configured feed/drop-folder, **When** the host application starts with automatic reconciliation enabled, **Then** the package is loaded before the first periodic timer tick fires.
-2. **Given** no packages exist in any configured source, **When** the host application starts, **Then** the startup reconciliation cycle completes without error and the host continues into normal periodic reconciliation.
-3. **Given** a package in the feed is corrupted or fails trust validation, **When** the startup reconciliation cycle runs, **Then** the failure is handled with last-known-good safety semantics (no crash, no partial state) and is observable through existing failure events.
-4. **Given** automatic reconciliation is disabled, **When** the host application starts, **Then** no startup reconciliation cycle runs.
-
+**Startup reconciliation behavior**: See [User Story 1 — Packages Available Immediately on Startup (Priority: P1)](#user-story-1--packages-available-immediately-on-startup-priority-p1) for the canonical rationale, independent test, and acceptance scenarios for startup reconciliation. The same behavior and outcomes apply here unchanged.
 ---
 
 ### User Story 2 — Notified When Packages Are Loaded (Priority: P1)
