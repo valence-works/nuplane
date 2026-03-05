@@ -118,23 +118,30 @@ public sealed class StartupCycleTests
         var services = new ServiceCollection();
         var stateRoot = Path.Combine(Path.GetTempPath(), "nuplane-ac4-test", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(stateRoot);
-        var stateFilePath = Path.Combine(stateRoot, "state.json");
+        try
+        {
+            var stateFilePath = Path.Combine(stateRoot, "state.json");
 
-        Nuplane.NuplaneServiceCollectionExtensions.AddNuplane(
-            services,
-            configureSourceTrust: trust =>
-            {
-                trust.AllowedSourceNames.Add("NuGet.Main");
-                trust.AllowedPackageIds.Add("Test.Package");
-            },
-            stateFilePath: stateFilePath);
+            Nuplane.NuplaneServiceCollectionExtensions.AddNuplane(
+                services,
+                configureSourceTrust: trust =>
+                {
+                    trust.AllowedSourceNames.Add("NuGet.Main");
+                    trust.AllowedPackageIds.Add("Test.Package");
+                },
+                stateFilePath: stateFilePath);
 
-        // EnableAutomaticReconciliation defaults to false — no hosted service registered
-        var hostedServiceDescriptor = services.FirstOrDefault(d =>
-            d.ServiceType == typeof(IHostedService)
-            && d.ImplementationType == typeof(Nuplane.ReconciliationHostedService));
+            // EnableAutomaticReconciliation defaults to false — no hosted service registered
+            var hostedServiceDescriptor = services.FirstOrDefault(d =>
+                d.ServiceType == typeof(IHostedService)
+                && d.ImplementationType == typeof(Nuplane.ReconciliationHostedService));
 
-        Assert.Null(hostedServiceDescriptor);
+            Assert.Null(hostedServiceDescriptor);
+        }
+        finally
+        {
+            try { Directory.Delete(stateRoot, recursive: true); } catch { }
+        }
     }
 
     #region Helpers
