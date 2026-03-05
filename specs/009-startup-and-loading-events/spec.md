@@ -92,9 +92,9 @@ As a host application developer, I want the startup reconciliation cycle to prod
 
 - **FR-003**: The `INuplaneObserver` interface MUST define an `OnPackagesUnloadedAsync(PackageUnloadedEvent unloadedEvent, CancellationToken ct)` method with a default no-op implementation (`=> Task.CompletedTask`) for backward compatibility. This method fires after assemblies have been successfully unloaded from AssemblyLoadContexts during a reconciliation cycle.
 
-- **FR-004**: A `PackageLoadedEvent` record MUST be defined in `Nuplane.Abstractions` containing the list of successfully loaded packages, the trigger type of the cycle, and the correlation identifier.
+- **FR-004**: A `PackageLoadedEvent` record MUST be defined in `Nuplane.Abstractions` containing `IReadOnlyList<ResolvedPackage> LoadedPackages` (the packages successfully loaded in this cycle), the `TriggerType` of the cycle, and the correlation identifier. Using `ResolvedPackage` avoids any new project dependency and gives observers the identity, version, feed name, and install path needed for type scanning.
 
-- **FR-005**: A `PackageUnloadedEvent` record MUST be defined in `Nuplane.Abstractions` containing the list of successfully unloaded packages, the trigger type of the cycle, and the correlation identifier.
+- **FR-005**: A `PackageUnloadedEvent` record MUST be defined in `Nuplane.Abstractions` containing `IReadOnlyList<string> UnloadedPackageIds` (the identifiers of successfully unloaded packages), the `TriggerType` of the cycle, and the correlation identifier. Package IDs are used rather than `ResolvedPackage` references because `UnloadMiddleware` tracks pending unloads by ID only and no store lookup is performed at unload time.
 
 - **FR-006**: The `IObserverEventDispatcher` interface MUST expose a `PublishLoadedAsync` method to dispatch `OnPackagesLoadedAsync` to all registered observers, and a `PublishUnloadedAsync` method to dispatch `OnPackagesUnloadedAsync` to all registered observers.
 
@@ -124,22 +124,30 @@ As a host application developer, I want the startup reconciliation cycle to prod
 
 ### Key Entities
 
-- **PackageLoadedEvent**: Represents the outcome of successful package loading in a reconciliation cycle. Contains the list of loaded packages, the trigger type (Startup, Scheduled, Manual, DirectoryChange), and the correlation identifier for the cycle.
+- **PackageLoadedEvent**: Represents the outcome of successful package loading in a reconciliation cycle. Contains `IReadOnlyList<ResolvedPackage> LoadedPackages` (packages loaded in this cycle), the `TriggerType` (Startup, Scheduled, Manual, DirectoryChange), and the correlation identifier for the cycle.
 
-- **PackageUnloadedEvent**: Represents the outcome of successful package unloading in a reconciliation cycle. Contains the list of unloaded packages, the trigger type, and the correlation identifier for the cycle.
+- **PackageUnloadedEvent**: Represents the outcome of successful package unloading in a reconciliation cycle. Contains `IReadOnlyList<string> UnloadedPackageIds` (the IDs of fully unloaded packages — excluding pending unloads), the `TriggerType`, and the correlation identifier. Uses string IDs rather than `ResolvedPackage` because `UnloadMiddleware` holds only ID-keyed context handles at unload time.
 
 - **TriggerType.Startup**: An existing enum value that identifies the first automatic reconciliation cycle after host startup. Currently defined but unused — this feature activates it.
 
 ## Assumptions
 
 - The startup reconciliation cycle uses the same middleware pipeline as all other cycles. No special startup-only middleware or bypass logic is introduced.
-- `TriggerType.Startup` is already defined in `ReconciliationTrigger.cs` and requires no modifications to the enum itself.
+- `TriggerType` will be moved from `Nuplane.Runtime.Reconciliation.Models` to `Nuplane.Abstractions` so that `PackageLoadedEvent` and `PackageUnloadedEvent` (which reference it) can reside in `Nuplane.Abstractions` without creating an upward dependency on `Nuplane.Runtime`. The `Nuplane.Runtime` project will reference the canonical type from `Nuplane.Abstractions`. The `TriggerType` enum values (`Scheduled`, `DirectoryChange`, `Manual`, `Startup`) and their semantics remain unchanged.
 - The `PackageLoadedEvent` and `PackageUnloadedEvent` types belong in `Nuplane.Abstractions` because they are part of the public observer contract.
 - Loading events fire from within the existing middleware pipeline positions: `PackageLoadingMiddleware` for load events, `UnloadMiddleware` for unload events. No middleware reordering is required.
 - Default interface method implementations (`=> Task.CompletedTask`) provide backward compatibility for existing observer implementations that do not implement the new methods.
 - The sample application update (FR-011, FR-012) demonstrates the intended usage pattern but does not change any runtime library behavior.
 - Single-flight protection (existing `EnableSingleFlight` option) prevents the startup cycle from running concurrently with a timer-triggered or directory-watcher-triggered cycle.
 - When loading is disabled (`LoadingOptions.Enabled = false`), loading events do not fire because the `PackageLoadingMiddleware` skips loading entirely.
+
+## Clarifications
+
+### Session 2026-03-05
+
+- Q: `PackageLoadedEvent` and `PackageUnloadedEvent` reference `TriggerType`, but `TriggerType` currently lives in `Nuplane.Runtime.Reconciliation.Models` while the events must be in `Nuplane.Abstractions`. How should this dependency conflict be resolved? → A: Move `TriggerType` enum to `Nuplane.Abstractions`; `Nuplane.Runtime` references it from there.
+- Q: `PackageUnloadedEvent` needs a package list, but `UnloadMiddleware` only tracks unloads by package ID string — what type should the payload use? → A: `IReadOnlyList<string>` (package IDs only); no store lookup required at unload time.
+- Q: `PackageLoadedEvent` needs a package list — should it use `IReadOnlyList<ResolvedPackage>` (same assembly, no new dependency) or another type? → A: `IReadOnlyList<ResolvedPackage>`; stays in `Nuplane.Abstractions` with no additional project reference.
 
 ## Success Criteria *(mandatory)*
 
