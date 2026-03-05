@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.IO.Compression;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Versioning;
@@ -52,11 +53,12 @@ public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, Feed
             }
 
             var selectedVersion = NuGetVersionRangeParser.SelectVersion(request.VersionRange);
+            var installPath = ResolveInstallPath(candidate, request.Id, selectedVersion);
             var resolved = new ResolvedPackage(
                 request.Id,
                 selectedVersion,
                 candidate.Name,
-                $"/packages/{request.Id}/{selectedVersion}",
+                installPath,
                 DateTimeOffset.UtcNow,
                 request.SourceName);
 
@@ -80,6 +82,46 @@ public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, Feed
 
         throw new NoEligibleFeedException(request.Id, "No candidate feed was available.");
     }
+
+    /// <summary>
+    /// Resolves the install path for a package from the specified feed.
+    /// For local directory feeds (<c>file://</c> scheme), the nupkg is extracted to an install directory.
+    /// For remote feeds, a synthetic path is returned (to be populated by a future acquisition step).
+    /// </summary>
+    private static string ResolveInstallPath(FeedDefinition feed, string packageId, string version)
+    {
+        if (!IsLocalDirectoryFeed(feed))
+        {
+            return $"/packages/{packageId}/{version}";
+        }
+
+        var feedDirectoryPath = feed.ServiceIndex.LocalPath;
+        var nupkgFileName = $"{packageId}.{version}.nupkg";
+        var nupkgPath = Path.Combine(feedDirectoryPath, nupkgFileName);
+
+        if (!File.Exists(nupkgPath))
+        {
+            throw new FileNotFoundException(
+                $"Expected nupkg '{nupkgFileName}' was not found in local directory feed '{feed.Name}' at '{feedDirectoryPath}'.",
+                nupkgPath);
+        }
+
+        var installDir = Path.Combine(feedDirectoryPath, ".installed", packageId, version);
+
+        if (!Directory.Exists(installDir))
+        {
+            Directory.CreateDirectory(installDir);
+            ZipFile.ExtractToDirectory(nupkgPath, installDir, overwriteFiles: true);
+        }
+
+        return installDir;
+    }
+
+    /// <summary>
+    /// Determines whether a feed definition represents a local directory feed.
+    /// </summary>
+    private static bool IsLocalDirectoryFeed(FeedDefinition feed) =>
+        feed.ServiceIndex.Scheme.Equals("file", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Tries to retrieve the feed resolution decision for the specified package.

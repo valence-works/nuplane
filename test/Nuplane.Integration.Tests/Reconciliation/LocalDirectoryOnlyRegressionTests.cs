@@ -1,8 +1,9 @@
+using System.IO.Compression;
+using System.Text;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.FeedPolicy;
 using Nuplane.Runtime.Reconciliation.Models;
@@ -14,12 +15,25 @@ namespace Nuplane.Integration.Tests.Reconciliation;
 /// Regression integration tests verifying that running with only local directory
 /// feeds (no remote feeds configured) works end-to-end without unhandled exceptions.
 /// </summary>
-public sealed class LocalDirectoryOnlyRegressionTests
+public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
 {
+    private readonly string tempDir = Path.Combine(Path.GetTempPath(), $"nuplane-local-reg-{Guid.NewGuid():N}");
+
+    public void Dispose()
+    {
+        if (Directory.Exists(tempDir))
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task LocalDirectoryOnly_ReconciliationCompletes_WithoutException()
     {
-        var localFeed = new FeedDefinition("local-drop", new Uri("file:///packages/local"), FeedTrustLevel.Trusted);
+        BuildNupkgTo(tempDir, "MyPlugin", "1.0.0");
+
+        var feedUri = new Uri("file:///" + tempDir.Replace('\\', '/').TrimStart('/'));
+        var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
         var feedOpts = new FeedResolutionOptions();
         feedOpts.Feeds.Add(localFeed);
 
@@ -51,7 +65,10 @@ public sealed class LocalDirectoryOnlyRegressionTests
     [Fact]
     public async Task LocalDirectoryOnly_EmptyDirectory_CompletesSuccessfully()
     {
-        var localFeed = new FeedDefinition("local-drop", new Uri("file:///packages/local"), FeedTrustLevel.Trusted);
+        Directory.CreateDirectory(tempDir);
+
+        var feedUri = new Uri("file:///" + tempDir.Replace('\\', '/').TrimStart('/'));
+        var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
         var feedOpts = new FeedResolutionOptions();
         feedOpts.Feeds.Add(localFeed);
 
@@ -80,7 +97,10 @@ public sealed class LocalDirectoryOnlyRegressionTests
     [Fact]
     public async Task LocalDirectoryOnly_MultipleTriggers_DoNotPathologicallyFail()
     {
-        var localFeed = new FeedDefinition("local-drop", new Uri("file:///packages/local"), FeedTrustLevel.Trusted);
+        BuildNupkgTo(tempDir, "PluginA", "1.0.0");
+
+        var feedUri = new Uri("file:///" + tempDir.Replace('\\', '/').TrimStart('/'));
+        var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
         var feedOpts = new FeedResolutionOptions();
         feedOpts.Feeds.Add(localFeed);
 
@@ -107,6 +127,30 @@ public sealed class LocalDirectoryOnlyRegressionTests
             var result = await service.TriggerAsync(trigger, CancellationToken.None);
             Assert.False(result.Skipped);
         }
+    }
+
+    private static void BuildNupkgTo(string directoryPath, string packageId, string version)
+    {
+        Directory.CreateDirectory(directoryPath);
+        var filePath = Path.Combine(directoryPath, $"{packageId}.{version}.nupkg");
+        using var ms = new MemoryStream();
+        using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var nuspecEntry = archive.CreateEntry($"{packageId}.nuspec");
+            using var writer = new StreamWriter(nuspecEntry.Open(), Encoding.UTF8);
+            writer.Write($"""
+                <?xml version="1.0" encoding="utf-8"?>
+                <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+                  <metadata>
+                    <id>{packageId}</id>
+                    <version>{version}</version>
+                    <authors>test</authors>
+                    <description>Test package</description>
+                  </metadata>
+                </package>
+                """);
+        }
+        File.WriteAllBytes(filePath, ms.ToArray());
     }
 
     private sealed class StaticSource(IReadOnlyList<PackageRequest> requests) : IDesiredPackageSource

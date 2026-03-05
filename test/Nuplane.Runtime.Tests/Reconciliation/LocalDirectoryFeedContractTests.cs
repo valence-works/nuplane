@@ -2,6 +2,7 @@ using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.FeedPolicy;
+using Nuplane.Runtime.Tests.TestSupport;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 
@@ -9,12 +10,25 @@ namespace Nuplane.Runtime.Tests.Reconciliation;
 /// Contract tests verifying that local directory feeds (file:// scheme) are
 /// eligible candidates for resolution without any remote feeds configured.
 /// </summary>
-public sealed class LocalDirectoryFeedContractTests
+public sealed class LocalDirectoryFeedContractTests : IDisposable
 {
+    private readonly string tempDir = Path.Combine(Path.GetTempPath(), $"nuplane-local-feed-test-{Guid.NewGuid():N}");
+
+    public void Dispose()
+    {
+        if (Directory.Exists(tempDir))
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task Resolve_WithOnlyLocalFeed_Succeeds()
     {
-        var localFeed = new FeedDefinition("local-drop", new Uri("file:///packages/local"), FeedTrustLevel.Trusted);
+        NupkgTestBuilder.Create("MyPlugin", "1.0.0").BuildTo(tempDir);
+
+        var feedUri = new Uri("file:///" + tempDir.Replace('\\', '/').TrimStart('/'));
+        var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
         var opts = new FeedResolutionOptions();
         opts.Feeds.Add(localFeed);
         var policy = new FeedResolutionPolicy(opts);
@@ -25,12 +39,16 @@ public sealed class LocalDirectoryFeedContractTests
 
         Assert.Equal("MyPlugin", result.Id);
         Assert.Equal("local-drop", result.FeedName);
+        Assert.True(Directory.Exists(result.InstallPath), $"Install path '{result.InstallPath}' should exist on disk.");
     }
 
     [Fact]
     public async Task Resolve_WithLocalFeedOnly_NoExplicitFeedNameOnRequest_StillResolvesViaPriority()
     {
-        var localFeed = new FeedDefinition("local-drop", new Uri("file:///packages/local"), FeedTrustLevel.Trusted);
+        NupkgTestBuilder.Create("MyPlugin", "1.0.0").BuildTo(tempDir);
+
+        var feedUri = new Uri("file:///" + tempDir.Replace('\\', '/').TrimStart('/'));
+        var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
         var opts = new FeedResolutionOptions();
         opts.Feeds.Add(localFeed);
         var policy = new FeedResolutionPolicy(opts);
@@ -42,6 +60,7 @@ public sealed class LocalDirectoryFeedContractTests
 
         Assert.Equal("MyPlugin", result.Id);
         Assert.Equal("local-drop", result.FeedName);
+        Assert.True(Directory.Exists(result.InstallPath), $"Install path '{result.InstallPath}' should exist on disk.");
     }
 
     [Fact]

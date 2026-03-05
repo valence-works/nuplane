@@ -18,9 +18,14 @@ internal sealed class TransactionExecutionMiddleware(
 
         foreach (var failedPackage in applyResult.FailedPackageIds)
         {
+            var reason = applyResult.FailureMessages is not null
+                && applyResult.FailureMessages.TryGetValue(failedPackage, out var msg)
+                ? $"Package '{failedPackage}' failed to apply: {msg}"
+                : $"Package '{failedPackage}' failed to apply.";
+
             await observerEventDispatcher.NotifyPackageFailedAsync(
                 failedPackage,
-                new InvalidOperationException($"Package '{failedPackage}' failed to apply."),
+                new InvalidOperationException(reason),
                 context.CorrelationId,
                 context.CancellationToken);
         }

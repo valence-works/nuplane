@@ -83,6 +83,7 @@ public sealed class PackageApplyExecutor(
 
         var applied = new List<ResolvedPackage>();
         var failed = new List<string>(resolutionResult.FailedPackageIds);
+        var failureMessages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var resolved in resolutionResult.ResolvedPackages)
         {
@@ -97,10 +98,14 @@ public sealed class PackageApplyExecutor(
             else
             {
                 failed.Add(resolved.Id);
+                if (!string.IsNullOrWhiteSpace(transaction.FailureMessage))
+                {
+                    failureMessages[resolved.Id] = transaction.FailureMessage;
+                }
             }
         }
 
-        return new(applied, failed);
+        return new(applied, failed, failureMessages);
     }
 
     /// <inheritdoc />
