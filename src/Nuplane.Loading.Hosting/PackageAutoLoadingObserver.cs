@@ -70,9 +70,18 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
         // Dispatch loaded event if any succeeded
         if (loadResult.Loaded.Count > 0)
         {
-            var correlationGuid = Guid.TryParse(changeSet.CorrelationId, out var cid)
-                ? cid
-                : Guid.NewGuid();
+            Guid correlationGuid;
+            if (Guid.TryParse(changeSet.CorrelationId, out var cid))
+            {
+                correlationGuid = cid;
+            }
+            else
+            {
+                correlationGuid = Guid.Empty;
+                _logger.LogWarning(
+                    "CorrelationId '{CorrelationId}' is not a valid GUID; using Guid.Empty for PackageLoadedEvent.",
+                    changeSet.CorrelationId);
+            }
 
             var evt = new PackageLoadedEvent(
                 correlationGuid,

@@ -132,11 +132,11 @@ public sealed class PackageAutoLoadingObserverTests
     }
 
     [Fact]
-    public async Task IdempotentLoading_NoDuplicatePublish()
+    public async Task IndependentCycles_EachDispatchPublishesLoadedEvent()
     {
         // Calling OnPackagesChangedAsync twice with the same packages
-        // still results in two PublishLoadedAsync calls (each cycle is independent).
-        // IPackageLoader.EnsureLoadedAsync is responsible for idempotency.
+        // results in two PublishLoadedAsync calls because each cycle dispatches independently.
+        // IPackageLoader.EnsureLoadedAsync is responsible for true idempotency.
         var loader = new FakePackageLoader();
         var dispatcher = new FakeLoadingEventDispatcher();
         var options = new LoadingOptions { Enabled = true };

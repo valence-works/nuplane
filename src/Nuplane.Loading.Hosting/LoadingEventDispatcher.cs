@@ -28,6 +28,10 @@ internal sealed class LoadingEventDispatcher : ILoadingEventDispatcher
             {
                 await observer.OnPackagesLoadedAsync(evt, cancellationToken);
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex,
@@ -45,6 +49,10 @@ internal sealed class LoadingEventDispatcher : ILoadingEventDispatcher
             try
             {
                 await observer.OnPackageLoadFailedAsync(packageId, reason, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
