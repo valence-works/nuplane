@@ -2,14 +2,161 @@
 
 **Feature Branch**: `009-startup-and-loading-events`  
 **Created**: 2026-03-05  
-**Status**: Draft  
-**Input**: User description: "Startup reconciliation and loading events for INuplaneObserver"
+**Status**: Revised 2026-03-05  
+**Input**: Startup reconciliation + a Loading-owned observer that automatically loads reconciled packages and publishes `PackageLoadedEvent` to a separate `IPackageLoadingObserver` interface
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — Packages Available Immediately on Startup (Priority: P1)
 
-As a host application developer, I want packages already present in my configured feeds or drop-folders to be loaded immediately when the application starts, so that I do not have to wait up to 60 seconds for the first periodic reconciliation tick before my plugins are available.
+As a host application developer, I want packages already present in my configured sources to be loaded immediately when the application starts, so that I do not have to wait up to 60 seconds for the first periodic reconciliation tick before my plugins are available.
+
+**Why this priority**: Without startup reconciliation, hosts that rely on pre-deployed packages experience a dead window after launch where no plugins are available. This is the most impactful gap — it blocks production usage.
+
+**Independent Test**: Deploy a package to the configured source before starting the host. Start the host with automatic reconciliation enabled. Verify that the package is loaded and a `PackageLoadedEvent` is received by the host's `IPackageLoadingObserver` before the first periodic timer tick fires.
+
+**Acceptance Scenarios**:
+
+1. **Given** a package exists in a configured source, **When** the host starts with automatic reconciliation enabled, **Then** the package is reconciled and loaded before the first periodic timer tick fires.
+2. **Given** no packages exist in any configured source, **When** the host starts, **Then** the startup reconciliation cycle completes without error and the host enters normal periodic reconciliation.
+3. **Given** a package fails trust validation during the startup cycle, **When** the startup reconciliation runs, **Then** the failure is handled with last-known-good safety semantics and is observable through existing failure events.
+4. **Given** automatic reconciliation is disabled, **When** the host starts, **Then** no startup reconciliation cycle runs.
+
+---
+
+### User Story 2 — Notified When Packages Are Loaded (Priority: P1)
+
+As a host application developer, I want to receive a dedicated `PackageLoadedEvent` when the Loading library loads new packages into the application (assemblies loaded into AssemblyLoadContexts), so that I can discover types and activate plugins at the correct moment — independent of the reconciliation state machine.
+
+**Why this priority**: The current pattern of using `OnPackagesChangedAsync` as a proxy for loading is semantically incorrect — reconciliation changed-state events are not loading events. A clean, Loading-owned event is essential for correct host integration and proper domain separation.
+
+**Independent Test**: Register an `IPackageLoadingObserver`. Trigger a reconciliation cycle that includes a new package. Verify that `OnPackagesLoadedAsync` fires with the correct `PackageLoadSession` entries and that the loaded assemblies are scannable immediately after the event fires.
+
+**Acceptance Scenarios**:
+
+1. **Given** a reconciliation cycle adds or updates packages, **When** the `PackageAutoLoadingObserver` successfully loads their assemblies, **Then** `OnPackagesLoadedAsync` fires with all successfully loaded `PackageLoadSession` entries.
+2. **Given** loading fails for one package but succeeds for others, **When** the observer completes loading, **Then** `OnPackagesLoadedAsync` fires with only the successfully loaded sessions, and `IPackageLoadingObserver.OnPackageLoadFailedAsync` fires for the failed one.
+3. **Given** no packages need loading in a cycle (no additions or updates), **When** the cycle completes, **Then** `OnPackagesLoadedAsync` does not fire.
+4. **Given** loading is disabled (`LoadingOptions.Enabled = false`), **When** reconciliation runs, **Then** `OnPackagesLoadedAsync` does not fire.
+5. **Given** a host does not implement `IPackageLoadingObserver`, **When** the event fires, **Then** no error occurs.
+
+---
+
+### User Story 3 — Startup Loading Uses the Same Event (Priority: P1)
+
+As a host application developer, I want the startup reconciliation cycle to produce the same `PackageLoadedEvent` as any subsequent cycle, so that I can use a single `IPackageLoadingObserver.OnPackagesLoadedAsync` handler for both initial discovery and runtime updates.
+
+**Why this priority**: Unified startup and runtime loading is the core design goal. Any special-casing for startup would force hosts to write separate initialization code.
+
+**Independent Test**: Deploy packages to the source, start the host, observe `OnPackagesLoadedAsync` firing for the startup cycle. Drop a new package, verify the same event fires again for the periodic cycle.
+
+**Acceptance Scenarios**:
+
+1. **Given** packages exist at startup, **When** the startup cycle reconciles and loads them, **Then** `OnPackagesLoadedAsync` fires with all loaded packages.
+2. **Given** a subsequent periodic cycle loads an additional package, **When** the Loading observer processes the change, **Then** `OnPackagesLoadedAsync` fires with only the newly loaded package.
+3. **Given** a host implements only `IPackageLoadingObserver.OnPackagesLoadedAsync`, **When** both startup and periodic loading occur, **Then** both are handled by the same method with no special-case code.
+
+---
+
+### Edge Cases
+
+- What happens when the startup cycle is still running when the first timer tick fires? The existing single-flight protection prevents concurrent cycles.
+- What happens when an `IPackageLoadingObserver` throws in `OnPackagesLoadedAsync`? The exception is caught and logged per-observer; other observers are not interrupted.
+- What happens when `LoadingOptions.Enabled = false`? The `PackageAutoLoadingObserver` skips loading entirely; no event fires.
+- What happens when the startup cycle produces no changes (empty sources)? `OnPackagesLoadedAsync` does not fire; no error.
+- What happens when the Loading observer's `IPackageLoader.EnsureLoadedAsync` fails for all packages? `OnPackagesLoadedAsync` does not fire; per-package failures are reported via the existing reconciliation failure path.
+
+## Requirements *(mandatory)*
+
+### Functional Requirements
+
+- **FR-001**: The `ReconciliationHostedService` MUST execute an immediate reconciliation cycle with `TriggerType.Startup` before entering the periodic timer loop, so that pre-existing packages are reconciled and loaded without waiting for the first `PollInterval` tick. This cycle MUST respect the same middleware pipeline, single-flight protection, and error handling as periodic cycles.
+
+- **FR-002**: A `PackageAutoLoadingObserver` class MUST be defined in `Nuplane.Loading.Hosting`. It MUST implement `INuplaneObserver`. On `OnPackagesChangedAsync`, it MUST call `IPackageLoader.EnsureLoadedAsync` for all packages in `changeSet.Added` and `changeSet.Updated`, then dispatch `PackageLoadedEvent` to all registered `IPackageLoadingObserver` instances via `ILoadingEventDispatcher`. If `LoadingOptions.Enabled` is false or the changed set is empty, it MUST skip loading and not dispatch an event.
+
+- **FR-003**: An `IPackageLoadingObserver` interface MUST be defined in `Nuplane.Loading.Abstractions`. It MUST declare `OnPackagesLoadedAsync(PackageLoadedEvent loadedEvent, CancellationToken ct)` with a default no-op implementation, and `OnPackageLoadFailedAsync(string packageId, string reason, CancellationToken ct)` with a default no-op implementation.
+
+- **FR-004**: A `PackageLoadedEvent` record MUST be defined in `Nuplane.Loading.Abstractions`. It MUST contain `IReadOnlyList<PackageLoadSession> LoadedPackages` (the sessions for successfully loaded packages), `string CorrelationId`, and `DateTimeOffset LoadedAt`.
+
+- **FR-005**: An `ILoadingEventDispatcher` interface MUST be defined in `Nuplane.Loading.Abstractions`. It MUST declare `PublishLoadedAsync(PackageLoadedEvent loadedEvent, CancellationToken ct)`.
+
+- **FR-006**: A `LoadingEventDispatcher` class MUST be defined in `Nuplane.Loading.Hosting` or `Nuplane.Loading`. It MUST implement `ILoadingEventDispatcher`. It MUST dispatch `OnPackagesLoadedAsync` to all registered `IPackageLoadingObserver` instances using the same per-observer error-isolation pattern as `ObserverEventDispatcher` (`catch` + log per observer; no interrupt of remaining observer dispatch).
+
+- **FR-007**: `PackageLoadingMiddleware` MUST be removed from the `ReconciliationService` middleware pipeline. Assembly loading is the sole responsibility of `PackageAutoLoadingObserver`. The runtime pipeline MUST NOT perform assembly loading.
+
+- **FR-008**: `AddNuplaneLoadingHosting()` MUST register `PackageAutoLoadingObserver` as an `INuplaneObserver` (so it receives reconciliation events), `LoadingEventDispatcher` as `ILoadingEventDispatcher`, and provide helper registration so host apps can add `IPackageLoadingObserver` implementations.
+
+- **FR-009**: The existing `PackageLoadingMiddleware`, `IPackageLoaderBoundary`, `NuplaneLoadingAdapter`, and related runtime loading plumbing MUST be removed or inerted once FR-007 is satisfied. No dead code that performs loading through the pipeline should remain.
+
+- **FR-010**: The existing `OnPackagesChangingAsync`, `OnPackagesChangedAsync`, and `OnPackageFailedAsync` events on `INuplaneObserver` MUST remain unchanged in signature, behavior, and pipeline position.
+
+- **FR-011**: The sample `PluginDiscoveryObserver` MUST be refactored to implement `IPackageLoadingObserver` (in `Nuplane.Loading.Abstractions`) instead of `INuplaneObserver` for type scanning. `OnPackagesChangedAsync` MAY be retained for audit logging only or removed.
+
+- **FR-012**: The sample `Program.cs` MUST set `EnableAutomaticReconciliation = true` so that startup reconciliation and the startup loading event are demonstrated.
+
+### Operational & Safety Requirements *(mandatory)*
+
+- **OSR-001**: The startup reconciliation cycle MUST be idempotent — if the host is restarted with the same packages present, the `PackageAutoLoadingObserver` calls `IPackageLoader.EnsureLoadedAsync` which is already idempotent (returns existing sessions for already-loaded packages). No duplicate activations or state corruption.
+
+- **OSR-002**: If the startup reconciliation cycle fails, the host MUST remain stable. Failed loading in `PackageAutoLoadingObserver` is isolated per-package; the observer MUST log each failure and (where possible) surface it via `IPackageLoadingObserver.OnPackageLoadFailedAsync`. Startup cycle infrastructure failures (source read, trust) are caught in `ReconciliationHostedService` and logged; the host enters normal periodic reconciliation.
+
+- **OSR-003**: `PackageAutoLoadingObserver` MUST include the `changeSet.CorrelationId` in all log entries and in the `PackageLoadedEvent` it dispatches, so startup-cycle loading is traceable via `TriggerType.Startup` correlation.
+
+- **OSR-004**: `LoadingEventDispatcher` MUST use per-observer exception isolation: each observer's callback is wrapped in try/catch; exceptions are logged with the correlation ID and observer type name; dispatch to remaining observers continues uninterrupted.
+
+- **OSR-005**: Automated tests MUST cover: (a) startup cycle fires before periodic timer tick, (b) `PackageAutoLoadingObserver.OnPackagesChangedAsync` calls `IPackageLoader` and dispatches `PackageLoadedEvent` with correct sessions, (c) loading failures are isolated and do not prevent the event being dispatched for successfully loaded packages, (d) `LoadingEventDispatcher` per-observer exception isolation, (e) hosts with no `IPackageLoadingObserver` registered receive no errors.
+
+### Key Entities
+
+- **PackageAutoLoadingObserver**: `INuplaneObserver` implementation in `Nuplane.Loading.Hosting`. Subscribes to `OnPackagesChangedAsync`, calls `IPackageLoader.EnsureLoadedAsync` for added/updated packages, then dispatches `PackageLoadedEvent` via `ILoadingEventDispatcher`. Acts as the bridge between the reconciliation domain and the loading domain.
+
+- **IPackageLoadingObserver**: Host-app–facing observer interface in `Nuplane.Loading.Abstractions`. Separate from `INuplaneObserver`. Declares `OnPackagesLoadedAsync` and `OnPackageLoadFailedAsync` with default no-op implementations. Host applications implement this interface to receive assembly-loading lifecycle events.
+
+- **PackageLoadedEvent**: Loading-domain event record in `Nuplane.Loading.Abstractions`. Contains `IReadOnlyList<PackageLoadSession> LoadedPackages`, `string CorrelationId`, `DateTimeOffset LoadedAt`. Carries `PackageLoadSession` (id, version, install path, context key, loaded-at) which gives host observers everything needed for type scanning.
+
+- **ILoadingEventDispatcher** / **LoadingEventDispatcher**: Interface (in `Nuplane.Loading.Abstractions`) + implementation (in `Nuplane.Loading.Hosting` or `Nuplane.Loading`) for dispatching `PackageLoadedEvent` to all registered `IPackageLoadingObserver` instances with per-observer error isolation.
+
+- **TriggerType.Startup**: Existing enum value in `Nuplane.Runtime.Reconciliation.Models`. Remains in `Nuplane.Runtime` — it is not needed in the Loading event record. The correlation ID threads the startup context into Loading's log output.
+
+## Assumptions
+
+- `PackageAutoLoadingObserver` observes `OnPackagesChangedAsync` (not `OnPackagesLoadingAsync` or any new event) — this is the correct signal that reconciliation has committed new/updated desired state to the store.
+- `IPackageLoader.EnsureLoadedAsync` is idempotent: calling it for a package that is already loaded returns the existing `PackageLoadSession` without re-loading, ensuring startup-cycle safety.
+- `PackageLoadingMiddleware` (and `IPackageLoaderBoundary`/`NuplaneLoadingAdapter`) are removed as part of this feature. `UnloadMiddleware` is not changed; unloading remains in the runtime pipeline for now (a separate future spec will decide if unloading should also move to the Loading domain).
+- `TriggerType` stays in `Nuplane.Runtime.Reconciliation.Models`. No migration to `Nuplane.Abstractions` is required because `PackageLoadedEvent` (now in `Nuplane.Loading.Abstractions`) does not need to reference it.
+- `Nuplane.Loading.Abstractions` already references `Nuplane.Abstractions`, so `PackageLoadSession` and `ResolvedPackage` are both accessible there without new project references.
+- Default interface implementations on `IPackageLoadingObserver` provide backward compatibility for host apps that add the interface incrementally.
+- Adding `PackageAutoLoadingObserver` as an `INuplaneObserver` via `AddNuplaneLoadingHosting()` is opt-in; hosts that do not call `AddNuplaneLoadingHosting()` get no Loading observer and no loading events.
+- The sample application update (FR-011, FR-012) demonstrates the intended usage pattern but does not change any runtime library behavior.
+- Single-flight protection prevents the startup cycle from running concurrently with a timer-triggered cycle.
+
+## Clarifications
+
+### Session 2026-03-05 (initial)
+
+- Q: `PackageLoadedEvent` reference to `TriggerType` creates an upward dependency. How to resolve? → Superseded by architecture revision (see below).
+- Q: `PackageUnloadedEvent` payload type? → `IReadOnlyList<string>` (IDs). Superseded by architecture revision.
+- Q: `PackageLoadedEvent` payload type? → `IReadOnlyList<ResolvedPackage>`. Superseded by architecture revision.
+
+### Session 2026-03-05 (architecture revision)
+
+- Q: Loading types (`PackageLoadedEvent`, `IPackageLoadingObserver`) and the loading observer belong in `Nuplane.Loading.*`, not `Nuplane.Abstractions`. `PackageLoadingMiddleware` should be removed; loading is the Loading library's responsibility. → A: **Confirmed**. All loading event types and the auto-loading observer move to `Nuplane.Loading.Abstractions` / `Nuplane.Loading.Hosting`.
+- Q: How does the Loading observer dispatch events to the host app — via `INuplaneObserver` or a separate interface? → A: Separate `IPackageLoadingObserver` interface (Option Y). Host apps implement `IPackageLoadingObserver`; the Loading library dispatches via `ILoadingEventDispatcher`.
+- Q: `PackageLoadedEvent` payload — `PackageLoadSession` is richer and available in `Nuplane.Loading.Abstractions`. Use it instead of `ResolvedPackage`? → A: **Yes**. `PackageLoadedEvent.LoadedPackages` is `IReadOnlyList<PackageLoadSession>`.
+- Q: Does `PackageLoadedEvent` need `TriggerType`? → A: **No**. The Loading domain does not need reconciliation trigger metadata; `CorrelationId` provides sufficient traceability.
+- Q: Unloading — does it also move to `Nuplane.Loading.Hosting`? → A: **Out of scope**. `IPackageLoader.TryRemoveContext` requires `(id, version)` but `changeSet.Removed` carries only IDs. Unloading remains in `UnloadMiddleware` (runtime pipeline) and a `PackageUnloadedEvent` / unload observer is deferred to a future spec.
+
+## Success Criteria *(mandatory)*
+
+### Measurable Outcomes
+
+- **SC-001**: When packages are pre-deployed to a configured source, they are loaded and `OnPackagesLoadedAsync` fires on all registered `IPackageLoadingObserver` instances within 5 seconds of application startup — not delayed until the first periodic timer tick.
+- **SC-002**: 100% of reconciliation cycles that add or update packages result in `OnPackagesLoadedAsync` firing with exactly the set of `PackageLoadSession` entries for successfully loaded packages.
+- **SC-003**: Loading failures are isolated per-package: they do not prevent `OnPackagesLoadedAsync` from firing for other successfully loaded packages in the same cycle.
+- **SC-004**: Host applications that implement `IPackageLoadingObserver` without implementing `INuplaneObserver` compile and run without errors.
+- **SC-005**: The sample application demonstrates end-to-end startup loading: deploy a package, start the app, and observe plugin discovery via `IPackageLoadingObserver.OnPackagesLoadedAsync` in logs — without any `OnPackagesChangedAsync` type-scanning code.
+- **SC-006**: On startup reconciliation failure, the host remains operational and the failure is visible in structured logs with a correlation identifier.
+
 
 **Why this priority**: Without startup reconciliation, hosts that rely on pre-deployed packages experience a dead window after launch where no plugins are available. This is the most impactful gap — it blocks real-world production usage.
 
