@@ -1,6 +1,6 @@
-using System.Threading.Channels;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Nuplane.Hosting;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.Models;
@@ -21,11 +21,7 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
     private readonly DirectorySourceOptions _options = options ?? throw new ArgumentNullException(nameof(options));
     private readonly IReconciliationService _reconciliationService = reconciliationService ?? throw new ArgumentNullException(nameof(reconciliationService));
     private readonly ILogger<DirectorySourceReconciliationTriggerHostedService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-    private readonly Channel<bool> _changes = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
-    {
-        FullMode = BoundedChannelFullMode.DropOldest
-    });
+    private readonly DebouncedDirtySignal _reconciliationSignal = new(options?.DebounceWindow ?? throw new ArgumentNullException(nameof(options)));
 
     private FileSystemWatcher? _watcher;
 
@@ -67,19 +63,9 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
 
         try
         {
-            while (await _changes.Reader.WaitToReadAsync(stoppingToken))
+            while (true)
             {
-                while (_changes.Reader.TryRead(out _))
-                {
-                }
-
-                await Task.Delay(_options.DebounceWindow, stoppingToken);
-
-                if (_changes.Reader.TryRead(out _))
-                {
-                    _changes.Writer.TryWrite(true);
-                    continue;
-                }
+                await _reconciliationSignal.WaitForNextSettledSignalAsync(stoppingToken);
 
                 try
                 {
@@ -117,11 +103,11 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
 
     private void OnChanged(object? _, FileSystemEventArgs __)
     {
-        _changes.Writer.TryWrite(true);
+        _reconciliationSignal.Signal();
     }
 
     private void OnRenamed(object? _, RenamedEventArgs __)
     {
-        _changes.Writer.TryWrite(true);
+        _reconciliationSignal.Signal();
     }
 }
