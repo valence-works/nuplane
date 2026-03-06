@@ -1,10 +1,12 @@
-using Nuplane.Loading;
+using System.Runtime.Loader;
 
 namespace Nuplane.Loading.Hosting.Builder;
 
 /// <summary>
-/// Fluent builder for configuring the Nuplane assembly loading subsystem.
-/// Obtain an instance via <see cref="NuplaneBuilderLoadingExtensions.AutoloadPackages"/>.
+/// Provides functionality to build and configure loading behaviors specific
+/// to the Nuplane environment. This builder supports configuration of shared
+/// assemblies, activation of loading processes, and management of timeouts
+/// related to assembly deactivation.
 /// </summary>
 public sealed class NuplaneLoadingBuilder
 {
@@ -14,7 +16,7 @@ public sealed class NuplaneLoadingBuilder
 
     /// <summary>
     /// Registers a shared assembly whose types are resolved from the host's default
-    /// <see cref="System.Runtime.Loader.AssemblyLoadContext"/> rather than from each
+    /// <see cref="AssemblyLoadContext"/> rather than from each
     /// package-specific context.
     /// </summary>
     /// <param name="name">The assembly name (without file extension).</param>
@@ -36,6 +38,16 @@ public sealed class NuplaneLoadingBuilder
     public NuplaneLoadingBuilder WithDeactivationTimeout(TimeSpan timeout)
     {
         DeactivationTimeout = timeout;
+        return this;
+    }
+
+    /// <summary>
+    /// Enables assembly loading when it was previously disabled.
+    /// Useful for code-based overrides on top of configuration.
+    /// </summary>
+    public NuplaneLoadingBuilder Enable()
+    {
+        Enabled = true;
         return this;
     }
 

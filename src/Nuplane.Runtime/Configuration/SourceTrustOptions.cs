@@ -12,22 +12,22 @@ public sealed class SourceTrustOptions
     /// Gets the set of source names that are allowed to contribute desired-state requests.
     /// An empty set means all sources are allowed.
     /// </summary>
-    public HashSet<string> AllowedSourceNames { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    public HashSet<string> AllowedSourceNames { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gets the set of package identifiers that are explicitly allowed.
     /// </summary>
-    public HashSet<string> AllowedPackageIds { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    public HashSet<string> AllowedPackageIds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gets or sets whether packages not in <see cref="AllowedPackageIds"/> are rejected.
     /// </summary>
-    public bool RejectUnallowlistedPackages { get; init; } = true;
+    public bool RejectUnallowlistedPackages { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether runtime credential resolution (e.g., secret references) is permitted.
     /// </summary>
-    public bool AllowRuntimeCredentialResolution { get; init; } = true;
+    public bool AllowRuntimeCredentialResolution { get; set; } = true;
 
     /// <summary>
     /// Determines whether the specified source name is allowed.

@@ -51,30 +51,203 @@ Hosts (e.g., web apps, workers, modular systems) react to change events by reloa
 
 ---
 
-## 📦 Example
+## 📚 Terminology and Concepts
+
+### Desired state
+
+The set of packages Nuplane should make active.
+Desired state comes from configured sources, such as remote feeds, directory-backed feeds, or other desired-state providers.
+
+### Actual state
+
+The packages currently installed and active in the local package store.
+Nuplane compares actual state with desired state during each reconciliation cycle.
+
+### Feed
+
+A named package source Nuplane can resolve from.
+A feed can point at a NuGet v3 service index or at a local directory containing `.nupkg` files.
+Feeds can also define trust level, credentials, and include patterns.
+
+### Include pattern
+
+A package ID filter applied to a feed.
+For example, `MyApp.Plugins.*` means that feed is authoritative for matching package IDs only.
+These patterns also inform source/package trust defaults unless you explicitly override trust options.
+
+### Directory-backed feed
+
+A local folder treated as a feed.
+Nuplane can scan it for `.nupkg` files and optionally watch it for file changes with debounce.
+This is what powers the sample's drop-folder workflow.
+
+### Reconciliation
+
+A control-loop cycle where Nuplane:
+
+- reads desired state
+- resolves package versions from feeds
+- computes the diff versus actual state
+- applies transactional add/update/remove operations
+- emits observer events and operational telemetry
+
+Reconciliation can be manual, startup-triggered, or periodic.
+
+### Package store
+
+Nuplane's deterministic on-disk storage area for downloaded packages, current-package pointers, staging work, and persisted state.
+It is designed so updates are atomic and safe to retry.
+
+### Active version
+
+The version Nuplane currently considers live for a package in the local store.
+This is the version your host should treat as the current runtime target.
+
+### Last-known-good (LKG)
+
+The most recent version Nuplane successfully applied for a package.
+If a future update fails, Nuplane can preserve the LKG state rather than leaving the system half-updated.
+
+### Observer
+
+A host-owned callback type registered in DI.
+Nuplane emits events such as package-change completion or package-loading completion, and your observers decide what the application should do in response.
+
+### Optional loading
+
+An opt-in subsystem that loads resolved packages into isolated assembly load contexts.
+Nuplane can manage shared contract assemblies, deactivation timeout, and unload coordination, but your host still decides what to do with loaded types.
+
+### Configuration-driven setup
+
+A way to declare Nuplane infrastructure in configuration instead of code.
+`Nuplane:Setup` covers builder-only concepts like feeds, polling, and state-file persistence, while `Nuplane:Loading` covers optional runtime loading behavior.
+Observer registration and other host-specific reactions stay in code.
+
+---
+
+## 📦 Quick Start
+
+Use the `Nuplane` configuration section for infrastructure, then keep host-owned reactions in code:
 
 ```csharp
-builder.Services.AddNuplane(options =>
+using Nuplane;
+using Nuplane.Loading.Hosting.Builder;
+
+var builder = WebApplication.CreateBuilder(args);
+var nuplaneConfiguration = builder.Configuration.GetSection("Nuplane");
+
+builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
 {
-    options.RootDirectory = "packages";
-    options.PollInterval = TimeSpan.FromMinutes(1);
-
-    options.Feeds.Add(new FeedDefinition(
-        Name: "Main",
-        ServiceIndex: new Uri("https://api.nuget.org/v3/index.json"),
-        TrustLevel: FeedTrustLevel.Trusted
-    ));
-
-    options.Packages.Add(new PackageRequest(
-        Id: "My.Plugin",
-        VersionRange: "[1.0.0,2.0.0)"
-    ));
-
-    options.Desired.FromNupkgDirectory("packages");
+    nuplane.AutoloadPackages(nuplaneConfiguration.GetSection("Loading"));
+    nuplane.OnPackagesChanged<PackageChangeObserver>();
+    nuplane.OnPackagesLoaded<PluginDiscoveryObserver>();
 });
-````
+```
 
-When packages are added, updated, or removed, Nuplane emits a `PackageChangeSet` event.
+```json
+{
+  "Nuplane": {
+    "Setup": {
+      "AutomaticReconciliation": true,
+      "PollInterval": "00:01:00",
+      "Feeds": [
+        {
+          "Name": "local-packages",
+          "DirectoryPath": "packages",
+          "IncludePatterns": [
+            "Nuplane.Sample.Plugin"
+          ],
+          "Directory": {
+            "Watch": true,
+            "DebounceWindow": "00:00:01"
+          }
+        },
+        {
+          "Name": "nuget.org",
+          "ServiceIndex": "https://api.nuget.org/v3/index.json",
+          "IncludePatterns": [
+            "Elsa.*"
+          ]
+        }
+      ]
+    },
+    "Loading": {
+      "Enabled": true,
+      "SharedAssemblies": [
+        {
+          "Name": "Nuplane.Abstractions",
+          "PublicKeyToken": "31bf3856ad364e35",
+          "MajorVersion": 1
+        }
+      ]
+    }
+  }
+}
+```
+
+When packages are added, updated, or removed, Nuplane emits `PackageChangeSet` events for your host to react to.
+
+### Configuration model
+
+Nuplane has two configuration layers:
+
+- `Nuplane:Setup` — the builder-only setup surface:
+  - automatic reconciliation
+  - poll interval
+  - optional state file path
+  - feeds, include patterns, directory watcher settings
+- existing runtime option sections under `Nuplane:*` — advanced operator configuration:
+  - `Reconciliation`
+  - `FeedResolution`
+  - `SourceTrust`
+  - `FeedTrustPolicy`
+  - `LockFile`
+  - `CleanupPolicy`
+  - `Convergence`
+  - `TrustedSourcePolicy`
+  - `StoreRegistry`
+- `Nuplane:Loading` — optional loading settings:
+  - `Enabled`
+  - `DeactivationTimeout`
+  - `ActiveStoreRoot`
+  - `SharedAssemblies`
+
+### Configuration vs code
+
+Use configuration for infrastructure and policy:
+
+- feeds
+- polling and persistence
+- loading options
+- trust and resolution settings
+
+Keep application-specific behavior in code:
+
+- `OnPackagesChanged<T>()`
+- `OnPackagesLoaded<T>()`
+- any logic that decides how your host reacts to package changes
+
+### Fluent builder still works
+
+If you prefer code-first setup, the fluent API remains available:
+
+```csharp
+builder.Services.AddNuplane(nuplane =>
+{
+    nuplane.PollEvery(TimeSpan.FromSeconds(60));
+    nuplane.AddFeed("local-packages", feed =>
+    {
+        feed.FromDirectory("packages", dir =>
+        {
+            dir.Watch = true;
+            dir.DebounceWindow = TimeSpan.FromSeconds(1);
+        });
+
+        feed.Include("MyApp.Plugins.*");
+    });
+});
+```
 
 ---
 
@@ -118,22 +291,30 @@ The process is idempotent and safe to retry.
 
 ## 🔍 Desired State Sources
 
-Nuplane supports multiple ways to declare desired packages:
+Nuplane can discover desired packages from configured feeds and sources.
 
-### Explicit
-
-```csharp
-options.Packages.Add(new PackageRequest("My.Plugin", "[1.0.0,2.0.0)"));
-```
-
-### Directory-Based (.nupkg Local Directory Feed)
+### Directory-backed local feed
 
 ```csharp
-options.Desired.FromNupkgDirectory("packages");
+builder.Services.AddNuplane(nuplane =>
+{
+    nuplane.AddFeed("local-packages", feed =>
+    {
+        feed.FromDirectory("packages", dir =>
+        {
+            dir.Watch = true;
+            dir.DebounceWindow = TimeSpan.FromSeconds(1);
+        });
+
+        feed.Include("MyApp.Plugins.*");
+    });
+});
 ```
 
 Dropping a `.nupkg` into the folder adds it.
 Removing the file removes it.
+
+The same setup can be declared through `Nuplane:Setup:Feeds` when you prefer configuration-driven hosts.
 
 ## 🧪 End-to-End ASP.NET Plugin Demo
 
@@ -142,7 +323,7 @@ The sample app demonstrates the full lifecycle:
 1. Directory-based desired state (`packages` local directory feed)
 2. File-change-triggered reconcile (watcher + debounce)
 3. `INuplaneObserver` notifications on completion
-4. Assembly loading via `IPackageLoaderBoundary`
+4. Assembly loading via the optional loading subsystem
 5. Type discovery for `IPlugin` implementations
 
 ### Build and pack the sample plugin
@@ -161,7 +342,7 @@ This produces a `.nupkg` like:
 dotnet run --project samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj
 ```
 
-The app is configured (via `NuplaneSample` settings in `appsettings.json`) to watch:
+The app is configured (via the `Nuplane` section in `samples/Nuplane.Sample.AspNetCore/appsettings.json`) to watch:
 
 - `packages`
 
@@ -178,7 +359,13 @@ Expected behavior:
 
 - The file watcher detects the new `.nupkg` and triggers manual reconcile asynchronously.
 - Nuplane applies any changes and emits `PackageChangeSet` events.
+- `PackageChangeObserver` logs the change-set lifecycle.
 - `PluginDiscoveryObserver` scans changed package contexts for `IPlugin` and logs discovered type names (for example, `Nuplane.Sample.Plugin.HelloPlugin`).
+
+See:
+
+- `samples/Nuplane.Sample.AspNetCore/PackageChangeObserver.cs`
+- `samples/Nuplane.Sample.AspNetCore/PluginDiscoveryObserver.cs`
 
 To trigger another cycle, update/remove packages in `packages`.
 

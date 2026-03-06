@@ -1,8 +1,8 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Builder;
-using Nuplane.Loading;
 using Nuplane.Loading.Extensions;
 
 namespace Nuplane.Loading.Hosting.Builder;
@@ -13,6 +13,43 @@ namespace Nuplane.Loading.Hosting.Builder;
 /// </summary>
 public static class NuplaneBuilderLoadingExtensions
 {
+    private const string LoadingSectionName = "Loading";
+
+    /// <summary>
+    /// Installs the Nuplane assembly loading subsystem from configuration or the <c>Loading</c>
+    /// subsection itself, then applies any additional builder customization.
+    /// </summary>
+    /// <param name="builder">The Nuplane builder to extend.</param>
+    /// <param name="configuration">The application configuration.</param>
+    /// <param name="configure">An optional callback to configure loading options.</param>
+    /// <returns>The same <see cref="NuplaneBuilder"/> for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> or <paramref name="configuration"/> is <see langword="null"/>.</exception>
+    public static NuplaneBuilder AutoloadPackages(
+        this NuplaneBuilder builder,
+        IConfiguration configuration,
+        Action<NuplaneLoadingBuilder>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        var loadingSection = GetNamedSectionOrSelf(configuration, LoadingSectionName);
+        var configuredOptions = new LoadingOptions();
+        loadingSection.Bind(configuredOptions);
+
+        var configuredBuilder = builder.AutoloadPackages(loadingBuilder =>
+        {
+            ApplyConfiguredLoading(loadingBuilder, configuredOptions);
+            configure?.Invoke(loadingBuilder);
+        });
+
+        configuredBuilder.Services.PostConfigure<LoadingOptions>(opts =>
+        {
+            opts.ActiveStoreRoot = configuredOptions.ActiveStoreRoot;
+        });
+
+        return configuredBuilder;
+    }
+
     /// <summary>
     /// Installs the Nuplane assembly loading subsystem, including the package loader,
     /// unload coordinator, auto-loading observer, and loading event dispatcher.
@@ -80,5 +117,35 @@ public static class NuplaneBuilderLoadingExtensions
 
         builder.Services.AddSingleton<IPackageLoadingObserver, T>();
         return builder;
+    }
+
+    private static void ApplyConfiguredLoading(NuplaneLoadingBuilder loadingBuilder, LoadingOptions options)
+    {
+        if (!options.Enabled)
+        {
+            loadingBuilder.Disable();
+        }
+        else
+        {
+            loadingBuilder.Enable();
+        }
+
+        loadingBuilder.WithDeactivationTimeout(options.DeactivationTimeout);
+
+        foreach (var sharedAssembly in options.SharedAssemblies)
+        {
+            loadingBuilder.SharedAssembly(sharedAssembly.Name, sharedAssembly.PublicKeyToken, sharedAssembly.MajorVersion);
+        }
+    }
+
+    private static IConfigurationSection GetNamedSectionOrSelf(IConfiguration configuration, string sectionName)
+    {
+        if (configuration is IConfigurationSection section
+            && string.Equals(section.Key, sectionName, StringComparison.OrdinalIgnoreCase))
+        {
+            return section;
+        }
+
+        return configuration.GetSection(sectionName);
     }
 }

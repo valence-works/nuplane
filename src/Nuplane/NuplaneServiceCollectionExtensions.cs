@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -5,10 +6,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Builder;
+using Nuplane.Configuration;
 using Nuplane.DirectorySource;
 using Nuplane.DirectorySource.Hosting;
 using Nuplane.Hosting;
-using Nuplane.Loading;
 using Nuplane.Options.Validation;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
@@ -29,6 +30,47 @@ namespace Nuplane;
 /// </summary>
 public static class NuplaneServiceCollectionExtensions
 {
+    private const string SetupSectionName = "Setup";
+    private const string ReconciliationSectionName = "Reconciliation";
+    private const string FeedResolutionSectionName = "FeedResolution";
+    private const string SourceTrustSectionName = "SourceTrust";
+    private const string FeedTrustPolicySectionName = "FeedTrustPolicy";
+    private const string LockFileSectionName = "LockFile";
+    private const string CleanupPolicySectionName = "CleanupPolicy";
+    private const string ConvergenceSectionName = "Convergence";
+    private const string TrustedSourcePolicySectionName = "TrustedSourcePolicy";
+    private const string StoreRegistrySectionName = "StoreRegistry";
+
+    /// <summary>
+    /// Registers Nuplane from a configuration root or the <c>Setup</c> subsection itself.
+    /// Existing runtime option sections such as <c>Reconciliation</c>, <c>SourceTrust</c>, and
+    /// <c>StoreRegistry</c> are bound directly when present, while builder-only concepts are
+    /// translated from the <c>Setup</c> section.
+    /// </summary>
+    public static IServiceCollection AddNuplane(
+        this IServiceCollection services,
+        IConfiguration configuration) =>
+        services.AddNuplane(configuration, configure: null);
+
+    /// <summary>
+    /// Registers Nuplane from configuration and then applies additional builder-based customization.
+    /// </summary>
+    public static IServiceCollection AddNuplane(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        Action<NuplaneBuilder>? configure)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        return services.AddNuplane(builder =>
+        {
+            ConfigureOptionsFromConfiguration(builder.Services, configuration);
+            ApplyConfiguredSetup(builder, configuration);
+            configure?.Invoke(builder);
+        });
+    }
+
     /// <summary>
     /// Registers all Nuplane runtime services using a fluent builder API.
     /// </summary>
@@ -59,6 +101,7 @@ public static class NuplaneServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configure);
 
         // ── Validators ────────────────────────────────────────────────────────────
+        services.AddSingleton<IValidateOptions<NuplaneSetupOptions>, NuplaneSetupOptionsValidator>();
         services.AddSingleton<IValidateOptions<ReconciliationOptions>, ReconciliationOptionsValidator>();
         services.AddSingleton<IValidateOptions<FeedResolutionOptions>, FeedResolutionOptionsValidator>();
         services.AddSingleton<IValidateOptions<FeedTrustPolicyOptions>, FeedTrustPolicyOptionsValidator>();
@@ -70,6 +113,7 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<IValidateOptions<TrustedSourcePolicyOptions>, TrustedSourcePolicyOptionsValidator>();
 
         // ── Options ────────────────────────────────────────────────────────────────
+        services.AddOptions<NuplaneSetupOptions>().ValidateOnStart();
         services.AddOptions<SourceTrustOptions>().ValidateOnStart();
         services.AddOptions<ReconciliationOptions>().ValidateOnStart();
         services.AddOptions<FeedResolutionOptions>().ValidateOnStart();
@@ -78,6 +122,7 @@ public static class NuplaneServiceCollectionExtensions
         services.AddOptions<CleanupPolicyOptions>().ValidateOnStart();
         services.AddOptions<ConvergenceOptions>().ValidateOnStart();
         services.AddOptions<TrustedSourcePolicyOptions>().ValidateOnStart();
+        services.AddOptions<StoreRegistryOptions>();
 
         // ── Core services ─────────────────────────────────────────────────────────
         services.AddSingleton<DesiredManifestReader>();
@@ -116,7 +161,7 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<StoreRegistry>(sp =>
             new(
                 sp.GetRequiredService<IStoreStateSerializer>(),
-                sp.GetRequiredService<StoreRegistryOptions>()));
+                sp.GetRequiredService<IOptions<StoreRegistryOptions>>().Value));
         services.AddSingleton<IStoreRegistry>(sp => sp.GetRequiredService<StoreRegistry>());
         services.AddSingleton<FailureRecorder>();
         services.AddSingleton<IFailureRecorder>(sp => sp.GetRequiredService<FailureRecorder>());
@@ -164,7 +209,10 @@ public static class NuplaneServiceCollectionExtensions
         });
 
         // State file
-        services.AddSingleton(new StoreRegistryOptions { StateFilePath = builder.StateFilePath });
+        services.Configure<StoreRegistryOptions>(opts =>
+        {
+            opts.StateFilePath = builder.StateFilePath;
+        });
 
         // Feeds
         foreach (var feed in builder.Feeds)
@@ -193,7 +241,7 @@ public static class NuplaneServiceCollectionExtensions
             {
                 if (!opts.Feeds.Any(f => string.Equals(f.Name, feed.Name, StringComparison.OrdinalIgnoreCase)))
                 {
-                    opts.Feeds.Add(new FeedDefinition(feed.Name, feedUri, FeedTrustLevel.Trusted));
+                    opts.Feeds.Add(new FeedDefinition(feed.Name, feedUri, feed.TrustLevel, feed.Credentials));
                 }
             });
 
@@ -247,4 +295,88 @@ public static class NuplaneServiceCollectionExtensions
             });
         }
     }
+
+    private static void ConfigureOptionsFromConfiguration(IServiceCollection services, IConfiguration configuration)
+    {
+        BindOptionsFromSection<NuplaneSetupOptions>(services, configuration, SetupSectionName);
+        BindOptionsFromSection<ReconciliationOptions>(services, configuration, ReconciliationSectionName);
+        BindOptionsFromSection<FeedResolutionOptions>(services, configuration, FeedResolutionSectionName);
+        BindOptionsFromSection<SourceTrustOptions>(services, configuration, SourceTrustSectionName);
+        BindOptionsFromSection<FeedTrustPolicyOptions>(services, configuration, FeedTrustPolicySectionName);
+        BindOptionsFromSection<LockFileOptions>(services, configuration, LockFileSectionName);
+        BindOptionsFromSection<CleanupPolicyOptions>(services, configuration, CleanupPolicySectionName);
+        BindOptionsFromSection<ConvergenceOptions>(services, configuration, ConvergenceSectionName);
+        BindOptionsFromSection<TrustedSourcePolicyOptions>(services, configuration, TrustedSourcePolicySectionName);
+        BindOptionsFromSection<StoreRegistryOptions>(services, configuration, StoreRegistrySectionName);
+    }
+
+    private static void ApplyConfiguredSetup(NuplaneBuilder builder, IConfiguration configuration)
+    {
+        var options = new NuplaneSetupOptions();
+        GetNamedSectionOrSelf(configuration, SetupSectionName).Bind(options);
+        ApplySetup(builder, options);
+    }
+
+    private static void ApplySetup(NuplaneBuilder builder, NuplaneSetupOptions options)
+    {
+        if (options.AutomaticReconciliation)
+        {
+            builder.PollEvery(options.PollInterval);
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.StateFilePath))
+        {
+            builder.WithStateFile(options.StateFilePath);
+        }
+
+        foreach (var feed in options.Feeds)
+        {
+            builder.AddFeed(feed.Name, configuredFeed =>
+            {
+                if (!string.IsNullOrWhiteSpace(feed.DirectoryPath))
+                {
+                    var directoryOptions = feed.Directory;
+                    configuredFeed.FromDirectory(feed.DirectoryPath, dir =>
+                    {
+                        dir.Watch = directoryOptions.Watch;
+                        dir.DebounceWindow = directoryOptions.DebounceWindow;
+                    });
+                }
+                else
+                {
+                    configuredFeed.FromUri(new Uri(feed.ServiceIndex!, UriKind.Absolute), feed.TrustLevel, feed.Credentials);
+                }
+
+                configuredFeed.Trust(feed.TrustLevel);
+
+                foreach (var pattern in DistinctNonBlank(feed.IncludePatterns))
+                {
+                    configuredFeed.Include(pattern);
+                }
+            });
+        }
+    }
+
+    private static void BindOptionsFromSection<TOptions>(IServiceCollection services, IConfiguration configuration, string sectionName)
+        where TOptions : class
+    {
+        var section = GetNamedSectionOrSelf(configuration, sectionName);
+        services.Configure<TOptions>(options => section.Bind(options));
+    }
+
+    private static IConfigurationSection GetNamedSectionOrSelf(IConfiguration configuration, string sectionName)
+    {
+        if (configuration is IConfigurationSection section
+            && string.Equals(section.Key, sectionName, StringComparison.OrdinalIgnoreCase))
+        {
+            return section;
+        }
+
+        return configuration.GetSection(sectionName);
+    }
+
+    private static IEnumerable<string> DistinctNonBlank(IEnumerable<string>? values) =>
+        (values ?? [])
+        .Where(static value => !string.IsNullOrWhiteSpace(value))
+        .Distinct(StringComparer.OrdinalIgnoreCase);
 }

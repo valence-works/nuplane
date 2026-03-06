@@ -34,6 +34,7 @@ public sealed class StoreRegistry : IStoreRegistry
         _stateFilePath = options.StateFilePath;
     }
 
+
     /// <inheritdoc />
     public async Task<IReadOnlyDictionary<string, string>> GetActiveVersionsAsync(CancellationToken cancellationToken)
     {

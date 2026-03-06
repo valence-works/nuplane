@@ -1,7 +1,9 @@
+using JetBrains.Annotations;
 using Nuplane.Abstractions;
 
 namespace Nuplane.Sample.AspNetCore;
 
+[UsedImplicitly]
 internal sealed class PackageChangeObserver(ILogger<PackageChangeObserver> logger)
     : INuplaneObserver
 {
