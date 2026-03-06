@@ -1,6 +1,8 @@
 using Nuplane.Abstractions;
+#pragma warning disable IDE0005 // Remove unnecessary usings — Loading usings kept for UnloadMiddleware
 using Nuplane.Loading;
 using Nuplane.Loading.Configuration;
+#pragma warning restore IDE0005
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
@@ -128,9 +130,6 @@ public ReconciliationService(
         pipeline.Use(new TrustAndLockGateMiddleware(
             feedResOpts, feedTrustOpts, feedTrustPolicyEvaluator,
             lockFileCoordinator, retryPolicy, failureRec, loggerInstance));
-        pipeline.Use(new PackageLoadingMiddleware(
-            loadOpts, loader, allowlistGate, applyExecutor,
-            eventDispatcher, loggerInstance, metricsInstance));
         pipeline.Use(new DiffAndChangeEventMiddleware(
             diffEngine, dryRunPlanner, retryPolicy,
             storeReg, eventDispatcher, metricsInstance));

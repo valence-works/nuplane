@@ -1,6 +1,7 @@
 using Nuplane.Abstractions;
 using Nuplane.Extensions;
 using Nuplane.Hosting;
+using Nuplane.Loading;
 using Nuplane.Loading.Hosting;
 using Nuplane;
 using Nuplane.Runtime.Configuration;
@@ -29,6 +30,7 @@ builder.Services.AddNuplane(
 	},
 	configureReconciliation: reconciliation =>
 	{
+		reconciliation.EnableAutomaticReconciliation = true;
 		reconciliation.PollInterval = TimeSpan.FromSeconds(60);
 		reconciliation.MaxRetryAttempts = 3;
 	},
@@ -66,7 +68,11 @@ builder.Services.AddNuplaneLoading(loading =>
 });
 
 builder.Services.AddNuplaneLoadingHosting();
-builder.Services.AddSingleton<INuplaneObserver, PluginDiscoveryObserver>();
+
+// Register PluginDiscoveryObserver as both INuplaneObserver and IPackageLoadingObserver (single instance).
+builder.Services.AddSingleton<PluginDiscoveryObserver>();
+builder.Services.AddSingleton<INuplaneObserver>(sp => sp.GetRequiredService<PluginDiscoveryObserver>());
+builder.Services.AddSingleton<IPackageLoadingObserver>(sp => sp.GetRequiredService<PluginDiscoveryObserver>());
 
 var app = builder.Build();
 

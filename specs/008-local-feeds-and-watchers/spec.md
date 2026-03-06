@@ -27,9 +27,9 @@
 - **Resolution**: The decision-making step that selects an eligible feed for each desired package request.
 
 - **Acquisition**: The step that determines and records the artifact *location* for activation.
-  - For a local directory feed, this is typically a local `.nupkg` path.
-  - For a remote feed, this is typically a remote feed identifier/URI and a concrete version.
-  - This feature does not require implementing new NuGet download/extraction mechanics; it requires that directory-originating requests are resolvable without remote feeds and produce explicit outcomes.
+  - For a local directory feed, this means locating the `.nupkg` file on disk and **extracting its contents** to a versioned install directory (e.g., `{feedLocalPath}/.installed/{packageId}/{version}/`) so that the loader can resolve assemblies from the extracted content. The `ResolvedPackage.InstallPath` MUST point to this extracted directory, NOT a synthetic path.
+  - For a remote feed, this is typically a remote feed identifier/URI and a concrete version, followed by download and extraction.
+  - This feature does not require implementing new NuGet download/extraction mechanics for remote feeds; it requires that directory-originating requests are resolvable without remote feeds, produce a real on-disk install path, and produce explicit outcomes.
 
 - **TriggerType**: The category of driver that initiated a reconciliation cycle: `Scheduled`, `DirectoryChange`, `Manual`, or `Startup`.
 
@@ -221,7 +221,7 @@ As an operator, I can run Nuplane with only local directory feeds configured (no
 
 - **FR-011**: The system MUST expose an operator-visible record of why reconciliation ran (scheduled vs directory change), suitable for troubleshooting and auditing.
 
-- **FR-012**: For any desired package that originates from a local directory feed, Nuplane MUST treat that local feed as an eligible acquisition source for an artifact location (even if no remote feeds are configured).
+- **FR-012**: For any desired package that originates from a local directory feed, Nuplane MUST treat that local feed as an eligible acquisition source. Specifically, the resolver MUST locate the `.nupkg` artifact in the feed directory, extract it to a versioned install directory under the feed path, and set `ResolvedPackage.InstallPath` to the extracted directory so that the loader can find assemblies on disk. A synthetic or placeholder path MUST NOT be used.
 
 ### Operational & Safety Requirements *(mandatory)*
 
@@ -253,7 +253,7 @@ As an operator, I can run Nuplane with only local directory feeds configured (no
 
 #### Requirement Clarifications (non-normative)
 
-- FR-002/FR-012 “acquisition” is satisfied when directory-originating requests resolve deterministically without remote feeds and the system can attribute a usable local artifact location for activation; this spec does not require introducing new remote acquisition mechanics.
+- FR-002/FR-012 "acquisition" for local directory feeds is satisfied when the resolver (a) locates the `.nupkg` in the feed directory, (b) extracts it to a versioned install directory on disk, and (c) sets `ResolvedPackage.InstallPath` to that extracted directory. The loader relies on `InstallPath` pointing to a real directory containing assemblies; a synthetic or placeholder path will cause a loader boundary failure. This spec does not require introducing new remote acquisition mechanics for remote feeds.
 
 ## Key Entities *(include if feature involves data)*
 

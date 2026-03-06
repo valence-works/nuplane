@@ -47,6 +47,23 @@ public sealed class ReconciliationHostedService : BackgroundService
 
         _logger.LogInformation("Nuplane automatic reconciliation started with poll interval {PollInterval}", effectivePollInterval);
 
+        // Startup cycle — runs once before the periodic timer begins.
+        // A failure here is non-fatal; the periodic loop will still start.
+        try
+        {
+            var startupTrigger = new ReconciliationTrigger(TriggerType.Startup);
+            await _reconciliationService.TriggerAsync(startupTrigger, stoppingToken);
+            _logger.LogDebug("Startup reconciliation cycle completed");
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Startup reconciliation cycle failed");
+        }
+
         using var timer = new PeriodicTimer(effectivePollInterval);
 
         while (await timer.WaitForNextTickAsync(stoppingToken))

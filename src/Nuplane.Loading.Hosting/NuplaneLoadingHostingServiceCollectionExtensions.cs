@@ -1,15 +1,18 @@
 using Microsoft.Extensions.DependencyInjection;
-using Nuplane.Runtime.Loading;
+using Nuplane.Abstractions;
+using Nuplane.Loading;
 
 namespace Nuplane.Loading.Hosting;
 
 /// <summary>
-/// Provides extension methods for wiring the loading adapter into the runtime loader boundary.
+/// Provides extension methods for wiring the loading adapter and event dispatcher
+/// into the DI container.
 /// </summary>
 public static class NuplaneLoadingHostingServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers <see cref="NuplaneLoadingAdapter"/> as the runtime <see cref="IPackageLoaderBoundary"/>.
+    /// Registers <see cref="PackageAutoLoadingObserver"/> as an <see cref="INuplaneObserver"/>
+    /// and <see cref="LoadingEventDispatcher"/> as the <see cref="ILoadingEventDispatcher"/>.
     /// </summary>
     /// <param name="services">The service collection to add to.</param>
     /// <returns>The service collection for chaining.</returns>
@@ -18,8 +21,8 @@ public static class NuplaneLoadingHostingServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddSingleton<NuplaneLoadingAdapter>();
-        services.AddSingleton<IPackageLoaderBoundary>(sp => sp.GetRequiredService<NuplaneLoadingAdapter>());
+        services.AddSingleton<ILoadingEventDispatcher, LoadingEventDispatcher>();
+        services.AddSingleton<INuplaneObserver, PackageAutoLoadingObserver>();
 
         return services;
     }

@@ -42,6 +42,16 @@
 - Local directory feed rule (normative for this feature):
   - For directory-discovered `.nupkg` inputs, requests use `feedName = <localDirectoryFeedName>` so the artifact source is explicit and resolution does not require any remote feed.
 
+## Entity: ResolvedPackage (install path semantics)
+
+- Purpose: Concrete package selected for activation, with a resolved install path.
+- Relevant fields:
+  - `installPath` (string, required): The file-system path where the package content is installed. The package loader expects this to be a real directory containing loadable assemblies.
+- Install path rules (normative for this feature):
+  - **Local directory feeds (`file://` scheme)**: The resolver MUST extract the `.nupkg` archive to a versioned install directory within the feed directory (e.g., `{feedLocalPath}/.installed/{packageId}/{version}/`) and set `installPath` to that extracted directory. Extraction MUST be idempotent (skip if directory already exists). A synthetic or placeholder path MUST NOT be used.
+  - **Remote feeds**: The resolver produces a path that is populated by a future acquisition/download step. For the current implementation this is a synthetic path (e.g., `/packages/{id}/{version}`).
+  - **Loader dependency**: The package loader (`PackageLoader.ResolveMainAssemblyPath`) requires `installPath` to be a real directory on disk containing `.dll` files (directly or under `lib/<tfm>/`). If `installPath` does not exist, the loader reports a boundary failure.
+
 ## Entity: ReconcileTrigger
 
 - Purpose: Operator-visible record describing why reconciliation ran.

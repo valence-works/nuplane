@@ -46,7 +46,15 @@
 
 ## Decision 8: Tests focus on the current regression and the new trigger/eligibility boundary
 - Decision: Require:
-  - a regression test proving “directory-only + no remote feeds” does not throw and yields an explicit outcome,
+
+  - Pass the nupkg path directly as InstallPath (rejected: the loader expects a directory with extracted assemblies, not a ZIP file).
+  - Have a separate "acquisition step" middleware extract the nupkg (rejected: increases pipeline complexity; the resolver is the right place because it already knows the feed type and has access to the feed URI).
+  - Have the loader extract the nupkg itself (rejected: violates separation of concerns; the loader should not know about feed types or nupkg archives).
+- Alternatives considered:
+- Rationale: The package loader (`PackageLoader.ResolveMainAssemblyPath`) requires `InstallPath` to be a real directory on disk containing assemblies. A `.nupkg` is a ZIP archive; without extraction, the loader has no directory to scan for DLLs. The original implementation produced a synthetic path (`/packages/{id}/{version}`) for all feeds, which caused `DirectoryNotFoundException` at the loader boundary.
+- Decision: When a `file://` feed resolves a package, the resolver MUST locate the `.nupkg` file by conventional name (`{id}.{version}.nupkg`) and extract it to `{feedDir}/.installed/{id}/{version}/`. The `ResolvedPackage.InstallPath` MUST point to this extracted directory. Extraction is idempotent (skip if directory already exists).
+## Decision 9: Local feed resolution must extract nupkg to produce a real install path
+  - a regression test proving "directory-only + no remote feeds" does not throw and yields an explicit outcome,
   - unit tests for watcher coalescing and debounce behavior,
   - unit/boundary tests for partial-write handling and deterministic retry bounds,
   - integration coverage using the existing sample flow.
