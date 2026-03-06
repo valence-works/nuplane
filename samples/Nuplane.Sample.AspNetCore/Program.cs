@@ -1,77 +1,37 @@
-using Nuplane.Abstractions;
-using Nuplane.Extensions;
-using Nuplane.Loading;
-using Nuplane.Loading.Hosting;
 using Nuplane;
-using Nuplane.Loading.Extensions;
-using Nuplane.Runtime.Configuration;
+using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Sample.AspNetCore;
-using Nuplane.Store.State;
 
 var builder = WebApplication.CreateBuilder(args);
 
 var dropDirectory = builder.Configuration["NuplaneSample:DropDirectory"] ?? "packages";
 var feedName = builder.Configuration["NuplaneSample:FeedName"] ?? "local-packages";
-var sourceName = builder.Configuration["NuplaneSample:SourceName"] ?? "Sample.LocalFeed";
 var debounceMs = ParseDebounceMilliseconds(builder.Configuration["NuplaneSample:DebounceMilliseconds"]);
-var allowlistedPackageIds = builder.Configuration
-    .GetSection("NuplaneSample:AllowlistedPackageIds")
-    .Get<string[]>()
-    ?? ["Nuplane.Sample.Plugin"];
+var packagePattern = builder.Configuration["NuplaneSample:PackagePattern"] ?? "Nuplane.Sample.*";
 
-builder.Services.AddNuplane(
-	configureSourceTrust: trust =>
-	{
-		trust.AllowedSourceNames.Add(sourceName);
-		foreach (var packageId in allowlistedPackageIds)
-		{
-			trust.AllowedPackageIds.Add(packageId);
-		}
-	},
-	configureReconciliation: reconciliation =>
-	{
-		reconciliation.EnableAutomaticReconciliation = true;
-		reconciliation.PollInterval = TimeSpan.FromSeconds(60);
-		reconciliation.MaxRetryAttempts = 3;
-	},
-	configureLockFile: lockFile =>
-	{
-		lockFile.Mode = LockFileMode.Enforce;
-		lockFile.Path = "state/nuplane.lock.json";
-		lockFile.FailOnHashMismatch = true;
-	},
-	configureCleanupPolicy: cleanup =>
-	{
-		cleanup.Mode = CleanupExecutionMode.Automatic;
-		cleanup.RetainLastNVersions = 3;
-		cleanup.RetainYoungerThanDays = 14;
-	});
-
-builder.Services.AddNuplaneDirectorySource(options =>
+builder.Services.AddNuplane(nuplane =>
 {
-	options.DirectoryPath = dropDirectory;
-	options.FeedName = feedName;
-	options.SourceName = sourceName;
-	options.TriggerReconciliationOnChange = true;
-	options.DebounceWindow = TimeSpan.FromMilliseconds(debounceMs);
-	foreach (var packageId in allowlistedPackageIds)
-	{
-		options.AllowlistedPackageIds.Add(packageId);
-	}
+    nuplane.PollEvery(TimeSpan.FromSeconds(60));
+
+    nuplane.AddFeed(feedName, feed =>
+    {
+        feed.FromDirectory(dropDirectory, dir =>
+        {
+            dir.Watch = true;
+            dir.DebounceWindow = TimeSpan.FromMilliseconds(debounceMs);
+        });
+
+        feed.Include(packagePattern);
+    });
+
+    nuplane.AutoloadPackages(load =>
+    {
+        load.SharedAssembly("Nuplane.Abstractions", "31bf3856ad364e35", 1);
+    });
+
+    nuplane.OnPackagesChanged<PackageChangeObserver>();
+    nuplane.OnPackagesLoaded<PluginDiscoveryObserver>();
 });
-
-builder.Services.AddNuplaneLoading(loading =>
-{
-	loading.Enabled = true;
-	loading.DeactivationTimeout = TimeSpan.FromSeconds(15);
-	loading.SharedAssemblies.Add(new("Nuplane.Abstractions", "31bf3856ad364e35", 1));
-});
-
-builder.Services.AddNuplaneLoadingHosting();
-
-// Register dedicated observers for reconciliation changes and package loading events.
-builder.Services.AddSingleton<INuplaneObserver, PackageChangeObserver>();
-builder.Services.AddSingleton<IPackageLoadingObserver, PluginDiscoveryObserver>();
 
 var app = builder.Build();
 
@@ -81,10 +41,10 @@ app.Run();
 
 static int ParseDebounceMilliseconds(string? configuredValue)
 {
-	if (int.TryParse(configuredValue, out var milliseconds) && milliseconds > 0)
-	{
-		return milliseconds;
-	}
+    if (int.TryParse(configuredValue, out var milliseconds) && milliseconds > 0)
+    {
+        return milliseconds;
+    }
 
-	return 1000;
+    return 1000;
 }

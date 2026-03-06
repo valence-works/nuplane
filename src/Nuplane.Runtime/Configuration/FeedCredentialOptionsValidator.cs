@@ -41,6 +41,12 @@ public sealed class FeedCredentialOptionsValidator
             }
 
             // Local directory feeds use file:// URIs; they must not have credentials.
+            if (feed.ServiceIndex is null)
+            {
+                errors.Add($"Feed '{feed.Name}' has no service index URI configured.");
+                continue;
+            }
+
             var isLocalFeed = feed.ServiceIndex.IsAbsoluteUri
                 && string.Equals(feed.ServiceIndex.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase);
 
@@ -54,7 +60,7 @@ public sealed class FeedCredentialOptionsValidator
             }
             else
             {
-                if (feed.ServiceIndex is null || !feed.ServiceIndex.IsAbsoluteUri || feed.ServiceIndex.Scheme != Uri.UriSchemeHttps)
+                if (!feed.ServiceIndex.IsAbsoluteUri || feed.ServiceIndex.Scheme != Uri.UriSchemeHttps)
                 {
                     errors.Add($"Feed '{feed.Name}' service index must be an absolute HTTPS URI.");
                 }
