@@ -185,7 +185,7 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<IFailureRecorder>(sp => sp.GetRequiredService<FailureRecorder>());
         services.AddSingleton<ReconciliationRetryPolicy>();
         services.AddSingleton<IReconciliationRetryPolicy>(sp => sp.GetRequiredService<ReconciliationRetryPolicy>());
-        services.TryAddSingleton<WatcherDegradationTracker>();
+        services.TryAddSingleton<ObservationDegradationTracker>();
         services.AddSingleton<ReconciliationService>();
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
 
@@ -297,9 +297,9 @@ public static class NuplaneServiceCollectionExtensions
                 services.AddSingleton<IHostedService>(sp =>
                     new DirectorySourceReconciliationTriggerHostedService(
                         capturedOptions,
-                        sp.GetRequiredService<IReconciliationTriggerSink>(),
+                        sp.GetRequiredService<IReconciliationTriggerIngress>(),
                         sp.GetRequiredService<ILogger<DirectorySourceReconciliationTriggerHostedService>>(),
-                        sp.GetService<WatcherDegradationTracker>()));
+                        sp.GetService<ObservationDegradationTracker>()));
             }
         }
         else if (feed.ServiceIndex is { } serviceIndex)
@@ -314,10 +314,10 @@ public static class NuplaneServiceCollectionExtensions
         }
     }
 
-    private static void EnsureTriggerIngressServices(IServiceCollection services)
+    internal static void EnsureTriggerIngressServices(IServiceCollection services)
     {
         services.TryAddSingleton<ReconciliationTriggerQueue>();
-        services.TryAddSingleton<IReconciliationTriggerSink>(sp => sp.GetRequiredService<ReconciliationTriggerQueue>());
+        services.TryAddSingleton<IReconciliationTriggerIngress>(sp => sp.GetRequiredService<ReconciliationTriggerQueue>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, ReconciliationTriggerDispatcherHostedService>());
     }
 

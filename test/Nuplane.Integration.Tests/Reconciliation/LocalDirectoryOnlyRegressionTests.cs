@@ -6,8 +6,6 @@ using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.FeedPolicy;
-using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
@@ -54,7 +52,10 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
             healthEvaluator: new ReconciliationHealthEvaluator(),
             feedResolutionOptions: feedOpts);
 
-        var trigger = new ReconciliationTrigger(TriggerType.DirectoryChange, Source: "local-drop");
+        var trigger = new ReconciliationTrigger(
+            TriggerType.ObservedChange,
+            Source: "local-drop",
+            ObservationKind: FeedObservationKind.DirectoryWatcher);
         var result = await service.TriggerAsync(trigger, CancellationToken.None);
 
         Assert.False(result.Skipped);
@@ -87,7 +88,10 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
             healthEvaluator: new ReconciliationHealthEvaluator(),
             feedResolutionOptions: feedOpts);
 
-        var trigger = new ReconciliationTrigger(TriggerType.DirectoryChange, Source: "local-drop");
+        var trigger = new ReconciliationTrigger(
+            TriggerType.ObservedChange,
+            Source: "local-drop",
+            ObservationKind: FeedObservationKind.DirectoryWatcher);
         var result = await service.TriggerAsync(trigger, CancellationToken.None);
 
         Assert.False(result.Skipped);

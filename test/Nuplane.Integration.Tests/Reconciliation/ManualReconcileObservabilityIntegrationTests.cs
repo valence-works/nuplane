@@ -3,7 +3,6 @@ using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Operational;
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
@@ -61,10 +60,9 @@ public sealed class ManualReconcileObservabilityIntegrationTests
     [Fact]
     public async Task ManualTrigger_Coordinator_LogsOutcome()
     {
-        var service = new FakeReconciliationService(
-            new(false, EmptyChangeSet(), [], false));
+        var ingress = new FakeTriggerIngress(Task.FromResult(new ReconciliationRunResult(false, EmptyChangeSet(), [], false)));
         var logger = new SpyReconciliationLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var coordinator = new ManualReconcileCoordinator(ingress, logger);
 
         await coordinator.TriggerAsync("admin-1", CancellationToken.None);
 
@@ -76,10 +74,9 @@ public sealed class ManualReconcileObservabilityIntegrationTests
     [Fact]
     public async Task ManualTrigger_Rejected_LogsRejection()
     {
-        var service = new FakeReconciliationService(
-            new(true, EmptyChangeSet(), [], false));
+        var ingress = new FakeTriggerIngress(Task.FromResult(new ReconciliationRunResult(true, EmptyChangeSet(), [], false)));
         var logger = new SpyReconciliationLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var coordinator = new ManualReconcileCoordinator(ingress, logger);
 
         await coordinator.TriggerAsync("admin-2", CancellationToken.None);
 
@@ -90,9 +87,9 @@ public sealed class ManualReconcileObservabilityIntegrationTests
     [Fact]
     public async Task ManualTrigger_Unavailable_LogsUnavailable()
     {
-        var service = new ThrowingReconciliationService(new InvalidOperationException("boom"));
+        var ingress = new ThrowingTriggerIngress(new InvalidOperationException("boom"));
         var logger = new SpyReconciliationLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var coordinator = new ManualReconcileCoordinator(ingress, logger);
 
         await coordinator.TriggerAsync("admin-3", CancellationToken.None);
 
@@ -124,15 +121,23 @@ public sealed class ManualReconcileObservabilityIntegrationTests
             Task.CompletedTask;
     }
 
-    private sealed class FakeReconciliationService(ReconciliationRunResult result) : IReconciliationService
+    private sealed class FakeTriggerIngress(Task<ReconciliationRunResult> resultTask) : IReconciliationTriggerIngress
     {
-        public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken ct) =>
-            Task.FromResult(result);
+        public void Enqueue(ReconciliationTrigger trigger)
+        {
+        }
+
+        public Task<ReconciliationRunResult> EnqueueAndWaitAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken) =>
+            resultTask;
     }
 
-    private sealed class ThrowingReconciliationService(Exception exception) : IReconciliationService
+    private sealed class ThrowingTriggerIngress(Exception exception) : IReconciliationTriggerIngress
     {
-        public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken ct) =>
+        public void Enqueue(ReconciliationTrigger trigger)
+        {
+        }
+
+        public Task<ReconciliationRunResult> EnqueueAndWaitAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken) =>
             throw exception;
     }
 

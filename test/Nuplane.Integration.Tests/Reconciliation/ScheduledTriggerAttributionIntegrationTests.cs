@@ -4,8 +4,6 @@ using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Models;
-using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -56,12 +54,15 @@ public sealed class ScheduledTriggerAttributionIntegrationTests
 
         await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Scheduled), CancellationToken.None);
         await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual, CorrelationId: "m-1"), CancellationToken.None);
-        await service.TriggerAsync(new ReconciliationTrigger(TriggerType.DirectoryChange, Source: "test-feed"), CancellationToken.None);
+        await service.TriggerAsync(new ReconciliationTrigger(
+            TriggerType.ObservedChange,
+            Source: "test-feed",
+            ObservationKind: FeedObservationKind.DirectoryWatcher), CancellationToken.None);
 
         Assert.Equal(3, spyLogger.RecordedTriggers.Count);
         Assert.Equal(nameof(TriggerType.Scheduled), spyLogger.RecordedTriggers[0].TriggerType);
         Assert.Equal(nameof(TriggerType.Manual), spyLogger.RecordedTriggers[1].TriggerType);
-        Assert.Equal(nameof(TriggerType.DirectoryChange), spyLogger.RecordedTriggers[2].TriggerType);
+        Assert.Equal(nameof(TriggerType.ObservedChange), spyLogger.RecordedTriggers[2].TriggerType);
         Assert.Equal("test-feed", spyLogger.RecordedTriggers[2].Source);
     }
 

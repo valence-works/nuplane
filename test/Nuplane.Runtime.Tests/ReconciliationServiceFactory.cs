@@ -37,7 +37,7 @@ internal static class ReconciliationServiceFactory
         LoadingOptions? loadingOptions = null,
         IPackageLoader? packageLoader = null,
         IPackageUnloadCoordinator? packageUnloadCoordinator = null,
-        WatcherDegradationTracker? watcherDegradationTracker = null,
+        ObservationDegradationTracker? observationDegradationTracker = null,
         ILoadingFailureTracker? loadingFailureTracker = null)
     {
         var desiredStateAgg = desiredStateAggregator ?? new DesiredStateAggregator();
@@ -74,7 +74,7 @@ internal static class ReconciliationServiceFactory
             loadingOptions is null ? null : new OptionsWrapper<LoadingOptions>(loadingOptions),
             packageLoader,
             packageUnloadCoordinator,
-            watcherDegradationTracker,
+            observationDegradationTracker,
             loadingFailureTracker);
     }
 }

@@ -1,7 +1,7 @@
+using Microsoft.Extensions.Logging;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -14,10 +14,9 @@ public sealed class AdminTriggerFailureRegressionTests
     [Fact]
     public async Task Rejected_DoesNotMutateState()
     {
-        var service = new FakeReconciliationService(
-            new(true, EmptyChangeSet(), [], false));
-        var logger = new SpyReconciliationLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var ingress = new FakeTriggerIngress(Task.FromResult(new ReconciliationRunResult(true, EmptyChangeSet(), [], false)));
+        var captureLogger = new CaptureLogger<ReconciliationLogger>();
+        var coordinator = new ManualReconcileCoordinator(ingress, new ReconciliationLogger(captureLogger));
 
         var outcome = await coordinator.TriggerAsync("corr-1", CancellationToken.None);
 
@@ -30,24 +29,23 @@ public sealed class AdminTriggerFailureRegressionTests
     [Fact]
     public async Task Rejected_EmitsExplicitOutcomeCode()
     {
-        var service = new FakeReconciliationService(
-            new(true, EmptyChangeSet(), [], false));
-        var logger = new SpyReconciliationLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var ingress = new FakeTriggerIngress(Task.FromResult(new ReconciliationRunResult(true, EmptyChangeSet(), [], false)));
+        var captureLogger = new CaptureLogger<ReconciliationLogger>();
+        var coordinator = new ManualReconcileCoordinator(ingress, new ReconciliationLogger(captureLogger));
 
         await coordinator.TriggerAsync("corr-2", CancellationToken.None);
 
-        Assert.Single(logger.AdminTriggerOutcomes);
-        Assert.Equal("Rejected", logger.AdminTriggerOutcomes[0].OutcomeCode);
-        Assert.Equal("single-flight-active", logger.AdminTriggerOutcomes[0].ReasonCode);
+        Assert.Contains(captureLogger.Messages, message =>
+            message.Contains("OutcomeCode=Rejected", StringComparison.Ordinal)
+            && message.Contains("ReasonCode=single-flight-active", StringComparison.Ordinal));
     }
 
     [Fact]
     public async Task Unavailable_DoesNotMutateState()
     {
-        var service = new ThrowingReconciliationService(new InvalidOperationException("service down"));
-        var logger = new SpyReconciliationLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var ingress = new ThrowingTriggerIngress(new InvalidOperationException("service down"));
+        var captureLogger = new CaptureLogger<ReconciliationLogger>();
+        var coordinator = new ManualReconcileCoordinator(ingress, new ReconciliationLogger(captureLogger));
 
         var outcome = await coordinator.TriggerAsync("corr-3", CancellationToken.None);
 
@@ -58,24 +56,23 @@ public sealed class AdminTriggerFailureRegressionTests
     [Fact]
     public async Task Unavailable_EmitsExplicitOutcomeCode()
     {
-        var service = new ThrowingReconciliationService(new InvalidOperationException("service down"));
-        var logger = new SpyReconciliationLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var ingress = new ThrowingTriggerIngress(new InvalidOperationException("service down"));
+        var captureLogger = new CaptureLogger<ReconciliationLogger>();
+        var coordinator = new ManualReconcileCoordinator(ingress, new ReconciliationLogger(captureLogger));
 
         await coordinator.TriggerAsync("corr-4", CancellationToken.None);
 
-        Assert.Single(logger.AdminTriggerOutcomes);
-        Assert.Equal("Unavailable", logger.AdminTriggerOutcomes[0].OutcomeCode);
-        Assert.Contains("service down", logger.AdminTriggerOutcomes[0].ReasonCode);
+        Assert.Contains(captureLogger.Messages, message =>
+            message.Contains("OutcomeCode=Unavailable", StringComparison.Ordinal)
+            && message.Contains("service down", StringComparison.Ordinal));
     }
 
     [Fact]
     public async Task MultipleRejections_AllNonMutating()
     {
-        var service = new FakeReconciliationService(
-            new(true, EmptyChangeSet(), [], false));
-        var logger = new SpyReconciliationLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var ingress = new FakeTriggerIngress(Task.FromResult(new ReconciliationRunResult(true, EmptyChangeSet(), [], false)));
+        var captureLogger = new CaptureLogger<ReconciliationLogger>();
+        var coordinator = new ManualReconcileCoordinator(ingress, new ReconciliationLogger(captureLogger));
 
         for (var i = 0; i < 3; i++)
         {
@@ -83,7 +80,7 @@ public sealed class AdminTriggerFailureRegressionTests
             Assert.Equal(ManualReconcileOutcomeCode.Rejected, outcome.OutcomeCode);
         }
 
-        Assert.Equal(3, logger.AdminTriggerOutcomes.Count);
+        Assert.Equal(3, captureLogger.Messages.Count(message => message.Contains("OutcomeCode=Rejected", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -91,54 +88,54 @@ public sealed class AdminTriggerFailureRegressionTests
     {
         var cts = new CancellationTokenSource();
         cts.Cancel();
-        var service = new ThrowingReconciliationService(new OperationCanceledException());
-        var logger = new SpyReconciliationLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var ingress = new ThrowingTriggerIngress(new OperationCanceledException());
+        var captureLogger = new CaptureLogger<ReconciliationLogger>();
+        var coordinator = new ManualReconcileCoordinator(ingress, new ReconciliationLogger(captureLogger));
 
-        await Assert.ThrowsAsync<OperationCanceledException>(
-            () => coordinator.TriggerAsync("corr-5", cts.Token));
-
-        // No outcome logged for cancellation — it's propagated, not caught
-        Assert.Empty(logger.AdminTriggerOutcomes);
+        await Assert.ThrowsAsync<OperationCanceledException>(() => coordinator.TriggerAsync("corr-5", cts.Token));
+        Assert.Empty(captureLogger.Messages);
     }
 
     private static PackageChangeSet EmptyChangeSet() =>
         new([], [], [], string.Empty, DateTimeOffset.UtcNow);
 
-    private sealed class FakeReconciliationService(ReconciliationRunResult result) : IReconciliationService
+    private sealed class FakeTriggerIngress(Task<ReconciliationRunResult> resultTask) : IReconciliationTriggerIngress
     {
-        public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken ct) =>
-            Task.FromResult(result);
+        public void Enqueue(ReconciliationTrigger trigger)
+        {
+        }
+
+        public Task<ReconciliationRunResult> EnqueueAndWaitAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken) =>
+            resultTask;
     }
 
-    private sealed class ThrowingReconciliationService(Exception exception) : IReconciliationService
+    private sealed class ThrowingTriggerIngress(Exception exception) : IReconciliationTriggerIngress
     {
-        public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken ct) =>
+        public void Enqueue(ReconciliationTrigger trigger)
+        {
+        }
+
+        public Task<ReconciliationRunResult> EnqueueAndWaitAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken) =>
             throw exception;
     }
 
-    private sealed class SpyReconciliationLogger : IReconciliationLogger
+    private sealed class CaptureLogger<T> : ILogger<T>
     {
-        public List<(string CorrelationId, string OutcomeCode, string? ReasonCode)> AdminTriggerOutcomes { get; } = [];
+        public List<string> Messages { get; } = [];
 
-        public void LogAdminTriggerOutcome(string correlationId, string outcomeCode, string? reasonCode) =>
-            AdminTriggerOutcomes.Add((correlationId, outcomeCode, reasonCode));
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
 
-        public void LogCycleStarted(string correlationId, int requestCount) { }
-        public void LogCycleCompleted(string correlationId, bool degraded, int failedCount) { }
-        public void LogObserverError(string correlationId, string callbackName, string message) { }
-        public void LogFeedDecision(FeedResolutionDecision decision) { }
-        public void LogTrustPolicyOutcome(string correlationId, string packageId, FeedTrustPolicyOutcome outcome) { }
-        public void LogLockOutcome(string correlationId, string packageId, LockFileEvaluationResult outcome) { }
-        public void LogLoadOutcome(string correlationId, string packageId, bool succeeded, string? reason) { }
-        public void LogUnloadOutcome(string correlationId, string packageId, string outcome, string? reason) { }
-        public void LogManifestOutcome(string correlationId, string sourcePath, string status, string reasonCode, int packageCount) { }
-        public void LogSourceOutage(string correlationId, string sourceName, string errorMessage) { }
-        public void LogAggregationOutcome(string correlationId, int packageCount, int failedSourceCount) { }
-        public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode) { }
-        public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState) { }
-        public void LogTrigger(string correlationId, string triggerType, string? triggerSource) { }
-        public void LogIdleModeEntered() { }
-        public void LogIdleModeExited() { }
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
+        }
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+            public void Dispose() { }
+        }
     }
 }

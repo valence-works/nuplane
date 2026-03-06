@@ -22,11 +22,17 @@ internal sealed class ReconciliationTriggerDispatcherHostedService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var trigger in _triggerQueue.ReadAllAsync(stoppingToken))
+        await foreach (var request in _triggerQueue.ReadAllAsync(stoppingToken))
         {
+            var trigger = request.Trigger;
+            using var dispatchCts = request.CancellationToken.CanBeCanceled
+                ? CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, request.CancellationToken)
+                : null;
+            var dispatchToken = dispatchCts?.Token ?? stoppingToken;
+
             try
             {
-                var result = await _reconciliationService.TriggerAsync(trigger, stoppingToken);
+                var result = await _reconciliationService.TriggerAsync(trigger, dispatchToken);
 
                 if (result.Skipped)
                 {
@@ -36,20 +42,31 @@ internal sealed class ReconciliationTriggerDispatcherHostedService(
                         trigger.Type,
                         trigger.Source);
                 }
+
+                request.CompletionSource?.TrySetResult(result);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
+                request.CompletionSource?.TrySetCanceled(stoppingToken);
                 break;
+            }
+            catch (OperationCanceledException) when (request.CancellationToken.IsCancellationRequested)
+            {
+                request.CompletionSource?.TrySetCanceled(request.CancellationToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(
-                    ex,
-                    "Unhandled exception while dispatching reconciliation trigger. TriggerType={TriggerType}, Source={TriggerSource}",
-                    trigger.Type,
-                    trigger.Source);
+                request.CompletionSource?.TrySetException(ex);
+
+                if (request.CompletionSource is null)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Unhandled exception while dispatching reconciliation trigger. TriggerType={TriggerType}, Source={TriggerSource}",
+                        trigger.Type,
+                        trigger.Source);
+                }
             }
         }
     }
 }
-

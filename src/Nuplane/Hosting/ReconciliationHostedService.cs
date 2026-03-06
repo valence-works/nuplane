@@ -2,6 +2,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.Hosting;
@@ -14,7 +15,7 @@ namespace Nuplane.Hosting;
 /// </summary>
 internal sealed class ReconciliationHostedService : BackgroundService
 {
-    private readonly IReconciliationTriggerSink _triggerSink;
+    private readonly IReconciliationTriggerIngress _triggerSink;
     private readonly ReconciliationOptions _options;
     private readonly ConvergenceOptions _convergenceOptions;
     private readonly ILogger<ReconciliationHostedService> _logger;
@@ -23,7 +24,7 @@ internal sealed class ReconciliationHostedService : BackgroundService
     /// Initializes a new instance of <see cref="ReconciliationHostedService"/>.
     /// </summary>
     public ReconciliationHostedService(
-        IReconciliationTriggerSink triggerSink,
+        IReconciliationTriggerIngress triggerSink,
         IOptions<ReconciliationOptions> options,
         IOptions<ConvergenceOptions> convergenceOptions,
         ILogger<ReconciliationHostedService> logger)

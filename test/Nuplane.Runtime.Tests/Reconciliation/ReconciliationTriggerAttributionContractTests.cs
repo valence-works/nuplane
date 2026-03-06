@@ -4,8 +4,6 @@ using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Models;
-using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 
@@ -30,17 +28,20 @@ public sealed class ReconciliationTriggerAttributionContractTests
     }
 
     [Fact]
-    public async Task TriggerAsync_DirectoryChange_PropagatesTriggerWithSource()
+    public async Task TriggerAsync_ObservedChange_PropagatesTriggerWithSource()
     {
         var spyLogger = new SpyReconciliationLogger();
         var service = CreateService(spyLogger);
 
-        var trigger = new ReconciliationTrigger(TriggerType.DirectoryChange, Source: "local-feed");
+        var trigger = new ReconciliationTrigger(
+            TriggerType.ObservedChange,
+            Source: "local-feed",
+            ObservationKind: FeedObservationKind.DirectoryWatcher);
         var result = await service.TriggerAsync(trigger, CancellationToken.None);
 
         Assert.False(result.Skipped);
         Assert.Single(spyLogger.RecordedTriggers);
-        Assert.Equal(nameof(TriggerType.DirectoryChange), spyLogger.RecordedTriggers[0].TriggerType);
+        Assert.Equal(nameof(TriggerType.ObservedChange), spyLogger.RecordedTriggers[0].TriggerType);
         Assert.Equal("local-feed", spyLogger.RecordedTriggers[0].Source);
     }
 
@@ -66,7 +67,10 @@ public sealed class ReconciliationTriggerAttributionContractTests
         var service = CreateService(spyLogger, enableSingleFlight: true, sources: [slowSource]);
 
         var trigger1 = new ReconciliationTrigger(TriggerType.Scheduled);
-        var trigger2 = new ReconciliationTrigger(TriggerType.DirectoryChange, Source: "blocked-feed");
+        var trigger2 = new ReconciliationTrigger(
+            TriggerType.ObservedChange,
+            Source: "blocked-feed",
+            ObservationKind: FeedObservationKind.DirectoryWatcher);
 
         // Start first trigger (will be slow due to slow desired source)
         var task1 = service.TriggerAsync(trigger1, CancellationToken.None);
@@ -115,8 +119,6 @@ public sealed class ReconciliationTriggerAttributionContractTests
     /// </summary>
     private sealed class SlowDesiredSource(TimeSpan delay) : IDesiredPackageSource
     {
-        public string SourceName => "slow-source";
-
         public async Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
         {
             await Task.Delay(delay, ct);

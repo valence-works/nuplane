@@ -4,27 +4,27 @@ using Nuplane.Runtime.Reconciliation.Models;
 namespace Nuplane.Runtime.Reconciliation;
 
 /// <summary>
-/// Coordinates manual reconciliation trigger requests, delegating to <see cref="IReconciliationService"/>
-/// and mapping outcomes to explicit <see cref="ManualReconcileOutcomeCode"/> values with correlation context.
+/// Coordinates manual reconciliation trigger requests through the shared trigger ingress,
+/// mapping outcomes to explicit <see cref="ManualReconcileOutcomeCode"/> values with correlation context.
 /// </summary>
 public sealed class ManualReconcileCoordinator
 {
-    private readonly IReconciliationService _reconciliationService;
+    private readonly IReconciliationTriggerIngress _triggerIngress;
     private readonly IReconciliationLogger _logger;
     private readonly ReconciliationMetrics? _metrics;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ManualReconcileCoordinator"/> class.
     /// </summary>
-    /// <param name="reconciliationService">The reconciliation service to trigger.</param>
+    /// <param name="triggerIngress">The shared trigger ingress used to dispatch manual reconciliation requests.</param>
     /// <param name="logger">The reconciliation logger for diagnostics.</param>
     /// <param name="metrics">Optional reconciliation metrics to record admin trigger outcomes.</param>
     public ManualReconcileCoordinator(
-        IReconciliationService reconciliationService,
+        IReconciliationTriggerIngress triggerIngress,
         IReconciliationLogger logger,
         ReconciliationMetrics? metrics = null)
     {
-        _reconciliationService = reconciliationService ?? throw new ArgumentNullException(nameof(reconciliationService));
+        _triggerIngress = triggerIngress ?? throw new ArgumentNullException(nameof(triggerIngress));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _metrics = metrics;
     }
@@ -32,9 +32,6 @@ public sealed class ManualReconcileCoordinator
     /// <summary>
     /// Triggers a manual reconciliation cycle and returns the mapped outcome.
     /// </summary>
-    /// <param name="correlationId">The correlation identifier for this trigger request.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The outcome of the manual reconciliation trigger.</returns>
     public async Task<ManualReconcileOutcome> TriggerAsync(string correlationId, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
@@ -42,7 +39,7 @@ public sealed class ManualReconcileCoordinator
         try
         {
             var trigger = new ReconciliationTrigger(TriggerType.Manual, CorrelationId: correlationId);
-            var result = await _reconciliationService.TriggerAsync(trigger, cancellationToken);
+            var result = await _triggerIngress.EnqueueAndWaitAsync(trigger, cancellationToken);
 
             if (result.Skipped)
             {

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nuplane.Hosting;
 using Nuplane.Runtime.Health;
+using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.DirectorySource.Hosting;
@@ -11,13 +12,13 @@ namespace Nuplane.DirectorySource.Hosting;
 /// </summary>
 internal sealed class DirectorySourceReconciliationTriggerHostedService(
     DirectorySourceOptions options,
-    IReconciliationTriggerSink triggerSink,
+    IReconciliationTriggerIngress triggerSink,
     ILogger<DirectorySourceReconciliationTriggerHostedService> logger,
-    WatcherDegradationTracker? watcherDegradationTracker = null)
+    ObservationDegradationTracker? observationDegradationTracker = null)
     : BackgroundService
 {
     private readonly DirectorySourceOptions _options = options ?? throw new ArgumentNullException(nameof(options));
-    private readonly IReconciliationTriggerSink _triggerSink = triggerSink ?? throw new ArgumentNullException(nameof(triggerSink));
+    private readonly IReconciliationTriggerIngress _triggerSink = triggerSink ?? throw new ArgumentNullException(nameof(triggerSink));
     private readonly ILogger<DirectorySourceReconciliationTriggerHostedService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly DebouncedDirtySignal _reconciliationSignal = new(options.DebounceWindow);
 
@@ -48,7 +49,7 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
                 "Directory watcher failed to start for feed '{FeedName}' at '{DirectoryPath}'. Falling back to scheduled reconciliation only.",
                 _options.FeedName,
                 _options.DirectoryPath);
-            watcherDegradationTracker?.MarkDegraded();
+            observationDegradationTracker?.MarkDegraded();
             return;
         }
 
@@ -57,7 +58,7 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
             _options.FeedName,
             _options.DirectoryPath,
             (int)_options.DebounceWindow.TotalMilliseconds,
-            nameof(TriggerType.DirectoryChange));
+            nameof(TriggerType.ObservedChange));
 
         try
         {
@@ -67,8 +68,11 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
 
                 try
                 {
-                    _triggerSink.Enqueue(new ReconciliationTrigger(TriggerType.DirectoryChange, Source: _options.FeedName));
-                    _logger.LogDebug("Queued directory-change reconciliation trigger for feed '{FeedName}'.", _options.FeedName);
+                    _triggerSink.Enqueue(new ReconciliationTrigger(
+                        TriggerType.ObservedChange,
+                        Source: _options.FeedName,
+                        ObservationKind: FeedObservationKind.DirectoryWatcher));
+                    _logger.LogDebug("Queued observed-change reconciliation trigger for feed '{FeedName}'.", _options.FeedName);
                 }
                 catch (OperationCanceledException)
                 {
@@ -76,7 +80,7 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to queue directory-change reconciliation trigger for feed '{FeedName}'.", _options.FeedName);
+                    _logger.LogWarning(ex, "Failed to queue observed-change reconciliation trigger for feed '{FeedName}'.", _options.FeedName);
                 }
             }
         }

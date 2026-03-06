@@ -12,7 +12,7 @@ internal sealed class HealthAndMetricsMiddleware(
     IReconciliationLogger logger,
     ReconciliationMetrics metrics,
     FeedResolutionOptions feedResolutionOptions,
-    WatcherDegradationTracker? watcherDegradationTracker = null,
+    ObservationDegradationTracker? observationDegradationTracker = null,
     ILoadingFailureTracker? loadingFailureTracker = null) : IReconciliationMiddleware
 {
     private bool _previouslyIdle;
@@ -68,7 +68,7 @@ internal sealed class HealthAndMetricsMiddleware(
             context.LockFailureCount,
             context.CleanupFailureCount,
             context.UnloadPendingCount,
-            SourceOutages: context.SourceOutageCount + (watcherDegradationTracker?.DegradedCount ?? 0),
+            SourceOutages: context.SourceOutageCount + (observationDegradationTracker?.DegradedCount ?? 0),
             LoaderFailures: loaderFailureCount));
         var cycleDuration = DateTimeOffset.UtcNow - context.CycleStartedAt;
         metrics.RecordCycle(changeSet, applyResult.FailedPackageIds.Count + loaderFailureCount, cycleDuration, context.MergedActive!.Count);

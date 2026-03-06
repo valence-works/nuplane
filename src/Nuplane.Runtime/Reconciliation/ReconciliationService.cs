@@ -52,7 +52,7 @@ public sealed class ReconciliationService : IReconciliationService
     /// <param name="loadingOptions">The loading options.</param>
     /// <param name="packageLoader">The package loader.</param>
     /// <param name="packageUnloadCoordinator">The package unload coordinator.</param>
-    /// <param name="watcherDegradationTracker">The watcher degradation tracker.</param>
+    /// <param name="observationDegradationTracker">The observation degradation tracker.</param>
     /// <param name="loadingFailureTracker">The loading failure tracker.</param>
     public ReconciliationService(
         IEnumerable<IDesiredPackageSource> sources,
@@ -78,7 +78,7 @@ public sealed class ReconciliationService : IReconciliationService
         IOptions<LoadingOptions>? loadingOptions = null,
         IPackageLoader? packageLoader = null,
         IPackageUnloadCoordinator? packageUnloadCoordinator = null,
-        WatcherDegradationTracker? watcherDegradationTracker = null,
+        ObservationDegradationTracker? observationDegradationTracker = null,
         ILoadingFailureTracker? loadingFailureTracker = null)
     {
         var sourcesList = (sources ?? throw new ArgumentNullException(nameof(sources))).ToArray();
@@ -139,7 +139,7 @@ public sealed class ReconciliationService : IReconciliationService
             cleanupOpts, metricsInstance));
         _pipeline.Use(new HealthAndMetricsMiddleware(
             healthEval, eventDispatcher, loggerInstance, metricsInstance,
-            feedResOpts, watcherDegradationTracker, loadingFailureTracker));
+            feedResOpts, observationDegradationTracker, loadingFailureTracker));
     }
 
     /// <inheritdoc />

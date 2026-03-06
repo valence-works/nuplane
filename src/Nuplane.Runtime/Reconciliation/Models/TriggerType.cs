@@ -8,8 +8,8 @@ public enum TriggerType
     /// <summary>A periodically scheduled reconciliation tick.</summary>
     Scheduled,
 
-    /// <summary>A file-system change detected by a directory watcher.</summary>
-    DirectoryChange,
+    /// <summary>A feed-monitor observation detected a change and requested reconciliation.</summary>
+    ObservedChange,
 
     /// <summary>An explicit manual trigger from an operator or API.</summary>
     Manual,

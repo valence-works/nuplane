@@ -1,7 +1,8 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Nuplane.Abstractions;
+using Nuplane.Hosting;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.Runtime.Tests.Operational;
 
@@ -14,31 +15,43 @@ public sealed class AdminTriggerContractTests
     [Fact]
     public async Task Trigger_CompletedCycle_ReturnsCompleted()
     {
-        var service = new FakeReconciliationService(
-            new(false, EmptyChangeSet(), [], false));
+        var service = new FakeReconciliationService(new(false, EmptyChangeSet(), [], false));
         var logger = new SpyLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var (coordinator, dispatcher) = await CreateCoordinatorAsync(service, logger);
 
-        var outcome = await coordinator.TriggerAsync("corr-1", CancellationToken.None);
+        try
+        {
+            var outcome = await coordinator.TriggerAsync("corr-1", CancellationToken.None);
 
-        Assert.Equal(ManualReconcileOutcomeCode.Completed, outcome.OutcomeCode);
-        Assert.Equal("corr-1", outcome.CorrelationId);
-        Assert.NotNull(outcome.RunResult);
-        Assert.Null(outcome.ReasonCode);
+            Assert.Equal(ManualReconcileOutcomeCode.Completed, outcome.OutcomeCode);
+            Assert.Equal("corr-1", outcome.CorrelationId);
+            Assert.NotNull(outcome.RunResult);
+            Assert.Null(outcome.ReasonCode);
+        }
+        finally
+        {
+            await dispatcher.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
     public async Task Trigger_SkippedCycle_ReturnsRejected()
     {
-        var service = new FakeReconciliationService(
-            new(true, EmptyChangeSet(), [], false));
+        var service = new FakeReconciliationService(new(true, EmptyChangeSet(), [], false));
         var logger = new SpyLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var (coordinator, dispatcher) = await CreateCoordinatorAsync(service, logger);
 
-        var outcome = await coordinator.TriggerAsync("corr-2", CancellationToken.None);
+        try
+        {
+            var outcome = await coordinator.TriggerAsync("corr-2", CancellationToken.None);
 
-        Assert.Equal(ManualReconcileOutcomeCode.Rejected, outcome.OutcomeCode);
-        Assert.Equal("single-flight-active", outcome.ReasonCode);
+            Assert.Equal(ManualReconcileOutcomeCode.Rejected, outcome.OutcomeCode);
+            Assert.Equal("single-flight-active", outcome.ReasonCode);
+        }
+        finally
+        {
+            await dispatcher.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
@@ -46,13 +59,20 @@ public sealed class AdminTriggerContractTests
     {
         var service = new ThrowingReconciliationService(new InvalidOperationException("service crash"));
         var logger = new SpyLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var (coordinator, dispatcher) = await CreateCoordinatorAsync(service, logger);
 
-        var outcome = await coordinator.TriggerAsync("corr-3", CancellationToken.None);
+        try
+        {
+            var outcome = await coordinator.TriggerAsync("corr-3", CancellationToken.None);
 
-        Assert.Equal(ManualReconcileOutcomeCode.Unavailable, outcome.OutcomeCode);
-        Assert.Contains("service crash", outcome.ReasonCode);
-        Assert.Null(outcome.RunResult);
+            Assert.Equal(ManualReconcileOutcomeCode.Unavailable, outcome.OutcomeCode);
+            Assert.Contains("service crash", outcome.ReasonCode);
+            Assert.Null(outcome.RunResult);
+        }
+        finally
+        {
+            await dispatcher.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
@@ -62,53 +82,90 @@ public sealed class AdminTriggerContractTests
         cts.Cancel();
         var service = new ThrowingReconciliationService(new OperationCanceledException());
         var logger = new SpyLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var (coordinator, dispatcher) = await CreateCoordinatorAsync(service, logger);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(
-            () => coordinator.TriggerAsync("corr-4", cts.Token));
+        try
+        {
+            await Assert.ThrowsAsync<OperationCanceledException>(() => coordinator.TriggerAsync("corr-4", cts.Token));
+        }
+        finally
+        {
+            await dispatcher.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
     public async Task Trigger_CompletedCycle_LogsOutcome()
     {
-        var service = new FakeReconciliationService(
-            new(false, EmptyChangeSet(), [], false));
+        var service = new FakeReconciliationService(new(false, EmptyChangeSet(), [], false));
         var logger = new SpyLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var (coordinator, dispatcher) = await CreateCoordinatorAsync(service, logger);
 
-        await coordinator.TriggerAsync("corr-5", CancellationToken.None);
+        try
+        {
+            await coordinator.TriggerAsync("corr-5", CancellationToken.None);
 
-        Assert.Single(logger.AdminTriggerOutcomes);
-        Assert.Equal("Completed", logger.AdminTriggerOutcomes[0].OutcomeCode);
+            Assert.Single(logger.AdminTriggerOutcomes);
+            Assert.Equal("Completed", logger.AdminTriggerOutcomes[0].OutcomeCode);
+        }
+        finally
+        {
+            await dispatcher.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
     public async Task Trigger_RejectedCycle_LogsRejection()
     {
-        var service = new FakeReconciliationService(
-            new(true, EmptyChangeSet(), [], false));
+        var service = new FakeReconciliationService(new(true, EmptyChangeSet(), [], false));
         var logger = new SpyLogger();
-        var coordinator = new ManualReconcileCoordinator(service, logger);
+        var (coordinator, dispatcher) = await CreateCoordinatorAsync(service, logger);
 
-        await coordinator.TriggerAsync("corr-6", CancellationToken.None);
+        try
+        {
+            await coordinator.TriggerAsync("corr-6", CancellationToken.None);
 
-        Assert.Single(logger.AdminTriggerOutcomes);
-        Assert.Equal("Rejected", logger.AdminTriggerOutcomes[0].OutcomeCode);
+            Assert.Single(logger.AdminTriggerOutcomes);
+            Assert.Equal("Rejected", logger.AdminTriggerOutcomes[0].OutcomeCode);
+        }
+        finally
+        {
+            await dispatcher.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
     public async Task Trigger_NullCorrelationId_Throws()
     {
-        var service = new FakeReconciliationService(
-            new(false, EmptyChangeSet(), [], false));
-        var coordinator = new ManualReconcileCoordinator(service, new SpyLogger());
+        var service = new FakeReconciliationService(new(false, EmptyChangeSet(), [], false));
+        var (coordinator, dispatcher) = await CreateCoordinatorAsync(service, new SpyLogger());
 
-        await Assert.ThrowsAsync<ArgumentNullException>(
-            () => coordinator.TriggerAsync(null!, CancellationToken.None));
+        try
+        {
+            await Assert.ThrowsAsync<ArgumentNullException>(() => coordinator.TriggerAsync(null!, CancellationToken.None));
+        }
+        finally
+        {
+            await dispatcher.StopAsync(CancellationToken.None);
+        }
     }
 
     private static PackageChangeSet EmptyChangeSet() =>
         new([], [], [], string.Empty, DateTimeOffset.UtcNow);
+
+    private static async Task<(ManualReconcileCoordinator Coordinator, ReconciliationTriggerDispatcherHostedService Dispatcher)> CreateCoordinatorAsync(
+        IReconciliationService reconciliationService,
+        SpyLogger logger)
+    {
+        var queue = new ReconciliationTriggerQueue();
+        var dispatcher = new ReconciliationTriggerDispatcherHostedService(
+            queue,
+            reconciliationService,
+            new ReconciliationMetrics(new ReconciliationTelemetry()),
+            NullLogger<ReconciliationTriggerDispatcherHostedService>.Instance);
+        await dispatcher.StartAsync(CancellationToken.None);
+        return (new ManualReconcileCoordinator(queue, logger), dispatcher);
+    }
 
     private sealed class FakeReconciliationService(ReconciliationRunResult result) : IReconciliationService
     {
