@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nuplane.Abstractions;
@@ -21,7 +24,7 @@ public sealed class StartupCycleTests
     public async Task StartupCycle_FiresBeforePeriodicTick()
     {
         // Arrange
-        var triggers = new List<TriggerType>();
+        var triggers = new ConcurrentQueue<TriggerType>();
         var service = new TrackingReconciliationService(triggers);
         var sut = CreateHostedService(service);
 
@@ -38,7 +41,8 @@ public sealed class StartupCycleTests
 
         // Assert — the first trigger must be Startup
         Assert.NotEmpty(triggers);
-        Assert.Equal(TriggerType.Startup, triggers[0]);
+        Assert.True(triggers.TryPeek(out var first));
+        Assert.Equal(TriggerType.Startup, first);
     }
 
     [Fact]
@@ -107,19 +111,37 @@ public sealed class StartupCycleTests
     }
 
     [Fact]
-    public async Task NoStartupCycle_WhenAutomaticReconciliationDisabled()
+    public void NoStartupCycle_WhenAutomaticReconciliationDisabled()
     {
-        // Arrange — EnableAutomaticReconciliation = false means the hosted service
-        // is never registered via DI. However, if it were somehow constructed,
-        // the startup cycle still fires (the guard is at the DI registration level).
-        // This test verifies the hosted service behavior: the test simply confirms
-        // that when EnableAutomaticReconciliation is false, the startup cycle still
-        // runs if the service is constructed — the real gate is AddNuplane not
-        // registering ReconciliationHostedService. Instead we verify that the
-        // service does fire a startup cycle regardless (it doesn't check the flag).
-        //
-        // The actual AC-4 behavior is an integration-level concern tested in T018.
-        Assert.False(new ReconciliationOptions().EnableAutomaticReconciliation);
+        // AC-4: When EnableAutomaticReconciliation is false (the default),
+        // ReconciliationHostedService is NOT registered via AddNuplane.
+        var services = new ServiceCollection();
+        var stateRoot = Path.Combine(Path.GetTempPath(), "nuplane-ac4-test", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(stateRoot);
+        try
+        {
+            var stateFilePath = Path.Combine(stateRoot, "state.json");
+
+            Nuplane.NuplaneServiceCollectionExtensions.AddNuplane(
+                services,
+                configureSourceTrust: trust =>
+                {
+                    trust.AllowedSourceNames.Add("NuGet.Main");
+                    trust.AllowedPackageIds.Add("Test.Package");
+                },
+                stateFilePath: stateFilePath);
+
+            // EnableAutomaticReconciliation defaults to false — no hosted service registered
+            var hostedServiceDescriptor = services.FirstOrDefault(d =>
+                d.ServiceType == typeof(IHostedService)
+                && d.ImplementationType == typeof(Nuplane.ReconciliationHostedService));
+
+            Assert.Null(hostedServiceDescriptor);
+        }
+        finally
+        {
+            try { Directory.Delete(stateRoot, recursive: true); } catch { }
+        }
     }
 
     #region Helpers
@@ -155,16 +177,16 @@ public sealed class StartupCycleTests
     }
 
     /// <summary>
-    /// Tracks trigger types in order.
+    /// Tracks trigger types in order (thread-safe).
     /// </summary>
-    private sealed class TrackingReconciliationService(List<TriggerType> triggers) : IReconciliationService
+    private sealed class TrackingReconciliationService(ConcurrentQueue<TriggerType> triggers) : IReconciliationService
     {
         public Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken cancellationToken) =>
             TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), cancellationToken);
 
         public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken)
         {
-            triggers.Add(trigger.Type);
+            triggers.Enqueue(trigger.Type);
             return Task.FromResult(new ReconciliationRunResult(false, EmptyChangeSet, [], false));
         }
     }

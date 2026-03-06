@@ -76,7 +76,7 @@ As a host application developer, I want the startup reconciliation cycle to prod
 
 - **FR-003**: An `IPackageLoadingObserver` interface MUST be defined in `Nuplane.Loading.Abstractions`. It MUST declare `OnPackagesLoadedAsync(PackageLoadedEvent loadedEvent, CancellationToken ct)` with a default no-op implementation, and `OnPackageLoadFailedAsync(string packageId, string reason, CancellationToken ct)` with a default no-op implementation.
 
-- **FR-004**: A `PackageLoadedEvent` record MUST be defined in `Nuplane.Loading.Abstractions`. It MUST contain `IReadOnlyList<PackageLoadSession> LoadedPackages` (the sessions for successfully loaded packages), `string CorrelationId`, and `DateTimeOffset LoadedAt`.
+- **FR-004**: A `PackageLoadedEvent` record MUST be defined in `Nuplane.Loading.Abstractions`. It MUST contain `IReadOnlyList<PackageLoadSession> LoadedPackages` (the sessions for successfully loaded packages), `Guid CorrelationId`, and `DateTimeOffset LoadedAt`.
 
 - **FR-005**: An `ILoadingEventDispatcher` interface MUST be defined in `Nuplane.Loading.Abstractions`. It MUST declare `PublishLoadedAsync(PackageLoadedEvent loadedEvent, CancellationToken ct)`.
 
