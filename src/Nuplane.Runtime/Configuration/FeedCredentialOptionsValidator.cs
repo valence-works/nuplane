@@ -41,8 +41,7 @@ public sealed class FeedCredentialOptionsValidator
             }
 
             // Local directory feeds use file:// URIs; they must not have credentials.
-            var isLocalFeed = feed.ServiceIndex is not null
-                && feed.ServiceIndex.IsAbsoluteUri
+            var isLocalFeed = feed.ServiceIndex.IsAbsoluteUri
                 && string.Equals(feed.ServiceIndex.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase);
 
             if (isLocalFeed)

@@ -12,11 +12,6 @@ public sealed class ConvergenceOptions
     public ManifestOptions Manifest { get; } = new();
 
     /// <summary>
-    /// Gets the administrative surface configuration options.
-    /// </summary>
-    public AdminOptions Admin { get; } = new();
-
-    /// <summary>
     /// Gets the optional loader boundary configuration options.
     /// </summary>
     public LoaderBoundaryOptions Loader { get; } = new();
