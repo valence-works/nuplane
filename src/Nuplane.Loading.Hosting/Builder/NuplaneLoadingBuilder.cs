@@ -3,10 +3,8 @@ using System.Runtime.Loader;
 namespace Nuplane.Loading.Hosting.Builder;
 
 /// <summary>
-/// Provides functionality to build and configure loading behaviors specific
-/// to the Nuplane environment. This builder supports configuration of shared
-/// assemblies, activation of loading processes, and management of timeouts
-/// related to assembly deactivation.
+/// Fluent builder for configuring Nuplane's optional runtime assembly loading subsystem,
+/// including shared assemblies, enablement, and deactivation timeout behavior.
 /// </summary>
 public sealed class NuplaneLoadingBuilder
 {

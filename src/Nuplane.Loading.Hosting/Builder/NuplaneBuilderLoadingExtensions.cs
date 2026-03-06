@@ -18,6 +18,7 @@ public static class NuplaneBuilderLoadingExtensions
     /// <summary>
     /// Installs the Nuplane assembly loading subsystem from configuration or the <c>Loading</c>
     /// subsection itself, then applies any additional builder customization.
+    /// Configuration binds first; the optional builder callback runs afterward and can override it.
     /// </summary>
     /// <param name="builder">The Nuplane builder to extend.</param>
     /// <param name="configuration">The application configuration.</param>
@@ -33,18 +34,18 @@ public static class NuplaneBuilderLoadingExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         var loadingSection = GetNamedSectionOrSelf(configuration, LoadingSectionName);
-        var configuredOptions = new LoadingOptions();
-        loadingSection.Bind(configuredOptions);
+        var loadingOptions = BindSection<LoadingOptions>(loadingSection);
 
         var configuredBuilder = builder.AutoloadPackages(loadingBuilder =>
         {
-            ApplyConfiguredLoading(loadingBuilder, configuredOptions);
+            ApplyLoadingOptions(loadingBuilder, loadingOptions);
             configure?.Invoke(loadingBuilder);
         });
 
+        // ActiveStoreRoot participates in runtime validation but does not affect builder control flow.
         configuredBuilder.Services.PostConfigure<LoadingOptions>(opts =>
         {
-            opts.ActiveStoreRoot = configuredOptions.ActiveStoreRoot;
+            opts.ActiveStoreRoot = loadingOptions.ActiveStoreRoot;
         });
 
         return configuredBuilder;
@@ -119,7 +120,7 @@ public static class NuplaneBuilderLoadingExtensions
         return builder;
     }
 
-    private static void ApplyConfiguredLoading(NuplaneLoadingBuilder loadingBuilder, LoadingOptions options)
+    private static void ApplyLoadingOptions(NuplaneLoadingBuilder loadingBuilder, LoadingOptions options)
     {
         if (!options.Enabled)
         {
@@ -136,6 +137,14 @@ public static class NuplaneBuilderLoadingExtensions
         {
             loadingBuilder.SharedAssembly(sharedAssembly.Name, sharedAssembly.PublicKeyToken, sharedAssembly.MajorVersion);
         }
+    }
+
+    private static TOptions BindSection<TOptions>(IConfiguration configuration)
+        where TOptions : class, new()
+    {
+        var options = new TOptions();
+        configuration.Bind(options);
+        return options;
     }
 
     private static IConfigurationSection GetNamedSectionOrSelf(IConfiguration configuration, string sectionName)

@@ -30,6 +30,20 @@ namespace Nuplane;
 /// </summary>
 public static class NuplaneServiceCollectionExtensions
 {
+    private static readonly Action<IServiceCollection, IConfiguration>[] ConfiguredOptionBinders =
+    [
+        static (services, configuration) => ConfigureBoundOptions<NuplaneSetupOptions>(services, configuration, SetupSectionName),
+        static (services, configuration) => ConfigureBoundOptions<ReconciliationOptions>(services, configuration, ReconciliationSectionName),
+        static (services, configuration) => ConfigureBoundOptions<FeedResolutionOptions>(services, configuration, FeedResolutionSectionName),
+        static (services, configuration) => ConfigureBoundOptions<SourceTrustOptions>(services, configuration, SourceTrustSectionName),
+        static (services, configuration) => ConfigureBoundOptions<FeedTrustPolicyOptions>(services, configuration, FeedTrustPolicySectionName),
+        static (services, configuration) => ConfigureBoundOptions<LockFileOptions>(services, configuration, LockFileSectionName),
+        static (services, configuration) => ConfigureBoundOptions<CleanupPolicyOptions>(services, configuration, CleanupPolicySectionName),
+        static (services, configuration) => ConfigureBoundOptions<ConvergenceOptions>(services, configuration, ConvergenceSectionName),
+        static (services, configuration) => ConfigureBoundOptions<TrustedSourcePolicyOptions>(services, configuration, TrustedSourcePolicySectionName),
+        static (services, configuration) => ConfigureBoundOptions<StoreRegistryOptions>(services, configuration, StoreRegistrySectionName)
+    ];
+
     private const string SetupSectionName = "Setup";
     private const string ReconciliationSectionName = "Reconciliation";
     private const string FeedResolutionSectionName = "FeedResolution";
@@ -54,6 +68,7 @@ public static class NuplaneServiceCollectionExtensions
 
     /// <summary>
     /// Registers Nuplane from configuration and then applies additional builder-based customization.
+    /// Configuration binds first; the optional builder callback runs afterward and can override it.
     /// </summary>
     public static IServiceCollection AddNuplane(
         this IServiceCollection services,
@@ -63,10 +78,13 @@ public static class NuplaneServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
+        var setupSection = GetNamedSectionOrSelf(configuration, SetupSectionName);
+        var setupOptions = BindSection<NuplaneSetupOptions>(setupSection);
+
         return services.AddNuplane(builder =>
         {
-            ConfigureOptionsFromConfiguration(builder.Services, configuration);
-            ApplyConfiguredSetup(builder, configuration);
+            BindConfiguredOptions(builder.Services, configuration);
+            ApplySetupOptions(builder, setupOptions);
             configure?.Invoke(builder);
         });
     }
@@ -296,28 +314,15 @@ public static class NuplaneServiceCollectionExtensions
         }
     }
 
-    private static void ConfigureOptionsFromConfiguration(IServiceCollection services, IConfiguration configuration)
+    private static void BindConfiguredOptions(IServiceCollection services, IConfiguration configuration)
     {
-        BindOptionsFromSection<NuplaneSetupOptions>(services, configuration, SetupSectionName);
-        BindOptionsFromSection<ReconciliationOptions>(services, configuration, ReconciliationSectionName);
-        BindOptionsFromSection<FeedResolutionOptions>(services, configuration, FeedResolutionSectionName);
-        BindOptionsFromSection<SourceTrustOptions>(services, configuration, SourceTrustSectionName);
-        BindOptionsFromSection<FeedTrustPolicyOptions>(services, configuration, FeedTrustPolicySectionName);
-        BindOptionsFromSection<LockFileOptions>(services, configuration, LockFileSectionName);
-        BindOptionsFromSection<CleanupPolicyOptions>(services, configuration, CleanupPolicySectionName);
-        BindOptionsFromSection<ConvergenceOptions>(services, configuration, ConvergenceSectionName);
-        BindOptionsFromSection<TrustedSourcePolicyOptions>(services, configuration, TrustedSourcePolicySectionName);
-        BindOptionsFromSection<StoreRegistryOptions>(services, configuration, StoreRegistrySectionName);
+        foreach (var bindOptions in ConfiguredOptionBinders)
+        {
+            bindOptions(services, configuration);
+        }
     }
 
-    private static void ApplyConfiguredSetup(NuplaneBuilder builder, IConfiguration configuration)
-    {
-        var options = new NuplaneSetupOptions();
-        GetNamedSectionOrSelf(configuration, SetupSectionName).Bind(options);
-        ApplySetup(builder, options);
-    }
-
-    private static void ApplySetup(NuplaneBuilder builder, NuplaneSetupOptions options)
+    private static void ApplySetupOptions(NuplaneBuilder builder, NuplaneSetupOptions options)
     {
         if (options.AutomaticReconciliation)
         {
@@ -335,11 +340,10 @@ public static class NuplaneServiceCollectionExtensions
             {
                 if (!string.IsNullOrWhiteSpace(feed.DirectoryPath))
                 {
-                    var directoryOptions = feed.Directory;
                     configuredFeed.FromDirectory(feed.DirectoryPath, dir =>
                     {
-                        dir.Watch = directoryOptions.Watch;
-                        dir.DebounceWindow = directoryOptions.DebounceWindow;
+                        dir.Watch = feed.Directory.Watch;
+                        dir.DebounceWindow = feed.Directory.DebounceWindow;
                     });
                 }
                 else
@@ -357,11 +361,19 @@ public static class NuplaneServiceCollectionExtensions
         }
     }
 
-    private static void BindOptionsFromSection<TOptions>(IServiceCollection services, IConfiguration configuration, string sectionName)
-        where TOptions : class
+    private static void ConfigureBoundOptions<TOptions>(IServiceCollection services, IConfiguration configuration, string sectionName)
+        where TOptions : class, new()
     {
         var section = GetNamedSectionOrSelf(configuration, sectionName);
         services.Configure<TOptions>(options => section.Bind(options));
+    }
+
+    private static TOptions BindSection<TOptions>(IConfiguration configuration)
+        where TOptions : class, new()
+    {
+        var options = new TOptions();
+        configuration.Bind(options);
+        return options;
     }
 
     private static IConfigurationSection GetNamedSectionOrSelf(IConfiguration configuration, string sectionName)
