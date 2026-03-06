@@ -31,10 +31,10 @@ public sealed class FeedRuleDesiredSource : IDesiredPackageSource
         ArgumentNullException.ThrowIfNull(includeIdPrefixes);
         ArgumentNullException.ThrowIfNull(availablePackageIds);
 
-        this._feedName = feedName;
-        this._includeIdPrefixes = includeIdPrefixes;
-        this._maxPackages = maxPackages;
-        this._availablePackageIds = availablePackageIds;
+        _feedName = feedName;
+        _includeIdPrefixes = includeIdPrefixes;
+        _maxPackages = maxPackages;
+        _availablePackageIds = availablePackageIds;
     }
 
     /// <inheritdoc />

@@ -29,8 +29,8 @@ public sealed class PackageAssemblyLoadContext : AssemblyLoadContext
         ArgumentException.ThrowIfNullOrWhiteSpace(packageMainAssemblyPath);
 
         _dependencyResolver = new(packageMainAssemblyPath);
-        this._sharedPolicy = sharedPolicy ?? throw new ArgumentNullException(nameof(sharedPolicy));
-        this._matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
+        _sharedPolicy = sharedPolicy ?? throw new ArgumentNullException(nameof(sharedPolicy));
+        _matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
     }
 
     /// <inheritdoc />

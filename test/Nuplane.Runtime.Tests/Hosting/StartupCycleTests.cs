@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nuplane.Abstractions;
+using Nuplane.Hosting;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
@@ -122,7 +122,7 @@ public sealed class StartupCycleTests
         {
             var stateFilePath = Path.Combine(stateRoot, "state.json");
 
-            Nuplane.NuplaneServiceCollectionExtensions.AddNuplane(
+            NuplaneServiceCollectionExtensions.AddNuplane(
                 services,
                 configureSourceTrust: trust =>
                 {
@@ -134,7 +134,7 @@ public sealed class StartupCycleTests
             // EnableAutomaticReconciliation defaults to false — no hosted service registered
             var hostedServiceDescriptor = services.FirstOrDefault(d =>
                 d.ServiceType == typeof(IHostedService)
-                && d.ImplementationType == typeof(Nuplane.ReconciliationHostedService));
+                && d.ImplementationType == typeof(ReconciliationHostedService));
 
             Assert.Null(hostedServiceDescriptor);
         }

@@ -1,8 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using Nuplane.Loading;
 
-namespace Nuplane.Hosting;
+namespace Nuplane.Loading.Extensions;
 
 /// <summary>
 /// Provides extension methods for registering Nuplane assembly loading services with a

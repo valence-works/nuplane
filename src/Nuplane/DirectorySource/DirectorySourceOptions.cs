@@ -1,4 +1,4 @@
-namespace Nuplane.Extensions;
+namespace Nuplane.DirectorySource;
 
 /// <summary>
 /// Configures the optional directory-backed desired-state source for Nuplane hosts.

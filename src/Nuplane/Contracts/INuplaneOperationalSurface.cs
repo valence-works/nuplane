@@ -1,7 +1,7 @@
 using Nuplane.Runtime.Operational;
 using Nuplane.Runtime.Reconciliation;
 
-namespace Nuplane.Extensions;
+namespace Nuplane.Contracts;
 
 /// <summary>
 /// Defines the in-process operational surface for administrative operations.

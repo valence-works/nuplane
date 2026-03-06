@@ -17,7 +17,7 @@ public sealed class PackageTypeScanner : IPackageTypeScanner
     /// <param name="packageLoader">The package loader used to resolve active load contexts.</param>
     public PackageTypeScanner(IPackageLoader packageLoader)
     {
-        this._packageLoader = packageLoader ?? throw new ArgumentNullException(nameof(packageLoader));
+        _packageLoader = packageLoader ?? throw new ArgumentNullException(nameof(packageLoader));
     }
 
     /// <inheritdoc />

@@ -1,4 +1,3 @@
-using System.Reflection;
 using Nuplane.Loading;
 
 namespace Nuplane.Integration.Tests.Contracts;

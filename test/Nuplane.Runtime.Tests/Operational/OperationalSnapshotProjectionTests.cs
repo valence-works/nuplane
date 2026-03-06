@@ -124,7 +124,7 @@ public sealed class OperationalSnapshotProjectionTests
         return (projector, evaluator);
     }
 
-    private static Nuplane.Abstractions.PackageChangeSet EmptyChangeSet() =>
+    private static Abstractions.PackageChangeSet EmptyChangeSet() =>
         new([], [], [], string.Empty, DateTimeOffset.UtcNow);
 
     /// <summary>

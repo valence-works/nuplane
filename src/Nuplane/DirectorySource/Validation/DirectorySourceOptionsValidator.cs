@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Options;
-using Nuplane.Extensions;
 
 namespace Nuplane.DirectorySource.Validation;
 

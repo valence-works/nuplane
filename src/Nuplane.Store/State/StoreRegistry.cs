@@ -20,8 +20,8 @@ public sealed class StoreRegistry : IStoreRegistry
     /// </summary>
     public StoreRegistry(IStoreStateSerializer serializer, string? stateFilePath)
     {
-        this._serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-        this._stateFilePath = stateFilePath;
+        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        _stateFilePath = stateFilePath;
     }
 
     /// <summary>
@@ -29,7 +29,7 @@ public sealed class StoreRegistry : IStoreRegistry
     /// </summary>
     public StoreRegistry(IStoreStateSerializer serializer, StoreRegistryOptions options)
     {
-        this._serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         ArgumentNullException.ThrowIfNull(options);
         _stateFilePath = options.StateFilePath;
     }

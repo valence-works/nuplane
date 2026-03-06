@@ -33,11 +33,11 @@ public sealed class NupkgFileStabilityProbe
         int maxAttempts = DefaultMaxAttempts,
         TimeSpan? retryDelay = null)
     {
-        this._logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        this._maxAttempts = maxAttempts > 0
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _maxAttempts = maxAttempts > 0
             ? maxAttempts
             : throw new ArgumentOutOfRangeException(nameof(maxAttempts), "Max attempts must be positive.");
-        this._retryDelay = retryDelay ?? DefaultRetryDelay;
+        _retryDelay = retryDelay ?? DefaultRetryDelay;
     }
 
     /// <summary>

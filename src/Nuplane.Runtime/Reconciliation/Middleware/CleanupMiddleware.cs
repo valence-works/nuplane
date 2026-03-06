@@ -1,4 +1,3 @@
-using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Observability;
 using Nuplane.Store.State;
 

@@ -1,8 +1,5 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Events;
-using Nuplane.Runtime.Health;
 using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Observers;

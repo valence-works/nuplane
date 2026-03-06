@@ -1,9 +1,9 @@
 using Nuplane.Abstractions;
 using Nuplane.Extensions;
-using Nuplane.Hosting;
 using Nuplane.Loading;
 using Nuplane.Loading.Hosting;
 using Nuplane;
+using Nuplane.Loading.Extensions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Sample.AspNetCore;
 using Nuplane.Store.State;

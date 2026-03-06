@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Options;
-using Nuplane.Loading;
 
-namespace Nuplane.Hosting;
+namespace Nuplane.Loading.Extensions;
 
 internal sealed class LoadingOptionsValidation(LoadingOptionsValidator validator) : IValidateOptions<LoadingOptions>
 {

@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Nuplane.Abstractions;
+using Nuplane.DirectorySource;
 using Nuplane.DirectorySource.Hosting;
-using Nuplane.Extensions;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Runtime.Tests.TestSupport;

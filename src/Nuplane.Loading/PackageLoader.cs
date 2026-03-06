@@ -20,7 +20,7 @@ public sealed class PackageLoader : IPackageLoader
     /// </summary>
     public PackageLoader(SharedAssemblyPolicyMatcher? matcher = null)
     {
-        this._matcher = matcher ?? new SharedAssemblyPolicyMatcher();
+        _matcher = matcher ?? new SharedAssemblyPolicyMatcher();
     }
 
     /// <summary>

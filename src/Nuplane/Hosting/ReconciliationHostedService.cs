@@ -5,7 +5,7 @@ using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.Models;
 
-namespace Nuplane;
+namespace Nuplane.Hosting;
 
 /// <summary>
 /// A background service that periodically triggers reconciliation cycles.

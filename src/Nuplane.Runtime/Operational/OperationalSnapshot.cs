@@ -1,5 +1,3 @@
-using Nuplane.Runtime.Health;
-
 namespace Nuplane.Runtime.Operational;
 
 /// <summary>

@@ -88,7 +88,7 @@ public ReconciliationService(
         IDesiredStateAggregator desiredStateAgg = desiredStateAggregator ?? throw new ArgumentNullException(nameof(desiredStateAggregator));
         IDesiredActualDiffEngine diffEngine = desiredActualDiffEngine ?? throw new ArgumentNullException(nameof(desiredActualDiffEngine));
         IStoreRegistry storeReg = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
-        this._reconciliationOptions = reconciliationOptions ?? throw new ArgumentNullException(nameof(reconciliationOptions));
+        _reconciliationOptions = reconciliationOptions ?? throw new ArgumentNullException(nameof(reconciliationOptions));
         IObserverEventDispatcher eventDispatcher = observerEventDispatcher ?? throw new ArgumentNullException(nameof(observerEventDispatcher));
         IReconciliationHealthEvaluator healthEval = healthEvaluator ?? throw new ArgumentNullException(nameof(healthEvaluator));
         var loggerInstance = logger ?? new ReconciliationLogger();
@@ -110,7 +110,7 @@ public ReconciliationService(
         var pointerSwitcher = new AtomicPointerSwitcher();
         var transactionCoordinator = new PackageTransactionCoordinator(pointerSwitcher, failureRecorder);
 
-        IReconciliationRetryPolicy retryPolicy = new ReconciliationRetryPolicy(this._reconciliationOptions);
+        IReconciliationRetryPolicy retryPolicy = new ReconciliationRetryPolicy(_reconciliationOptions);
         var snapshotCache = new DesiredSourceSnapshotCache(storeReg);
         IAllowlistGate allowlistGate = new AllowlistGate();
         IPackageApplyExecutor applyExecutor = new PackageApplyExecutor(
@@ -150,7 +150,7 @@ public ReconciliationService(
     /// </summary>
     public Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken cancellationToken)
     {
-        return TriggerAsync(new ReconciliationTrigger(Models.TriggerType.Manual), cancellationToken);
+        return TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), cancellationToken);
     }
 
     /// <summary>
