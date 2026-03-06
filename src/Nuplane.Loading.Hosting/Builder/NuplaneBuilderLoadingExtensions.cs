@@ -1,5 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Nuplane.Abstractions;
 using Nuplane.Builder;
+using Nuplane.Loading;
 using Nuplane.Loading.Extensions;
 
 namespace Nuplane.Loading.Hosting.Builder;
@@ -27,19 +30,37 @@ public static class NuplaneBuilderLoadingExtensions
         var loadingBuilder = new NuplaneLoadingBuilder();
         configure?.Invoke(loadingBuilder);
 
-        // Register the core loading services (loader, unload coordinator, type scanner)
-        builder.Services.AddNuplaneLoading(opts =>
-        {
-            opts.Enabled = loadingBuilder.Enabled;
-            opts.DeactivationTimeout = loadingBuilder.DeactivationTimeout;
-            foreach (var sa in loadingBuilder.SharedAssemblies)
-            {
-                opts.SharedAssemblies.Add(sa);
-            }
-        });
+        var services = builder.Services;
 
-        // Wire the loading observer and event dispatcher into the reconciliation pipeline
-        builder.Services.AddNuplaneLoadingHosting();
+        // ── Core loading services ─────────────────────────────────────────────────
+        services.AddSingleton<LoadingOptionsValidator>();
+        services.AddSingleton<IValidateOptions<LoadingOptions>, LoadingOptionsValidation>();
+
+        services
+            .AddOptions<LoadingOptions>()
+            .Configure(opts =>
+            {
+                opts.Enabled = loadingBuilder.Enabled;
+                opts.DeactivationTimeout = loadingBuilder.DeactivationTimeout;
+                foreach (var sa in loadingBuilder.SharedAssemblies)
+                {
+                    opts.SharedAssemblies.Add(sa);
+                }
+            })
+            .ValidateOnStart();
+
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<LoadingOptions>>().Value);
+        services.AddSingleton<SharedAssemblyPolicyMatcher>();
+        services.AddSingleton<PackageLoader>();
+        services.AddSingleton<IPackageLoader>(sp => sp.GetRequiredService<PackageLoader>());
+        services.AddSingleton<PackageTypeScanner>();
+        services.AddSingleton<IPackageTypeScanner>(sp => sp.GetRequiredService<PackageTypeScanner>());
+        services.AddSingleton<PackageUnloadCoordinator>();
+        services.AddSingleton<IPackageUnloadCoordinator>(sp => sp.GetRequiredService<PackageUnloadCoordinator>());
+
+        // ── Loading observer + event dispatcher ───────────────────────────────────
+        services.AddSingleton<ILoadingEventDispatcher, LoadingEventDispatcher>();
+        services.AddSingleton<INuplaneObserver, PackageAutoLoadingObserver>();
 
         return builder;
     }

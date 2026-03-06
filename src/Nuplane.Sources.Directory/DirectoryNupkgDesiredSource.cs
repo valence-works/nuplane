@@ -101,43 +101,12 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
         }
 
         var packageId = match.Groups["id"].Value;
-        if (_includePatterns.Count > 0 && !MatchesAnyPattern(packageId))
+        if (_includePatterns.Count > 0 && !PackagePatternMatcher.MatchesAny(_includePatterns, packageId))
         {
             return null;
         }
 
         var version = match.Groups["version"].Value;
         return new(packageId, version, _feedName, PackageUpdatePolicy.Exact, _sourceName);
-    }
-
-    private bool MatchesAnyPattern(string packageId)
-    {
-        foreach (var pattern in _includePatterns)
-        {
-            if (string.IsNullOrEmpty(pattern))
-            {
-                continue;
-            }
-
-            if (!pattern.Contains('*') && !pattern.Contains('?'))
-            {
-                if (string.Equals(pattern, packageId, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-            else
-            {
-                var regexPattern = "^" + Regex.Escape(pattern)
-                    .Replace("\\*", ".*", StringComparison.Ordinal)
-                    .Replace("\\?", ".", StringComparison.Ordinal) + "$";
-                if (Regex.IsMatch(packageId, regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 }

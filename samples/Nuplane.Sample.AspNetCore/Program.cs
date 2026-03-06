@@ -5,15 +5,17 @@ using Nuplane.Sample.AspNetCore;
 var builder = WebApplication.CreateBuilder(args);
 
 var dropDirectory = builder.Configuration["NuplaneSample:DropDirectory"] ?? "packages";
-var feedName = builder.Configuration["NuplaneSample:FeedName"] ?? "local-packages";
+var localFeedName = builder.Configuration["NuplaneSample:FeedName"] ?? "local-packages";
 var debounceMs = ParseDebounceMilliseconds(builder.Configuration["NuplaneSample:DebounceMilliseconds"]);
-var packagePattern = builder.Configuration["NuplaneSample:PackagePattern"] ?? "Nuplane.Sample.*";
+var localPackagePattern = builder.Configuration["NuplaneSample:PackagePattern"] ?? "Nuplane.Sample.*";
 
 builder.Services.AddNuplane(nuplane =>
 {
     nuplane.PollEvery(TimeSpan.FromSeconds(60));
 
-    nuplane.AddFeed(feedName, feed =>
+    // Local directory feed: discovers .nupkg files dropped into the packages/ directory.
+    // The file-system watcher triggers an immediate reconciliation when files change.
+    nuplane.AddFeed(localFeedName, feed =>
     {
         feed.FromDirectory(dropDirectory, dir =>
         {
@@ -21,7 +23,16 @@ builder.Services.AddNuplane(nuplane =>
             dir.DebounceWindow = TimeSpan.FromMilliseconds(debounceMs);
         });
 
-        feed.Include(packagePattern);
+        feed.Include(localPackagePattern);
+    });
+
+    // Remote NuGet feed: resolves packages from the official NuGet gallery.
+    // Include("Elsa.*") declares this feed as the authoritative source for all Elsa packages,
+    // enabling wildcard-based package scope targeting.
+    nuplane.AddFeed("nuget.org", feed =>
+    {
+        feed.FromUri(new Uri("https://api.nuget.org/v3/index.json"));
+        feed.Include("Elsa.*");
     });
 
     nuplane.AutoloadPackages(load =>
