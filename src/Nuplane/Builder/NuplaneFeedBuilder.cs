@@ -67,6 +67,21 @@ public sealed class NuplaneFeedBuilder
     }
 
     /// <summary>
+    /// Explicitly accepts all packages from this feed.
+    /// Prefer this over relying on omitted include patterns when you want unrestricted feed scope
+    /// to be obvious in code.
+    /// </summary>
+    public NuplaneFeedBuilder IncludeAll()
+    {
+        if (!IncludePatterns.Any(static pattern => string.Equals(pattern, "*", StringComparison.Ordinal)))
+        {
+            IncludePatterns.Add("*");
+        }
+
+        return this;
+    }
+
+    /// <summary>
     /// Sets the trust level for this feed.
     /// </summary>
     /// <param name="level">The trust level to assign.</param>

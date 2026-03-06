@@ -24,6 +24,21 @@ public sealed class AllowlistGateTests
     }
 
     [Fact]
+    public void Enforce_WildcardAllowlist_ReturnsAll()
+    {
+        var opts = new SourceTrustOptions
+        {
+            RejectUnallowlistedPackages = true,
+            AllowedPackageIds = new(["*"], StringComparer.OrdinalIgnoreCase)
+        };
+        var requests = new[] { Req("alpha"), Req("beta"), Req("gamma") };
+
+        var result = _sut.Enforce(requests, opts);
+
+        Assert.Equal(3, result.Count);
+    }
+
+    [Fact]
     public void Enforce_OnePackageBlocked_ThrowsAggregateException()
     {
         var opts = new SourceTrustOptions

@@ -156,7 +156,7 @@ builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
           "Name": "local-packages",
           "DirectoryPath": "packages",
           "IncludePatterns": [
-            "Nuplane.Sample.Plugin"
+            "*"
           ],
           "Directory": {
             "Watch": true,
@@ -213,6 +213,12 @@ Nuplane has two configuration layers:
   - `ActiveStoreRoot`
   - `SharedAssemblies`
 
+For unrestricted feeds, prefer one of these explicit forms:
+
+- configuration: `"IncludePatterns": ["*"]`
+- configuration alias: `"IncludeAll": true`
+- fluent API: `feed.IncludeAll()`
+
 ### Configuration vs code
 
 Use configuration for infrastructure and policy:
@@ -244,7 +250,7 @@ builder.Services.AddNuplane(nuplane =>
             dir.DebounceWindow = TimeSpan.FromSeconds(1);
         });
 
-        feed.Include("MyApp.Plugins.*");
+        feed.IncludeAll();
     });
 });
 ```

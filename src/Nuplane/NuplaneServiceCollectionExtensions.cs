@@ -202,8 +202,11 @@ public static class NuplaneServiceCollectionExtensions
             opts.PollInterval = builder.PollInterval;
         });
 
-        // Source trust: collect include patterns across all feeds, auto-wire source names
-        var allIncludePatterns = builder.Feeds.SelectMany(f => f.IncludePatterns).ToList();
+        // Source trust: collect include patterns across all feeds, auto-wire source names.
+        // Any unrestricted feed, or the absence of explicit patterns altogether, collapses the global
+        // package allowlist to '*'.
+        var hasUnrestrictedFeed = builder.Feeds.Any(HasUnrestrictedPackageSelection);
+        var allIncludePatterns = builder.Feeds.SelectMany(feed => DistinctNonBlank(feed.IncludePatterns)).ToArray();
         services.Configure<SourceTrustOptions>(opts =>
         {
             foreach (var feed in builder.Feeds)
@@ -211,18 +214,15 @@ public static class NuplaneServiceCollectionExtensions
                 opts.AllowedSourceNames.Add(feed.Name);
             }
 
-            if (allIncludePatterns.Count > 0)
+            if (hasUnrestrictedFeed || allIncludePatterns.Length == 0)
             {
-                foreach (var pattern in allIncludePatterns)
-                {
-                    opts.AllowedPackageIds.Add(pattern);
-                }
-                // RejectUnallowlistedPackages stays true (default) — patterns gate access
-            }
-            else
-            {
-                // No explicit patterns — allow all packages from trusted sources
                 opts.AllowedPackageIds.Add("*");
+                return;
+            }
+
+            foreach (var pattern in allIncludePatterns)
+            {
+                opts.AllowedPackageIds.Add(pattern);
             }
         });
 
@@ -353,9 +353,16 @@ public static class NuplaneServiceCollectionExtensions
 
                 configuredFeed.Trust(feed.TrustLevel);
 
-                foreach (var pattern in DistinctNonBlank(feed.IncludePatterns))
+                if (feed.IncludeAll)
                 {
-                    configuredFeed.Include(pattern);
+                    configuredFeed.IncludeAll();
+                }
+                else
+                {
+                    foreach (var pattern in DistinctNonBlank(feed.IncludePatterns))
+                    {
+                        configuredFeed.Include(pattern);
+                    }
                 }
             });
         }
@@ -387,6 +394,9 @@ public static class NuplaneServiceCollectionExtensions
         return configuration.GetSection(sectionName);
     }
 
+    private static bool HasUnrestrictedPackageSelection(NuplaneFeedBuilder feed) =>
+        feed.IncludePatterns.Count == 0
+        || feed.IncludePatterns.Any(static pattern => string.Equals(pattern, "*", StringComparison.Ordinal));
     private static IEnumerable<string> DistinctNonBlank(IEnumerable<string>? values) =>
         (values ?? [])
         .Where(static value => !string.IsNullOrWhiteSpace(value))

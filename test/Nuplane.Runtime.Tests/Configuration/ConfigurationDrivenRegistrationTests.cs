@@ -31,7 +31,7 @@ public sealed class ConfigurationDrivenRegistrationTests
                     ["Nuplane:Setup:StateFilePath"] = stateFilePath,
                     ["Nuplane:Setup:Feeds:0:Name"] = "local-packages",
                     ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath,
-                    ["Nuplane:Setup:Feeds:0:IncludePatterns:0"] = "Nuplane.Sample.Plugin",
+                    ["Nuplane:Setup:Feeds:0:IncludePatterns:0"] = "*",
                     ["Nuplane:Setup:Feeds:0:Directory:Watch"] = "false",
                     ["Nuplane:Setup:Feeds:0:Directory:DebounceWindow"] = "00:00:02",
                     ["Nuplane:Setup:Feeds:1:Name"] = "nuget.org",
@@ -73,8 +73,52 @@ public sealed class ConfigurationDrivenRegistrationTests
 
             Assert.Contains("local-packages", sourceTrust.AllowedSourceNames);
             Assert.Contains("nuget.org", sourceTrust.AllowedSourceNames);
-            Assert.Contains("Nuplane.Sample.Plugin", sourceTrust.AllowedPackageIds);
-            Assert.Contains("Elsa.*", sourceTrust.AllowedPackageIds);
+            Assert.Single(sourceTrust.AllowedPackageIds);
+            Assert.Contains("*", sourceTrust.AllowedPackageIds);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // Best effort cleanup for temp test content.
+            }
+        }
+    }
+
+    [Fact]
+    public void AddNuplane_FromConfiguration_IncludeAllAlias_CollapsesAllowlistToWildcard()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "nuplane-include-all-config", Guid.NewGuid().ToString("N"));
+        var packagesPath = Path.Combine(root, "packages");
+        Directory.CreateDirectory(packagesPath);
+
+        try
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
+                    ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath,
+                    ["Nuplane:Setup:Feeds:0:IncludeAll"] = "true",
+                    ["Nuplane:Setup:Feeds:1:Name"] = "nuget.org",
+                    ["Nuplane:Setup:Feeds:1:ServiceIndex"] = "https://api.nuget.org/v3/index.json",
+                    ["Nuplane:Setup:Feeds:1:IncludePatterns:0"] = "Elsa.*"
+                })
+                .Build();
+
+            var services = new ServiceCollection();
+            services.AddNuplane(configuration.GetSection("Nuplane"));
+
+            using var provider = services.BuildServiceProvider();
+
+            var sourceTrust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
+
+            Assert.Single(sourceTrust.AllowedPackageIds);
+            Assert.Contains("*", sourceTrust.AllowedPackageIds);
         }
         finally
         {

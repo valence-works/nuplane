@@ -35,8 +35,16 @@ public sealed class NuplaneFeedSetupOptions
     public string? Credentials { get; set; }
 
     /// <summary>
+    /// Gets or sets whether all packages from this feed should be accepted.
+    /// Prefer this or <c>"*"</c> in <see cref="IncludePatterns"/> when unrestricted feed scope
+    /// should be explicit in configuration.
+    /// </summary>
+    public bool IncludeAll { get; set; }
+
+    /// <summary>
     /// Gets or sets the include patterns applied to this feed.
-    /// Empty means all packages from the feed are accepted.
+    /// Empty still means all packages from the feed are accepted for backward compatibility,
+    /// but prefer <see cref="IncludeAll"/> or <c>"*"</c> when that intent should be explicit.
     /// </summary>
     public List<string> IncludePatterns { get; set; } = [];
 
@@ -45,4 +53,3 @@ public sealed class NuplaneFeedSetupOptions
     /// </summary>
     public NuplaneDirectoryFeedSetupOptions Directory { get; set; } = new();
 }
-
