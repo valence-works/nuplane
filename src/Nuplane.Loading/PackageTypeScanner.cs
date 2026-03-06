@@ -9,7 +9,7 @@ namespace Nuplane.Loading;
 /// </summary>
 public sealed class PackageTypeScanner : IPackageTypeScanner
 {
-    private readonly IPackageLoader packageLoader;
+    private readonly IPackageLoader _packageLoader;
 
     /// <summary>
     /// Initializes a new instance of <see cref="PackageTypeScanner"/>.
@@ -17,7 +17,7 @@ public sealed class PackageTypeScanner : IPackageTypeScanner
     /// <param name="packageLoader">The package loader used to resolve active load contexts.</param>
     public PackageTypeScanner(IPackageLoader packageLoader)
     {
-        this.packageLoader = packageLoader ?? throw new ArgumentNullException(nameof(packageLoader));
+        this._packageLoader = packageLoader ?? throw new ArgumentNullException(nameof(packageLoader));
     }
 
     /// <inheritdoc />
@@ -31,7 +31,7 @@ public sealed class PackageTypeScanner : IPackageTypeScanner
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(version);
 
-        if (!packageLoader.TryGetContext(packageId, version, out var contextHandle) ||
+        if (!_packageLoader.TryGetContext(packageId, version, out var contextHandle) ||
             contextHandle?.Context is not AssemblyLoadContext loadContext)
         {
             return [];

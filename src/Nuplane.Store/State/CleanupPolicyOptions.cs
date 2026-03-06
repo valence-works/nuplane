@@ -1,17 +1,6 @@
 namespace Nuplane.Store.State;
 
 /// <summary>
-/// Specifies when cleanup operations are executed.
-/// </summary>
-public enum CleanupExecutionMode
-{
-    /// <summary>Cleanup runs automatically after each successful reconciliation cycle.</summary>
-    Automatic,
-    /// <summary>Cleanup is only triggered manually.</summary>
-    ManualOnly
-}
-
-/// <summary>
 /// Configuration options for the package version cleanup policy, controlling retention
 /// by version count, age, execution mode, and last-known-good protection.
 /// </summary>

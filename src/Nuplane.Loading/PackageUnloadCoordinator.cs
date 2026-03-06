@@ -8,7 +8,7 @@ namespace Nuplane.Loading;
 /// </summary>
 public sealed class PackageUnloadCoordinator : IPackageUnloadCoordinator
 {
-    private readonly ConcurrentDictionary<string, int> attempts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, int> _attempts = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Attempts to unload a package assembly load context directly.
@@ -80,7 +80,7 @@ public sealed class PackageUnloadCoordinator : IPackageUnloadCoordinator
             timedOut ? "deactivation-timeout" : "deactivation-complete",
             correlationId);
 
-        var attempt = attempts.AddOrUpdate(sessionKey, 1, (_, current) => current + 1);
+        var attempt = _attempts.AddOrUpdate(sessionKey, 1, (_, current) => current + 1);
 
         try
         {

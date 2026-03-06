@@ -10,7 +10,7 @@ namespace Nuplane.Runtime.Tests.Sources.Directory;
 /// </summary>
 public sealed class NupkgFileStabilityProbeTests
 {
-    private readonly NupkgFileStabilityProbe probe = new(
+    private readonly NupkgFileStabilityProbe _probe = new(
         NullLogger<NupkgFileStabilityProbe>.Instance,
         maxAttempts: 3,
         retryDelay: TimeSpan.FromMilliseconds(50));
@@ -22,7 +22,7 @@ public sealed class NupkgFileStabilityProbeTests
         var filePath = Path.Combine(tempDir.Path, "stable.nupkg");
         await File.WriteAllBytesAsync(filePath, CreateValidNupkgBytes());
 
-        var result = await probe.IsStableAsync(filePath);
+        var result = await _probe.IsStableAsync(filePath);
 
         Assert.True(result);
     }
@@ -33,7 +33,7 @@ public sealed class NupkgFileStabilityProbeTests
         using var tempDir = new TempDirectory();
         var filePath = Path.Combine(tempDir.Path, "does-not-exist.nupkg");
 
-        var result = await probe.IsStableAsync(filePath);
+        var result = await _probe.IsStableAsync(filePath);
 
         Assert.False(result);
     }
@@ -49,7 +49,7 @@ public sealed class NupkgFileStabilityProbeTests
         using var lockStream = new FileStream(
             filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
 
-        var result = await probe.IsStableAsync(filePath);
+        var result = await _probe.IsStableAsync(filePath);
 
         Assert.False(result);
     }
@@ -61,7 +61,7 @@ public sealed class NupkgFileStabilityProbeTests
         var filePath = Path.Combine(tempDir.Path, "empty.nupkg");
         await File.WriteAllBytesAsync(filePath, []);
 
-        var result = await probe.IsStableAsync(filePath);
+        var result = await _probe.IsStableAsync(filePath);
 
         // Empty files (size 0) never achieve stability (previousSize must be > 0)
         Assert.False(result);
@@ -78,7 +78,7 @@ public sealed class NupkgFileStabilityProbeTests
         cts.Cancel();
 
         await Assert.ThrowsAsync<OperationCanceledException>(
-            () => probe.IsStableAsync(filePath, cts.Token));
+            () => _probe.IsStableAsync(filePath, cts.Token));
     }
 
     [Fact]
@@ -133,14 +133,14 @@ public sealed class NupkgFileStabilityProbeTests
     public async Task NullFilePath_Throws()
     {
         await Assert.ThrowsAsync<ArgumentNullException>(
-            () => probe.IsStableAsync(null!));
+            () => _probe.IsStableAsync(null!));
     }
 
     [Fact]
     public async Task EmptyFilePath_Throws()
     {
         await Assert.ThrowsAsync<ArgumentException>(
-            () => probe.IsStableAsync(string.Empty));
+            () => _probe.IsStableAsync(string.Empty));
     }
 
     [Fact]

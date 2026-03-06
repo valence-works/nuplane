@@ -7,7 +7,7 @@ namespace Nuplane.Runtime.Reconciliation;
 /// </summary>
 public sealed class ReconciliationRetryPolicy(ReconciliationOptions options) : IReconciliationRetryPolicy
 {
-    private readonly ReconciliationOptions options = options ?? throw new ArgumentNullException(nameof(options));
+    private readonly ReconciliationOptions _options = options ?? throw new ArgumentNullException(nameof(options));
 
     /// <inheritdoc />
     public async Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
@@ -28,11 +28,11 @@ public sealed class ReconciliationRetryPolicy(ReconciliationOptions options) : I
             }
             catch
             {
-                if (attempt > options.MaxRetryAttempts)
+                if (attempt > _options.MaxRetryAttempts)
                 {
                     throw;
                 }
-                var backoff = GetBackoffForRetry(options, attempt);
+                var backoff = GetBackoffForRetry(_options, attempt);
                 await Task.Delay(backoff, cancellationToken);
             }
         }

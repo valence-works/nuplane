@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nuplane.Abstractions;
 using Nuplane.Loading;
-using Nuplane.Loading.Configuration;
+using Nuplane.Loading.Events;
 using Nuplane.Loading.Hosting;
 
 namespace Nuplane.Loading.Tests;
@@ -164,17 +164,12 @@ public sealed class PackageAutoLoadingObserverTests
         LoadingOptions options) =>
         new(loader, dispatcher, options, NullLogger<PackageAutoLoadingObserver>.Instance);
 
-    internal sealed class FakePackageLoader : IPackageLoader
+    internal sealed class FakePackageLoader(IEnumerable<string>? failIds = null) : IPackageLoader
     {
-        private readonly HashSet<string> _failIds;
+        private readonly HashSet<string> _failIds = failIds is not null
+            ? new HashSet<string>(failIds, StringComparer.OrdinalIgnoreCase)
+            : [];
         public bool WasCalled { get; private set; }
-
-        public FakePackageLoader(IEnumerable<string>? failIds = null)
-        {
-            _failIds = failIds is not null
-                ? new HashSet<string>(failIds, StringComparer.OrdinalIgnoreCase)
-                : [];
-        }
 
         public Task<PackageLoadResult> EnsureLoadedAsync(
             IReadOnlyList<ResolvedPackage> packages,

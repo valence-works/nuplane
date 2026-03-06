@@ -2,10 +2,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Nuplane.Extensions;
-using Nuplane.Runtime.Operational;
 using Nuplane.Runtime.Reconciliation;
 
-namespace Nuplane.Admin.AspNetCore;
+namespace Nuplane.Admin.Api;
 
 /// <summary>
 /// Provides extension methods for mapping Nuplane admin endpoints to an ASP.NET Core endpoint routing builder.
@@ -55,55 +54,5 @@ public static class NuplaneAdminEndpointExtensions
           .WithTags("NuplaneAdmin");
 
         return endpoints;
-    }
-}
-
-/// <summary>
-/// Response DTO for operational snapshot endpoint.
-/// </summary>
-internal sealed record SnapshotResponse(
-    DateTimeOffset SnapshotAtUtc,
-    IReadOnlyList<ActivePackageEntry> ActivePackages,
-    LastReconcileOutcome? LastReconcile,
-    string Health,
-    IReadOnlyList<string> DegradedReasons,
-    string CorrelationId)
-{
-    /// <summary>
-    /// Initializes from an <see cref="OperationalSnapshot"/>.
-    /// </summary>
-    public SnapshotResponse(OperationalSnapshot snapshot)
-        : this(
-            snapshot.SnapshotAtUtc,
-            snapshot.ActivePackages,
-            snapshot.LastReconcile,
-            snapshot.Health.ToString(),
-            snapshot.DegradedReasons,
-            snapshot.CorrelationId)
-    {
-    }
-}
-
-/// <summary>
-/// Response DTO for reconcile trigger endpoint.
-/// </summary>
-internal sealed record ReconcileResponse(
-    string OutcomeCode,
-    string CorrelationId,
-    string? ReasonCode,
-    bool? IsDegraded,
-    IReadOnlyList<string>? FailedPackages)
-{
-    /// <summary>
-    /// Initializes from a <see cref="ManualReconcileOutcome"/>.
-    /// </summary>
-    public ReconcileResponse(ManualReconcileOutcome outcome)
-        : this(
-            outcome.OutcomeCode.ToString(),
-            outcome.CorrelationId,
-            outcome.ReasonCode,
-            outcome.RunResult?.IsDegraded,
-            outcome.RunResult?.FailedPackages)
-    {
     }
 }

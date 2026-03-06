@@ -1,7 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <ItemGroup>
-    <ProjectReference Include="..\Nuplane.Abstractions\Nuplane.Abstractions.csproj" />
-  </ItemGroup>
+    <PropertyGroup>
+        <rootnamespace>Nuplane.Loading</rootnamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Nuplane.Abstractions\Nuplane.Abstractions.csproj"/>
+    </ItemGroup>
 
 </Project>

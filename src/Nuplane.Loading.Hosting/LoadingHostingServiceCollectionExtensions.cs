@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Abstractions;
-using Nuplane.Loading;
 
 namespace Nuplane.Loading.Hosting;
 
@@ -8,7 +7,7 @@ namespace Nuplane.Loading.Hosting;
 /// Provides extension methods for wiring the loading adapter and event dispatcher
 /// into the DI container.
 /// </summary>
-public static class NuplaneLoadingHostingServiceCollectionExtensions
+public static class LoadingHostingServiceCollectionExtensions
 {
     /// <summary>
     /// Registers <see cref="PackageAutoLoadingObserver"/> as an <see cref="INuplaneObserver"/>

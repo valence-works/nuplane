@@ -18,9 +18,9 @@ public sealed class NupkgFileStabilityProbe
     /// </summary>
     public static readonly TimeSpan DefaultRetryDelay = TimeSpan.FromMilliseconds(200);
 
-    private readonly int maxAttempts;
-    private readonly TimeSpan retryDelay;
-    private readonly ILogger<NupkgFileStabilityProbe> logger;
+    private readonly int _maxAttempts;
+    private readonly TimeSpan _retryDelay;
+    private readonly ILogger<NupkgFileStabilityProbe> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="NupkgFileStabilityProbe"/>.
@@ -33,11 +33,11 @@ public sealed class NupkgFileStabilityProbe
         int maxAttempts = DefaultMaxAttempts,
         TimeSpan? retryDelay = null)
     {
-        this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        this.maxAttempts = maxAttempts > 0
+        this._logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        this._maxAttempts = maxAttempts > 0
             ? maxAttempts
             : throw new ArgumentOutOfRangeException(nameof(maxAttempts), "Max attempts must be positive.");
-        this.retryDelay = retryDelay ?? DefaultRetryDelay;
+        this._retryDelay = retryDelay ?? DefaultRetryDelay;
     }
 
     /// <summary>
@@ -54,7 +54,7 @@ public sealed class NupkgFileStabilityProbe
 
         long previousSize = -1;
 
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        for (var attempt = 1; attempt <= _maxAttempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -71,7 +71,7 @@ public sealed class NupkgFileStabilityProbe
 
                 if (previousSize >= 0 && currentSize == previousSize && currentSize > 0)
                 {
-                    logger.LogDebug(
+                    _logger.LogDebug(
                         "File '{FilePath}' is stable after {Attempt} attempt(s) (size: {Size} bytes).",
                         filePath, attempt, currentSize);
                     return true;
@@ -81,28 +81,28 @@ public sealed class NupkgFileStabilityProbe
             }
             catch (IOException ex) when (ex is not FileNotFoundException)
             {
-                logger.LogDebug(
+                _logger.LogDebug(
                     ex,
                     "File '{FilePath}' is locked on attempt {Attempt}/{MaxAttempts}.",
-                    filePath, attempt, maxAttempts);
+                    filePath, attempt, _maxAttempts);
             }
             catch (FileNotFoundException)
             {
-                logger.LogDebug(
+                _logger.LogDebug(
                     "File '{FilePath}' not found on attempt {Attempt}/{MaxAttempts}; treating as unstable.",
-                    filePath, attempt, maxAttempts);
+                    filePath, attempt, _maxAttempts);
                 return false;
             }
 
-            if (attempt < maxAttempts)
+            if (attempt < _maxAttempts)
             {
-                await Task.Delay(retryDelay, cancellationToken);
+                await Task.Delay(_retryDelay, cancellationToken);
             }
         }
 
-        logger.LogWarning(
+        _logger.LogWarning(
             "File '{FilePath}' did not stabilize after {MaxAttempts} attempts. Treating as unstable.",
-            filePath, maxAttempts);
+            filePath, _maxAttempts);
         return false;
     }
 }

@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nuplane.Loading;
-using Nuplane.Loading.Configuration;
 
 namespace Nuplane.Hosting;
 

@@ -10,7 +10,7 @@ namespace Nuplane.Runtime.Reconciliation.FeedPolicy;
 /// </summary>
 public sealed class FeedResolutionPolicy(FeedResolutionOptions options)
 {
-    private readonly FeedResolutionOptions options = options ?? throw new ArgumentNullException(nameof(options));
+    private readonly FeedResolutionOptions _options = options ?? throw new ArgumentNullException(nameof(options));
 
     /// <summary>
     /// Orders candidate feeds for the specified package request based on explicit feed preference and priority.
@@ -23,14 +23,14 @@ public sealed class FeedResolutionPolicy(FeedResolutionOptions options)
 
         if (!string.IsNullOrWhiteSpace(request.FeedName))
         {
-            var explicitFeed = options.Feeds
+            var explicitFeed = _options.Feeds
                 .FirstOrDefault(x => string.Equals(x.Name, request.FeedName, StringComparison.OrdinalIgnoreCase));
 
             return explicitFeed is null ? [] : [explicitFeed];
         }
 
-        return options.Feeds
-            .OrderBy(x => options.GetPriority(x.Name))
+        return _options.Feeds
+            .OrderBy(x => _options.GetPriority(x.Name))
             .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }

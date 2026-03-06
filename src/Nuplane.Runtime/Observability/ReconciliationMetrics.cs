@@ -11,19 +11,19 @@ namespace Nuplane.Runtime.Observability;
 /// </summary>
 public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
 {
-    private readonly ReconciliationTelemetry telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
+    private readonly ReconciliationTelemetry _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
 
     /// <summary>
     /// Records metrics for a completed reconciliation cycle.
     /// </summary>
     public void RecordCycle(PackageChangeSet changeSet, int failedPackages, TimeSpan duration, int activePackages)
     {
-        telemetry.AddedPackagesCounter.Add(changeSet.Added.Count);
-        telemetry.UpdatedPackagesCounter.Add(changeSet.Updated.Count);
-        telemetry.RemovedPackagesCounter.Add(changeSet.Removed.Count);
-        telemetry.FailedPackagesCounter.Add(failedPackages);
-        telemetry.TransactionDurationMilliseconds.Record(duration.TotalMilliseconds);
-        telemetry.SetActivePackages(activePackages);
+        _telemetry.AddedPackagesCounter.Add(changeSet.Added.Count);
+        _telemetry.UpdatedPackagesCounter.Add(changeSet.Updated.Count);
+        _telemetry.RemovedPackagesCounter.Add(changeSet.Removed.Count);
+        _telemetry.FailedPackagesCounter.Add(failedPackages);
+        _telemetry.TransactionDurationMilliseconds.Record(duration.TotalMilliseconds);
+        _telemetry.SetActivePackages(activePackages);
     }
 
     /// <summary>Records metrics for a dry-run plan.</summary>
@@ -31,63 +31,63 @@ public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
     {
         ArgumentNullException.ThrowIfNull(plan);
         var total = plan.ChangeSet.Added.Count + plan.ChangeSet.Updated.Count + plan.ChangeSet.Removed.Count;
-        telemetry.DryRunPlannedPackagesCounter.Add(total);
+        _telemetry.DryRunPlannedPackagesCounter.Add(total);
     }
 
     /// <summary>Records cleanup decision metrics.</summary>
     public void RecordCleanup(IReadOnlyList<CleanupDecision> decisions)
     {
         ArgumentNullException.ThrowIfNull(decisions);
-        telemetry.CleanupDeletedCounter.Add(decisions.Count(x => x.Action == CleanupAction.Deleted));
-        telemetry.CleanupKeptCounter.Add(decisions.Count(x => x.Action == CleanupAction.Kept));
-        telemetry.CleanupFailedCounter.Add(decisions.Count(x => x.Action == CleanupAction.Blocked));
+        _telemetry.CleanupDeletedCounter.Add(decisions.Count(x => x.Action == CleanupAction.Deleted));
+        _telemetry.CleanupKeptCounter.Add(decisions.Count(x => x.Action == CleanupAction.Kept));
+        _telemetry.CleanupFailedCounter.Add(decisions.Count(x => x.Action == CleanupAction.Blocked));
     }
 
     /// <summary>Records that a package load attempt has started.</summary>
-    public void RecordLoadAttemptStarted() => telemetry.LoadingStartedCounter.Add(1);
+    public void RecordLoadAttemptStarted() => _telemetry.LoadingStartedCounter.Add(1);
 
     /// <summary>Records a successful package load.</summary>
-    public void RecordLoadSucceeded() => telemetry.LoadingSucceededCounter.Add(1);
+    public void RecordLoadSucceeded() => _telemetry.LoadingSucceededCounter.Add(1);
 
     /// <summary>Records a failed package load.</summary>
-    public void RecordLoadFailed() => telemetry.LoadingFailedCounter.Add(1);
+    public void RecordLoadFailed() => _telemetry.LoadingFailedCounter.Add(1);
 
     /// <summary>Records that a package unload was attempted.</summary>
-    public void RecordUnloadAttempted() => telemetry.UnloadAttemptedCounter.Add(1);
+    public void RecordUnloadAttempted() => _telemetry.UnloadAttemptedCounter.Add(1);
 
     /// <summary>Records a successful package unload.</summary>
-    public void RecordUnloadSucceeded() => telemetry.UnloadSucceededCounter.Add(1);
+    public void RecordUnloadSucceeded() => _telemetry.UnloadSucceededCounter.Add(1);
 
     /// <summary>Records a pending package unload.</summary>
-    public void RecordUnloadPending() => telemetry.UnloadPendingCounter.Add(1);
+    public void RecordUnloadPending() => _telemetry.UnloadPendingCounter.Add(1);
 
     /// <summary>Records a deactivation timeout.</summary>
-    public void RecordDeactivationTimeout() => telemetry.DeactivationTimeoutCounter.Add(1);
+    public void RecordDeactivationTimeout() => _telemetry.DeactivationTimeoutCounter.Add(1);
 
     /// <summary>Sets the gauge value for packages with pending unloads.</summary>
-    public void SetUnloadPendingPackages(long count) => telemetry.SetUnloadPendingPackages(count);
+    public void SetUnloadPendingPackages(long count) => _telemetry.SetUnloadPendingPackages(count);
 
     /// <summary>Records a successful manifest read.</summary>
-    public void RecordManifestSucceeded() => telemetry.ManifestSucceededCounter.Add(1);
+    public void RecordManifestSucceeded() => _telemetry.ManifestSucceededCounter.Add(1);
 
     /// <summary>Records a failed manifest read.</summary>
-    public void RecordManifestFailed() => telemetry.ManifestFailedCounter.Add(1);
+    public void RecordManifestFailed() => _telemetry.ManifestFailedCounter.Add(1);
 
     /// <summary>Records a source outage event.</summary>
-    public void RecordSourceOutage() => telemetry.SourceOutageCounter.Add(1);
+    public void RecordSourceOutage() => _telemetry.SourceOutageCounter.Add(1);
 
     /// <summary>Records a package acquisition failure.</summary>
     /// <param name="count">Number of acquisition failures to record. Defaults to 1.</param>
-    public void RecordAcquisitionFailed(int count = 1) => telemetry.AcquisitionFailedCounter.Add(count);
+    public void RecordAcquisitionFailed(int count = 1) => _telemetry.AcquisitionFailedCounter.Add(count);
 
     /// <summary>Records a completed convergence cycle.</summary>
     /// <param name="degraded">Whether the cycle completed in degraded state.</param>
     public void RecordConvergenceCycle(bool degraded)
     {
-        telemetry.ConvergenceCycleCounter.Add(1);
+        _telemetry.ConvergenceCycleCounter.Add(1);
         if (degraded)
         {
-            telemetry.ConvergenceDegradedCounter.Add(1);
+            _telemetry.ConvergenceDegradedCounter.Add(1);
         }
     }
 
@@ -95,15 +95,15 @@ public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
     /// <param name="rejected">Whether the trigger was rejected.</param>
     public void RecordAdminTrigger(bool rejected)
     {
-        telemetry.AdminTriggerCounter.Add(1);
+        _telemetry.AdminTriggerCounter.Add(1);
         if (rejected)
         {
-            telemetry.AdminRejectedCounter.Add(1);
+            _telemetry.AdminRejectedCounter.Add(1);
         }
     }
 
     /// <summary>Records a rollback operation.</summary>
-    public void RecordRollbackPerformed() => telemetry.RollbackPerformedCounter.Add(1);
+    public void RecordRollbackPerformed() => _telemetry.RollbackPerformedCounter.Add(1);
 
     /// <summary>Records a loader boundary outcome.</summary>
     /// <param name="succeeded">Number of loaders that succeeded.</param>
@@ -111,22 +111,22 @@ public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
     /// <param name="skipped">Number of loaders that were skipped.</param>
     public void RecordLoaderBoundaryOutcome(int succeeded, int failed, int skipped)
     {
-        telemetry.LoaderBoundarySucceededCounter.Add(succeeded);
-        telemetry.LoaderBoundaryFailedCounter.Add(failed);
-        telemetry.LoaderBoundarySkippedCounter.Add(skipped);
+        _telemetry.LoaderBoundarySucceededCounter.Add(succeeded);
+        _telemetry.LoaderBoundaryFailedCounter.Add(failed);
+        _telemetry.LoaderBoundarySkippedCounter.Add(skipped);
     }
 
     /// <summary>Records a reconciliation trigger by type.</summary>
     /// <param name="triggerType">The trigger type label (e.g., "Scheduled", "DirectoryChange", "Manual").</param>
     public void RecordTrigger(string triggerType)
     {
-        telemetry.TriggerCounter.Add(1, new KeyValuePair<string, object?>("trigger_type", triggerType));
+        _telemetry.TriggerCounter.Add(1, new KeyValuePair<string, object?>("trigger_type", triggerType));
     }
 
     /// <summary>Sets the idle mode gauge.</summary>
     /// <param name="isIdle">Whether the runtime is in idle mode (no feeds configured).</param>
     public void SetIdleMode(bool isIdle)
     {
-        telemetry.SetIdleMode(isIdle);
+        _telemetry.SetIdleMode(isIdle);
     }
 }

@@ -37,12 +37,12 @@ public sealed class SourceOutageFallbackTests
 
     private sealed class FlakySource : IDesiredPackageSource
     {
-        private int calls;
+        private int _calls;
 
         public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
         {
-            calls++;
-            if (calls >= 2)
+            _calls++;
+            if (_calls >= 2)
             {
                 throw new InvalidOperationException("source unavailable");
             }

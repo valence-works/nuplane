@@ -8,7 +8,7 @@ namespace Nuplane.Runtime.Observability;
 /// </summary>
 public sealed class ReconciliationTelemetry : IDisposable
 {
-    private readonly Meter meter = new("Nuplane.Runtime", "0.1.0");
+    private readonly Meter _meter = new("Nuplane.Runtime", "0.1.0");
 
     /// <summary>Counter for packages added during reconciliation.</summary>
     public Counter<long> AddedPackagesCounter { get; }
@@ -124,53 +124,53 @@ public sealed class ReconciliationTelemetry : IDisposable
     /// <summary>Gauge tracking whether the runtime is in idle mode (1 = idle, 0 = active).</summary>
     public ObservableGauge<int> IdleModeGauge { get; }
 
-    private long activePackages;
-    private long unloadPendingPackages;
-    private int idleMode;
+    private long _activePackages;
+    private long _unloadPendingPackages;
+    private int _idleMode;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ReconciliationTelemetry"/> class.
     /// </summary>
     public ReconciliationTelemetry()
     {
-        AddedPackagesCounter = meter.CreateCounter<long>("nuplane.reconciliation.added");
-        UpdatedPackagesCounter = meter.CreateCounter<long>("nuplane.reconciliation.updated");
-        RemovedPackagesCounter = meter.CreateCounter<long>("nuplane.reconciliation.removed");
-        FailedPackagesCounter = meter.CreateCounter<long>("nuplane.reconciliation.failed");
-        TrustPolicyAllowedCounter = meter.CreateCounter<long>("nuplane.policy.trust.allowed");
-        TrustPolicyBlockedCounter = meter.CreateCounter<long>("nuplane.policy.trust.blocked");
-        LockGenerateCounter = meter.CreateCounter<long>("nuplane.lock.generate");
-        LockEnforceCounter = meter.CreateCounter<long>("nuplane.lock.enforce");
-        LockStrictFailureCounter = meter.CreateCounter<long>("nuplane.lock.strict.failure");
-        LockHashMismatchCounter = meter.CreateCounter<long>("nuplane.lock.hashmismatch");
-        DryRunPlannedPackagesCounter = meter.CreateCounter<long>("nuplane.dryrun.planned.packages");
-        CleanupDeletedCounter = meter.CreateCounter<long>("nuplane.cleanup.deleted");
-        CleanupKeptCounter = meter.CreateCounter<long>("nuplane.cleanup.kept");
-        CleanupFailedCounter = meter.CreateCounter<long>("nuplane.cleanup.failed");
-        LoadingStartedCounter = meter.CreateCounter<long>("nuplane.loading.started");
-        LoadingSucceededCounter = meter.CreateCounter<long>("nuplane.loading.succeeded");
-        LoadingFailedCounter = meter.CreateCounter<long>("nuplane.loading.failed");
-        UnloadAttemptedCounter = meter.CreateCounter<long>("nuplane.loading.unload.attempted");
-        UnloadSucceededCounter = meter.CreateCounter<long>("nuplane.loading.unload.succeeded");
-        UnloadPendingCounter = meter.CreateCounter<long>("nuplane.loading.unload.pending");
-        DeactivationTimeoutCounter = meter.CreateCounter<long>("nuplane.loading.deactivation.timeout");
-        ManifestSucceededCounter = meter.CreateCounter<long>("nuplane.convergence.manifest.succeeded");
-        ManifestFailedCounter = meter.CreateCounter<long>("nuplane.convergence.manifest.failed");
-        SourceOutageCounter = meter.CreateCounter<long>("nuplane.convergence.source.outage");
-        AcquisitionFailedCounter = meter.CreateCounter<long>("nuplane.convergence.acquisition.failed");
-        ConvergenceCycleCounter = meter.CreateCounter<long>("nuplane.convergence.cycle.total");
-        ConvergenceDegradedCounter = meter.CreateCounter<long>("nuplane.convergence.cycle.degraded");
-        AdminTriggerCounter = meter.CreateCounter<long>("nuplane.convergence.admin.trigger");
-        AdminRejectedCounter = meter.CreateCounter<long>("nuplane.convergence.admin.rejected");
-        RollbackPerformedCounter = meter.CreateCounter<long>("nuplane.convergence.rollback.performed");
-        LoaderBoundarySucceededCounter = meter.CreateCounter<long>("nuplane.convergence.loader.succeeded");
-        LoaderBoundaryFailedCounter = meter.CreateCounter<long>("nuplane.convergence.loader.failed");
-        LoaderBoundarySkippedCounter = meter.CreateCounter<long>("nuplane.convergence.loader.skipped");
-        TriggerCounter = meter.CreateCounter<long>("nuplane.convergence.trigger");
-        TransactionDurationMilliseconds = meter.CreateHistogram<double>("nuplane.reconciliation.transaction.duration.ms");
-        ActivePackagesGauge = meter.CreateObservableGauge<long>("nuplane.reconciliation.active", () => activePackages);
-        UnloadPendingPackagesGauge = meter.CreateObservableGauge<long>("nuplane.loading.unload.pending.active", () => unloadPendingPackages);
-        IdleModeGauge = meter.CreateObservableGauge<int>("nuplane.runtime.idle", () => idleMode);
+        AddedPackagesCounter = _meter.CreateCounter<long>("nuplane.reconciliation.added");
+        UpdatedPackagesCounter = _meter.CreateCounter<long>("nuplane.reconciliation.updated");
+        RemovedPackagesCounter = _meter.CreateCounter<long>("nuplane.reconciliation.removed");
+        FailedPackagesCounter = _meter.CreateCounter<long>("nuplane.reconciliation.failed");
+        TrustPolicyAllowedCounter = _meter.CreateCounter<long>("nuplane.policy.trust.allowed");
+        TrustPolicyBlockedCounter = _meter.CreateCounter<long>("nuplane.policy.trust.blocked");
+        LockGenerateCounter = _meter.CreateCounter<long>("nuplane.lock.generate");
+        LockEnforceCounter = _meter.CreateCounter<long>("nuplane.lock.enforce");
+        LockStrictFailureCounter = _meter.CreateCounter<long>("nuplane.lock.strict.failure");
+        LockHashMismatchCounter = _meter.CreateCounter<long>("nuplane.lock.hashmismatch");
+        DryRunPlannedPackagesCounter = _meter.CreateCounter<long>("nuplane.dryrun.planned.packages");
+        CleanupDeletedCounter = _meter.CreateCounter<long>("nuplane.cleanup.deleted");
+        CleanupKeptCounter = _meter.CreateCounter<long>("nuplane.cleanup.kept");
+        CleanupFailedCounter = _meter.CreateCounter<long>("nuplane.cleanup.failed");
+        LoadingStartedCounter = _meter.CreateCounter<long>("nuplane.loading.started");
+        LoadingSucceededCounter = _meter.CreateCounter<long>("nuplane.loading.succeeded");
+        LoadingFailedCounter = _meter.CreateCounter<long>("nuplane.loading.failed");
+        UnloadAttemptedCounter = _meter.CreateCounter<long>("nuplane.loading.unload.attempted");
+        UnloadSucceededCounter = _meter.CreateCounter<long>("nuplane.loading.unload.succeeded");
+        UnloadPendingCounter = _meter.CreateCounter<long>("nuplane.loading.unload.pending");
+        DeactivationTimeoutCounter = _meter.CreateCounter<long>("nuplane.loading.deactivation.timeout");
+        ManifestSucceededCounter = _meter.CreateCounter<long>("nuplane.convergence.manifest.succeeded");
+        ManifestFailedCounter = _meter.CreateCounter<long>("nuplane.convergence.manifest.failed");
+        SourceOutageCounter = _meter.CreateCounter<long>("nuplane.convergence.source.outage");
+        AcquisitionFailedCounter = _meter.CreateCounter<long>("nuplane.convergence.acquisition.failed");
+        ConvergenceCycleCounter = _meter.CreateCounter<long>("nuplane.convergence.cycle.total");
+        ConvergenceDegradedCounter = _meter.CreateCounter<long>("nuplane.convergence.cycle.degraded");
+        AdminTriggerCounter = _meter.CreateCounter<long>("nuplane.convergence.admin.trigger");
+        AdminRejectedCounter = _meter.CreateCounter<long>("nuplane.convergence.admin.rejected");
+        RollbackPerformedCounter = _meter.CreateCounter<long>("nuplane.convergence.rollback.performed");
+        LoaderBoundarySucceededCounter = _meter.CreateCounter<long>("nuplane.convergence.loader.succeeded");
+        LoaderBoundaryFailedCounter = _meter.CreateCounter<long>("nuplane.convergence.loader.failed");
+        LoaderBoundarySkippedCounter = _meter.CreateCounter<long>("nuplane.convergence.loader.skipped");
+        TriggerCounter = _meter.CreateCounter<long>("nuplane.convergence.trigger");
+        TransactionDurationMilliseconds = _meter.CreateHistogram<double>("nuplane.reconciliation.transaction.duration.ms");
+        ActivePackagesGauge = _meter.CreateObservableGauge<long>("nuplane.reconciliation.active", () => _activePackages);
+        UnloadPendingPackagesGauge = _meter.CreateObservableGauge<long>("nuplane.loading.unload.pending.active", () => _unloadPendingPackages);
+        IdleModeGauge = _meter.CreateObservableGauge<int>("nuplane.runtime.idle", () => _idleMode);
     }
 
     /// <summary>
@@ -178,7 +178,7 @@ public sealed class ReconciliationTelemetry : IDisposable
     /// </summary>
     public void SetActivePackages(long count)
     {
-        activePackages = Math.Max(0, count);
+        _activePackages = Math.Max(0, count);
     }
 
     /// <summary>
@@ -186,7 +186,7 @@ public sealed class ReconciliationTelemetry : IDisposable
     /// </summary>
     public void SetUnloadPendingPackages(long count)
     {
-        unloadPendingPackages = Math.Max(0, count);
+        _unloadPendingPackages = Math.Max(0, count);
     }
 
     /// <summary>
@@ -194,12 +194,12 @@ public sealed class ReconciliationTelemetry : IDisposable
     /// </summary>
     public void SetIdleMode(bool isIdle)
     {
-        idleMode = isIdle ? 1 : 0;
+        _idleMode = isIdle ? 1 : 0;
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
-        meter.Dispose();
+        _meter.Dispose();
     }
 }

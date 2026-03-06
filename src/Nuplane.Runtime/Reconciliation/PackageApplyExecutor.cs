@@ -17,10 +17,10 @@ public sealed class PackageApplyExecutor(
     IReconciliationRetryPolicy retryPolicy,
     IFailureRecorder failureRecorder) : IPackageApplyExecutor
 {
-    private readonly IPackageResolver packageResolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver));
-    private readonly PackageTransactionCoordinator transactionCoordinator = transactionCoordinator ?? throw new ArgumentNullException(nameof(transactionCoordinator));
-    private readonly IReconciliationRetryPolicy retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
-    private readonly IFailureRecorder failureRecorder = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
+    private readonly IPackageResolver _packageResolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver));
+    private readonly PackageTransactionCoordinator _transactionCoordinator = transactionCoordinator ?? throw new ArgumentNullException(nameof(transactionCoordinator));
+    private readonly IReconciliationRetryPolicy _retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
+    private readonly IFailureRecorder _failureRecorder = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
 
     /// <inheritdoc />
     public async Task<PackageResolutionResult> ResolveAsync(
@@ -39,12 +39,12 @@ public sealed class PackageApplyExecutor(
         {
             try
             {
-                var pkg = await retryPolicy.ExecuteAsync(
-                    ct => packageResolver.ResolveAsync(request, ct),
+                var pkg = await _retryPolicy.ExecuteAsync(
+                    ct => _packageResolver.ResolveAsync(request, ct),
                     cancellationToken);
                 resolved.Add(pkg);
 
-                if (packageResolver is MultiFeedPackageResolver multiFeedResolver &&
+                if (_packageResolver is MultiFeedPackageResolver multiFeedResolver &&
                     multiFeedResolver.TryGetDecision(request.Id, out var decision))
                 {
                     decisions.Add(decision with { CorrelationId = correlationId });
@@ -59,9 +59,9 @@ public sealed class PackageApplyExecutor(
                     NoEligibleFeedException => "resolve-no-eligible-feed",
                     _ => "resolve"
                 };
-                await failureRecorder.RecordAsync(request.Id, stage, ex.Message, correlationId, cancellationToken);
+                await _failureRecorder.RecordAsync(request.Id, stage, ex.Message, correlationId, cancellationToken);
 
-                if (packageResolver is MultiFeedPackageResolver multiFeedResolver &&
+                if (_packageResolver is MultiFeedPackageResolver multiFeedResolver &&
                     multiFeedResolver.TryGetDecision(request.Id, out var decision))
                 {
                     decisions.Add(decision with { CorrelationId = correlationId });
@@ -87,7 +87,7 @@ public sealed class PackageApplyExecutor(
 
         foreach (var resolved in resolutionResult.ResolvedPackages)
         {
-            var transaction = await transactionCoordinator.ExecuteAsync(
+            var transaction = await _transactionCoordinator.ExecuteAsync(
                 new(resolved.Id, resolved.Version, correlationId),
                 cancellationToken);
 
@@ -119,6 +119,6 @@ public sealed class PackageApplyExecutor(
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
 
-        await failureRecorder.RecordAsync(packageId, "load", message, correlationId, cancellationToken);
+        await _failureRecorder.RecordAsync(packageId, "load", message, correlationId, cancellationToken);
     }
 }

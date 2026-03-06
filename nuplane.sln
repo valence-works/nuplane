@@ -57,7 +57,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.Loading.Tests", "te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.Loading.Hosting", "src\Nuplane.Loading.Hosting\Nuplane.Loading.Hosting.csproj", "{7D4538D3-2304-43EC-97E1-24738EF6ACEA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.Admin.AspNetCore", "src\Nuplane.Admin.AspNetCore\Nuplane.Admin.AspNetCore.csproj", "{E81BB22E-BB36-4D94-9086-DF74A78DBDCD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.Admin.Api", "src\Nuplane.Admin.Api\Nuplane.Admin.Api.csproj", "{E81BB22E-BB36-4D94-9086-DF74A78DBDCD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.Sample.Abstractions", "samples\Nuplane.Sample.Abstractions\Nuplane.Sample.Abstractions.csproj", "{2310C33C-0F7A-420C-A66F-CBC715823A9A}"
 EndProject

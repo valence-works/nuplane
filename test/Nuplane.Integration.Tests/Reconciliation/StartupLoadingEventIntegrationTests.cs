@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Nuplane.Abstractions;
 using Nuplane.Loading;
-using Nuplane.Loading.Configuration;
+using Nuplane.Loading.Events;
 using Nuplane.Loading.Hosting;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;

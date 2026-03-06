@@ -2,12 +2,12 @@ namespace Nuplane.Runtime.Reconciliation.Middleware;
 
 internal sealed class ReconciliationPipeline
 {
-    private readonly List<IReconciliationMiddleware> middlewares = [];
+    private readonly List<IReconciliationMiddleware> _middlewares = [];
 
     public ReconciliationPipeline Use(IReconciliationMiddleware middleware)
     {
         ArgumentNullException.ThrowIfNull(middleware);
-        middlewares.Add(middleware);
+        _middlewares.Add(middleware);
         return this;
     }
 
@@ -19,9 +19,9 @@ internal sealed class ReconciliationPipeline
 
         Task Next()
         {
-            if (index < middlewares.Count)
+            if (index < _middlewares.Count)
             {
-                var middleware = middlewares[index++];
+                var middleware = _middlewares[index++];
                 return middleware.InvokeAsync(context, Next);
             }
 

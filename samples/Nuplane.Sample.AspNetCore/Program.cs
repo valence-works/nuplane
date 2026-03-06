@@ -69,10 +69,9 @@ builder.Services.AddNuplaneLoading(loading =>
 
 builder.Services.AddNuplaneLoadingHosting();
 
-// Register PluginDiscoveryObserver as both INuplaneObserver and IPackageLoadingObserver (single instance).
-builder.Services.AddSingleton<PluginDiscoveryObserver>();
-builder.Services.AddSingleton<INuplaneObserver>(sp => sp.GetRequiredService<PluginDiscoveryObserver>());
-builder.Services.AddSingleton<IPackageLoadingObserver>(sp => sp.GetRequiredService<PluginDiscoveryObserver>());
+// Register dedicated observers for reconciliation changes and package loading events.
+builder.Services.AddSingleton<INuplaneObserver, PackageChangeObserver>();
+builder.Services.AddSingleton<IPackageLoadingObserver, PluginDiscoveryObserver>();
 
 var app = builder.Build();
 

@@ -11,22 +11,22 @@ namespace Nuplane.Loading;
 /// </summary>
 public sealed class PackageLoader : IPackageLoader
 {
-    private readonly SharedAssemblyPolicyMatcher matcher;
-    private readonly ConcurrentDictionary<string, PackageAssemblyLoadContext> contexts = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, PackageLoadSession> sessions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SharedAssemblyPolicyMatcher _matcher;
+    private readonly ConcurrentDictionary<string, PackageAssemblyLoadContext> _contexts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, PackageLoadSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Initializes a new instance of <see cref="PackageLoader"/> with an optional shared assembly policy matcher.
     /// </summary>
     public PackageLoader(SharedAssemblyPolicyMatcher? matcher = null)
     {
-        this.matcher = matcher ?? new SharedAssemblyPolicyMatcher();
+        this._matcher = matcher ?? new SharedAssemblyPolicyMatcher();
     }
 
     /// <summary>
     /// Gets the active load sessions keyed by package-version key.
     /// </summary>
-    public IReadOnlyDictionary<string, PackageLoadSession> Sessions => sessions;
+    public IReadOnlyDictionary<string, PackageLoadSession> Sessions => _sessions;
 
     /// <inheritdoc />
     public Task<PackageLoadResult> EnsureLoadedAsync(
@@ -45,7 +45,7 @@ public sealed class PackageLoader : IPackageLoader
             cancellationToken.ThrowIfCancellationRequested();
 
             var key = BuildKey(package.Id, package.Version);
-            if (sessions.TryGetValue(key, out var existing) && existing.IsLoaded)
+            if (_sessions.TryGetValue(key, out var existing) && existing.IsLoaded)
             {
                 loaded.Add(existing);
                 continue;
@@ -54,11 +54,11 @@ public sealed class PackageLoader : IPackageLoader
             try
             {
                 var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath);
-                var context = new PackageAssemblyLoadContext(mainAssemblyPath, sharedPolicy, matcher);
+                var context = new PackageAssemblyLoadContext(mainAssemblyPath, sharedPolicy, _matcher);
                 var assemblyName = AssemblyName.GetAssemblyName(mainAssemblyPath);
                 context.LoadFromAssemblyName(assemblyName);
 
-                contexts[key] = context;
+                _contexts[key] = context;
 
                 var session = new PackageLoadSession(
                     package.Id,
@@ -69,13 +69,13 @@ public sealed class PackageLoader : IPackageLoader
                     IsLoaded: true,
                     LastError: null);
 
-                sessions[key] = session;
+                _sessions[key] = session;
                 loaded.Add(session);
             }
             catch (Exception ex)
             {
                 failed[package.Id] = ex.Message;
-                sessions[key] = new(
+                _sessions[key] = new(
                     package.Id,
                     package.Version,
                     package.InstallPath,
@@ -93,9 +93,9 @@ public sealed class PackageLoader : IPackageLoader
     public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
     {
         var key = BuildKey(packageId, version);
-        sessions.TryRemove(key, out _);
+        _sessions.TryRemove(key, out _);
 
-        if (contexts.TryRemove(key, out var removed) && removed is not null)
+        if (_contexts.TryRemove(key, out var removed) && removed is not null)
         {
             context = new(key, removed);
             return true;
@@ -109,7 +109,7 @@ public sealed class PackageLoader : IPackageLoader
     public bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context)
     {
         var key = BuildKey(packageId, version);
-        if (contexts.TryGetValue(key, out var existing) && existing is not null)
+        if (_contexts.TryGetValue(key, out var existing) && existing is not null)
         {
             context = new(key, existing);
             return true;

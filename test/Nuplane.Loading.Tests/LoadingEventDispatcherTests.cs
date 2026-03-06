@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nuplane.Loading;
+using Nuplane.Loading.Events;
 using Nuplane.Loading.Hosting;
 
 namespace Nuplane.Loading.Tests;

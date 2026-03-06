@@ -82,33 +82,3 @@ public sealed class ReconciliationRollbackCoordinator
             ReasonCode: reasonCode);
     }
 }
-
-/// <summary>
-/// Represents the per-package acquisition outcome used for rollback evaluation.
-/// </summary>
-/// <param name="PackageId">The package identifier.</param>
-/// <param name="Version">The package version.</param>
-/// <param name="Stage">The acquisition stage where the outcome was determined.</param>
-/// <param name="Status">The outcome status.</param>
-/// <param name="ReasonCode">The reason code for the outcome.</param>
-public sealed record AcquisitionOutcomeEntry(
-    string PackageId,
-    string Version,
-    AcquisitionStage Stage,
-    PackageOperationStatus Status,
-    string ReasonCode);
-
-/// <summary>
-/// Represents the result of a rollback evaluation across all packages in a reconciliation cycle.
-/// </summary>
-/// <param name="RollbackPerformed">Whether any rollback was required.</param>
-/// <param name="RolledBackPackages">Package IDs that were rolled back to LKG.</param>
-/// <param name="PreservedPackages">Package IDs that were preserved (skipped).</param>
-/// <param name="SucceededPackages">Package IDs that completed successfully.</param>
-/// <param name="ReasonCode">The overall reason code for the rollback evaluation.</param>
-public sealed record RollbackResult(
-    bool RollbackPerformed,
-    IReadOnlyList<string> RolledBackPackages,
-    IReadOnlyList<string> PreservedPackages,
-    IReadOnlyList<string> SucceededPackages,
-    string ReasonCode);

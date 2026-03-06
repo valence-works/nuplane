@@ -6,7 +6,7 @@ namespace Nuplane.Store.State;
 /// </summary>
 public sealed class PackageCleanupService(CleanupPolicyEvaluator evaluator) : IPackageCleanupService
 {
-    private readonly CleanupPolicyEvaluator evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
+    private readonly CleanupPolicyEvaluator _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
 
     /// <inheritdoc />
     public Task<IReadOnlyList<CleanupDecision>> ExecuteAutomaticAsync(
@@ -44,7 +44,7 @@ public sealed class PackageCleanupService(CleanupPolicyEvaluator evaluator) : IP
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var item = ordered[index];
-                var decision = evaluator.Evaluate(
+                var decision = _evaluator.Evaluate(
                     item.PackageId,
                     item.Version,
                     item.CapturedAt,

@@ -182,24 +182,24 @@ public sealed class DirectoryObservationContractTests
 
     private sealed class SpyReconciliationService : IReconciliationService
     {
-        private int triggerCount;
-        private readonly List<ReconciliationTrigger> triggers = [];
+        private int _triggerCount;
+        private readonly List<ReconciliationTrigger> _triggers = [];
 
-        public int TriggerCount => triggerCount;
-        public IReadOnlyList<ReconciliationTrigger> Triggers => triggers;
+        public int TriggerCount => _triggerCount;
+        public IReadOnlyList<ReconciliationTrigger> Triggers => _triggers;
 
         public Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken cancellationToken)
         {
-            Interlocked.Increment(ref triggerCount);
+            Interlocked.Increment(ref _triggerCount);
             return Task.FromResult(SkippedResult());
         }
 
         public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken)
         {
-            Interlocked.Increment(ref triggerCount);
-            lock (triggers)
+            Interlocked.Increment(ref _triggerCount);
+            lock (_triggers)
             {
-                triggers.Add(trigger);
+                _triggers.Add(trigger);
             }
             return Task.FromResult(SkippedResult());
         }

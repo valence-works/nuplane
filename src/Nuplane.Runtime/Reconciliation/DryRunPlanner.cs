@@ -9,7 +9,7 @@ namespace Nuplane.Runtime.Reconciliation;
 /// </summary>
 public sealed class DryRunPlanner(IDesiredActualDiffEngine diffEngine) : IDryRunPlanner
 {
-    private readonly IDesiredActualDiffEngine diffEngine = diffEngine ?? throw new ArgumentNullException(nameof(diffEngine));
+    private readonly IDesiredActualDiffEngine _diffEngine = diffEngine ?? throw new ArgumentNullException(nameof(diffEngine));
 
     /// <inheritdoc />
     public Task<DryRunPlan> BuildPlanAsync(
@@ -19,7 +19,7 @@ public sealed class DryRunPlanner(IDesiredActualDiffEngine diffEngine) : IDryRun
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var changeSet = diffEngine.Compute(desired, activeVersions, correlationId, DateTimeOffset.UtcNow);
+        var changeSet = _diffEngine.Compute(desired, activeVersions, correlationId, DateTimeOffset.UtcNow);
         return Task.FromResult(new DryRunPlan(changeSet, MutatedState: false));
     }
 }

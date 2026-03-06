@@ -8,11 +8,11 @@ namespace Nuplane.Runtime.Sources;
 /// </summary>
 public sealed class FeedRuleDesiredSource : IDesiredPackageSource
 {
-    private readonly string feedName;
-    private readonly IReadOnlyList<string> includeIdPrefixes;
-    private readonly int maxPackages;
-    private readonly IReadOnlyList<string> availablePackageIds;
-    private readonly FeedRuleResultSelector selector = new();
+    private readonly string _feedName;
+    private readonly IReadOnlyList<string> _includeIdPrefixes;
+    private readonly int _maxPackages;
+    private readonly IReadOnlyList<string> _availablePackageIds;
+    private readonly FeedRuleResultSelector _selector = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FeedRuleDesiredSource"/> class.
@@ -31,10 +31,10 @@ public sealed class FeedRuleDesiredSource : IDesiredPackageSource
         ArgumentNullException.ThrowIfNull(includeIdPrefixes);
         ArgumentNullException.ThrowIfNull(availablePackageIds);
 
-        this.feedName = feedName;
-        this.includeIdPrefixes = includeIdPrefixes;
-        this.maxPackages = maxPackages;
-        this.availablePackageIds = availablePackageIds;
+        this._feedName = feedName;
+        this._includeIdPrefixes = includeIdPrefixes;
+        this._maxPackages = maxPackages;
+        this._availablePackageIds = availablePackageIds;
     }
 
     /// <inheritdoc />
@@ -42,13 +42,13 @@ public sealed class FeedRuleDesiredSource : IDesiredPackageSource
     {
         ct.ThrowIfCancellationRequested();
 
-        var filtered = availablePackageIds
-            .Where(id => includeIdPrefixes.Any(prefix => id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+        var filtered = _availablePackageIds
+            .Where(id => _includeIdPrefixes.Any(prefix => id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
 
-        var selected = selector.Select(filtered, maxPackages);
+        var selected = _selector.Select(filtered, _maxPackages);
         var requests = selected
-            .Select(id => new PackageRequest(id, "[1.0.0,)", feedName, PackageUpdatePolicy.Range, $"feed-rule:{feedName}"))
+            .Select(id => new PackageRequest(id, "[1.0.0,)", _feedName, PackageUpdatePolicy.Range, $"feed-rule:{_feedName}"))
             .ToArray();
 
         return Task.FromResult<IReadOnlyList<PackageRequest>>(requests);

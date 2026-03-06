@@ -1,4 +1,3 @@
-using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -7,7 +6,6 @@ using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Sources.Directory;
 
 namespace Nuplane.Extensions;
@@ -119,128 +117,5 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
         }
 
         return services;
-    }
-}
-
-internal sealed class DirectorySourceReconciliationTriggerHostedService : BackgroundService
-{
-    private readonly DirectorySourceOptions options;
-    private readonly IReconciliationService reconciliationService;
-    private readonly ILogger<DirectorySourceReconciliationTriggerHostedService> logger;
-    private readonly WatcherDegradationTracker? watcherDegradationTracker;
-
-    private readonly Channel<bool> changes = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
-    {
-        FullMode = BoundedChannelFullMode.DropOldest
-    });
-
-    private FileSystemWatcher? watcher;
-
-    public DirectorySourceReconciliationTriggerHostedService(
-        DirectorySourceOptions options,
-        IReconciliationService reconciliationService,
-        ILogger<DirectorySourceReconciliationTriggerHostedService> logger,
-        WatcherDegradationTracker? watcherDegradationTracker = null)
-    {
-        this.options = options ?? throw new ArgumentNullException(nameof(options));
-        this.reconciliationService = reconciliationService ?? throw new ArgumentNullException(nameof(reconciliationService));
-        this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        this.watcherDegradationTracker = watcherDegradationTracker;
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        Directory.CreateDirectory(options.DirectoryPath);
-
-        try
-        {
-            watcher = new(options.DirectoryPath, "*.nupkg")
-            {
-                IncludeSubdirectories = false,
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.LastWrite
-            };
-
-            watcher.Created += OnChanged;
-            watcher.Changed += OnChanged;
-            watcher.Deleted += OnChanged;
-            watcher.Renamed += OnRenamed;
-            watcher.EnableRaisingEvents = true;
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(
-                ex,
-                "Directory watcher failed to start for feed '{FeedName}' at '{DirectoryPath}'. Falling back to scheduled reconciliation only.",
-                options.FeedName,
-                options.DirectoryPath);
-            watcherDegradationTracker?.MarkDegraded();
-            return;
-        }
-
-        logger.LogInformation(
-            "Directory watcher enabled for feed '{FeedName}' at '{DirectoryPath}' (debounce: {DebounceMs}ms, trigger type: {TriggerType}).",
-            options.FeedName,
-            options.DirectoryPath,
-            (int)options.DebounceWindow.TotalMilliseconds,
-            nameof(TriggerType.DirectoryChange));
-
-        try
-        {
-            while (await changes.Reader.WaitToReadAsync(stoppingToken))
-            {
-                while (changes.Reader.TryRead(out _))
-                {
-                }
-
-                await Task.Delay(options.DebounceWindow, stoppingToken);
-
-                if (changes.Reader.TryRead(out _))
-                {
-                    changes.Writer.TryWrite(true);
-                    continue;
-                }
-
-                try
-                {
-                    var trigger = new ReconciliationTrigger(TriggerType.DirectoryChange, Source: options.FeedName);
-                    var result = await reconciliationService.TriggerAsync(trigger, stoppingToken);
-                    logger.LogInformation(
-                        "Directory-triggered reconcile completed. Skipped={Skipped}, Degraded={IsDegraded}.",
-                        result.Skipped,
-                        result.IsDegraded);
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Directory-triggered reconcile failed.");
-                }
-            }
-        }
-        finally
-        {
-            if (watcher is not null)
-            {
-                watcher.EnableRaisingEvents = false;
-                watcher.Created -= OnChanged;
-                watcher.Changed -= OnChanged;
-                watcher.Deleted -= OnChanged;
-                watcher.Renamed -= OnRenamed;
-                watcher.Dispose();
-                watcher = null;
-            }
-        }
-    }
-
-    private void OnChanged(object? _, FileSystemEventArgs __)
-    {
-        changes.Writer.TryWrite(true);
-    }
-
-    private void OnRenamed(object? _, RenamedEventArgs __)
-    {
-        changes.Writer.TryWrite(true);
     }
 }

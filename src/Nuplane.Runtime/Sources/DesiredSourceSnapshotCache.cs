@@ -10,8 +10,8 @@ namespace Nuplane.Runtime.Sources;
 /// </summary>
 public sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
 {
-    private readonly ConcurrentDictionary<string, IReadOnlyList<PackageRequest>> snapshots = new(StringComparer.OrdinalIgnoreCase);
-    private readonly IStoreRegistry storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
+    private readonly ConcurrentDictionary<string, IReadOnlyList<PackageRequest>> _snapshots = new(StringComparer.OrdinalIgnoreCase);
+    private readonly IStoreRegistry _storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
 
     /// <summary>
     /// Saves a desired-state snapshot to both the in-memory cache and the store registry.
@@ -22,8 +22,8 @@ public sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
         ArgumentNullException.ThrowIfNull(requests);
 
         var captured = requests.ToArray();
-        snapshots[sourceName] = captured;
-        await storeRegistry.PersistSourceSnapshotAsync(
+        _snapshots[sourceName] = captured;
+        await _storeRegistry.PersistSourceSnapshotAsync(
             sourceName,
             new(Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow, captured),
             cancellationToken);
@@ -36,7 +36,7 @@ public sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceName);
 
-        if (snapshots.TryGetValue(sourceName, out var snapshot))
+        if (_snapshots.TryGetValue(sourceName, out var snapshot))
         {
             requests = snapshot;
             return true;
@@ -54,16 +54,16 @@ public sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceName);
 
-        if (snapshots.TryGetValue(sourceName, out var cached))
+        if (_snapshots.TryGetValue(sourceName, out var cached))
         {
             return cached;
         }
 
-        var state = await storeRegistry.GetStateAsync(cancellationToken);
+        var state = await _storeRegistry.GetStateAsync(cancellationToken);
         if (state.LastSuccessfulSourceSnapshots.TryGetValue(sourceName, out var snapshotRef) &&
             snapshotRef.Requests is { Count: > 0 } storedRequests)
         {
-            snapshots[sourceName] = storedRequests;
+            _snapshots[sourceName] = storedRequests;
             return storedRequests;
         }
 

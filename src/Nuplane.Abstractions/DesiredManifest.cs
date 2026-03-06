@@ -12,33 +12,3 @@ public sealed record DesiredManifest(
     string SchemaVersion,
     DateTimeOffset GeneratedAtUtc,
     IReadOnlyList<DesiredManifestEntry> Packages);
-
-/// <summary>
-/// Represents a single package entry within a <see cref="DesiredManifest"/>.
-/// </summary>
-/// <param name="Id">The case-insensitive package identifier.</param>
-/// <param name="Version">The exact semantic or package version (no ranges).</param>
-/// <param name="SourceHint">An optional hint indicating the preferred source for acquisition.</param>
-/// <param name="Sha512">An optional SHA-512 integrity hash for the package.</param>
-public sealed record DesiredManifestEntry(
-    string Id,
-    string Version,
-    string? SourceHint = null,
-    string? Sha512 = null);
-
-/// <summary>
-/// Represents the result of reading and parsing a desired manifest for a single reconciliation cycle.
-/// </summary>
-/// <param name="Status">The outcome status of the manifest read operation.</param>
-/// <param name="ReasonCode">The reason code describing the outcome.</param>
-/// <param name="SourceId">The identifier of the manifest source (e.g., file path).</param>
-/// <param name="CorrelationId">The correlation identifier for the current reconciliation cycle.</param>
-/// <param name="ObservedAtUtc">The UTC timestamp when the manifest was observed.</param>
-/// <param name="Manifest">The parsed manifest, if the read was successful; otherwise <see langword="null"/>.</param>
-public sealed record DesiredManifestReadResult(
-    ManifestReadStatus Status,
-    string ReasonCode,
-    string SourceId,
-    string CorrelationId,
-    DateTimeOffset ObservedAtUtc,
-    DesiredManifest? Manifest = null);

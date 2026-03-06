@@ -12,22 +12,22 @@ namespace Nuplane.Runtime.Tests.Reconciliation;
 /// </summary>
 public sealed class LocalDirectoryFeedContractTests : IDisposable
 {
-    private readonly string tempDir = Path.Combine(Path.GetTempPath(), $"nuplane-local-feed-test-{Guid.NewGuid():N}");
+    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"nuplane-local-feed-test-{Guid.NewGuid():N}");
 
     public void Dispose()
     {
-        if (Directory.Exists(tempDir))
+        if (Directory.Exists(_tempDir))
         {
-            Directory.Delete(tempDir, recursive: true);
+            Directory.Delete(_tempDir, recursive: true);
         }
     }
 
     [Fact]
     public async Task Resolve_WithOnlyLocalFeed_Succeeds()
     {
-        NupkgTestBuilder.Create("MyPlugin", "1.0.0").BuildTo(tempDir);
+        NupkgTestBuilder.Create("MyPlugin", "1.0.0").BuildTo(_tempDir);
 
-        var feedUri = new Uri("file:///" + tempDir.Replace('\\', '/').TrimStart('/'));
+        var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
         var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
         var opts = new FeedResolutionOptions();
         opts.Feeds.Add(localFeed);
@@ -45,9 +45,9 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
     [Fact]
     public async Task Resolve_WithLocalFeedOnly_NoExplicitFeedNameOnRequest_StillResolvesViaPriority()
     {
-        NupkgTestBuilder.Create("MyPlugin", "1.0.0").BuildTo(tempDir);
+        NupkgTestBuilder.Create("MyPlugin", "1.0.0").BuildTo(_tempDir);
 
-        var feedUri = new Uri("file:///" + tempDir.Replace('\\', '/').TrimStart('/'));
+        var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
         var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
         var opts = new FeedResolutionOptions();
         opts.Feeds.Add(localFeed);

@@ -1,43 +1,12 @@
-using Nuplane.Abstractions;
 using Nuplane.Loading;
+using Nuplane.Loading.Events;
 using Nuplane.Sample.Abstractions;
 
 namespace Nuplane.Sample.AspNetCore;
 
 internal sealed class PluginDiscoveryObserver(IPackageTypeScanner packageTypeScanner, ILogger<PluginDiscoveryObserver> logger)
-    : INuplaneObserver, IPackageLoadingObserver
+    : IPackageLoadingObserver
 {
-    public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct)
-    {
-        logger.LogInformation(
-            "Packages changing. Added={AddedCount}, Updated={UpdatedCount}, CorrelationId={CorrelationId}",
-            changeSet.Added.Count,
-            changeSet.Updated.Count,
-            changeSet.CorrelationId);
-
-        return Task.CompletedTask;
-    }
-
-    /// <summary>
-    /// Audit-log only — type scanning has moved to <see cref="OnPackagesLoadedAsync"/>.
-    /// </summary>
-    public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct)
-    {
-        logger.LogInformation(
-            "Packages changed. Added={AddedCount}, Updated={UpdatedCount}, Removed={RemovedCount}, CorrelationId={CorrelationId}",
-            changeSet.Added.Count,
-            changeSet.Updated.Count,
-            changeSet.Removed.Count,
-            changeSet.CorrelationId);
-
-        return Task.CompletedTask;
-    }
-
-    public Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken ct)
-    {
-        logger.LogWarning(exception, "Package operation failed for {PackageId}.", packageId);
-        return Task.CompletedTask;
-    }
 
     /// <summary>
     /// Called after packages are loaded into Assembly Load Contexts. Performs type scanning

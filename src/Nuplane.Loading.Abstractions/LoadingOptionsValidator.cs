@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Nuplane.Loading.Configuration;
+namespace Nuplane.Loading;
 
 /// <summary>
 /// Validates <see cref="LoadingOptions"/> configuration, checking deactivation timeout,

@@ -10,8 +10,8 @@ namespace Nuplane.Runtime.Reconciliation.FeedPolicy;
 /// </summary>
 public sealed class FeedTrustPolicyEvaluator : IFeedTrustPolicyEvaluator
 {
-    private readonly UntrustedOverridePolicy overridePolicy = new();
-    private readonly RestrictedFeedValidatorPipeline restrictedValidatorPipeline = new();
+    private readonly UntrustedOverridePolicy _overridePolicy = new();
+    private readonly RestrictedFeedValidatorPipeline _restrictedValidatorPipeline = new();
 
     /// <inheritdoc />
     public FeedTrustPolicyOutcome Evaluate(
@@ -31,7 +31,7 @@ public sealed class FeedTrustPolicyEvaluator : IFeedTrustPolicyEvaluator
 
         if (feed.TrustLevel == FeedTrustLevel.Restricted)
         {
-            var allowed = restrictedValidatorPipeline.Evaluate(request, feed, options, validatorPassed);
+            var allowed = _restrictedValidatorPipeline.Evaluate(request, feed, options, validatorPassed);
             return allowed
                 ? new(true, feed.TrustLevel, FeedOverrideScope.None, null, "allowed-restricted")
                 : new FeedTrustPolicyOutcome(false, feed.TrustLevel, FeedOverrideScope.None, null, "restricted-validator-failed");
@@ -42,7 +42,7 @@ public sealed class FeedTrustPolicyEvaluator : IFeedTrustPolicyEvaluator
             return new(false, feed.TrustLevel, FeedOverrideScope.None, null, "untrusted-disabled");
         }
 
-        var overrideEntry = overridePolicy.FindOverride(request, options);
+        var overrideEntry = _overridePolicy.FindOverride(request, options);
         if (overrideEntry is null)
         {
             return new(false, feed.TrustLevel, FeedOverrideScope.None, null, "untrusted-no-override");

@@ -17,22 +17,22 @@ namespace Nuplane.Integration.Tests.Reconciliation;
 /// </summary>
 public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
 {
-    private readonly string tempDir = Path.Combine(Path.GetTempPath(), $"nuplane-local-reg-{Guid.NewGuid():N}");
+    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"nuplane-local-reg-{Guid.NewGuid():N}");
 
     public void Dispose()
     {
-        if (Directory.Exists(tempDir))
+        if (Directory.Exists(_tempDir))
         {
-            Directory.Delete(tempDir, recursive: true);
+            Directory.Delete(_tempDir, recursive: true);
         }
     }
 
     [Fact]
     public async Task LocalDirectoryOnly_ReconciliationCompletes_WithoutException()
     {
-        BuildNupkgTo(tempDir, "MyPlugin", "1.0.0");
+        BuildNupkgTo(_tempDir, "MyPlugin", "1.0.0");
 
-        var feedUri = new Uri("file:///" + tempDir.Replace('\\', '/').TrimStart('/'));
+        var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
         var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
         var feedOpts = new FeedResolutionOptions();
         feedOpts.Feeds.Add(localFeed);
@@ -65,9 +65,9 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
     [Fact]
     public async Task LocalDirectoryOnly_EmptyDirectory_CompletesSuccessfully()
     {
-        Directory.CreateDirectory(tempDir);
+        Directory.CreateDirectory(_tempDir);
 
-        var feedUri = new Uri("file:///" + tempDir.Replace('\\', '/').TrimStart('/'));
+        var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
         var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
         var feedOpts = new FeedResolutionOptions();
         feedOpts.Feeds.Add(localFeed);
@@ -97,9 +97,9 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
     [Fact]
     public async Task LocalDirectoryOnly_MultipleTriggers_DoNotPathologicallyFail()
     {
-        BuildNupkgTo(tempDir, "PluginA", "1.0.0");
+        BuildNupkgTo(_tempDir, "PluginA", "1.0.0");
 
-        var feedUri = new Uri("file:///" + tempDir.Replace('\\', '/').TrimStart('/'));
+        var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
         var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
         var feedOpts = new FeedResolutionOptions();
         feedOpts.Feeds.Add(localFeed);

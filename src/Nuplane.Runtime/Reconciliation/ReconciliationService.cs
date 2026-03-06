@@ -1,7 +1,6 @@
 using Nuplane.Abstractions;
 #pragma warning disable IDE0005 // Remove unnecessary usings — Loading usings kept for UnloadMiddleware
 using Nuplane.Loading;
-using Nuplane.Loading.Configuration;
 #pragma warning restore IDE0005
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
@@ -27,10 +26,10 @@ public sealed class ReconciliationService : IReconciliationService
 {
     private static readonly PackageChangeSet EmptyChangeSet = new([], [], [], string.Empty, DateTimeOffset.UtcNow);
 
-    private readonly ReconciliationOptions reconciliationOptions;
-    private readonly ReconciliationPipeline pipeline;
-    private readonly SemaphoreSlim cycleLock = new(1, 1);
-    private int inFlight;
+    private readonly ReconciliationOptions _reconciliationOptions;
+    private readonly ReconciliationPipeline _pipeline;
+    private readonly SemaphoreSlim _cycleLock = new(1, 1);
+    private int _inFlight;
 
     /// <summary>Initializes a new instance of the reconciliation service.</summary>
     /// <summary>Initializes a new instance of the reconciliation service.</summary>
@@ -89,7 +88,7 @@ public ReconciliationService(
         IDesiredStateAggregator desiredStateAgg = desiredStateAggregator ?? throw new ArgumentNullException(nameof(desiredStateAggregator));
         IDesiredActualDiffEngine diffEngine = desiredActualDiffEngine ?? throw new ArgumentNullException(nameof(desiredActualDiffEngine));
         IStoreRegistry storeReg = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
-        this.reconciliationOptions = reconciliationOptions ?? throw new ArgumentNullException(nameof(reconciliationOptions));
+        this._reconciliationOptions = reconciliationOptions ?? throw new ArgumentNullException(nameof(reconciliationOptions));
         IObserverEventDispatcher eventDispatcher = observerEventDispatcher ?? throw new ArgumentNullException(nameof(observerEventDispatcher));
         IReconciliationHealthEvaluator healthEval = healthEvaluator ?? throw new ArgumentNullException(nameof(healthEvaluator));
         var loggerInstance = logger ?? new ReconciliationLogger();
@@ -111,7 +110,7 @@ public ReconciliationService(
         var pointerSwitcher = new AtomicPointerSwitcher();
         var transactionCoordinator = new PackageTransactionCoordinator(pointerSwitcher, failureRecorder);
 
-        IReconciliationRetryPolicy retryPolicy = new ReconciliationRetryPolicy(this.reconciliationOptions);
+        IReconciliationRetryPolicy retryPolicy = new ReconciliationRetryPolicy(this._reconciliationOptions);
         var snapshotCache = new DesiredSourceSnapshotCache(storeReg);
         IAllowlistGate allowlistGate = new AllowlistGate();
         IPackageApplyExecutor applyExecutor = new PackageApplyExecutor(
@@ -122,26 +121,26 @@ public ReconciliationService(
 
         var pendingUnloads = new Dictionary<string, PackageLoadContextHandle>(StringComparer.OrdinalIgnoreCase);
 
-        pipeline = new();
-        pipeline.Use(new DesiredStateReadMiddleware(
+        _pipeline = new();
+        _pipeline.Use(new DesiredStateReadMiddleware(
             sourcesList, sourceTrustOptions, desiredStateAgg, allowlistGate,
             retryPolicy, snapshotCache, failureRec, loggerInstance, metricsInstance));
-        pipeline.Use(new PackageResolutionMiddleware(applyExecutor, loggerInstance));
-        pipeline.Use(new TrustAndLockGateMiddleware(
+        _pipeline.Use(new PackageResolutionMiddleware(applyExecutor, loggerInstance));
+        _pipeline.Use(new TrustAndLockGateMiddleware(
             feedResOpts, feedTrustOpts, feedTrustPolicyEvaluator,
             lockFileCoordinator, retryPolicy, failureRec, loggerInstance));
-        pipeline.Use(new DiffAndChangeEventMiddleware(
+        _pipeline.Use(new DiffAndChangeEventMiddleware(
             diffEngine, dryRunPlanner, retryPolicy,
             storeReg, eventDispatcher, metricsInstance));
-        pipeline.Use(new TransactionExecutionMiddleware(
+        _pipeline.Use(new TransactionExecutionMiddleware(
             applyExecutor, diffEngine, eventDispatcher));
-        pipeline.Use(new UnloadMiddleware(
+        _pipeline.Use(new UnloadMiddleware(
             loadOpts, loader, unloadCoordinator,
             pendingUnloads, loggerInstance, metricsInstance));
-        pipeline.Use(new CleanupMiddleware(
+        _pipeline.Use(new CleanupMiddleware(
             diffEngine, storeReg, packageCleanupService,
             cleanupOpts, metricsInstance));
-        pipeline.Use(new HealthAndMetricsMiddleware(
+        _pipeline.Use(new HealthAndMetricsMiddleware(
             healthEval, eventDispatcher, loggerInstance, metricsInstance,
             feedResOpts, watcherDegradationTracker));
     }
@@ -161,12 +160,12 @@ public ReconciliationService(
     {
         ArgumentNullException.ThrowIfNull(trigger);
 
-        if (reconciliationOptions.EnableSingleFlight && Interlocked.CompareExchange(ref inFlight, 1, 0) != 0)
+        if (_reconciliationOptions.EnableSingleFlight && Interlocked.CompareExchange(ref _inFlight, 1, 0) != 0)
         {
             return new(true, EmptyChangeSet, [], IsDegraded: false);
         }
 
-        await cycleLock.WaitAsync(cancellationToken);
+        await _cycleLock.WaitAsync(cancellationToken);
         try
         {
             var cycleStartedAt = DateTimeOffset.UtcNow;
@@ -184,14 +183,14 @@ public ReconciliationService(
                 Trigger = trigger
             };
 
-            await pipeline.ExecuteAsync(context);
+            await _pipeline.ExecuteAsync(context);
 
             return context.Result!;
         }
         finally
         {
-            cycleLock.Release();
-            Interlocked.Exchange(ref inFlight, 0);
+            _cycleLock.Release();
+            Interlocked.Exchange(ref _inFlight, 0);
         }
     }
 }

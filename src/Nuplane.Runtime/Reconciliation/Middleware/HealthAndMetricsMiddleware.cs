@@ -15,23 +15,23 @@ internal sealed class HealthAndMetricsMiddleware(
     FeedResolutionOptions feedResolutionOptions,
     WatcherDegradationTracker? watcherDegradationTracker = null) : IReconciliationMiddleware
 {
-    private bool previouslyIdle;
+    private bool _previouslyIdle;
 
     public async Task InvokeAsync(ReconciliationCycleContext context, Func<Task> next)
     {
         var isIdle = feedResolutionOptions.Feeds.Count == 0;
 
-        if (isIdle && !previouslyIdle)
+        if (isIdle && !_previouslyIdle)
         {
             logger.LogIdleModeEntered();
             metrics.SetIdleMode(true);
-            previouslyIdle = true;
+            _previouslyIdle = true;
         }
-        else if (!isIdle && previouslyIdle)
+        else if (!isIdle && _previouslyIdle)
         {
             logger.LogIdleModeExited();
             metrics.SetIdleMode(false);
-            previouslyIdle = false;
+            _previouslyIdle = false;
         }
 
         // Record trigger attribution if available

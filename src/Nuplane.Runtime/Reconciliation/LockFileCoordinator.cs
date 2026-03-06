@@ -11,25 +11,25 @@ namespace Nuplane.Runtime.Reconciliation;
 /// </summary>
 public sealed class LockFileCoordinator(LockFileStore store, LockFileOptions options) : ILockFileCoordinator
 {
-    private readonly LockFileStore store = store ?? throw new ArgumentNullException(nameof(store));
-    private readonly LockFileOptions options = options ?? throw new ArgumentNullException(nameof(options));
+    private readonly LockFileStore _store = store ?? throw new ArgumentNullException(nameof(store));
+    private readonly LockFileOptions _options = options ?? throw new ArgumentNullException(nameof(options));
 
     /// <inheritdoc />
     public async Task<LockFileEvaluationResult> EvaluateAsync(ResolvedPackage resolved, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(resolved);
 
-        if (options.Mode == LockFileMode.Generate)
+        if (_options.Mode == LockFileMode.Generate)
         {
             return new(true, "generate", resolved, null);
         }
 
-        var lockFile = await store.ReadAsync(cancellationToken);
+        var lockFile = await _store.ReadAsync(cancellationToken);
         var entry = lockFile?.Packages.FirstOrDefault(x => string.Equals(x.Id, resolved.Id, StringComparison.OrdinalIgnoreCase));
 
         if (entry is null)
         {
-            if (options.Mode == LockFileMode.Strict && options.RequireEntryInStrictMode)
+            if (_options.Mode == LockFileMode.Strict && _options.RequireEntryInStrictMode)
             {
                 return new(false, "strict-missing-entry", null, null);
             }
@@ -37,7 +37,7 @@ public sealed class LockFileCoordinator(LockFileStore store, LockFileOptions opt
             return new(true, "enforce-no-entry", resolved, null);
         }
 
-        if (options.Mode is LockFileMode.Enforce or LockFileMode.Strict)
+        if (_options.Mode is LockFileMode.Enforce or LockFileMode.Strict)
         {
             var effective = new ResolvedPackage(
                 resolved.Id,

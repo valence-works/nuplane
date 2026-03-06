@@ -15,10 +15,10 @@ namespace Nuplane.Runtime.Reconciliation;
 /// </summary>
 public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, FeedResolutionPolicy policy) : IPackageResolver
 {
-    private readonly FeedResolutionOptions options = options ?? throw new ArgumentNullException(nameof(options));
-    private readonly FeedResolutionPolicy policy = policy ?? throw new ArgumentNullException(nameof(policy));
-    private readonly ConcurrentDictionary<string, FeedResolutionDecision> decisions = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, int> attempts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly FeedResolutionOptions _options = options ?? throw new ArgumentNullException(nameof(options));
+    private readonly FeedResolutionPolicy _policy = policy ?? throw new ArgumentNullException(nameof(policy));
+    private readonly ConcurrentDictionary<string, FeedResolutionDecision> _decisions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, int> _attempts = new(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc />
     public Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)
@@ -26,19 +26,19 @@ public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, Feed
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        attempts.AddOrUpdate(request.Id, 1, (_, current) => current + 1);
-        var candidates = policy.OrderCandidates(request);
+        _attempts.AddOrUpdate(request.Id, 1, (_, current) => current + 1);
+        var candidates = _policy.OrderCandidates(request);
         var candidateNames = candidates.Select(x => x.Name).ToArray();
 
         foreach (var candidate in candidates)
         {
-            var unavailable = options.UnavailableFeeds.Contains(candidate.Name);
+            var unavailable = _options.UnavailableFeeds.Contains(candidate.Name);
             if (unavailable)
             {
-                var shouldStop = options.PolicyMode == FeedResolutionPolicyMode.Strict || options.StopOnFirstSuccessfulFeed;
+                var shouldStop = _options.PolicyMode == FeedResolutionPolicyMode.Strict || _options.StopOnFirstSuccessfulFeed;
                 if (shouldStop)
                 {
-                    decisions[request.Id] = FeedResolutionDecision.Failed(
+                    _decisions[request.Id] = FeedResolutionDecision.Failed(
                         request,
                         candidateNames,
                         string.Empty,
@@ -62,7 +62,7 @@ public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, Feed
                 DateTimeOffset.UtcNow,
                 request.SourceName);
 
-            decisions[request.Id] = FeedResolutionDecision.Resolved(
+            _decisions[request.Id] = FeedResolutionDecision.Resolved(
                 request,
                 candidateNames,
                 resolved,
@@ -72,7 +72,7 @@ public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, Feed
             return Task.FromResult(resolved);
         }
 
-        decisions[request.Id] = FeedResolutionDecision.Failed(
+        _decisions[request.Id] = FeedResolutionDecision.Failed(
             request,
             candidateNames,
             correlationId: string.Empty,
@@ -130,13 +130,13 @@ public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, Feed
     /// <param name="decision">The resolution decision, if found.</param>
     /// <returns><see langword="true"/> if a decision was found; otherwise <see langword="false"/>.</returns>
     public bool TryGetDecision(string packageId, out FeedResolutionDecision decision) =>
-        decisions.TryGetValue(packageId, out decision!);
+        _decisions.TryGetValue(packageId, out decision!);
 
     /// <summary>
     /// Gets the number of resolution attempts for the specified package.
     /// </summary>
     /// <param name="packageId">The package identifier.</param>
     /// <returns>The number of attempts, or 0 if no attempts have been made.</returns>
-    public int GetAttempts(string packageId) => attempts.TryGetValue(packageId, out var count) ? count : 0;
+    public int GetAttempts(string packageId) => _attempts.GetValueOrDefault(packageId, 0);
 
 }

@@ -9,13 +9,13 @@ namespace Nuplane.Runtime.Events;
 /// </summary>
 public sealed class ObserverEventDispatcher(IEnumerable<INuplaneObserver> observers, IReconciliationLogger? logger = null) : IObserverEventDispatcher
 {
-    private readonly IReadOnlyList<INuplaneObserver> observers = observers?.ToArray() ?? throw new ArgumentNullException(nameof(observers));
-    private readonly IReconciliationLogger logger = logger ?? new ReconciliationLogger();
+    private readonly IReadOnlyList<INuplaneObserver> _observers = observers?.ToArray() ?? throw new ArgumentNullException(nameof(observers));
+    private readonly IReconciliationLogger _logger = logger ?? new ReconciliationLogger();
 
     /// <inheritdoc />
     public async Task PublishChangingAsync(PackageChangeSet changeSet, CancellationToken cancellationToken)
     {
-        foreach (var observer in observers)
+        foreach (var observer in _observers)
         {
             try
             {
@@ -23,7 +23,7 @@ public sealed class ObserverEventDispatcher(IEnumerable<INuplaneObserver> observ
             }
             catch (Exception ex)
             {
-                logger.LogObserverError(changeSet.CorrelationId, "OnPackagesChangingAsync", ex.Message);
+                _logger.LogObserverError(changeSet.CorrelationId, "OnPackagesChangingAsync", ex.Message);
             }
         }
     }
@@ -31,7 +31,7 @@ public sealed class ObserverEventDispatcher(IEnumerable<INuplaneObserver> observ
     /// <inheritdoc />
     public async Task PublishChangedAsync(PackageChangeSet changeSet, CancellationToken cancellationToken)
     {
-        foreach (var observer in observers)
+        foreach (var observer in _observers)
         {
             try
             {
@@ -39,7 +39,7 @@ public sealed class ObserverEventDispatcher(IEnumerable<INuplaneObserver> observ
             }
             catch (Exception ex)
             {
-                logger.LogObserverError(changeSet.CorrelationId, "OnPackagesChangedAsync", ex.Message);
+                _logger.LogObserverError(changeSet.CorrelationId, "OnPackagesChangedAsync", ex.Message);
             }
         }
     }
@@ -51,7 +51,7 @@ public sealed class ObserverEventDispatcher(IEnumerable<INuplaneObserver> observ
         string correlationId,
         CancellationToken cancellationToken)
     {
-        foreach (var observer in observers)
+        foreach (var observer in _observers)
         {
             try
             {
@@ -59,7 +59,7 @@ public sealed class ObserverEventDispatcher(IEnumerable<INuplaneObserver> observ
             }
             catch (Exception ex)
             {
-                logger.LogObserverError(correlationId, "OnPackageFailedAsync", ex.Message);
+                _logger.LogObserverError(correlationId, "OnPackageFailedAsync", ex.Message);
             }
         }
     }

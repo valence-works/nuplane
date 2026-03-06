@@ -21,20 +21,20 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
         "^(?<id>.+)\\.(?<version>\\d+\\.\\d+\\.\\d+(?:[-+][A-Za-z0-9\\.-]+)?)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    private readonly string sourceName = string.IsNullOrWhiteSpace(sourceName) ? throw new ArgumentException("Source name is required.", nameof(sourceName)) : sourceName;
-    private readonly string directoryPath = string.IsNullOrWhiteSpace(directoryPath) ? throw new ArgumentException("Directory path is required.", nameof(directoryPath)) : directoryPath;
-    private readonly string? feedName = string.IsNullOrWhiteSpace(feedName) ? null : feedName;
-    private readonly HashSet<string> allowlistedPackageIds = allowlistedPackageIds is null
+    private readonly string _sourceName = string.IsNullOrWhiteSpace(sourceName) ? throw new ArgumentException("Source name is required.", nameof(sourceName)) : sourceName;
+    private readonly string _directoryPath = string.IsNullOrWhiteSpace(directoryPath) ? throw new ArgumentException("Directory path is required.", nameof(directoryPath)) : directoryPath;
+    private readonly string? _feedName = string.IsNullOrWhiteSpace(feedName) ? null : feedName;
+    private readonly HashSet<string> _allowlistedPackageIds = allowlistedPackageIds is null
         ? new(StringComparer.OrdinalIgnoreCase)
         : new HashSet<string>(allowlistedPackageIds, StringComparer.OrdinalIgnoreCase);
-    private readonly ILogger<DirectoryNupkgDesiredSource> logger = logger ?? NullLogger<DirectoryNupkgDesiredSource>.Instance;
+    private readonly ILogger<DirectoryNupkgDesiredSource> _logger = logger ?? NullLogger<DirectoryNupkgDesiredSource>.Instance;
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
 
-        if (!System.IO.Directory.Exists(directoryPath))
+        if (!System.IO.Directory.Exists(_directoryPath))
         {
             return [];
         }
@@ -43,12 +43,12 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
         try
         {
             filePaths = System.IO.Directory
-                .EnumerateFiles(directoryPath, "*.nupkg", SearchOption.TopDirectoryOnly)
+                .EnumerateFiles(_directoryPath, "*.nupkg", SearchOption.TopDirectoryOnly)
                 .ToArray();
         }
         catch (IOException ex)
         {
-            logger.LogWarning(ex, "Failed to enumerate .nupkg files in '{DirectoryPath}'. Returning empty desired state.", directoryPath);
+            _logger.LogWarning(ex, "Failed to enumerate .nupkg files in '{DirectoryPath}'. Returning empty desired state.", _directoryPath);
             return Array.Empty<PackageRequest>();
         }
 
@@ -62,7 +62,7 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
                 var isStable = await stabilityProbe.IsStableAsync(filePath, ct);
                 if (!isStable)
                 {
-                    logger.LogDebug(
+                    _logger.LogDebug(
                         "Skipping unstable file '{FilePath}' — it may still be in the process of being written.",
                         filePath);
                     continue;
@@ -100,12 +100,12 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
         }
 
         var packageId = match.Groups["id"].Value;
-        if (allowlistedPackageIds.Count > 0 && !allowlistedPackageIds.Contains(packageId))
+        if (_allowlistedPackageIds.Count > 0 && !_allowlistedPackageIds.Contains(packageId))
         {
             return null;
         }
 
         var version = match.Groups["version"].Value;
-        return new(packageId, version, feedName, PackageUpdatePolicy.Exact, sourceName);
+        return new(packageId, version, _feedName, PackageUpdatePolicy.Exact, _sourceName);
     }
 }

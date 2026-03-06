@@ -1,4 +1,4 @@
-namespace Nuplane.Loading;
+namespace Nuplane.Loading.Events;
 
 /// <summary>
 /// Published after a batch of packages has been successfully loaded into

@@ -8,7 +8,7 @@ namespace Nuplane.Store.Activation;
 /// </summary>
 public sealed class AtomicPointerSwitcher
 {
-    private readonly ConcurrentDictionary<string, string> currentByPackage = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _currentByPackage = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Atomically switches the active version pointer for a package.
@@ -22,7 +22,7 @@ public sealed class AtomicPointerSwitcher
         ArgumentException.ThrowIfNullOrWhiteSpace(version);
         cancellationToken.ThrowIfCancellationRequested();
 
-        currentByPackage[packageId] = version;
+        _currentByPackage[packageId] = version;
         return Task.CompletedTask;
     }
 
@@ -34,6 +34,6 @@ public sealed class AtomicPointerSwitcher
     public string? GetCurrentVersion(string packageId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
-        return currentByPackage.TryGetValue(packageId, out var version) ? version : null;
+        return _currentByPackage.GetValueOrDefault(packageId);
     }
 }

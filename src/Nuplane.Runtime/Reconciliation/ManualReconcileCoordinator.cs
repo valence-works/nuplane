@@ -4,37 +4,6 @@ using Nuplane.Runtime.Reconciliation.Models;
 namespace Nuplane.Runtime.Reconciliation;
 
 /// <summary>
-/// Outcome code for a manual reconcile trigger operation.
-/// </summary>
-public enum ManualReconcileOutcomeCode
-{
-    /// <summary>The reconciliation was accepted and completed.</summary>
-    Completed,
-
-    /// <summary>The reconciliation was accepted but is still in progress.</summary>
-    Accepted,
-
-    /// <summary>The reconciliation was rejected (e.g. single-flight already running).</summary>
-    Rejected,
-
-    /// <summary>The reconciliation service is unavailable.</summary>
-    Unavailable
-}
-
-/// <summary>
-/// Represents the result of a manual reconcile trigger operation.
-/// </summary>
-/// <param name="OutcomeCode">The outcome code of the trigger operation.</param>
-/// <param name="CorrelationId">The correlation identifier for the operation.</param>
-/// <param name="RunResult">The reconciliation run result, if completed.</param>
-/// <param name="ReasonCode">The reason code explaining the outcome, if applicable.</param>
-public sealed record ManualReconcileOutcome(
-    ManualReconcileOutcomeCode OutcomeCode,
-    string CorrelationId,
-    ReconciliationRunResult? RunResult,
-    string? ReasonCode);
-
-/// <summary>
 /// Coordinates manual reconciliation trigger requests, delegating to <see cref="IReconciliationService"/>
 /// and mapping outcomes to explicit <see cref="ManualReconcileOutcomeCode"/> values with correlation context.
 /// </summary>

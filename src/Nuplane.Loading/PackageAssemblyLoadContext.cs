@@ -10,9 +10,9 @@ namespace Nuplane.Loading;
 /// </summary>
 public sealed class PackageAssemblyLoadContext : AssemblyLoadContext
 {
-    private readonly AssemblyDependencyResolver dependencyResolver;
-    private readonly IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy;
-    private readonly SharedAssemblyPolicyMatcher matcher;
+    private readonly AssemblyDependencyResolver _dependencyResolver;
+    private readonly IReadOnlyList<SharedAssemblyPolicyEntry> _sharedPolicy;
+    private readonly SharedAssemblyPolicyMatcher _matcher;
 
     /// <summary>
     /// Initializes a new instance of <see cref="PackageAssemblyLoadContext"/> for the specified package assembly.
@@ -28,15 +28,15 @@ public sealed class PackageAssemblyLoadContext : AssemblyLoadContext
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packageMainAssemblyPath);
 
-        dependencyResolver = new(packageMainAssemblyPath);
-        this.sharedPolicy = sharedPolicy ?? throw new ArgumentNullException(nameof(sharedPolicy));
-        this.matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
+        _dependencyResolver = new(packageMainAssemblyPath);
+        this._sharedPolicy = sharedPolicy ?? throw new ArgumentNullException(nameof(sharedPolicy));
+        this._matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
     }
 
     /// <inheritdoc />
     protected override Assembly? Load(AssemblyName assemblyName)
     {
-        if (matcher.IsMatch(assemblyName, sharedPolicy))
+        if (_matcher.IsMatch(assemblyName, _sharedPolicy))
         {
             try
             {
@@ -48,7 +48,7 @@ public sealed class PackageAssemblyLoadContext : AssemblyLoadContext
             }
         }
 
-        var path = dependencyResolver.ResolveAssemblyToPath(assemblyName);
+        var path = _dependencyResolver.ResolveAssemblyToPath(assemblyName);
         return string.IsNullOrWhiteSpace(path) ? null : LoadFromAssemblyPath(path);
     }
 }

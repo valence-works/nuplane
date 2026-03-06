@@ -9,19 +9,19 @@ namespace Nuplane.Store.State;
 /// </summary>
 public sealed class StoreRegistry : IStoreRegistry
 {
-    private readonly SemaphoreSlim gate = new(1, 1);
-    private readonly IStoreStateSerializer serializer;
-    private readonly string? stateFilePath;
-    private StoreStateRecord currentState = StoreStateRecord.Empty();
-    private bool loaded;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly IStoreStateSerializer _serializer;
+    private readonly string? _stateFilePath;
+    private StoreStateRecord _currentState = StoreStateRecord.Empty();
+    private bool _loaded;
 
     /// <summary>
     /// Initializes a new instance of <see cref="StoreRegistry"/> with a serializer and optional state file path.
     /// </summary>
     public StoreRegistry(IStoreStateSerializer serializer, string? stateFilePath)
     {
-        this.serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-        this.stateFilePath = stateFilePath;
+        this._serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        this._stateFilePath = stateFilePath;
     }
 
     /// <summary>
@@ -29,44 +29,44 @@ public sealed class StoreRegistry : IStoreRegistry
     /// </summary>
     public StoreRegistry(IStoreStateSerializer serializer, StoreRegistryOptions options)
     {
-        this.serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        this._serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         ArgumentNullException.ThrowIfNull(options);
-        stateFilePath = options.StateFilePath;
+        _stateFilePath = options.StateFilePath;
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyDictionary<string, string>> GetActiveVersionsAsync(CancellationToken cancellationToken)
     {
-        await gate.WaitAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken);
         try
         {
             await EnsureLoadedUnderLockAsync(cancellationToken);
             return new ReadOnlyDictionary<string, string>(
-                new Dictionary<string, string>(currentState.ActiveVersionById, StringComparer.OrdinalIgnoreCase));
+                new Dictionary<string, string>(_currentState.ActiveVersionById, StringComparer.OrdinalIgnoreCase));
         }
         finally
         {
-            gate.Release();
+            _gate.Release();
         }
     }
 
     /// <inheritdoc />
     public async Task<StoreStateRecord> GetStateAsync(CancellationToken cancellationToken)
     {
-        await gate.WaitAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken);
         try
         {
             await EnsureLoadedUnderLockAsync(cancellationToken);
             return new(
-                new(currentState.ActiveVersionById, StringComparer.OrdinalIgnoreCase),
-                new(currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase),
-                new(currentState.LastFailureById, StringComparer.OrdinalIgnoreCase),
-                new(currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
-                currentState.UpdatedAt);
+                new(_currentState.ActiveVersionById, StringComparer.OrdinalIgnoreCase),
+                new(_currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase),
+                new(_currentState.LastFailureById, StringComparer.OrdinalIgnoreCase),
+                new(_currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
+                _currentState.UpdatedAt);
         }
         finally
         {
-            gate.Release();
+            _gate.Release();
         }
     }
 
@@ -81,35 +81,35 @@ public sealed class StoreRegistry : IStoreRegistry
         ArgumentNullException.ThrowIfNull(successfullyApplied);
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
-        await gate.WaitAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken);
         try
         {
             await EnsureLoadedUnderLockAsync(cancellationToken);
 
             var now = DateTimeOffset.UtcNow;
             var nextActive = new Dictionary<string, string>(activeVersions, StringComparer.OrdinalIgnoreCase);
-            var nextLkg = new Dictionary<string, string>(currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase);
+            var nextLkg = new Dictionary<string, string>(_currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase);
 
             foreach (var (id, version) in successfullyApplied)
             {
                 nextLkg[id] = version;
             }
 
-            currentState = currentState with
+            _currentState = _currentState with
             {
                 ActiveVersionById = nextActive,
                 LastKnownGoodById = nextLkg,
                 UpdatedAt = now
             };
 
-            if (!string.IsNullOrWhiteSpace(stateFilePath))
+            if (!string.IsNullOrWhiteSpace(_stateFilePath))
             {
-                await serializer.SaveAsync(stateFilePath, currentState, cancellationToken);
+                await _serializer.SaveAsync(_stateFilePath, _currentState, cancellationToken);
             }
         }
         finally
         {
-            gate.Release();
+            _gate.Release();
         }
     }
 
@@ -126,30 +126,30 @@ public sealed class StoreRegistry : IStoreRegistry
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
-        await gate.WaitAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken);
         try
         {
             await EnsureLoadedUnderLockAsync(cancellationToken);
 
-            var nextFailures = new Dictionary<string, FailureRecord>(currentState.LastFailureById, StringComparer.OrdinalIgnoreCase)
+            var nextFailures = new Dictionary<string, FailureRecord>(_currentState.LastFailureById, StringComparer.OrdinalIgnoreCase)
             {
                 [packageId] = new(packageId, stage, message, DateTimeOffset.UtcNow, correlationId)
             };
 
-            currentState = currentState with
+            _currentState = _currentState with
             {
                 LastFailureById = nextFailures,
                 UpdatedAt = DateTimeOffset.UtcNow
             };
 
-            if (!string.IsNullOrWhiteSpace(stateFilePath))
+            if (!string.IsNullOrWhiteSpace(_stateFilePath))
             {
-                await serializer.SaveAsync(stateFilePath, currentState, cancellationToken);
+                await _serializer.SaveAsync(_stateFilePath, _currentState, cancellationToken);
             }
         }
         finally
         {
-            gate.Release();
+            _gate.Release();
         }
     }
 
@@ -162,41 +162,41 @@ public sealed class StoreRegistry : IStoreRegistry
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceName);
         ArgumentNullException.ThrowIfNull(snapshot);
 
-        await gate.WaitAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken);
         try
         {
             await EnsureLoadedUnderLockAsync(cancellationToken);
 
-            var nextSnapshots = new Dictionary<string, SourceSnapshotRef>(currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase)
+            var nextSnapshots = new Dictionary<string, SourceSnapshotRef>(_currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase)
             {
                 [sourceName] = snapshot
             };
 
-            currentState = currentState with
+            _currentState = _currentState with
             {
                 LastSuccessfulSourceSnapshots = nextSnapshots,
                 UpdatedAt = DateTimeOffset.UtcNow
             };
 
-            if (!string.IsNullOrWhiteSpace(stateFilePath))
+            if (!string.IsNullOrWhiteSpace(_stateFilePath))
             {
-                await serializer.SaveAsync(stateFilePath, currentState, cancellationToken);
+                await _serializer.SaveAsync(_stateFilePath, _currentState, cancellationToken);
             }
         }
         finally
         {
-            gate.Release();
+            _gate.Release();
         }
     }
 
     private async Task EnsureLoadedUnderLockAsync(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(stateFilePath) || loaded)
+        if (string.IsNullOrWhiteSpace(_stateFilePath) || _loaded)
         {
             return;
         }
 
-        currentState = await serializer.LoadAsync(stateFilePath, cancellationToken);
-        loaded = true;
+        _currentState = await _serializer.LoadAsync(_stateFilePath, cancellationToken);
+        _loaded = true;
     }
 }

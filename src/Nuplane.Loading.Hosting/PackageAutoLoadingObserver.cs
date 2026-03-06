@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Nuplane.Abstractions;
-using Nuplane.Loading.Configuration;
+using Nuplane.Loading.Events;
 
 namespace Nuplane.Loading.Hosting;
 
@@ -9,28 +9,20 @@ namespace Nuplane.Loading.Hosting;
 /// calls <see cref="IPackageLoader.EnsureLoadedAsync"/> for added/updated packages,
 /// and dispatches <see cref="PackageLoadedEvent"/> to <see cref="ILoadingEventDispatcher"/>.
 /// </summary>
-internal sealed class PackageAutoLoadingObserver : INuplaneObserver
+internal sealed class PackageAutoLoadingObserver(
+    IPackageLoader loader,
+    ILoadingEventDispatcher dispatcher,
+    LoadingOptions loadingOptions,
+    ILogger<PackageAutoLoadingObserver> logger)
+    : INuplaneObserver
 {
-    private readonly IPackageLoader _loader;
-    private readonly ILoadingEventDispatcher _dispatcher;
-    private readonly LoadingOptions _loadingOptions;
-    private readonly ILogger<PackageAutoLoadingObserver> _logger;
-
-    public PackageAutoLoadingObserver(
-        IPackageLoader loader,
-        ILoadingEventDispatcher dispatcher,
-        LoadingOptions loadingOptions,
-        ILogger<PackageAutoLoadingObserver> logger)
-    {
-        _loader = loader ?? throw new ArgumentNullException(nameof(loader));
-        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
-        _loadingOptions = loadingOptions ?? throw new ArgumentNullException(nameof(loadingOptions));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
+    private readonly IPackageLoader _loader = loader ?? throw new ArgumentNullException(nameof(loader));
+    private readonly ILoadingEventDispatcher _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+    private readonly LoadingOptions _loadingOptions = loadingOptions ?? throw new ArgumentNullException(nameof(loadingOptions));
+    private readonly ILogger<PackageAutoLoadingObserver> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <inheritdoc />
-    public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct)
-        => Task.CompletedTask;
+    public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
 
     /// <inheritdoc />
     public async Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct)

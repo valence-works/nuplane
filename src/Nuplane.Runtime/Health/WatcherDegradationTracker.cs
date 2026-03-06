@@ -9,11 +9,11 @@ namespace Nuplane.Runtime.Health;
 /// </summary>
 public sealed class WatcherDegradationTracker
 {
-    private int degradedCount;
+    private int _degradedCount;
 
     /// <summary>Gets the current number of degraded watchers.</summary>
-    public int DegradedCount => Volatile.Read(ref degradedCount);
+    public int DegradedCount => Volatile.Read(ref _degradedCount);
 
     /// <summary>Marks one watcher as degraded (failed to start).</summary>
-    public void MarkDegraded() => Interlocked.Increment(ref degradedCount);
+    public void MarkDegraded() => Interlocked.Increment(ref _degradedCount);
 }

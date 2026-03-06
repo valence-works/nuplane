@@ -17,19 +17,19 @@ public sealed class LockFileStore(string path)
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    private readonly string path = path ?? throw new ArgumentNullException(nameof(path));
+    private readonly string _path = path ?? throw new ArgumentNullException(nameof(path));
 
     /// <summary>
     /// Reads the lock file from disk, returning <see langword="null"/> if the file does not exist.
     /// </summary>
     public async Task<PackageLockFile?> ReadAsync(CancellationToken cancellationToken)
     {
-        if (!File.Exists(path))
+        if (!File.Exists(_path))
         {
             return null;
         }
 
-        await using var stream = File.OpenRead(path);
+        await using var stream = File.OpenRead(_path);
         return await JsonSerializer.DeserializeAsync<PackageLockFile>(stream, JsonOptions, cancellationToken);
     }
 
@@ -40,13 +40,13 @@ public sealed class LockFileStore(string path)
     {
         ArgumentNullException.ThrowIfNull(lockFile);
 
-        var directory = Path.GetDirectoryName(path);
+        var directory = Path.GetDirectoryName(_path);
         if (!string.IsNullOrWhiteSpace(directory))
         {
             Directory.CreateDirectory(directory);
         }
 
-        await using var stream = File.Create(path);
+        await using var stream = File.Create(_path);
         await JsonSerializer.SerializeAsync(stream, lockFile, JsonOptions, cancellationToken);
     }
 }

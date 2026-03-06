@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nuplane.Loading.Events;
 
 namespace Nuplane.Loading.Hosting;
 
@@ -6,18 +7,12 @@ namespace Nuplane.Loading.Hosting;
 /// Fans out loading domain events to all registered <see cref="IPackageLoadingObserver"/>
 /// instances. Observer exceptions are caught and logged; they never interrupt the dispatch loop.
 /// </summary>
-internal sealed class LoadingEventDispatcher : ILoadingEventDispatcher
+internal sealed class LoadingEventDispatcher(
+    IEnumerable<IPackageLoadingObserver> observers,
+    ILogger<LoadingEventDispatcher> logger) : ILoadingEventDispatcher
 {
-    private readonly IReadOnlyList<IPackageLoadingObserver> _observers;
-    private readonly ILogger<LoadingEventDispatcher> _logger;
-
-    public LoadingEventDispatcher(
-        IEnumerable<IPackageLoadingObserver> observers,
-        ILogger<LoadingEventDispatcher> logger)
-    {
-        _observers = (observers ?? throw new ArgumentNullException(nameof(observers))).ToList();
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
+    private readonly IReadOnlyList<IPackageLoadingObserver> _observers = (observers ?? throw new ArgumentNullException(nameof(observers))).ToList();
+    private readonly ILogger<LoadingEventDispatcher> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <inheritdoc />
     public async Task PublishLoadedAsync(PackageLoadedEvent evt, CancellationToken cancellationToken)

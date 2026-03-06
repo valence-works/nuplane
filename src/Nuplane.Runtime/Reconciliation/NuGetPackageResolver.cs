@@ -4,13 +4,6 @@ using Nuplane.Runtime.Versioning;
 namespace Nuplane.Runtime.Reconciliation;
 
 /// <summary>
-/// Specialized package resolver contract for NuGet-based resolution.
-/// </summary>
-public interface INuGetPackageResolver : IPackageResolver
-{
-}
-
-/// <summary>
 /// Resolves package requests by extracting version information from NuGet version range strings
 /// and producing resolved package records with synthetic install paths.
 /// </summary>

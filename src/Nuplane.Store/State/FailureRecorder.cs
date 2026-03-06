@@ -5,7 +5,7 @@ namespace Nuplane.Store.State;
 /// </summary>
 public sealed class FailureRecorder(IStoreRegistry storeRegistry) : IFailureRecorder
 {
-    private readonly IStoreRegistry storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
+    private readonly IStoreRegistry _storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
 
     /// <inheritdoc />
     public Task RecordAsync(
@@ -20,6 +20,6 @@ public sealed class FailureRecorder(IStoreRegistry storeRegistry) : IFailureReco
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
-        return storeRegistry.PersistFailureAsync(packageId, stage, message, correlationId, cancellationToken);
+        return _storeRegistry.PersistFailureAsync(packageId, stage, message, correlationId, cancellationToken);
     }
 }
