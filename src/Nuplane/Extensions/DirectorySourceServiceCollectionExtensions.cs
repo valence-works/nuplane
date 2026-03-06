@@ -16,7 +16,7 @@ namespace Nuplane.Extensions;
 /// <summary>
 /// Provides extension methods for registering directory-backed desired-state inputs.
 /// </summary>
-public static class NuplaneDirectorySourceServiceCollectionExtensions
+public static class DirectorySourceServiceCollectionExtensions
 {
     /// <summary>
     /// Registers a directory-based desired-state source as a local directory feed and,

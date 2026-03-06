@@ -7,6 +7,10 @@ using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.DirectorySource.Hosting;
 
+/// <summary>
+/// A hosted service that triggers the reconciliation process for a directory source.
+/// This service monitors changes in the specified directory and triggers reconciliation based on configuration options.
+/// </summary>
 internal sealed class DirectorySourceReconciliationTriggerHostedService(
     DirectorySourceOptions options,
     IReconciliationService reconciliationService,

@@ -137,7 +137,7 @@
 - [X] T050 [P] [US4] Implement operational snapshot read model in src/Nuplane.Runtime/Operational/OperationalSnapshot.cs
 - [X] T051 [P] [US4] Implement operational snapshot projector in src/Nuplane.Runtime/Operational/OperationalSnapshotProjector.cs
 - [X] T052 [P] [US4] Implement manual reconcile coordinator and outcome mapping in src/Nuplane.Runtime/Reconciliation/ManualReconcileCoordinator.cs
-- [X] T053 [US4] Implement in-process admin operational surface contract in src/Nuplane.Hosting/INuplaneOperationalSurface.cs
+- [X] T053 [US4] Implement in-process admin operational surface contract in src/Nuplane/Contracts/INuplaneAdminOperations.cs
 - [X] T054 [US4] Wire optional admin operational services in src/Nuplane.Hosting/NuplaneServiceCollectionExtensions.cs
 - [X] T055 [US4] Implement optional ASP.NET Core admin endpoints in src/Nuplane.Admin.AspNetCore/
 - [X] T056 [US4] Emit admin read/trigger observability and failure events in src/Nuplane.Runtime/Observability/ReconciliationLogger.cs

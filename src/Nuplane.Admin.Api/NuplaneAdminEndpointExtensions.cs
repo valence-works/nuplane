@@ -29,19 +29,19 @@ public static class NuplaneAdminEndpointExtensions
         ArgumentNullException.ThrowIfNull(endpoints);
 
         endpoints.MapGet($"{prefix}/snapshot", async (
-            INuplaneOperationalSurface surface,
+            INuplaneAdminOperations operations,
             CancellationToken cancellationToken) =>
         {
-            var snapshot = await surface.GetSnapshotAsync(cancellationToken);
+            var snapshot = await operations.GetSnapshotAsync(cancellationToken);
             return Results.Ok(new SnapshotResponse(snapshot));
         }).WithName("NuplaneGetSnapshot")
           .WithTags("NuplaneAdmin");
 
         endpoints.MapPost($"{prefix}/reconcile", async (
-            INuplaneOperationalSurface surface,
+            INuplaneAdminOperations operations,
             CancellationToken cancellationToken) =>
         {
-            var outcome = await surface.TriggerReconcileAsync(cancellationToken);
+            var outcome = await operations.TriggerReconcileAsync(cancellationToken);
             return outcome.OutcomeCode switch
             {
                 ManualReconcileOutcomeCode.Completed => Results.Ok(new ReconcileResponse(outcome)),

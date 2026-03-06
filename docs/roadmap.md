@@ -744,7 +744,7 @@ Endpoints:
 Authentication left to host.
 
 Implementation notes:
-- In-process admin surface exposes `INuplaneOperationalSurface` for snapshot reads and manual triggers.
+- In-process admin surface exposes `INuplaneAdminOperations` for snapshot reads and manual triggers.
 - Admin reads return a consistent snapshot with active packages, last reconcile outcome, and health.
 - Rejected/unavailable triggers produce explicit non-mutating outcome codes and diagnostics.
 

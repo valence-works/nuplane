@@ -184,7 +184,7 @@ public static class NuplaneServiceCollectionExtensions
         // Operational/admin surfaces
         services.AddSingleton<OperationalSnapshotProjector>();
         services.AddSingleton<ManualReconcileCoordinator>();
-        services.AddSingleton<INuplaneOperationalSurface, NuplaneOperationalSurface>();
+        services.AddSingleton<INuplaneAdminOperations, NuplaneAdminOperations>();
 
         if (reconciliationPreview.EnableAutomaticReconciliation)
         {

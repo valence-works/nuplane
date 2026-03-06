@@ -4,10 +4,10 @@ using Nuplane.Runtime.Reconciliation;
 namespace Nuplane.Contracts;
 
 /// <summary>
-/// Defines the in-process operational surface for administrative operations.
+/// Defines the in-process admin operations contract.
 /// Provides read-only snapshot access and manual reconcile trigger capabilities.
 /// </summary>
-public interface INuplaneOperationalSurface
+public interface INuplaneAdminOperations
 {
     /// <summary>
     /// Gets a consistent operational snapshot of the current Nuplane runtime state.

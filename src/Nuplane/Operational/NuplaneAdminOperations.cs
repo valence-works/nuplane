@@ -6,14 +6,14 @@ using Nuplane.Runtime.Reconciliation;
 namespace Nuplane.Operational;
 
 /// <summary>
-/// Default implementation of <see cref="INuplaneOperationalSurface"/> that delegates
+/// Default implementation of <see cref="INuplaneAdminOperations"/> that delegates
 /// to <see cref="OperationalSnapshotProjector"/> for reads and
 /// <see cref="ManualReconcileCoordinator"/> for trigger operations.
 /// </summary>
-internal sealed class NuplaneOperationalSurface(
+internal sealed class NuplaneAdminOperations(
     OperationalSnapshotProjector projector,
     ManualReconcileCoordinator coordinator,
-    IReconciliationLogger logger) : INuplaneOperationalSurface
+    IReconciliationLogger logger) : INuplaneAdminOperations
 {
     private readonly OperationalSnapshotProjector _projector = projector ?? throw new ArgumentNullException(nameof(projector));
     private readonly ManualReconcileCoordinator _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));

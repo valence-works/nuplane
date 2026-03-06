@@ -137,7 +137,7 @@ Removing the file removes it.
 
 ## 🧪 End-to-End ASP.NET Plugin Demo
 
-The sample app now demonstrates the full lifecycle:
+The sample app demonstrates the full lifecycle:
 
 1. Directory-based desired state (`packages` local directory feed)
 2. File-change-triggered reconcile (watcher + debounce)
@@ -208,7 +208,7 @@ Use these conventions when enabling cluster-convergent runtime loading:
 - Update manifests atomically: upload package artifacts first, then write/update the manifest last.
 - Use `ConvergenceOptions` to configure manifest path, admin surfaces, optional loader boundary, and poll interval.
 - Keep loader integration opt-in and default-disabled unless the host explicitly wants Nuplane-managed loading.
-- Use `INuplaneOperationalSurface` (in-process) or `Nuplane.Admin.AspNetCore` (HTTP) for admin reads and manual reconcile triggers.
+- Use `INuplaneAdminOperations` (in-process) or `Nuplane.Admin.AspNetCore` (HTTP) for admin reads and manual reconcile triggers.
 - Monitor convergence through correlation-linked logs, metrics, health transitions, and observer failure events.
 - Treat degraded cycles as non-mutating: LKG active state is preserved; impacted scope is explicitly reported.
 
@@ -311,7 +311,7 @@ See [`docs/coding-conventions.md`](docs/coding-conventions.md) for project codin
 
 ## License
 
-[MIT](LICENSE.md)
+[MIT](LICENSE)
 
 ---
 

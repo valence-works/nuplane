@@ -1,7 +1,7 @@
 namespace Nuplane.Runtime.Configuration;
 
 /// <summary>
-/// Root configuration object for Phase 4 convergent runtime loading behaviors,
+/// Root configuration object for convergent runtime loading behaviors,
 /// including manifest, admin, loader, polling, and retry settings.
 /// </summary>
 public sealed class ConvergenceOptions

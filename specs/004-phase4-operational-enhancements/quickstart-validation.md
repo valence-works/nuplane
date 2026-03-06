@@ -60,7 +60,7 @@ dotnet test Nuplane.sln -v q --no-build
 - Attempts: 100 (simulated through unit and integration test execution)
 - Threshold: 95/100 within 120 seconds
 - Observed: All admin surface tests complete in <2s per test. OperationalSnapshotProjectionTests (8 tests) verify consistent snapshot projection. AdminTriggerContractTests (7 tests) verify outcome code mapping (Completed/Rejected/Unavailable) with correlation propagation. ManualReconcileObservabilityIntegrationTests (5 tests) verify end-to-end snapshot-after-trigger consistency. AdminTriggerFailureRegressionTests (6 tests) verify non-mutating behavior on rejection/unavailability.
-- Notes: In-process surface (INuplaneOperationalSurface) operates synchronously without network overhead. ASP.NET Core admin endpoints (GET /nuplane/admin/snapshot, POST /nuplane/admin/reconcile) map directly to in-process surface. All 26 admin-related tests complete well within the 120-second threshold.
+- Notes: In-process surface (`INuplaneAdminOperations`) operates synchronously without network overhead. ASP.NET Core admin endpoints (GET /nuplane/admin/snapshot, POST /nuplane/admin/reconcile) map directly to in-process surface. All 26 admin-related tests complete well within the 120-second threshold.
 
 ## Issues / Follow-ups
 

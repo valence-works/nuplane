@@ -7,7 +7,7 @@
 - Admin trigger operations:
   - request on-demand reconciliation
 - Surfaces:
-  - in-process hosting contract (`INuplaneOperationalSurface` style boundary)
+  - in-process hosting contract (`INuplaneAdminOperations` style boundary)
   - optional ASP.NET Core HTTP endpoints (separate optional package)
 
 Authentication/authorization is host-supplied and out of scope.
