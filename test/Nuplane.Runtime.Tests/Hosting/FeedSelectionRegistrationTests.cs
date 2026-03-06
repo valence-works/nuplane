@@ -7,7 +7,7 @@ namespace Nuplane.Runtime.Tests.Hosting;
 public sealed class FeedSelectionRegistrationTests
 {
     [Fact]
-    public void AddNuplane_WithoutFeeds_DefaultsAllowlistToWildcard()
+    public void AddNuplane_WithoutFeeds_DoesNotAllowlistAnyPackages()
     {
         var services = new ServiceCollection();
         services.AddNuplane(_ => { });
@@ -16,8 +16,44 @@ public sealed class FeedSelectionRegistrationTests
 
         var sourceTrust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
 
-        Assert.Single(sourceTrust.AllowedPackageIds);
-        Assert.Contains("*", sourceTrust.AllowedPackageIds);
+        Assert.Empty(sourceTrust.AllowedPackageIds);
+    }
+
+    [Fact]
+    public void AddNuplane_DirectoryFeedWithoutIncludeFilter_DoesNotAllowlistAnyPackages()
+    {
+        var packagesPath = Path.Combine(Path.GetTempPath(), "nuplane-empty-filter-builder", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(packagesPath);
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddNuplane(nuplane =>
+            {
+                nuplane.AddFeed("drop-folder", feed =>
+                {
+                    feed.FromDirectory(packagesPath);
+                });
+            });
+
+            using var provider = services.BuildServiceProvider();
+
+            var sourceTrust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
+
+            Assert.Empty(sourceTrust.AllowedPackageIds);
+            Assert.Contains("drop-folder", sourceTrust.AllowedSourceNames);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(packagesPath, recursive: true);
+            }
+            catch
+            {
+                // Best effort cleanup for temp test content.
+            }
+        }
     }
 
     [Fact]

@@ -5,6 +5,8 @@ namespace Nuplane.Configuration;
 /// <summary>
 /// Declarative configuration for a single Nuplane feed.
 /// </summary>
+// ReSharper disable UnusedAutoPropertyAccessor.Global
+// ReSharper disable CollectionNeverUpdated.Global
 public sealed class NuplaneFeedSetupOptions
 {
     /// <summary>
@@ -43,8 +45,8 @@ public sealed class NuplaneFeedSetupOptions
 
     /// <summary>
     /// Gets or sets the include patterns applied to this feed.
-    /// Empty still means all packages from the feed are accepted for backward compatibility,
-    /// but prefer <see cref="IncludeAll"/> or <c>"*"</c> when that intent should be explicit.
+    /// Empty means no packages from the feed are selected.
+    /// Use <see cref="IncludeAll"/> or <c>"*"</c> when unrestricted selection is intended.
     /// </summary>
     public List<string> IncludePatterns { get; set; } = [];
 
@@ -53,3 +55,5 @@ public sealed class NuplaneFeedSetupOptions
     /// </summary>
     public NuplaneDirectoryFeedSetupOptions Directory { get; set; } = new();
 }
+// ReSharper restore CollectionNeverUpdated.Global
+// ReSharper restore UnusedAutoPropertyAccessor.Global

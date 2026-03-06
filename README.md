@@ -219,6 +219,9 @@ For unrestricted feeds, prefer one of these explicit forms:
 - configuration alias: `"IncludeAll": true`
 - fluent API: `feed.IncludeAll()`
 
+> Breaking change: omitted include filters no longer mean “accept everything.”
+> A feed without `IncludePatterns`, `IncludeAll`, or `feed.IncludeAll()` now contributes no packages.
+
 ### Configuration vs code
 
 Use configuration for infrastructure and policy:

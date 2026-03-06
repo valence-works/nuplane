@@ -29,7 +29,7 @@ public sealed class DirectoryNupkgDesiredSourceTests : IDisposable
     public async Task GetDesiredAsync_SetsFeedName_WhenProvided()
     {
         CreateNupkg("MyPlugin.1.0.0.nupkg");
-        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, feedName: "local-drop");
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], feedName: "local-drop");
 
         var results = await source.GetDesiredAsync(CancellationToken.None);
 
@@ -41,7 +41,7 @@ public sealed class DirectoryNupkgDesiredSourceTests : IDisposable
     public async Task GetDesiredAsync_SetsSourceName_ToProvidedValue()
     {
         CreateNupkg("MyPlugin.1.0.0.nupkg");
-        var source = new DirectoryNupkgDesiredSource("my-custom-source", _tempDir, feedName: "local-drop");
+        var source = new DirectoryNupkgDesiredSource("my-custom-source", _tempDir, ["*"], feedName: "local-drop");
 
         var results = await source.GetDesiredAsync(CancellationToken.None);
 
@@ -53,7 +53,7 @@ public sealed class DirectoryNupkgDesiredSourceTests : IDisposable
     public async Task GetDesiredAsync_FeedNameNull_SetsFeedNameToNull()
     {
         CreateNupkg("MyPlugin.1.0.0.nupkg");
-        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, feedName: null);
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], feedName: null);
 
         var results = await source.GetDesiredAsync(CancellationToken.None);
 
@@ -65,7 +65,7 @@ public sealed class DirectoryNupkgDesiredSourceTests : IDisposable
     public async Task GetDesiredAsync_ParsesPackageIdAndVersion()
     {
         CreateNupkg("Acme.Widgets.2.3.1.nupkg");
-        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, feedName: "local-drop");
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], feedName: "local-drop");
 
         var results = await source.GetDesiredAsync(CancellationToken.None);
 
@@ -78,7 +78,7 @@ public sealed class DirectoryNupkgDesiredSourceTests : IDisposable
     public async Task GetDesiredAsync_SetsExactUpdatePolicy()
     {
         CreateNupkg("MyPlugin.1.0.0.nupkg");
-        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, feedName: "local-drop");
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], feedName: "local-drop");
 
         var results = await source.GetDesiredAsync(CancellationToken.None);
 
@@ -91,22 +91,46 @@ public sealed class DirectoryNupkgDesiredSourceTests : IDisposable
     {
         CreateNupkg("PluginA.1.0.0.nupkg");
         CreateNupkg("PluginB.2.0.0.nupkg");
-        var source = new DirectoryNupkgDesiredSource("dir-src", _tempDir, feedName: "feed-x");
+        var source = new DirectoryNupkgDesiredSource("dir-src", _tempDir, ["*"], feedName: "feed-x");
 
         var results = await source.GetDesiredAsync(CancellationToken.None);
 
         Assert.Equal(2, results.Count);
-        Assert.All(results, r =>
+        foreach (var result in results)
         {
-            Assert.Equal("feed-x", r.FeedName);
-            Assert.Equal("dir-src", r.SourceName);
-        });
+            Assert.Equal("feed-x", result.FeedName);
+            Assert.Equal("dir-src", result.SourceName);
+        }
+    }
+
+    [Fact]
+    public async Task GetDesiredAsync_WithoutIncludePatterns_ReturnsEmpty()
+    {
+        CreateNupkg("MyPlugin.1.0.0.nupkg");
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, feedName: "local-drop");
+
+        var results = await source.GetDesiredAsync(CancellationToken.None);
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task GetDesiredAsync_PatternFilter_MatchesOnlySelectedPackages()
+    {
+        CreateNupkg("PluginA.1.0.0.nupkg");
+        CreateNupkg("Other.Plugin.2.0.0.nupkg");
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["Plugin*"], feedName: "local-drop");
+
+        var results = await source.GetDesiredAsync(CancellationToken.None);
+
+        var request = Assert.Single(results);
+        Assert.Equal("PluginA", request.Id);
     }
 
     [Fact]
     public async Task GetDesiredAsync_EmptyDirectory_ReturnsEmpty()
     {
-        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, feedName: "local-drop");
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], feedName: "local-drop");
 
         var results = await source.GetDesiredAsync(CancellationToken.None);
 
@@ -117,7 +141,7 @@ public sealed class DirectoryNupkgDesiredSourceTests : IDisposable
     public async Task GetDesiredAsync_NonExistentDirectory_ReturnsEmpty()
     {
         var nonExistent = Path.Combine(_tempDir, "does-not-exist");
-        var source = new DirectoryNupkgDesiredSource("src-name", nonExistent, feedName: "local-drop");
+        var source = new DirectoryNupkgDesiredSource("src-name", nonExistent, ["*"], feedName: "local-drop");
 
         var results = await source.GetDesiredAsync(CancellationToken.None);
 

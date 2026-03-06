@@ -203,9 +203,8 @@ public static class NuplaneServiceCollectionExtensions
         });
 
         // Source trust: collect include patterns across all feeds, auto-wire source names.
-        // Any unrestricted feed, or the absence of explicit patterns altogether, collapses the global
-        // package allowlist to '*'.
-        var hasUnrestrictedFeed = builder.Feeds.Any(HasUnrestrictedPackageSelection);
+        // Only explicit unrestricted selection ('*' / IncludeAll) collapses the global package allowlist to '*'.
+        var hasExplicitUnrestrictedFeed = builder.Feeds.Any(HasExplicitUnrestrictedPackageSelection);
         var allIncludePatterns = builder.Feeds.SelectMany(feed => DistinctNonBlank(feed.IncludePatterns)).ToArray();
         services.Configure<SourceTrustOptions>(opts =>
         {
@@ -214,7 +213,7 @@ public static class NuplaneServiceCollectionExtensions
                 opts.AllowedSourceNames.Add(feed.Name);
             }
 
-            if (hasUnrestrictedFeed || allIncludePatterns.Length == 0)
+            if (hasExplicitUnrestrictedFeed)
             {
                 opts.AllowedPackageIds.Add("*");
                 return;
@@ -270,9 +269,7 @@ public static class NuplaneServiceCollectionExtensions
             {
                 var probeLogger = sp.GetService<ILogger<NupkgFileStabilityProbe>>();
                 var probe = probeLogger is not null ? new NupkgFileStabilityProbe(probeLogger) : null;
-                IEnumerable<string>? patterns = capturedFeed.IncludePatterns.Count > 0
-                    ? capturedFeed.IncludePatterns
-                    : null;
+                var patterns = DistinctNonBlank(capturedFeed.IncludePatterns).ToArray();
                 return new DirectoryNupkgDesiredSource(
                     capturedFeed.Name,
                     capturedPath,
@@ -394,9 +391,9 @@ public static class NuplaneServiceCollectionExtensions
         return configuration.GetSection(sectionName);
     }
 
-    private static bool HasUnrestrictedPackageSelection(NuplaneFeedBuilder feed) =>
-        feed.IncludePatterns.Count == 0
-        || feed.IncludePatterns.Any(static pattern => string.Equals(pattern, "*", StringComparison.Ordinal));
+    private static bool HasExplicitUnrestrictedPackageSelection(NuplaneFeedBuilder feed) =>
+        feed.IncludePatterns.Any(static pattern => string.Equals(pattern, "*", StringComparison.Ordinal));
+
     private static IEnumerable<string> DistinctNonBlank(IEnumerable<string>? values) =>
         (values ?? [])
         .Where(static value => !string.IsNullOrWhiteSpace(value))

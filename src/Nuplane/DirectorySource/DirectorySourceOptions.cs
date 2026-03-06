@@ -3,6 +3,7 @@ namespace Nuplane.DirectorySource;
 /// <summary>
 /// Configures the optional directory-backed desired-state source for Nuplane hosts.
 /// </summary>
+// ReSharper disable UnusedAutoPropertyAccessor.Global
 public sealed class DirectorySourceOptions
 {
     /// <summary>
@@ -25,7 +26,7 @@ public sealed class DirectorySourceOptions
 
     /// <summary>
     /// Gets the allowlist of package identifiers accepted by this source.
-    /// Empty means all packages are accepted.
+    /// Empty means no packages are accepted; add <c>"*"</c> to accept all packages explicitly.
     /// </summary>
     public IList<string> AllowlistedPackageIds { get; } = new List<string>();
 
@@ -40,3 +41,4 @@ public sealed class DirectorySourceOptions
     /// </summary>
     public TimeSpan DebounceWindow { get; set; } = TimeSpan.FromSeconds(1);
 }
+// ReSharper restore UnusedAutoPropertyAccessor.Global

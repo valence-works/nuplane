@@ -12,7 +12,7 @@ namespace Nuplane.Sources.Directory;
 /// </summary>
 /// <param name="sourceName">A descriptive name for this desired-state source.</param>
 /// <param name="directoryPath">The directory to scan for <c>.nupkg</c> files.</param>
-/// <param name="allowlistedPackageIds">An optional set of package identifier patterns. If <see langword="null"/> or empty, all packages are allowed.</param>
+/// <param name="allowlistedPackageIds">An optional set of package identifier patterns. If <see langword="null"/> or empty, no packages are included.</param>
 /// <param name="logger">An optional logger for diagnostic output.</param>
 /// <param name="feedName">The optional local directory feed name to set on produced package requests.</param>
 /// <param name="stabilityProbe">An optional stability probe for partial-write safety. When provided, each discovered <c>.nupkg</c> file is probed for stability before being included.</param>
@@ -101,7 +101,7 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
         }
 
         var packageId = match.Groups["id"].Value;
-        if (_includePatterns.Count > 0 && !PackagePatternMatcher.MatchesAny(_includePatterns, packageId))
+        if (_includePatterns.Count == 0 || !PackagePatternMatcher.MatchesAny(_includePatterns, packageId))
         {
             return null;
         }

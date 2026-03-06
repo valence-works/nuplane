@@ -56,7 +56,8 @@ public sealed class NuplaneFeedBuilder
     /// <summary>
     /// Adds a package identifier pattern to the include filter for this feed.
     /// Supports <c>*</c> (any sequence) and <c>?</c> (any single character) wildcards.
-    /// If no patterns are added, all packages from the feed are accepted.
+    /// If no patterns are added, no packages from the feed are accepted.
+    /// Use <see cref="IncludeAll"/> for explicit unrestricted selection.
     /// </summary>
     /// <param name="pattern">The package ID pattern to include (e.g., <c>"Acme.Plugins.*"</c>).</param>
     public NuplaneFeedBuilder Include(string pattern)

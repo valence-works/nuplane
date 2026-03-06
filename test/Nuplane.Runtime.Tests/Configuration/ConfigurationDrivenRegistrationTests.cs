@@ -90,6 +90,46 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
+    public void AddNuplane_FromConfiguration_WithoutFilters_DoesNotAllowlistAnyPackages()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "nuplane-no-filter-config", Guid.NewGuid().ToString("N"));
+        var packagesPath = Path.Combine(root, "packages");
+        Directory.CreateDirectory(packagesPath);
+
+        try
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
+                    ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
+                })
+                .Build();
+
+            var services = new ServiceCollection();
+            services.AddNuplane(configuration.GetSection("Nuplane"));
+
+            using var provider = services.BuildServiceProvider();
+
+            var sourceTrust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
+
+            Assert.Empty(sourceTrust.AllowedPackageIds);
+            Assert.Contains("drop-folder", sourceTrust.AllowedSourceNames);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // Best effort cleanup for temp test content.
+            }
+        }
+    }
+
+    [Fact]
     public void AddNuplane_FromConfiguration_IncludeAllAlias_CollapsesAllowlistToWildcard()
     {
         var root = Path.Combine(Path.GetTempPath(), "nuplane-include-all-config", Guid.NewGuid().ToString("N"));
