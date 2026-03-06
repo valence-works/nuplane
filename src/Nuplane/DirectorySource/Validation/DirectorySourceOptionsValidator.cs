@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
+using Nuplane.Extensions;
 
-namespace Nuplane.Extensions;
+namespace Nuplane.DirectorySource.Validation;
 
 internal sealed class DirectorySourceOptionsValidator : IValidateOptions<DirectorySourceOptions>
 {

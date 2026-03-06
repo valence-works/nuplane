@@ -1,11 +1,12 @@
 using System.Threading.Channels;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Nuplane.Extensions;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.Models;
 
-namespace Nuplane.Extensions;
+namespace Nuplane.DirectorySource.Hosting;
 
 internal sealed class DirectorySourceReconciliationTriggerHostedService(
     DirectorySourceOptions options,

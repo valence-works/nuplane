@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 
-namespace Nuplane.Extensions;
+namespace Nuplane.Options.Validation;
 
 internal sealed class TrustedSourcePolicyOptionsValidator : IValidateOptions<TrustedSourcePolicyOptions>
 {

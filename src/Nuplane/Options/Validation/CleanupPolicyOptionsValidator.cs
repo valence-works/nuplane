@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Store.State;
 
-namespace Nuplane.Extensions;
+namespace Nuplane.Options.Validation;
 
 internal sealed class CleanupPolicyOptionsValidator : IValidateOptions<CleanupPolicyOptions>
 {

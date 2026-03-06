@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Options;
+using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 
-namespace Nuplane.Extensions;
+namespace Nuplane.Options.Validation;
 
 internal sealed class FeedTrustPolicyOptionsValidator : IValidateOptions<FeedTrustPolicyOptions>
 {
@@ -13,7 +14,7 @@ internal sealed class FeedTrustPolicyOptionsValidator : IValidateOptions<FeedTru
         }
 
         var errors = options.Overrides
-            .Where(x => x.Scope != Nuplane.Abstractions.FeedOverrideScope.None && string.IsNullOrWhiteSpace(x.Reason))
+            .Where(x => x.Scope != FeedOverrideScope.None && string.IsNullOrWhiteSpace(x.Reason))
             .Select(x => $"Override reason is required for override target '{x.Target}'.")
             .ToArray();
 

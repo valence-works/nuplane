@@ -2,14 +2,14 @@ using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Operational;
 using Nuplane.Runtime.Reconciliation;
 
-namespace Nuplane.Extensions;
+namespace Nuplane.Operational;
 
 /// <summary>
-/// Default implementation of <see cref="INuplaneOperationalSurface"/> that delegates
+/// Default implementation of <see cref="global::Nuplane.Extensions.INuplaneOperationalSurface"/> that delegates
 /// to <see cref="OperationalSnapshotProjector"/> for reads and
 /// <see cref="ManualReconcileCoordinator"/> for trigger operations.
 /// </summary>
-internal sealed class NuplaneOperationalSurface : INuplaneOperationalSurface
+internal sealed class NuplaneOperationalSurface : global::Nuplane.Extensions.INuplaneOperationalSurface
 {
     private readonly OperationalSnapshotProjector _projector;
     private readonly ManualReconcileCoordinator _coordinator;

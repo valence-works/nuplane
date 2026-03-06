@@ -1,5 +1,5 @@
 using Nuplane.Abstractions;
-using Nuplane.Extensions;
+using Nuplane.Options.Validation;
 using Nuplane.Runtime.Configuration;
 
 namespace Nuplane.Runtime.Tests.Configuration;

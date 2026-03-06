@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Runtime.Configuration;
 
-namespace Nuplane.Extensions;
+namespace Nuplane.Options.Validation;
 
 internal sealed class FeedCredentialCompositeValidator(
     FeedCredentialOptionsValidator credentialValidator,
