@@ -4,7 +4,9 @@ using Nuplane.Abstractions;
 using Nuplane.Loading;
 using Nuplane.Loading.Events;
 using Nuplane.Loading.Hosting;
+using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
+using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Store.State;
@@ -35,16 +37,12 @@ public sealed class StartupLoadingEventIntegrationTests
 
         var observerDispatcher = new ObserverEventDispatcher([autoLoadingObserver]);
 
-        var service = new ReconciliationService(
+        var service = ReconciliationServiceFactory.Create(
             sources: [source],
             sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "plugin-a" } },
-            desiredStateAggregator: new(),
-            desiredActualDiffEngine: new(),
             packageResolver: new NuGetPackageResolver(),
-            storeRegistry: new(new StoreStateSerializer(), stateFilePath: null),
-            reconciliationOptions: new(),
-            observerEventDispatcher: observerDispatcher,
-            healthEvaluator: new());
+            storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
+            observerEventDispatcher: observerDispatcher);
 
         var trigger = new ReconciliationTrigger(TriggerType.Startup);
         var result = await service.TriggerAsync(trigger, CancellationToken.None);
@@ -127,16 +125,12 @@ public sealed class StartupLoadingEventIntegrationTests
             loadingFailureTracker);
 
         var serviceObserverDispatcher = new ObserverEventDispatcher([autoLoadingObserver, coreObserver]);
-        var service = new ReconciliationService(
+        var service = ReconciliationServiceFactory.Create(
             sources: [source],
             sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "plugin-fail" } },
-            desiredStateAggregator: new(),
-            desiredActualDiffEngine: new(),
             packageResolver: new NuGetPackageResolver(),
             storeRegistry: storeRegistry,
-            reconciliationOptions: new(),
             observerEventDispatcher: serviceObserverDispatcher,
-            healthEvaluator: new(),
             loadingFailureTracker: loadingFailureTracker);
 
         var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Startup), CancellationToken.None);
@@ -172,16 +166,12 @@ public sealed class StartupLoadingEventIntegrationTests
             loadingFailureTracker: loadingFailureTracker);
         var observerDispatcher = new ObserverEventDispatcher([autoLoadingObserver]);
 
-        return new ReconciliationService(
+        return ReconciliationServiceFactory.Create(
             sources: [source],
             sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { source.PackageId } },
-            desiredStateAggregator: new(),
-            desiredActualDiffEngine: new(),
             packageResolver: new NuGetPackageResolver(),
             storeRegistry: storeRegistry,
-            reconciliationOptions: new(),
             observerEventDispatcher: observerDispatcher,
-            healthEvaluator: new(),
             loadingFailureTracker: loadingFailureTracker);
     }
 

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 
@@ -22,7 +23,7 @@ public sealed class CoreRuntimeRegistrationIsolationTests
         await using var provider = services.BuildServiceProvider();
 
         var runtime = provider.GetRequiredService<ReconciliationService>();
-        var result = await runtime.TriggerManualAsync(CancellationToken.None);
+        var result = await runtime.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Empty(result.FailedPackages);

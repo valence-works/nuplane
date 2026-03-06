@@ -92,18 +92,15 @@ public sealed class ReconciliationTriggerAttributionContractTests
         bool enableSingleFlight = false,
         IDesiredPackageSource[]? sources = null)
     {
-        return new ReconciliationService(
-            sources ?? [],
-            new SourceTrustOptions(),
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
-            new NoOpResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions { EnableSingleFlight = enableSingleFlight },
-            new ObserverEventDispatcher([]),
-            new ReconciliationHealthEvaluator(),
-            spyLogger,
-            new ReconciliationMetrics(new ReconciliationTelemetry()));
+        return ReconciliationServiceFactory.Create(
+            sources: sources ?? [],
+            sourceTrustOptions: new SourceTrustOptions(),
+            packageResolver: new NoOpResolver(),
+            reconciliationOptions: new ReconciliationOptions { EnableSingleFlight = enableSingleFlight },
+            observerEventDispatcher: new ObserverEventDispatcher([]),
+            healthEvaluator: new ReconciliationHealthEvaluator(),
+            logger: spyLogger,
+            metrics: new ReconciliationMetrics(new ReconciliationTelemetry()));
     }
 
     private sealed class NoOpResolver : IPackageResolver

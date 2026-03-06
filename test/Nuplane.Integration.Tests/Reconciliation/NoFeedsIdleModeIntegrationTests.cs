@@ -19,17 +19,15 @@ public sealed class NoFeedsIdleModeIntegrationTests
     public async Task NoFeeds_IdleModeEntered_LoggedOnce()
     {
         var spyLogger = new SpyReconciliationLogger();
-        var service = new ReconciliationService(
-            [],
-            new SourceTrustOptions(),
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
-            new NoOpResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions(),
-            new ObserverEventDispatcher([]),
-            new ReconciliationHealthEvaluator(),
-            spyLogger);
+        var service = ReconciliationServiceFactory.Create(
+            sources: [],
+            sourceTrustOptions: new SourceTrustOptions(),
+            packageResolver: new NoOpResolver(),
+            storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
+            reconciliationOptions: new ReconciliationOptions(),
+            observerEventDispatcher: new ObserverEventDispatcher([]),
+            healthEvaluator: new ReconciliationHealthEvaluator(),
+            logger: spyLogger);
 
         var trigger = new ReconciliationTrigger(TriggerType.Scheduled);
         await service.TriggerAsync(trigger, CancellationToken.None);
@@ -42,17 +40,15 @@ public sealed class NoFeedsIdleModeIntegrationTests
     public async Task NoFeeds_MultipleCycles_IdleModeLoggedOnlyOnce()
     {
         var spyLogger = new SpyReconciliationLogger();
-        var service = new ReconciliationService(
-            [],
-            new SourceTrustOptions(),
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
-            new NoOpResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions(),
-            new ObserverEventDispatcher([]),
-            new ReconciliationHealthEvaluator(),
-            spyLogger);
+        var service = ReconciliationServiceFactory.Create(
+            sources: [],
+            sourceTrustOptions: new SourceTrustOptions(),
+            packageResolver: new NoOpResolver(),
+            storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
+            reconciliationOptions: new ReconciliationOptions(),
+            observerEventDispatcher: new ObserverEventDispatcher([]),
+            healthEvaluator: new ReconciliationHealthEvaluator(),
+            logger: spyLogger);
 
         for (var i = 0; i < 3; i++)
         {
@@ -68,16 +64,14 @@ public sealed class NoFeedsIdleModeIntegrationTests
     [Fact]
     public async Task NoFeeds_ReconciliationCompletes_WithoutException()
     {
-        var service = new ReconciliationService(
-            [],
-            new SourceTrustOptions(),
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
-            new NoOpResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions(),
-            new ObserverEventDispatcher([]),
-            new ReconciliationHealthEvaluator());
+        var service = ReconciliationServiceFactory.Create(
+            sources: [],
+            sourceTrustOptions: new SourceTrustOptions(),
+            packageResolver: new NoOpResolver(),
+            storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
+            reconciliationOptions: new ReconciliationOptions(),
+            observerEventDispatcher: new ObserverEventDispatcher([]),
+            healthEvaluator: new ReconciliationHealthEvaluator());
 
         var trigger = new ReconciliationTrigger(TriggerType.Scheduled);
         var result = await service.TriggerAsync(trigger, CancellationToken.None);

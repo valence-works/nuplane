@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Nuplane.Runtime.Configuration;
 
 namespace Nuplane.Runtime.Reconciliation;
@@ -5,9 +6,9 @@ namespace Nuplane.Runtime.Reconciliation;
 /// <summary>
 /// Implements an exponential backoff retry policy for reconciliation operations.
 /// </summary>
-public sealed class ReconciliationRetryPolicy(ReconciliationOptions options) : IReconciliationRetryPolicy
+public sealed class ReconciliationRetryPolicy(IOptions<ReconciliationOptions> options) : IReconciliationRetryPolicy
 {
-    private readonly ReconciliationOptions _options = options ?? throw new ArgumentNullException(nameof(options));
+    private readonly ReconciliationOptions _options = (options ?? throw new ArgumentNullException(nameof(options))).Value;
 
     /// <inheritdoc />
     public async Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken)

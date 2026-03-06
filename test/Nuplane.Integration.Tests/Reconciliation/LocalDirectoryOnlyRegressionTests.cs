@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
@@ -41,16 +42,16 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
             new("MyPlugin", "1.0.0", "local-drop", PackageUpdatePolicy.Exact, "local-source")
         ]);
 
-        var service = new ReconciliationService(
-            [source],
-            new SourceTrustOptions { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "MyPlugin" } },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
-            new MultiFeedPackageResolver(feedOpts, new FeedResolutionPolicy(feedOpts)),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions(),
-            new ObserverEventDispatcher([]),
-            new ReconciliationHealthEvaluator(),
+        var service = ReconciliationServiceFactory.Create(
+            sources: [source],
+            sourceTrustOptions: new SourceTrustOptions { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "MyPlugin" } },
+            desiredStateAggregator: new DesiredStateAggregator(),
+            desiredActualDiffEngine: new DesiredActualDiffEngine(),
+            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOpts), new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(feedOpts))),
+            storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
+            reconciliationOptions: new ReconciliationOptions(),
+            observerEventDispatcher: new ObserverEventDispatcher([]),
+            healthEvaluator: new ReconciliationHealthEvaluator(),
             feedResolutionOptions: feedOpts);
 
         var trigger = new ReconciliationTrigger(TriggerType.DirectoryChange, Source: "local-drop");
@@ -74,16 +75,16 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
 
         var source = new StaticSource([]);
 
-        var service = new ReconciliationService(
-            [source],
-            new SourceTrustOptions(),
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
-            new MultiFeedPackageResolver(feedOpts, new FeedResolutionPolicy(feedOpts)),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions(),
-            new ObserverEventDispatcher([]),
-            new ReconciliationHealthEvaluator(),
+        var service = ReconciliationServiceFactory.Create(
+            sources: [source],
+            sourceTrustOptions: new SourceTrustOptions(),
+            desiredStateAggregator: new DesiredStateAggregator(),
+            desiredActualDiffEngine: new DesiredActualDiffEngine(),
+            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOpts), new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(feedOpts))),
+            storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
+            reconciliationOptions: new ReconciliationOptions(),
+            observerEventDispatcher: new ObserverEventDispatcher([]),
+            healthEvaluator: new ReconciliationHealthEvaluator(),
             feedResolutionOptions: feedOpts);
 
         var trigger = new ReconciliationTrigger(TriggerType.DirectoryChange, Source: "local-drop");
@@ -108,16 +109,16 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
             new("PluginA", "1.0.0", "local-drop", PackageUpdatePolicy.Exact, "local-source")
         ]);
 
-        var service = new ReconciliationService(
-            [source],
-            new SourceTrustOptions { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "PluginA" } },
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
-            new MultiFeedPackageResolver(feedOpts, new FeedResolutionPolicy(feedOpts)),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions(),
-            new ObserverEventDispatcher([]),
-            new ReconciliationHealthEvaluator(),
+        var service = ReconciliationServiceFactory.Create(
+            sources: [source],
+            sourceTrustOptions: new SourceTrustOptions { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "PluginA" } },
+            desiredStateAggregator: new DesiredStateAggregator(),
+            desiredActualDiffEngine: new DesiredActualDiffEngine(),
+            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOpts), new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(feedOpts))),
+            storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
+            reconciliationOptions: new ReconciliationOptions(),
+            observerEventDispatcher: new ObserverEventDispatcher([]),
+            healthEvaluator: new ReconciliationHealthEvaluator(),
             feedResolutionOptions: feedOpts);
 
         // Multiple triggers should all succeed
@@ -155,7 +156,6 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
 
     private sealed class StaticSource(IReadOnlyList<PackageRequest> requests) : IDesiredPackageSource
     {
-        public string SourceName => "static";
         public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct) => Task.FromResult(requests);
     }
 }

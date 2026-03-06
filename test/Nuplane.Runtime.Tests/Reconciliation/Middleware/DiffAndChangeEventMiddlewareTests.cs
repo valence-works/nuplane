@@ -20,8 +20,8 @@ public sealed class DiffAndChangeEventMiddlewareTests
         var storeRegistry = new FakeStoreRegistry(activeVersions);
 
         var ctx = Ctx([pkg]);
-        bool nextCalled = false;
-        bool changingCalledBeforeNext = false;
+        var nextCalled = false;
+        var changingCalledBeforeNext = false;
 
         await Build(diffEngine, storeRegistry, dispatcher).InvokeAsync(ctx, () =>
         {

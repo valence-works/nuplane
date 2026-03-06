@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation;
@@ -82,9 +83,13 @@ public sealed class LockFileCoordinatorTests : IDisposable
         Assert.True(result.Allowed);
     }
 
-    private static LockFileCoordinator Build(string path, LockFileMode mode, bool requireEntry = false) =>
-        new(new(path),
-            new() { Mode = mode, RequireEntryInStrictMode = requireEntry });
+    private static LockFileCoordinator Build(string path, LockFileMode mode, bool requireEntry = false)
+    {
+        var options = new LockFileOptions { Path = path, Mode = mode, RequireEntryInStrictMode = requireEntry };
+        return new(
+            new LockFileStore(new OptionsWrapper<LockFileOptions>(options)),
+            new OptionsWrapper<LockFileOptions>(options));
+    }
 
     private static ResolvedPackage Pkg(string id, string version, string feed) =>
         new(id, version, feed, $"/store/{id}", DateTimeOffset.UtcNow, id);

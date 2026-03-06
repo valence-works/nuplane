@@ -1,7 +1,7 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Configuration;
-using Nuplane.Store.State;
+using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -13,8 +13,8 @@ public sealed class SourceOutageFallbackTests
         var source = new FlakySource();
         var service = CreateService(source, new() { MaxRetryAttempts = 1 });
 
-        var first = await service.TriggerManualAsync(CancellationToken.None);
-        var second = await service.TriggerManualAsync(CancellationToken.None);
+        var first = await service.TriggerAsync(new Nuplane.Runtime.Reconciliation.Models.ReconciliationTrigger(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
+        var second = await service.TriggerAsync(new Nuplane.Runtime.Reconciliation.Models.ReconciliationTrigger(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
 
         Assert.False(first.IsDegraded);
         Assert.True(second.IsDegraded);
@@ -25,14 +25,11 @@ public sealed class SourceOutageFallbackTests
 
     private static ReconciliationService CreateService(IDesiredPackageSource source, ReconciliationOptions options)
     {
-        return new(
-            [source],
-            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            new(),
-            new(),
-            new NuGetPackageResolver(),
-            new(new StoreStateSerializer(), stateFilePath: null),
-            options);
+        return ReconciliationServiceFactory.Create(
+            sources: [source],
+            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
+            packageResolver: new NuGetPackageResolver(),
+            reconciliationOptions: options);
     }
 
     private sealed class FlakySource : IDesiredPackageSource

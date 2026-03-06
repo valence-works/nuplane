@@ -1,5 +1,6 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Store.State;
 
@@ -10,22 +11,16 @@ public sealed class DesiredStateReconciliationTests
     [Fact]
     public async Task ManualTrigger_RepeatedRun_IsIdempotentOnSecondCycle()
     {
-        var timestamp = DateTimeOffset.UtcNow;
         var source = new StaticSource([
             new("pkg-a", "1.2.3", "feed-1", PackageUpdatePolicy.Exact, "source-a")
         ]);
 
-        var service = new ReconciliationService(
-            [source],
-            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            new(),
-            new(),
-            new NuGetPackageResolver(),
-            new(new StoreStateSerializer(), stateFilePath: null),
-            new());
+        var service = ReconciliationServiceFactory.Create(
+            sources: [source],
+            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } });
 
-        var first = await service.TriggerManualAsync(CancellationToken.None);
-        var second = await service.TriggerManualAsync(CancellationToken.None);
+        var first = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var second = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.False(first.Skipped);
         Assert.Single(first.ChangeSet.Added);
@@ -41,16 +36,11 @@ public sealed class DesiredStateReconciliationTests
             new("pkg-a", "1.2.3", "feed-missing", PackageUpdatePolicy.Exact, "source-a")
         ]);
 
-        var service = new ReconciliationService(
-            [source],
-            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            new(),
-            new(),
-            new NuGetPackageResolver(),
-            new(new StoreStateSerializer(), stateFilePath: null),
-            new());
+        var service = ReconciliationServiceFactory.Create(
+            sources: [source],
+            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } });
 
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.False(result.Skipped);
         Assert.Empty(result.FailedPackages);
@@ -71,24 +61,17 @@ public sealed class DesiredStateReconciliationTests
             new("https://feed-untrusted.example/v3/index.json"),
             FeedTrustLevel.Untrusted));
 
-        var service = new ReconciliationService(
-            [source],
-            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            new(),
-            new(),
-            new NuGetPackageResolver(),
-            new(new StoreStateSerializer(), stateFilePath: null),
-            new(),
-            new([]),
-            new(),
+        var service = ReconciliationServiceFactory.Create(
+            sources: [source],
+            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
             feedResolutionOptions: feedResolutionOptions,
-            feedTrustPolicyOptions: new()
+            feedTrustPolicyOptions: new FeedTrustPolicyOptions
             {
                 AllowUntrustedWithScopedOverride = false,
                 RequireOverrideReason = true
             });
 
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.False(result.Skipped);
         Assert.Contains("pkg-a", result.FailedPackages);

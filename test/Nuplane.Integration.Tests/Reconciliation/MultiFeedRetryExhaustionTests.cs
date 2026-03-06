@@ -1,6 +1,9 @@
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.FeedPolicy;
+using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
@@ -24,23 +27,23 @@ public sealed class MultiFeedRetryExhaustionTests
         feedOptions.Feeds.Add(new("feed-down", new("https://down.example/v3/index.json"), FeedTrustLevel.Trusted));
         feedOptions.UnavailableFeeds.Add("feed-down");
 
-        var resolver = new MultiFeedPackageResolver(feedOptions, new(feedOptions));
+        var resolver = new MultiFeedPackageResolver(
+            new OptionsWrapper<FeedResolutionOptions>(feedOptions),
+            new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(feedOptions)));
 
-        var service = new ReconciliationService(
-            [source],
-            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg" } },
-            new(),
-            new(),
-            resolver,
-            new(new StoreStateSerializer(), stateFilePath: null),
-            new()
+        var service = ReconciliationServiceFactory.Create(
+            sources: [source],
+            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg" } },
+            packageResolver: resolver,
+            reconciliationOptions: new()
             {
                 MaxRetryAttempts = 2,
                 InitialRetryBackoff = TimeSpan.FromMilliseconds(1),
                 MaxRetryBackoff = TimeSpan.FromMilliseconds(2)
-            });
+            },
+            feedResolutionOptions: feedOptions);
 
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.True(result.IsDegraded);
         Assert.Contains("pkg", result.FailedPackages);

@@ -1,27 +1,21 @@
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
-#pragma warning disable IDE0005 // Remove unnecessary usings — Loading usings kept for UnloadMiddleware
 using Nuplane.Loading;
-#pragma warning restore IDE0005
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation.Middleware;
-using Nuplane.Runtime.Sources;
 using Nuplane.Store.Activation;
 using Nuplane.Store.State;
 using Nuplane.Store.Transactions;
 using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Runtime.Reconciliation.FeedPolicy;
+using Nuplane.Runtime.Sources;
 
 namespace Nuplane.Runtime.Reconciliation;
 
-
-/// <summary>
-/// Orchestrates the Nuplane reconciliation cycle, coordinating desired-state reading,
-/// package resolution, trust and lock evaluation, assembly loading, transaction execution,
-/// unloading, cleanup, and health assessment through a middleware pipeline.
-/// </summary>
+/// <inheritdoc />
 public sealed class ReconciliationService : IReconciliationService
 {
     private static readonly PackageChangeSet EmptyChangeSet = new([], [], [], string.Empty, DateTimeOffset.UtcNow);
@@ -31,107 +25,109 @@ public sealed class ReconciliationService : IReconciliationService
     private readonly SemaphoreSlim _cycleLock = new(1, 1);
     private int _inFlight;
 
-    /// <summary>Initializes a new instance of the reconciliation service.</summary>
-    /// <summary>Initializes a new instance of the reconciliation service.</summary>
-public ReconciliationService(
+    /// <summary>
+    /// Initializes a new instance of the reconciliation service with the runtime collaborators,
+    /// policies, and optional loading services required to execute reconciliation cycles.
+    /// </summary>
+    /// <param name="sources">The desired package sources.</param>
+    /// <param name="sourceTrustOptions">The source trust options.</param>
+    /// <param name="desiredStateAggregator">The desired state aggregator.</param>
+    /// <param name="desiredActualDiffEngine">The desired-actual difference engine.</param>
+    /// <param name="packageResolver">The package resolver.</param>
+    /// <param name="storeRegistry">The store registry.</param>
+    /// <param name="reconciliationOptions">The reconciliation options.</param>
+    /// <param name="observerEventDispatcher">The observer event dispatcher.</param>
+    /// <param name="healthEvaluator">The health evaluator.</param>
+    /// <param name="logger">The reconciliation logger.</param>
+    /// <param name="metrics">The reconciliation metrics.</param>
+    /// <param name="feedResolutionOptions">The feed resolution options.</param>
+    /// <param name="feedTrustPolicyOptions">The feed trust policy options.</param>
+    /// <param name="lockFileCoordinator">The lock file coordinator.</param>
+    /// <param name="cleanupPolicyOptions">The cleanup policy options.</param>
+    /// <param name="retryPolicy">The reconciliation retry policy.</param>
+    /// <param name="dryRunPlanner">The dry run planner.</param>
+    /// <param name="feedTrustPolicyEvaluator">The feed trust policy evaluator.</param>
+    /// <param name="packageCleanupService">The package cleanup service.</param>
+    /// <param name="failureRecorder">The failure recorder.</param>
+    /// <param name="loadingOptions">The loading options.</param>
+    /// <param name="packageLoader">The package loader.</param>
+    /// <param name="packageUnloadCoordinator">The package unload coordinator.</param>
+    /// <param name="watcherDegradationTracker">The watcher degradation tracker.</param>
+    /// <param name="loadingFailureTracker">The loading failure tracker.</param>
+    public ReconciliationService(
         IEnumerable<IDesiredPackageSource> sources,
-        SourceTrustOptions sourceTrustOptions,
-        DesiredStateAggregator desiredStateAggregator,
-        DesiredActualDiffEngine desiredActualDiffEngine,
+        IOptions<SourceTrustOptions> sourceTrustOptions,
+        IDesiredStateAggregator desiredStateAggregator,
+        IDesiredActualDiffEngine desiredActualDiffEngine,
         IPackageResolver packageResolver,
-        StoreRegistry storeRegistry,
-        ReconciliationOptions reconciliationOptions)
-        : this(
-            sources,
-            sourceTrustOptions,
-            desiredStateAggregator,
-            desiredActualDiffEngine,
-            packageResolver,
-            storeRegistry,
-            reconciliationOptions,
-        new([]),
-        new(),
-        new ReconciliationLogger(),
-        new(new()),
-                new(),
-                new(),
-                new(),
-                new())
-    {
-    }
-
-    /// <summary>Initializes a new instance of the reconciliation service.</summary>
-    /// <summary>Initializes a new instance of the reconciliation service.</summary>
-public ReconciliationService(
-        IEnumerable<IDesiredPackageSource> sources,
-        SourceTrustOptions sourceTrustOptions,
-        DesiredStateAggregator desiredStateAggregator,
-        DesiredActualDiffEngine desiredActualDiffEngine,
-        IPackageResolver packageResolver,
-        StoreRegistry storeRegistry,
-        ReconciliationOptions reconciliationOptions,
-        ObserverEventDispatcher observerEventDispatcher,
-        ReconciliationHealthEvaluator healthEvaluator,
-        IReconciliationLogger? logger = null,
-        ReconciliationMetrics? metrics = null,
-        FeedResolutionOptions? feedResolutionOptions = null,
-        FeedTrustPolicyOptions? feedTrustPolicyOptions = null,
-        LockFileOptions? lockFileOptions = null,
-        CleanupPolicyOptions? cleanupPolicyOptions = null,
-        LoadingOptions? loadingOptions = null,
+        IStoreRegistry storeRegistry,
+        IOptions<ReconciliationOptions> reconciliationOptions,
+        IObserverEventDispatcher observerEventDispatcher,
+        IReconciliationHealthEvaluator healthEvaluator,
+        IReconciliationLogger logger,
+        ReconciliationMetrics metrics,
+        IOptions<FeedResolutionOptions> feedResolutionOptions,
+        IOptions<FeedTrustPolicyOptions> feedTrustPolicyOptions,
+        ILockFileCoordinator lockFileCoordinator,
+        IOptions<CleanupPolicyOptions> cleanupPolicyOptions,
+        IReconciliationRetryPolicy retryPolicy,
+        IDryRunPlanner dryRunPlanner,
+        IFeedTrustPolicyEvaluator feedTrustPolicyEvaluator,
+        IPackageCleanupService packageCleanupService,
+        IFailureRecorder failureRecorder,
+        IOptions<LoadingOptions>? loadingOptions = null,
         IPackageLoader? packageLoader = null,
         IPackageUnloadCoordinator? packageUnloadCoordinator = null,
         WatcherDegradationTracker? watcherDegradationTracker = null,
         ILoadingFailureTracker? loadingFailureTracker = null)
     {
         var sourcesList = (sources ?? throw new ArgumentNullException(nameof(sources))).ToArray();
-        sourceTrustOptions = sourceTrustOptions ?? throw new ArgumentNullException(nameof(sourceTrustOptions));
-        IDesiredStateAggregator desiredStateAgg = desiredStateAggregator ?? throw new ArgumentNullException(nameof(desiredStateAggregator));
-        IDesiredActualDiffEngine diffEngine = desiredActualDiffEngine ?? throw new ArgumentNullException(nameof(desiredActualDiffEngine));
-        IStoreRegistry storeReg = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
-        _reconciliationOptions = reconciliationOptions ?? throw new ArgumentNullException(nameof(reconciliationOptions));
-        IObserverEventDispatcher eventDispatcher = observerEventDispatcher ?? throw new ArgumentNullException(nameof(observerEventDispatcher));
-        IReconciliationHealthEvaluator healthEval = healthEvaluator ?? throw new ArgumentNullException(nameof(healthEvaluator));
-        var loggerInstance = logger ?? new ReconciliationLogger();
-        var metricsInstance = metrics ?? new ReconciliationMetrics(new());
-        var feedResOpts = feedResolutionOptions ?? new FeedResolutionOptions();
-        var feedTrustOpts = feedTrustPolicyOptions ?? new FeedTrustPolicyOptions();
-        var lockOpts = lockFileOptions ?? new LockFileOptions();
-        var cleanupOpts = cleanupPolicyOptions ?? new CleanupPolicyOptions();
-        var loadOpts = loadingOptions ?? new LoadingOptions();
+        var sourceTrustOpts = (sourceTrustOptions ?? throw new ArgumentNullException(nameof(sourceTrustOptions))).Value;
+        var reconciliationOpts = (reconciliationOptions ?? throw new ArgumentNullException(nameof(reconciliationOptions))).Value;
+        var feedResOpts = (feedResolutionOptions ?? throw new ArgumentNullException(nameof(feedResolutionOptions))).Value;
+        var feedTrustOpts = (feedTrustPolicyOptions ?? throw new ArgumentNullException(nameof(feedTrustPolicyOptions))).Value;
+        var cleanupOpts = (cleanupPolicyOptions ?? throw new ArgumentNullException(nameof(cleanupPolicyOptions))).Value;
+        var loadOpts = loadingOptions?.Value ?? new LoadingOptions();
+
+        var desiredStateAgg = desiredStateAggregator ?? throw new ArgumentNullException(nameof(desiredStateAggregator));
+        var diffEngine = desiredActualDiffEngine ?? throw new ArgumentNullException(nameof(desiredActualDiffEngine));
+        var storeReg = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
+        _reconciliationOptions = reconciliationOpts;
+        var eventDispatcher = observerEventDispatcher ?? throw new ArgumentNullException(nameof(observerEventDispatcher));
+        var healthEval = healthEvaluator ?? throw new ArgumentNullException(nameof(healthEvaluator));
+        var loggerInstance = logger ?? throw new ArgumentNullException(nameof(logger));
+        var metricsInstance = metrics ?? throw new ArgumentNullException(nameof(metrics));
         var loader = packageLoader ?? new NoOpPackageLoader();
         var unloadCoordinator = packageUnloadCoordinator ?? new NoOpPackageUnloadCoordinator();
-        IFeedTrustPolicyEvaluator feedTrustPolicyEvaluator = new FeedTrustPolicyEvaluator();
-        ILockFileCoordinator lockFileCoordinator = new LockFileCoordinator(new(lockOpts.Path), lockOpts);
-        IDryRunPlanner dryRunPlanner = new DryRunPlanner(diffEngine);
-        IPackageCleanupService packageCleanupService = new PackageCleanupService(new());
+        var failureRec = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
+        var lockCoordinator = lockFileCoordinator ?? throw new ArgumentNullException(nameof(lockFileCoordinator));
+        var retry = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
+        var dryRun = dryRunPlanner ?? throw new ArgumentNullException(nameof(dryRunPlanner));
+        var trustPolicyEvaluator = feedTrustPolicyEvaluator ?? throw new ArgumentNullException(nameof(feedTrustPolicyEvaluator));
+        var cleanupService = packageCleanupService ?? throw new ArgumentNullException(nameof(packageCleanupService));
 
-        var failureRecorder = new FailureRecorder(storeReg);
-        IFailureRecorder failureRec = failureRecorder;
         var pointerSwitcher = new AtomicPointerSwitcher();
-        var transactionCoordinator = new PackageTransactionCoordinator(pointerSwitcher, failureRecorder);
-
-        IReconciliationRetryPolicy retryPolicy = new ReconciliationRetryPolicy(_reconciliationOptions);
+        var transactionCoordinator = new PackageTransactionCoordinator(pointerSwitcher, failureRec);
         var snapshotCache = new DesiredSourceSnapshotCache(storeReg);
         IAllowlistGate allowlistGate = new AllowlistGate();
         IPackageApplyExecutor applyExecutor = new PackageApplyExecutor(
             packageResolver ?? throw new ArgumentNullException(nameof(packageResolver)),
             transactionCoordinator,
-            retryPolicy,
-            failureRecorder);
+            retry,
+            failureRec);
 
         var pendingUnloads = new Dictionary<string, PackageLoadContextHandle>(StringComparer.OrdinalIgnoreCase);
 
         _pipeline = new();
         _pipeline.Use(new DesiredStateReadMiddleware(
-            sourcesList, sourceTrustOptions, desiredStateAgg, allowlistGate,
-            retryPolicy, snapshotCache, failureRec, loggerInstance, metricsInstance));
+            sourcesList, sourceTrustOpts, desiredStateAgg, allowlistGate,
+            retry, snapshotCache, failureRec, loggerInstance, metricsInstance));
         _pipeline.Use(new PackageResolutionMiddleware(applyExecutor, loggerInstance));
         _pipeline.Use(new TrustAndLockGateMiddleware(
-            feedResOpts, feedTrustOpts, feedTrustPolicyEvaluator,
-            lockFileCoordinator, retryPolicy, failureRec, loggerInstance));
+            feedResOpts, feedTrustOpts, trustPolicyEvaluator,
+            lockCoordinator, retry, failureRec, loggerInstance));
         _pipeline.Use(new DiffAndChangeEventMiddleware(
-            diffEngine, dryRunPlanner, retryPolicy,
+            diffEngine, dryRun, retry,
             storeReg, eventDispatcher, metricsInstance));
         _pipeline.Use(new TransactionExecutionMiddleware(
             applyExecutor, diffEngine, eventDispatcher));
@@ -139,24 +135,14 @@ public ReconciliationService(
             loadOpts, loader, unloadCoordinator,
             pendingUnloads, loggerInstance, metricsInstance));
         _pipeline.Use(new CleanupMiddleware(
-            diffEngine, storeReg, packageCleanupService,
+            diffEngine, storeReg, cleanupService,
             cleanupOpts, metricsInstance));
         _pipeline.Use(new HealthAndMetricsMiddleware(
             healthEval, eventDispatcher, loggerInstance, metricsInstance,
             feedResOpts, watcherDegradationTracker, loadingFailureTracker));
     }
 
-    /// <summary>
-    /// Triggers a manual reconciliation cycle (backward-compatible; uses Manual trigger type).
-    /// </summary>
-    public Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken cancellationToken)
-    {
-        return TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), cancellationToken);
-    }
-
-    /// <summary>
-    /// Triggers a reconciliation cycle with explicit trigger metadata.
-    /// </summary>
+    /// <inheritdoc />
     public async Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(trigger);
@@ -173,7 +159,6 @@ public ReconciliationService(
             var correlationId = trigger.CorrelationId ?? CorrelationContext.CreateNew();
             using var scope = CorrelationContext.BeginScope(correlationId);
 
-            // Prefer the Activity-assigned ID when tracing is active
             var effectiveCorrelationId = System.Diagnostics.Activity.Current?.Id ?? correlationId;
 
             var context = new ReconciliationCycleContext
@@ -195,4 +180,3 @@ public ReconciliationService(
         }
     }
 }
-

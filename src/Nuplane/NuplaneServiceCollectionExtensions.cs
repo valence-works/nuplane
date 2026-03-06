@@ -5,19 +5,16 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Builder;
-using Nuplane.Contracts;
 using Nuplane.DirectorySource;
 using Nuplane.DirectorySource.Hosting;
 using Nuplane.Hosting;
 using Nuplane.Loading;
 using Nuplane.Options.Validation;
-using Nuplane.Operational;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Desired;
-using Nuplane.Runtime.Operational;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.FeedPolicy;
 using Nuplane.Runtime.Sources;
@@ -91,17 +88,13 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<FeedRuleResultSelector>();
         services.AddSingleton<DryRunPlanner>();
         services.AddSingleton<IDryRunPlanner>(sp => sp.GetRequiredService<DryRunPlanner>());
-        services.AddSingleton<FeedResolutionPolicy>(sp =>
-            new(sp.GetRequiredService<IOptions<FeedResolutionOptions>>().Value));
+        services.AddSingleton<FeedResolutionPolicy>();
         services.AddSingleton<FeedTrustPolicyEvaluator>();
         services.AddSingleton<IFeedTrustPolicyEvaluator>(sp => sp.GetRequiredService<FeedTrustPolicyEvaluator>());
         services.AddSingleton<RestrictedFeedValidatorPipeline>();
         services.AddSingleton<UntrustedOverridePolicy>();
-        services.AddSingleton(sp => new LockFileStore(sp.GetRequiredService<IOptions<LockFileOptions>>().Value.Path));
-        services.AddSingleton<LockFileCoordinator>(sp =>
-            new(
-                sp.GetRequiredService<LockFileStore>(),
-                sp.GetRequiredService<IOptions<LockFileOptions>>().Value));
+        services.AddSingleton<LockFileStore>();
+        services.AddSingleton<LockFileCoordinator>();
         services.AddSingleton<ILockFileCoordinator>(sp => sp.GetRequiredService<LockFileCoordinator>());
         services.AddSingleton<CleanupPolicyEvaluator>();
         services.AddSingleton<PackageCleanupService>();
@@ -117,10 +110,7 @@ public static class NuplaneServiceCollectionExtensions
                 sp.GetServices<INuplaneObserver>(),
                 sp.GetRequiredService<IReconciliationLogger>()));
         services.AddSingleton<IObserverEventDispatcher>(sp => sp.GetRequiredService<ObserverEventDispatcher>());
-        services.AddSingleton<IPackageResolver>(sp =>
-            new MultiFeedPackageResolver(
-                sp.GetRequiredService<IOptions<FeedResolutionOptions>>().Value,
-                sp.GetRequiredService<FeedResolutionPolicy>()));
+        services.AddSingleton<IPackageResolver, MultiFeedPackageResolver>();
         services.AddSingleton<StoreStateSerializer>();
         services.AddSingleton<IStoreStateSerializer>(sp => sp.GetRequiredService<StoreStateSerializer>());
         services.AddSingleton<StoreRegistry>(sp =>
@@ -130,36 +120,11 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<IStoreRegistry>(sp => sp.GetRequiredService<StoreRegistry>());
         services.AddSingleton<FailureRecorder>();
         services.AddSingleton<IFailureRecorder>(sp => sp.GetRequiredService<FailureRecorder>());
-        services.AddSingleton<ReconciliationRetryPolicy>(sp =>
-            new(sp.GetRequiredService<IOptions<ReconciliationOptions>>().Value));
+        services.AddSingleton<ReconciliationRetryPolicy>();
         services.AddSingleton<IReconciliationRetryPolicy>(sp => sp.GetRequiredService<ReconciliationRetryPolicy>());
         services.TryAddSingleton<WatcherDegradationTracker>();
-        services.AddSingleton<ReconciliationService>(sp =>
-            new(
-                sp.GetServices<IDesiredPackageSource>(),
-                sp.GetRequiredService<IOptions<SourceTrustOptions>>().Value,
-                sp.GetRequiredService<DesiredStateAggregator>(),
-                sp.GetRequiredService<DesiredActualDiffEngine>(),
-                sp.GetRequiredService<IPackageResolver>(),
-                sp.GetRequiredService<StoreRegistry>(),
-                sp.GetRequiredService<IOptions<ReconciliationOptions>>().Value,
-                sp.GetRequiredService<ObserverEventDispatcher>(),
-                sp.GetRequiredService<ReconciliationHealthEvaluator>(),
-                sp.GetRequiredService<IReconciliationLogger>(),
-                sp.GetRequiredService<ReconciliationMetrics>(),
-                sp.GetRequiredService<IOptions<FeedResolutionOptions>>().Value,
-                sp.GetRequiredService<IOptions<FeedTrustPolicyOptions>>().Value,
-                sp.GetRequiredService<IOptions<LockFileOptions>>().Value,
-                sp.GetRequiredService<IOptions<CleanupPolicyOptions>>().Value,
-                sp.GetService<IOptions<LoadingOptions>>()?.Value,
-                sp.GetService<IPackageLoader>(),
-                sp.GetService<IPackageUnloadCoordinator>(),
-                sp.GetService<WatcherDegradationTracker>(),
-                sp.GetService<ILoadingFailureTracker>()));
+        services.AddSingleton<ReconciliationService>();
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
-        services.AddSingleton<OperationalSnapshotProjector>();
-        services.AddSingleton<ManualReconcileCoordinator>();
-        services.AddSingleton<INuplaneAdminOperations, NuplaneAdminOperations>();
 
         // ── Builder phase ─────────────────────────────────────────────────────────
         var builder = new NuplaneBuilder(services);

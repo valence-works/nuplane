@@ -179,9 +179,6 @@ public sealed class StartupCycleTests
     /// </summary>
     private sealed class TrackingReconciliationService(ConcurrentQueue<TriggerType> triggers) : IReconciliationService
     {
-        public Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken cancellationToken) =>
-            TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), cancellationToken);
-
         public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken)
         {
             triggers.Enqueue(trigger.Type);
@@ -195,8 +192,6 @@ public sealed class StartupCycleTests
     private sealed class DelegatingReconciliationService(
         Func<ReconciliationTrigger, Task<ReconciliationRunResult>> handler) : IReconciliationService
     {
-        public Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken cancellationToken) =>
-            TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), cancellationToken);
 
         public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken) =>
             handler(trigger);

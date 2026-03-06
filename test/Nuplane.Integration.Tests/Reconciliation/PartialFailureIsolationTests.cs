@@ -1,5 +1,6 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
@@ -15,19 +16,16 @@ public sealed class PartialFailureIsolationTests
             new("pkg-bad", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")
         ]);
 
-        var service = new ReconciliationService(
-            [source],
-            new()
+        var service = ReconciliationServiceFactory.Create(
+            sources: [source],
+            sourceTrustOptions: new()
             {
                 AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-good", "pkg-bad" }
             },
-            new(),
-            new(),
-            new FailOneResolver("pkg-bad"),
-            new(new StoreStateSerializer(), stateFilePath: null),
-            new() { MaxRetryAttempts = 0 });
+            packageResolver: new FailOneResolver("pkg-bad"),
+            reconciliationOptions: new() { MaxRetryAttempts = 0 });
 
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.Contains("pkg-bad", result.FailedPackages);
         Assert.Contains(result.ChangeSet.Added, p => string.Equals(p.Id, "pkg-good", StringComparison.OrdinalIgnoreCase));

@@ -187,12 +187,15 @@ public sealed class DirectoryObservationContractTests
         private readonly List<ReconciliationTrigger> _triggers = [];
 
         public int TriggerCount => _triggerCount;
-        public IReadOnlyList<ReconciliationTrigger> Triggers => _triggers;
-
-        public Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken cancellationToken)
+        public IReadOnlyList<ReconciliationTrigger> Triggers
         {
-            Interlocked.Increment(ref _triggerCount);
-            return Task.FromResult(SkippedResult());
+            get
+            {
+                lock (_triggers)
+                {
+                    return _triggers.ToArray();
+                }
+            }
         }
 
         public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken)
@@ -202,6 +205,7 @@ public sealed class DirectoryObservationContractTests
             {
                 _triggers.Add(trigger);
             }
+
             return Task.FromResult(SkippedResult());
         }
 

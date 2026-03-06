@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Runtime.Configuration;
 
 namespace Nuplane.Runtime.Reconciliation;
 
@@ -8,7 +10,7 @@ namespace Nuplane.Runtime.Reconciliation;
 /// Reads and writes package lock files in JSON format, providing serialization
 /// and deserialization for <see cref="PackageLockFile"/> instances.
 /// </summary>
-public sealed class LockFileStore(string path)
+public sealed class LockFileStore(IOptions<LockFileOptions> options)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -17,7 +19,7 @@ public sealed class LockFileStore(string path)
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    private readonly string _path = path ?? throw new ArgumentNullException(nameof(path));
+    private readonly string _path = (options ?? throw new ArgumentNullException(nameof(options))).Value.Path;
 
     /// <summary>
     /// Reads the lock file from disk, returning <see langword="null"/> if the file does not exist.

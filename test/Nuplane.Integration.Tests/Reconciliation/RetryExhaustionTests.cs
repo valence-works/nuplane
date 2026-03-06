@@ -1,7 +1,7 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Configuration;
-using Nuplane.Store.State;
+using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -18,16 +18,13 @@ public sealed class RetryExhaustionTests
             MaxRetryBackoff = TimeSpan.FromMilliseconds(2)
         };
 
-        var service = new ReconciliationService(
-            [source],
-            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            new(),
-            new(),
-            new NuGetPackageResolver(),
-            new(new StoreStateSerializer(), stateFilePath: null),
-            options);
+        var service = ReconciliationServiceFactory.Create(
+            sources: [source],
+            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
+            packageResolver: new NuGetPackageResolver(),
+            reconciliationOptions: options);
 
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.True(result.IsDegraded);
         Assert.Empty(result.ChangeSet.Added);

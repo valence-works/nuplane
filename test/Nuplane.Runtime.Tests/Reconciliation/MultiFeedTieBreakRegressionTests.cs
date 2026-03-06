@@ -1,4 +1,6 @@
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation.FeedPolicy;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
@@ -8,7 +10,7 @@ public sealed class MultiFeedTieBreakRegressionTests
     [Fact]
     public void SelectWinner_WithEqualPriorityAndVersion_IsStableAcrossInputOrder()
     {
-        var policy = new FeedResolutionPolicy(new());
+        var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(new()));
         var timestamp = DateTimeOffset.UtcNow;
 
         var firstOrder = new[]

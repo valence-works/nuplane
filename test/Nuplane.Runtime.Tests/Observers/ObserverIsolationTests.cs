@@ -1,6 +1,8 @@
 using Nuplane.Abstractions;
+using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Store.State;
+using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.Runtime.Tests.Observers;
 
@@ -9,18 +11,12 @@ public sealed class ObserverIsolationTests
     [Fact]
     public async Task TriggerManualAsync_WhenObserverThrows_ReconciliationStillCompletes()
     {
-        var service = new ReconciliationService(
-            [new StaticSource([new("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")])],
-            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            new(),
-            new(),
-            new NuGetPackageResolver(),
-            new(new StoreStateSerializer(), stateFilePath: null),
-            new(),
-            new([new ThrowingObserver()]),
-            new());
+        var service = ReconciliationServiceFactory.Create(
+            sources: [new StaticSource([new("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")])],
+            sourceTrustOptions: new SourceTrustOptions { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
+            observerEventDispatcher: new ObserverEventDispatcher([new ThrowingObserver()]));
 
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.False(result.Skipped);
         Assert.Single(result.ChangeSet.Added);

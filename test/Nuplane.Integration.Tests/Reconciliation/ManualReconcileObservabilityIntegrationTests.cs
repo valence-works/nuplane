@@ -126,18 +126,12 @@ public sealed class ManualReconcileObservabilityIntegrationTests
 
     private sealed class FakeReconciliationService(ReconciliationRunResult result) : IReconciliationService
     {
-        public Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken ct) =>
-            Task.FromResult(result);
-
         public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken ct) =>
             Task.FromResult(result);
     }
 
     private sealed class ThrowingReconciliationService(Exception exception) : IReconciliationService
     {
-        public Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken ct) =>
-            throw exception;
-
         public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken ct) =>
             throw exception;
     }

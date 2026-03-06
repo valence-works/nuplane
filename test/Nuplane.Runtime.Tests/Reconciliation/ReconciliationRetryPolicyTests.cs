@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation;
 
@@ -9,12 +10,12 @@ public sealed class ReconciliationRetryPolicyTests
     public async Task ExecuteAsync_RetriesUntilSuccess_WithinMaxAttempts()
     {
         var policy = new ReconciliationRetryPolicy(
-            new()
+            new OptionsWrapper<ReconciliationOptions>(new()
             {
                 MaxRetryAttempts = 3,
                 InitialRetryBackoff = TimeSpan.FromMilliseconds(1),
                 MaxRetryBackoff = TimeSpan.FromMilliseconds(4)
-            });
+            }));
 
         var attempts = 0;
         var result = await policy.ExecuteAsync(

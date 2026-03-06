@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation;
 
@@ -15,7 +16,7 @@ public sealed class MultiFeedRetryPolicyTests
             MaxRetryBackoff = TimeSpan.FromMilliseconds(2)
         };
 
-        var policy = new ReconciliationRetryPolicy(options);
+        var policy = new ReconciliationRetryPolicy(new OptionsWrapper<ReconciliationOptions>(options));
         var attempts = 0;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>

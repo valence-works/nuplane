@@ -3,6 +3,7 @@ using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Desired;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
@@ -30,16 +31,10 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
 
     private static ReconciliationService CreateService(IDesiredPackageSource source)
     {
-        return new(
-            [source],
-            new() { RejectUnallowlistedPackages = false },
-            new(),
-            new(),
-            new NuGetPackageResolver(),
-            new(new StoreStateSerializer(), stateFilePath: null),
-            new(),
-            new([]),
-            new());
+        return ReconciliationServiceFactory.Create(
+            sources: [source],
+            sourceTrustOptions: new SourceTrustOptions { RejectUnallowlistedPackages = false },
+            packageResolver: new NuGetPackageResolver());
     }
 
     [Fact]
@@ -53,7 +48,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
         var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.Empty(result.ChangeSet.Added);
         Assert.Empty(result.ChangeSet.Updated);
@@ -74,7 +69,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
         var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.Empty(result.ChangeSet.Added);
         Assert.Empty(result.ChangeSet.Updated);
@@ -104,7 +99,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
         var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.Empty(result.ChangeSet.Added);
         Assert.Empty(result.ChangeSet.Updated);
@@ -133,7 +128,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
         var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.Empty(result.ChangeSet.Added);
         Assert.Empty(result.ChangeSet.Updated);
@@ -151,7 +146,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
         var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.Empty(result.ChangeSet.Added);
         Assert.Empty(result.ChangeSet.Updated);
@@ -182,13 +177,13 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
         var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
-        var established = await service.TriggerManualAsync(CancellationToken.None);
+        var established = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
         Assert.Single(established.ChangeSet.Added);
 
         // Now corrupt the manifest  
         await File.WriteAllTextAsync(manifestPath, "corrupt");
 
-        var degraded = await service.TriggerManualAsync(CancellationToken.None);
+        var degraded = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         // Source is non-mutating: returns empty desired set, so no new packages are added.
         // The diff engine may still remove previously-active packages since desired set is now empty.

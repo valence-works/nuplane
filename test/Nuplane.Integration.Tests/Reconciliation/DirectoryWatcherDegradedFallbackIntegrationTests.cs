@@ -52,18 +52,14 @@ public sealed class DirectoryWatcherDegradedFallbackIntegrationTests
         var failingSource = new FailingDesiredSource();
         var spyLogger = new SpyReconciliationLogger();
 
-        var service = new ReconciliationService(
-            [failingSource],
-            new SourceTrustOptions(),
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
-            new NoOpResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions(),
-            new ObserverEventDispatcher([]),
-            new ReconciliationHealthEvaluator(),
-            spyLogger,
-            new ReconciliationMetrics(new ReconciliationTelemetry()));
+        var service = ReconciliationServiceFactory.Create(
+            sources: [failingSource],
+            sourceTrustOptions: new SourceTrustOptions(),
+            packageResolver: new NoOpResolver(),
+            observerEventDispatcher: new ObserverEventDispatcher([]),
+            healthEvaluator: new ReconciliationHealthEvaluator(),
+            logger: spyLogger,
+            metrics: new ReconciliationMetrics(new ReconciliationTelemetry()));
 
         // Trigger scheduled reconciliation — should complete even with source outage
         var trigger = new ReconciliationTrigger(TriggerType.Scheduled);
@@ -83,18 +79,14 @@ public sealed class DirectoryWatcherDegradedFallbackIntegrationTests
         var failingSource = new FailingDesiredSource();
         var spyLogger = new SpyReconciliationLogger();
 
-        var service = new ReconciliationService(
-            [failingSource],
-            new SourceTrustOptions(),
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
-            new NoOpResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions(),
-            new ObserverEventDispatcher([]),
-            new ReconciliationHealthEvaluator(),
-            spyLogger,
-            new ReconciliationMetrics(new ReconciliationTelemetry()));
+        var service = ReconciliationServiceFactory.Create(
+            sources: [failingSource],
+            sourceTrustOptions: new SourceTrustOptions(),
+            packageResolver: new NoOpResolver(),
+            observerEventDispatcher: new ObserverEventDispatcher([]),
+            healthEvaluator: new ReconciliationHealthEvaluator(),
+            logger: spyLogger,
+            metrics: new ReconciliationMetrics(new ReconciliationTelemetry()));
 
         var trigger = new ReconciliationTrigger(TriggerType.Scheduled);
         await service.TriggerAsync(trigger, CancellationToken.None);

@@ -9,14 +9,6 @@ namespace Nuplane.Runtime.Reconciliation;
 public interface IReconciliationService
 {
     /// <summary>
-    /// Triggers a manual reconciliation cycle. If single-flight is enabled,
-    /// concurrent invocations return a skipped result.
-    /// </summary>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The result of the reconciliation cycle.</returns>
-    Task<ReconciliationRunResult> TriggerManualAsync(CancellationToken cancellationToken);
-
-    /// <summary>
     /// Triggers a reconciliation cycle with explicit trigger metadata for attribution
     /// and observability. If single-flight is enabled, concurrent invocations return a skipped result.
     /// </summary>
@@ -25,4 +17,3 @@ public interface IReconciliationService
     /// <returns>The result of the reconciliation cycle.</returns>
     Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken);
 }
-

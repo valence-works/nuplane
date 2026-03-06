@@ -1,7 +1,7 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Events;
+using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.Models;
@@ -69,18 +69,14 @@ public sealed class ScheduledTriggerAttributionIntegrationTests
         SpyReconciliationLogger spyLogger,
         ReconciliationHealthEvaluator? healthEvaluator = null)
     {
-        return new ReconciliationService(
-            [],
-            new SourceTrustOptions(),
-            new DesiredStateAggregator(),
-            new DesiredActualDiffEngine(),
-            new NoOpResolver(),
-            new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            new ReconciliationOptions(),
-            new ObserverEventDispatcher([]),
-            healthEvaluator ?? new ReconciliationHealthEvaluator(),
-            spyLogger,
-            new ReconciliationMetrics(new ReconciliationTelemetry()));
+        return ReconciliationServiceFactory.Create(
+            sources: [],
+            sourceTrustOptions: new SourceTrustOptions(),
+            packageResolver: new NoOpResolver(),
+            observerEventDispatcher: new ObserverEventDispatcher([]),
+            healthEvaluator: healthEvaluator ?? new ReconciliationHealthEvaluator(),
+            logger: spyLogger,
+            metrics: new ReconciliationMetrics(new ReconciliationTelemetry()));
     }
 
     private sealed class NoOpResolver : IPackageResolver

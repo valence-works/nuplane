@@ -1,6 +1,6 @@
 using Nuplane.Abstractions;
+using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Contracts;
 
@@ -10,18 +10,16 @@ public sealed class ObserverContractTests
     public async Task TriggerManualAsync_FiresObserverCallbacksInOrder_WithSharedCorrelationId()
     {
         var observer = new RecordingObserver();
-        var service = new ReconciliationService(
-            [new StaticSource([new("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")])],
-            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            new(),
-            new(),
-            new NuGetPackageResolver(),
-            new(new StoreStateSerializer(), stateFilePath: null),
-            new(),
-            new([observer]),
-            new());
 
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var service = ReconciliationServiceFactory.Create(
+            sources: [new StaticSource([new("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")])],
+            sourceTrustOptions: new SourceTrustOptions
+            {
+                AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" }
+            },
+            observerEventDispatcher: new Nuplane.Runtime.Events.ObserverEventDispatcher([observer]));
+
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.False(result.Skipped);
         Assert.Equal(["Changing", "Changed"], observer.Events);

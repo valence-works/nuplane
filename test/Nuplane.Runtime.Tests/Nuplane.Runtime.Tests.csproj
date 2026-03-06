@@ -4,6 +4,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <ProjectReference Include="..\..\src\Nuplane.Runtime\Nuplane.Runtime.csproj" />
     <ProjectReference Include="..\..\src\Nuplane\Nuplane.csproj" />
+    <ProjectReference Include="..\..\src\Nuplane.Admin.Api\Nuplane.Admin.Api.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Loading\Nuplane.Loading.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Loading.Hosting\Nuplane.Loading.Hosting.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Sources.Directory\Nuplane.Sources.Directory.csproj" />

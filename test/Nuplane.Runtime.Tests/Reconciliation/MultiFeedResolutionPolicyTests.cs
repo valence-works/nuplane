@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation.FeedPolicy;
@@ -18,7 +19,7 @@ public sealed class MultiFeedResolutionPolicyTests
         options.SetPriority("a-feed", 10);
         options.SetPriority("m-feed", 10);
 
-        var policy = new FeedResolutionPolicy(options);
+        var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
         var request = new PackageRequest("pkg", "[1.0.0,2.0.0)", null, PackageUpdatePolicy.Range, "source");
 
         var ordered = policy.OrderCandidates(request).Select(x => x.Name).ToArray();
@@ -30,7 +31,7 @@ public sealed class MultiFeedResolutionPolicyTests
     public void SelectWinner_WhenVersionsEqual_UsesDeterministicFeedNameTieBreak()
     {
         var options = new FeedResolutionOptions();
-        var policy = new FeedResolutionPolicy(options);
+        var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
         var timestamp = DateTimeOffset.UtcNow;
 
         var candidates = new[]

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.IO.Compression;
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Versioning;
@@ -13,9 +14,9 @@ namespace Nuplane.Runtime.Reconciliation;
 /// Resolves packages across multiple feeds using priority ordering and feed availability
 /// tracking, recording resolution decisions for observability.
 /// </summary>
-public sealed class MultiFeedPackageResolver(FeedResolutionOptions options, FeedResolutionPolicy policy) : IPackageResolver
+public sealed class MultiFeedPackageResolver(IOptions<FeedResolutionOptions> options, FeedResolutionPolicy policy) : IPackageResolver
 {
-    private readonly FeedResolutionOptions _options = options ?? throw new ArgumentNullException(nameof(options));
+    private readonly FeedResolutionOptions _options = (options ?? throw new ArgumentNullException(nameof(options))).Value;
     private readonly FeedResolutionPolicy _policy = policy ?? throw new ArgumentNullException(nameof(policy));
     private readonly ConcurrentDictionary<string, FeedResolutionDecision> _decisions = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, int> _attempts = new(StringComparer.OrdinalIgnoreCase);

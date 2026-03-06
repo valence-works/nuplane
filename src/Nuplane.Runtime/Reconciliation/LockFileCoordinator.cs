@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation.Models;
@@ -9,10 +10,10 @@ namespace Nuplane.Runtime.Reconciliation;
 /// Evaluates resolved packages against the lock file, enforcing or overriding
 /// package versions and feeds based on the configured lock file mode.
 /// </summary>
-public sealed class LockFileCoordinator(LockFileStore store, LockFileOptions options) : ILockFileCoordinator
+public sealed class LockFileCoordinator(LockFileStore store, IOptions<LockFileOptions> options) : ILockFileCoordinator
 {
     private readonly LockFileStore _store = store ?? throw new ArgumentNullException(nameof(store));
-    private readonly LockFileOptions _options = options ?? throw new ArgumentNullException(nameof(options));
+    private readonly LockFileOptions _options = (options ?? throw new ArgumentNullException(nameof(options))).Value;
 
     /// <inheritdoc />
     public async Task<LockFileEvaluationResult> EvaluateAsync(ResolvedPackage resolved, CancellationToken cancellationToken)

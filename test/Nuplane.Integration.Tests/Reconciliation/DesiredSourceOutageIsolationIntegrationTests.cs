@@ -1,5 +1,6 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
@@ -21,7 +22,7 @@ public sealed class DesiredSourceOutageIsolationIntegrationTests
         var faulting = new FaultingSource(new InvalidOperationException("source offline"));
 
         var service = CreateService([healthy, faulting]);
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.False(result.Skipped);
         Assert.Single(result.ChangeSet.Added);
@@ -37,7 +38,7 @@ public sealed class DesiredSourceOutageIsolationIntegrationTests
         var faulting = new FaultingSource(new InvalidOperationException("gone"));
 
         var service = CreateService([healthy, faulting]);
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         // The result should be degraded because one source had an outage
         Assert.True(result.IsDegraded);
@@ -54,7 +55,7 @@ public sealed class DesiredSourceOutageIsolationIntegrationTests
         ]);
 
         var service = CreateService([srcA, srcB]);
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.False(result.IsDegraded);
         Assert.Equal(2, result.ChangeSet.Added.Count);
@@ -71,11 +72,11 @@ public sealed class DesiredSourceOutageIsolationIntegrationTests
         var service = CreateService([healthy, faulting]);
 
         // First cycle: converge healthy packages
-        var first = await service.TriggerManualAsync(CancellationToken.None);
+        var first = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
         Assert.Single(first.ChangeSet.Added);
 
         // Second cycle: faulting source still down, but healthy package is stable
-        var second = await service.TriggerManualAsync(CancellationToken.None);
+        var second = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
         Assert.Empty(second.ChangeSet.Added);
         Assert.Empty(second.ChangeSet.Updated);
         // pkg-a should remain active
@@ -89,7 +90,7 @@ public sealed class DesiredSourceOutageIsolationIntegrationTests
         var fault2 = new FaultingSource(new InvalidOperationException("down-2"));
 
         var service = CreateService([fault1, fault2]);
-        var result = await service.TriggerManualAsync(CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
 
         Assert.Empty(result.ChangeSet.Added);
         Assert.True(result.IsDegraded);
@@ -97,16 +98,10 @@ public sealed class DesiredSourceOutageIsolationIntegrationTests
 
     private static ReconciliationService CreateService(IDesiredPackageSource[] sources)
     {
-        return new(
-            sources,
-            new() { RejectUnallowlistedPackages = false },
-            new(),
-            new(),
-            new NuGetPackageResolver(),
-            new(new StoreStateSerializer(), stateFilePath: null),
-            new(),
-            new([]),
-            new());
+        return ReconciliationServiceFactory.Create(
+            sources: sources,
+            sourceTrustOptions: new() { RejectUnallowlistedPackages = false },
+            packageResolver: new NuGetPackageResolver());
     }
 
     private sealed class StaticSource(IReadOnlyList<PackageRequest> requests) : IDesiredPackageSource

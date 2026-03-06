@@ -1,5 +1,6 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
@@ -13,18 +14,15 @@ public sealed class SingleFlightOverlapTests
             new("pkg-a", "1.2.3", "feed-1", PackageUpdatePolicy.Exact, "source-a")
         ]);
 
-        var service = new ReconciliationService(
-            [source],
-            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            new(),
-            new(),
-            new SlowResolver(TimeSpan.FromMilliseconds(200)),
-            new(new StoreStateSerializer(), stateFilePath: null),
-            new() { EnableSingleFlight = true });
+        var service = ReconciliationServiceFactory.Create(
+            sources: [source],
+            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
+            packageResolver: new SlowResolver(TimeSpan.FromMilliseconds(200)),
+            reconciliationOptions: new() { EnableSingleFlight = true });
 
-        var firstRun = service.TriggerManualAsync(CancellationToken.None);
+        var firstRun = service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
         await Task.Delay(30);
-        var secondRun = await service.TriggerManualAsync(CancellationToken.None);
+        var secondRun = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
         var firstResult = await firstRun;
 
         Assert.False(firstResult.Skipped);

@@ -13,6 +13,8 @@ public static class NuplaneAdminEndpointExtensions
 {
     /// <summary>
     /// Maps Nuplane admin operational endpoints under the specified prefix.
+    /// Requires <see cref="NuplaneAdminServiceCollectionExtensions.AddNuplaneAdmin(Microsoft.Extensions.DependencyInjection.IServiceCollection)"/>
+    /// to be registered on the service collection first.
     /// Provides:
     /// <list type="bullet">
     ///   <item><c>GET {prefix}/snapshot</c> — Returns a consistent operational snapshot.</item>
