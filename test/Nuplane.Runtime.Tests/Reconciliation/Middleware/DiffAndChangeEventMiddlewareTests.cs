@@ -152,6 +152,9 @@ public sealed class DiffAndChangeEventMiddlewareTests
             return Task.CompletedTask;
         }
 
+        public Task PublishReconciledAsync(PackageChangeSet changeSet, IReadOnlyList<ResolvedPackage> appliedPackages, CancellationToken ct) =>
+            Task.CompletedTask;
+
         public Task NotifyPackageFailedAsync(string packageId, Exception exception, string correlationId, CancellationToken ct) =>
             Task.CompletedTask;
     }

@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
-using Nuplane;
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Hosting;
 using Nuplane.Runtime.Configuration;
@@ -156,8 +156,8 @@ public sealed class StartupCycleTests
 
         return new ReconciliationHostedService(
             reconciliationService,
-            options,
-            new ConvergenceOptions(),
+            new OptionsWrapper<ReconciliationOptions>(options),
+            new OptionsWrapper<ConvergenceOptions>(new ConvergenceOptions()),
             NullLogger<ReconciliationHostedService>.Instance,
             new ReconciliationMetrics(new ReconciliationTelemetry()));
     }

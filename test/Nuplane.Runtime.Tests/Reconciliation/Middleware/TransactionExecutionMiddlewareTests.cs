@@ -122,6 +122,7 @@ public sealed class TransactionExecutionMiddlewareTests
 
         public Task PublishChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
         public Task PublishChangedAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
+        public Task PublishReconciledAsync(PackageChangeSet changeSet, IReadOnlyList<ResolvedPackage> appliedPackages, CancellationToken ct) => Task.CompletedTask;
 
         public Task NotifyPackageFailedAsync(string packageId, Exception exception, string correlationId, CancellationToken ct)
         {
@@ -135,6 +136,7 @@ public sealed class TransactionExecutionMiddlewareTests
     {
         public Task PublishChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
         public Task PublishChangedAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
+        public Task PublishReconciledAsync(PackageChangeSet changeSet, IReadOnlyList<ResolvedPackage> appliedPackages, CancellationToken ct) => Task.CompletedTask;
         public Task NotifyPackageFailedAsync(string packageId, Exception exception, string correlationId, CancellationToken ct) => Task.CompletedTask;
     }
 }

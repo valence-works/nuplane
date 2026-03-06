@@ -81,9 +81,10 @@ public ReconciliationService(
         LoadingOptions? loadingOptions = null,
         IPackageLoader? packageLoader = null,
         IPackageUnloadCoordinator? packageUnloadCoordinator = null,
-        WatcherDegradationTracker? watcherDegradationTracker = null)
+        WatcherDegradationTracker? watcherDegradationTracker = null,
+        ILoadingFailureTracker? loadingFailureTracker = null)
     {
-        var sourcesList = sources?.ToArray() ?? throw new ArgumentNullException(nameof(sources));
+        var sourcesList = (sources ?? throw new ArgumentNullException(nameof(sources))).ToArray();
         sourceTrustOptions = sourceTrustOptions ?? throw new ArgumentNullException(nameof(sourceTrustOptions));
         IDesiredStateAggregator desiredStateAgg = desiredStateAggregator ?? throw new ArgumentNullException(nameof(desiredStateAggregator));
         IDesiredActualDiffEngine diffEngine = desiredActualDiffEngine ?? throw new ArgumentNullException(nameof(desiredActualDiffEngine));
@@ -142,7 +143,7 @@ public ReconciliationService(
             cleanupOpts, metricsInstance));
         _pipeline.Use(new HealthAndMetricsMiddleware(
             healthEval, eventDispatcher, loggerInstance, metricsInstance,
-            feedResOpts, watcherDegradationTracker));
+            feedResOpts, watcherDegradationTracker, loadingFailureTracker));
     }
 
     /// <summary>

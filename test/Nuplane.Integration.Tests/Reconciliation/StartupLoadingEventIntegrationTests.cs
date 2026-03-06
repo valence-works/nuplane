@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Loading;
 using Nuplane.Loading.Events;
@@ -10,18 +11,11 @@ using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
-/// <summary>
-/// T018 — End-to-end integration test verifying that the startup reconciliation cycle
-/// triggers the loading observer chain (<see cref="PackageAutoLoadingObserver"/>),
-/// producing a <see cref="PackageLoadedEvent"/> delivered to <see cref="IPackageLoadingObserver"/>
-/// instances before any scheduled cycle.
-/// </summary>
 public sealed class StartupLoadingEventIntegrationTests
 {
     [Fact]
     public async Task StartupTrigger_FiresOnPackagesLoadedAsync_WithCorrectCorrelation()
     {
-        // Arrange — build a full ReconciliationService wired with PackageAutoLoadingObserver
         var source = new StaticSource([
             new("plugin-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "test-source")
         ]);
@@ -33,185 +27,262 @@ public sealed class StartupLoadingEventIntegrationTests
 
         var fakeLoader = new FakePackageLoader();
         var loadingOptions = new LoadingOptions { Enabled = true };
-
         var autoLoadingObserver = new PackageAutoLoadingObserver(
             fakeLoader,
             loadingDispatcher,
-            loadingOptions,
+            new OptionsWrapper<LoadingOptions>(loadingOptions),
             NullLogger<PackageAutoLoadingObserver>.Instance);
 
         var observerDispatcher = new ObserverEventDispatcher([autoLoadingObserver]);
 
         var service = new ReconciliationService(
-            [source],
-            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "plugin-a" } },
-            new(),
-            new(),
-            new NuGetPackageResolver(),
-            new(new StoreStateSerializer(), stateFilePath: null),
-            new(),
-            observerDispatcher,
-            new());
+            sources: [source],
+            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "plugin-a" } },
+            desiredStateAggregator: new(),
+            desiredActualDiffEngine: new(),
+            packageResolver: new NuGetPackageResolver(),
+            storeRegistry: new(new StoreStateSerializer(), stateFilePath: null),
+            reconciliationOptions: new(),
+            observerEventDispatcher: observerDispatcher,
+            healthEvaluator: new());
 
-        // Act — trigger a startup reconciliation cycle
         var trigger = new ReconciliationTrigger(TriggerType.Startup);
         var result = await service.TriggerAsync(trigger, CancellationToken.None);
 
-        // Assert — the reconciliation completed and added the package
         Assert.False(result.Skipped);
         Assert.Single(result.ChangeSet.Added);
         Assert.Equal("plugin-a", result.ChangeSet.Added[0].Id);
 
-        // Assert — OnPackagesLoadedAsync was called with at least one package
         Assert.Single(spyObserver.ReceivedEvents);
         var loadedEvent = spyObserver.ReceivedEvents[0];
+        Assert.NotEmpty(loadedEvent.CorrelationId);
         Assert.True(loadedEvent.LoadedPackages.Count >= 1);
         Assert.Contains(loadedEvent.LoadedPackages, p => p.PackageId == "plugin-a");
-
-        // Assert — CorrelationId is non-empty (SC-002 / OSR-003)
-        Assert.NotEqual(Guid.Empty, loadedEvent.CorrelationId);
     }
 
     [Fact]
-    public async Task ScheduledTrigger_ProducesSameEventShape_AsStartup()
+    public async Task RestartedHost_WithNoChangeSet_StillLoadsPreviouslyActivePackages()
     {
-        // Arrange
-        var source = new StaticSource([
-            new("plugin-b", "2.0.0", "feed-1", PackageUpdatePolicy.Exact, "test-source")
-        ]);
+        var tempRoot = Path.Combine(Path.GetTempPath(), "nuplane-startup-reload", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        var stateFilePath = Path.Combine(tempRoot, "state.json");
 
-        var spyObserver = new SpyPackageLoadingObserver();
-        var loadingDispatcher = new LoadingEventDispatcher(
-            [spyObserver],
-            NullLogger<LoadingEventDispatcher>.Instance);
+        try
+        {
+            var source = new StaticSource([
+                new("plugin-restart", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "test-source")
+            ]);
 
-        var fakeLoader = new FakePackageLoader();
-        var loadingOptions = new LoadingOptions { Enabled = true };
+            var firstObserver = new SpyPackageLoadingObserver();
+            var firstLoader = new FakePackageLoader();
+            var firstService = CreateService(source, firstLoader, firstObserver, stateFilePath);
+            await firstService.TriggerAsync(new ReconciliationTrigger(TriggerType.Startup), CancellationToken.None);
 
-        var autoLoadingObserver = new PackageAutoLoadingObserver(
-            fakeLoader,
-            loadingDispatcher,
-            loadingOptions,
-            NullLogger<PackageAutoLoadingObserver>.Instance);
+            Assert.Single(firstObserver.ReceivedEvents);
 
-        var observerDispatcher = new ObserverEventDispatcher([autoLoadingObserver]);
+            var secondObserver = new SpyPackageLoadingObserver();
+            var secondLoader = new FakePackageLoader();
+            var secondService = CreateService(source, secondLoader, secondObserver, stateFilePath);
 
-        var service = new ReconciliationService(
-            [source],
-            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "plugin-b" } },
-            new(),
-            new(),
-            new NuGetPackageResolver(),
-            new(new StoreStateSerializer(), stateFilePath: null),
-            new(),
-            observerDispatcher,
-            new());
+            var secondResult = await secondService.TriggerAsync(new ReconciliationTrigger(TriggerType.Startup), CancellationToken.None);
 
-        // Act — first call as Startup, second as Scheduled
-        await service.TriggerAsync(
-            new ReconciliationTrigger(TriggerType.Startup), CancellationToken.None);
-
-        var startupEvent = spyObserver.ReceivedEvents.SingleOrDefault();
-        Assert.NotNull(startupEvent);
-
-        // Second cycle (Scheduled) — package already reconciled, no new Added, so no new event
-        var result2 = await service.TriggerAsync(
-            new ReconciliationTrigger(TriggerType.Scheduled), CancellationToken.None);
-
-        // No new packages → no new event
-        Assert.Single(spyObserver.ReceivedEvents);
-
-        // Validate the startup event had the right shape
-        Assert.True(startupEvent.LoadedPackages.Count >= 1);
-        Assert.NotEqual(Guid.Empty, startupEvent.CorrelationId);
+            Assert.False(secondResult.Skipped);
+            Assert.Empty(secondResult.ChangeSet.Added);
+            Assert.Empty(secondResult.ChangeSet.Updated);
+            Assert.Empty(secondResult.ChangeSet.Removed);
+            Assert.Single(secondObserver.ReceivedEvents);
+            Assert.Single(secondObserver.ReceivedEvents[0].LoadedPackages);
+            Assert.Equal("plugin-restart", secondObserver.ReceivedEvents[0].LoadedPackages[0].PackageId);
+            Assert.True(secondLoader.TryGetContext("plugin-restart", "1.0.0", out _));
+        }
+        finally
+        {
+            try { Directory.Delete(tempRoot, recursive: true); } catch { }
+        }
     }
 
     [Fact]
-    public async Task LoadingDisabled_StartupTrigger_NoLoadingEvent()
+    public async Task LoaderFailure_PropagatesIntoCoreObservers_StoreState_AndReconciliationResult()
     {
-        // Arrange
         var source = new StaticSource([
-            new("plugin-c", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "test-source")
+            new("plugin-fail", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "test-source")
         ]);
 
-        var spyObserver = new SpyPackageLoadingObserver();
-        var loadingDispatcher = new LoadingEventDispatcher(
-            [spyObserver],
-            NullLogger<LoadingEventDispatcher>.Instance);
-
-        var fakeLoader = new FakePackageLoader();
-        var loadingOptions = new LoadingOptions { Enabled = false };
-
+        var storeRegistry = new StoreRegistry(new StoreStateSerializer(), stateFilePath: null);
+        var failureRecorder = new FailureRecorder(storeRegistry);
+        var loadingFailureTracker = new LoadingFailureTracker();
+        var coreObserver = new SpyCoreObserver();
+        var coreFailureDispatcher = new ObserverEventDispatcher([coreObserver]);
+        var loadingObserver = new SpyPackageLoadingObserver();
+        var loadingDispatcher = new LoadingEventDispatcher([loadingObserver], NullLogger<LoadingEventDispatcher>.Instance);
+        var fakeLoader = new FakePackageLoader(failIds: ["plugin-fail"]);
         var autoLoadingObserver = new PackageAutoLoadingObserver(
             fakeLoader,
             loadingDispatcher,
-            loadingOptions,
-            NullLogger<PackageAutoLoadingObserver>.Instance);
+            new OptionsWrapper<LoadingOptions>(new LoadingOptions { Enabled = true }),
+            NullLogger<PackageAutoLoadingObserver>.Instance,
+            coreFailureDispatcher,
+            failureRecorder,
+            metrics: null,
+            loadingFailureTracker);
 
-        var observerDispatcher = new ObserverEventDispatcher([autoLoadingObserver]);
-
+        var serviceObserverDispatcher = new ObserverEventDispatcher([autoLoadingObserver, coreObserver]);
         var service = new ReconciliationService(
-            [source],
-            new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "plugin-c" } },
-            new(),
-            new(),
-            new NuGetPackageResolver(),
-            new(new StoreStateSerializer(), stateFilePath: null),
-            new(),
-            observerDispatcher,
-            new());
+            sources: [source],
+            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "plugin-fail" } },
+            desiredStateAggregator: new(),
+            desiredActualDiffEngine: new(),
+            packageResolver: new NuGetPackageResolver(),
+            storeRegistry: storeRegistry,
+            reconciliationOptions: new(),
+            observerEventDispatcher: serviceObserverDispatcher,
+            healthEvaluator: new(),
+            loadingFailureTracker: loadingFailureTracker);
 
-        // Act
-        await service.TriggerAsync(
-            new ReconciliationTrigger(TriggerType.Startup), CancellationToken.None);
+        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Startup), CancellationToken.None);
+        var state = await storeRegistry.GetStateAsync(CancellationToken.None);
 
-        // Assert — no loading events since loading is disabled
-        Assert.Empty(spyObserver.ReceivedEvents);
+        Assert.True(result.IsDegraded);
+        Assert.Contains("plugin-fail", result.FailedPackages);
+        Assert.Single(loadingObserver.ReceivedFailures);
+        Assert.Equal("plugin-fail", loadingObserver.ReceivedFailures[0].PackageId);
+        Assert.Single(coreObserver.PackageFailures);
+        Assert.Equal("plugin-fail", coreObserver.PackageFailures[0].packageId);
+        Assert.True(state.LastFailureById.ContainsKey("plugin-fail"));
+        Assert.Equal("load", state.LastFailureById["plugin-fail"].Stage);
     }
 
-    #region Helpers
+    private static ReconciliationService CreateService(
+        StaticSource source,
+        FakePackageLoader loader,
+        SpyPackageLoadingObserver loadingObserver,
+        string? stateFilePath)
+    {
+        var storeRegistry = new StoreRegistry(new StoreStateSerializer(), stateFilePath);
+        var loadingFailureTracker = new LoadingFailureTracker();
+        var loadingDispatcher = new LoadingEventDispatcher([loadingObserver], NullLogger<LoadingEventDispatcher>.Instance);
+        var autoLoadingObserver = new PackageAutoLoadingObserver(
+            loader,
+            loadingDispatcher,
+            new OptionsWrapper<LoadingOptions>(new LoadingOptions { Enabled = true }),
+            NullLogger<PackageAutoLoadingObserver>.Instance,
+            observerEventDispatcher: null,
+            failureRecorder: new FailureRecorder(storeRegistry),
+            metrics: null,
+            loadingFailureTracker: loadingFailureTracker);
+        var observerDispatcher = new ObserverEventDispatcher([autoLoadingObserver]);
+
+        return new ReconciliationService(
+            sources: [source],
+            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { source.PackageId } },
+            desiredStateAggregator: new(),
+            desiredActualDiffEngine: new(),
+            packageResolver: new NuGetPackageResolver(),
+            storeRegistry: storeRegistry,
+            reconciliationOptions: new(),
+            observerEventDispatcher: observerDispatcher,
+            healthEvaluator: new(),
+            loadingFailureTracker: loadingFailureTracker);
+    }
 
     private sealed class StaticSource(IReadOnlyList<PackageRequest> requests) : IDesiredPackageSource
     {
+        public string PackageId => requests[0].Id;
+
         public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct) =>
             Task.FromResult(requests);
     }
 
-    /// <summary>
-    /// Fake loader that returns a successful <see cref="PackageLoadSession"/> for every requested package.
-    /// </summary>
-    private sealed class FakePackageLoader : IPackageLoader
+    private sealed class FakePackageLoader(
+        IEnumerable<string>? failIds = null,
+        IEnumerable<ResolvedPackage>? preloadedPackages = null) : IPackageLoader
     {
+        private readonly HashSet<string> _failIds = failIds is not null
+            ? new HashSet<string>(failIds, StringComparer.OrdinalIgnoreCase)
+            : [];
+        private readonly Dictionary<string, PackageLoadSession> _sessions = CreateSessions(preloadedPackages);
+
         public Task<PackageLoadResult> EnsureLoadedAsync(
             IReadOnlyList<ResolvedPackage> packages,
             IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicies,
             CancellationToken ct)
         {
-            var sessions = packages.Select(p => new PackageLoadSession(
-                p.Id, p.Version, p.InstallPath, $"{p.Id}-ctx",
-                DateTimeOffset.UtcNow, IsLoaded: true, LastError: null)).ToList();
+            var sessions = new List<PackageLoadSession>();
+            var failures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            return Task.FromResult(new PackageLoadResult(
-                sessions,
-                new Dictionary<string, string>()));
+            foreach (var package in packages)
+            {
+                var key = BuildKey(package.Id, package.Version);
+                if (_failIds.Contains(package.Id))
+                {
+                    failures[package.Id] = $"Load failed for {package.Id}";
+                    continue;
+                }
+
+                if (_sessions.TryGetValue(key, out var existing))
+                {
+                    sessions.Add(existing);
+                    continue;
+                }
+
+                var session = new PackageLoadSession(
+                    package.Id,
+                    package.Version,
+                    package.InstallPath,
+                    $"{package.Id}-ctx",
+                    DateTimeOffset.UtcNow,
+                    IsLoaded: true,
+                    LastError: null);
+                _sessions[key] = session;
+                sessions.Add(session);
+            }
+
+            return Task.FromResult(new PackageLoadResult(sessions, failures));
         }
 
         public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
         {
-            context = null;
-            return false;
+            var key = BuildKey(packageId, version);
+            var removed = _sessions.Remove(key);
+            context = removed ? new PackageLoadContextHandle(key, new object()) : null;
+            return removed;
         }
 
         public bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context)
         {
-            context = null;
-            return false;
+            var key = BuildKey(packageId, version);
+            var exists = _sessions.ContainsKey(key);
+            context = exists ? new PackageLoadContextHandle(key, new object()) : null;
+            return exists;
+        }
+
+        private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";
+
+        private static Dictionary<string, PackageLoadSession> CreateSessions(IEnumerable<ResolvedPackage>? packages)
+        {
+            var sessions = new Dictionary<string, PackageLoadSession>(StringComparer.OrdinalIgnoreCase);
+            if (packages is null)
+            {
+                return sessions;
+            }
+
+            foreach (var package in packages)
+            {
+                var key = BuildKey(package.Id, package.Version);
+                sessions[key] = new PackageLoadSession(
+                    package.Id,
+                    package.Version,
+                    package.InstallPath,
+                    $"{package.Id}-ctx",
+                    DateTimeOffset.UtcNow,
+                    IsLoaded: true,
+                    LastError: null);
+            }
+
+            return sessions;
         }
     }
 
-    /// <summary>
-    /// Records all <see cref="PackageLoadedEvent"/> instances received.
-    /// </summary>
     private sealed class SpyPackageLoadingObserver : IPackageLoadingObserver
     {
         public List<PackageLoadedEvent> ReceivedEvents { get; } = [];
@@ -230,5 +301,16 @@ public sealed class StartupLoadingEventIntegrationTests
         }
     }
 
-    #endregion
+    private sealed class SpyCoreObserver : INuplaneObserver
+    {
+        public List<(string packageId, string correlationId)> PackageFailures { get; } = [];
+
+        public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
+        public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
+        public Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken ct)
+        {
+            PackageFailures.Add((packageId, string.Empty));
+            return Task.CompletedTask;
+        }
+    }
 }

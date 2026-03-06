@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
@@ -26,14 +27,14 @@ public sealed class ReconciliationHostedService : BackgroundService
     /// </summary>
     public ReconciliationHostedService(
         IReconciliationService reconciliationService,
-        ReconciliationOptions options,
-        ConvergenceOptions convergenceOptions,
+        IOptions<ReconciliationOptions> options,
+        IOptions<ConvergenceOptions> convergenceOptions,
         ILogger<ReconciliationHostedService> logger,
         ReconciliationMetrics metrics)
     {
         _reconciliationService = reconciliationService ?? throw new ArgumentNullException(nameof(reconciliationService));
-        _options = options ?? throw new ArgumentNullException(nameof(options));
-        _convergenceOptions = convergenceOptions ?? throw new ArgumentNullException(nameof(convergenceOptions));
+        _options = (options ?? throw new ArgumentNullException(nameof(options))).Value;
+        _convergenceOptions = (convergenceOptions ?? throw new ArgumentNullException(nameof(convergenceOptions))).Value;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
     }

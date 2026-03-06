@@ -34,4 +34,17 @@ public interface INuplaneObserver
     /// <param name="failure">The scoped failure details including target, scope, and reason code.</param>
     /// <param name="ct">A token to cancel the operation.</param>
     Task OnScopedFailureAsync(ScopedFailureEvent failure, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>
+    /// Called after a reconciliation cycle successfully applies packages, carrying the set of
+    /// packages that are active for the cycle even when the change set itself is empty.
+    /// Default implementation is a no-op for backward compatibility.
+    /// </summary>
+    /// <param name="changeSet">The computed package change set for the cycle.</param>
+    /// <param name="appliedPackages">The packages successfully applied for the cycle.</param>
+    /// <param name="ct">A token to cancel the operation.</param>
+    Task OnPackagesReconciledAsync(
+        PackageChangeSet changeSet,
+        IReadOnlyList<ResolvedPackage> appliedPackages,
+        CancellationToken ct) => Task.CompletedTask;
 }

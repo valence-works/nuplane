@@ -9,7 +9,7 @@ namespace Nuplane.Runtime.Events;
 /// </summary>
 public sealed class ObserverEventDispatcher(IEnumerable<INuplaneObserver> observers, IReconciliationLogger? logger = null) : IObserverEventDispatcher
 {
-    private readonly IReadOnlyList<INuplaneObserver> _observers = observers?.ToArray() ?? throw new ArgumentNullException(nameof(observers));
+    private readonly IReadOnlyList<INuplaneObserver> _observers = (observers ?? throw new ArgumentNullException(nameof(observers))).ToArray();
     private readonly IReconciliationLogger _logger = logger ?? new ReconciliationLogger();
 
     /// <inheritdoc />
@@ -60,6 +60,25 @@ public sealed class ObserverEventDispatcher(IEnumerable<INuplaneObserver> observ
             catch (Exception ex)
             {
                 _logger.LogObserverError(correlationId, "OnPackageFailedAsync", ex.Message);
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task PublishReconciledAsync(
+        PackageChangeSet changeSet,
+        IReadOnlyList<ResolvedPackage> appliedPackages,
+        CancellationToken cancellationToken)
+    {
+        foreach (var observer in _observers)
+        {
+            try
+            {
+                await observer.OnPackagesReconciledAsync(changeSet, appliedPackages, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogObserverError(changeSet.CorrelationId, "OnPackagesReconciledAsync", ex.Message);
             }
         }
     }

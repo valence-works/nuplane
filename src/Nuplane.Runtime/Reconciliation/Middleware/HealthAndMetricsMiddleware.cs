@@ -1,3 +1,4 @@
+using Nuplane.Loading;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Health;
@@ -11,7 +12,8 @@ internal sealed class HealthAndMetricsMiddleware(
     IReconciliationLogger logger,
     ReconciliationMetrics metrics,
     FeedResolutionOptions feedResolutionOptions,
-    WatcherDegradationTracker? watcherDegradationTracker = null) : IReconciliationMiddleware
+    WatcherDegradationTracker? watcherDegradationTracker = null,
+    ILoadingFailureTracker? loadingFailureTracker = null) : IReconciliationMiddleware
 {
     private bool _previouslyIdle;
 
@@ -41,13 +43,23 @@ internal sealed class HealthAndMetricsMiddleware(
         }
 
         var changeSet = context.ChangeSet!;
+        var applyResult = context.ApplyResult!;
 
         if (changeSet.Added.Count + changeSet.Updated.Count + changeSet.Removed.Count > 0)
         {
             await observerEventDispatcher.PublishChangedAsync(changeSet, context.CancellationToken);
         }
 
-        var hadFailures = context.ReadResult!.UsedFallback || context.ApplyResult!.FailedPackageIds.Count > 0;
+        if (applyResult.AppliedPackages.Count > 0)
+        {
+            await observerEventDispatcher.PublishReconciledAsync(changeSet, applyResult.AppliedPackages, context.CancellationToken);
+        }
+
+        var loaderFailedPackageIds = loadingFailureTracker?.TakeFailedPackageIds(context.CorrelationId) ?? [];
+        var loaderFailureCount = loaderFailedPackageIds.Count;
+        var hadFailures = context.ReadResult!.UsedFallback
+            || applyResult.FailedPackageIds.Count > 0
+            || loaderFailureCount > 0;
         metrics.SetUnloadPendingPackages(context.UnloadPendingCount);
         var isDegraded = healthEvaluator.Evaluate(new(
             hadFailures,
@@ -56,22 +68,25 @@ internal sealed class HealthAndMetricsMiddleware(
             context.LockFailureCount,
             context.CleanupFailureCount,
             context.UnloadPendingCount,
-            SourceOutages: context.SourceOutageCount + (watcherDegradationTracker?.DegradedCount ?? 0)));
+            SourceOutages: context.SourceOutageCount + (watcherDegradationTracker?.DegradedCount ?? 0),
+            LoaderFailures: loaderFailureCount));
         var cycleDuration = DateTimeOffset.UtcNow - context.CycleStartedAt;
-        var applyResult = context.ApplyResult!;
-        metrics.RecordCycle(changeSet, applyResult.FailedPackageIds.Count, cycleDuration, context.MergedActive!.Count);
+        metrics.RecordCycle(changeSet, applyResult.FailedPackageIds.Count + loaderFailureCount, cycleDuration, context.MergedActive!.Count);
         metrics.RecordConvergenceCycle(isDegraded);
         if (applyResult.FailedPackageIds.Count > 0)
         {
             metrics.RecordAcquisitionFailed(applyResult.FailedPackageIds.Count);
         }
-        logger.LogCycleCompleted(context.CorrelationId, isDegraded, applyResult.FailedPackageIds.Count);
+        logger.LogCycleCompleted(context.CorrelationId, isDegraded, applyResult.FailedPackageIds.Count + loaderFailureCount);
 
-        context.Result = new(false, changeSet, applyResult.FailedPackageIds, isDegraded);
+        var failedPackages = applyResult.FailedPackageIds
+            .Concat(loaderFailedPackageIds)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        context.Result = new(false, changeSet, failedPackages, isDegraded);
 
         await next();
     }
 }
-
-
-

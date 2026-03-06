@@ -34,4 +34,16 @@ public interface IObserverEventDispatcher
         Exception exception,
         string correlationId,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Notifies observers after a reconciliation cycle has applied packages, carrying the
+    /// active package set for the cycle even when the computed change set is empty.
+    /// </summary>
+    /// <param name="changeSet">The computed package change set for the cycle.</param>
+    /// <param name="appliedPackages">The packages successfully applied for the cycle.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    Task PublishReconciledAsync(
+        PackageChangeSet changeSet,
+        IReadOnlyList<ResolvedPackage> appliedPackages,
+        CancellationToken cancellationToken);
 }

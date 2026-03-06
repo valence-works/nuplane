@@ -49,7 +49,7 @@ public static class NuplaneBuilderLoadingExtensions
             })
             .ValidateOnStart();
 
-        services.AddSingleton(sp => sp.GetRequiredService<IOptions<LoadingOptions>>().Value);
+        services.AddSingleton<ILoadingFailureTracker, LoadingFailureTracker>();
         services.AddSingleton<SharedAssemblyPolicyMatcher>();
         services.AddSingleton<PackageLoader>();
         services.AddSingleton<IPackageLoader>(sp => sp.GetRequiredService<PackageLoader>());

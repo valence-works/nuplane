@@ -8,5 +8,6 @@
     <ProjectReference Include="..\Nuplane.Runtime\Nuplane.Runtime.csproj" />
     <ProjectReference Include="..\Nuplane.Loading\Nuplane.Loading.csproj" />
     <ProjectReference Include="..\Nuplane.Loading.Abstractions\Nuplane.Loading.Abstractions.csproj" />
+    <ProjectReference Include="..\Nuplane\Nuplane.csproj" />
   </ItemGroup>
 </Project>

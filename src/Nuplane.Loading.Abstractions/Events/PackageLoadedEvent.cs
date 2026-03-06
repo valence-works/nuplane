@@ -9,6 +9,6 @@ namespace Nuplane.Loading.Events;
 /// <param name="LoadedAt">UTC timestamp recorded immediately after loading completed.</param>
 /// <param name="LoadedPackages">Sessions for every package successfully loaded in this batch.</param>
 public sealed record PackageLoadedEvent(
-    Guid CorrelationId,
+    string CorrelationId,
     DateTimeOffset LoadedAt,
     IReadOnlyList<PackageLoadSession> LoadedPackages);

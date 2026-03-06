@@ -1,14 +1,14 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Loading.Events;
 using Nuplane.Loading.Hosting;
+using Nuplane.Runtime.Events;
+using Nuplane.Runtime.Observability;
+using Nuplane.Store.State;
 
 namespace Nuplane.Loading.Tests;
 
-/// <summary>
-/// T013 — Verifies <see cref="PackageAutoLoadingObserver"/> behaviour:
-/// loading packages from change sets and dispatching events.
-/// </summary>
 public sealed class PackageAutoLoadingObserverTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
@@ -16,38 +16,39 @@ public sealed class PackageAutoLoadingObserverTests
     [Fact]
     public async Task AddedAndUpdatedPackages_PublishLoadedFired()
     {
-        // Arrange
         var loader = new FakePackageLoader();
         var dispatcher = new FakeLoadingEventDispatcher();
-        var options = new LoadingOptions { Enabled = true };
-        var sut = CreateObserver(loader, dispatcher, options);
+        var sut = CreateObserver(loader, dispatcher, new LoadingOptions { Enabled = true });
+
+        var appliedPackages = new[]
+        {
+            new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now),
+            new ResolvedPackage("pkg-b", "2.0.0", "feed", "/path-b", Now)
+        };
 
         var changeSet = new PackageChangeSet(
-            Added: [new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now)],
-            Updated: [new ResolvedPackage("pkg-b", "2.0.0", "feed", "/path-b", Now)],
+            Added: [appliedPackages[0]],
+            Updated: [appliedPackages[1]],
             Removed: [],
-            CorrelationId: Guid.NewGuid().ToString(),
+            CorrelationId: "corr-added-updated",
             Timestamp: Now);
 
-        // Act
-        await sut.OnPackagesChangedAsync(changeSet, CancellationToken.None);
+        await sut.OnPackagesReconciledAsync(changeSet, appliedPackages, CancellationToken.None);
 
-        // Assert
         Assert.Single(dispatcher.LoadedEvents);
         Assert.Equal(2, dispatcher.LoadedEvents[0].LoadedPackages.Count);
     }
 
     [Fact]
-    public async Task EmptyChangeSet_PublishLoadedNotFired()
+    public async Task EmptyReconciliation_PublishLoadedNotFired()
     {
         var loader = new FakePackageLoader();
         var dispatcher = new FakeLoadingEventDispatcher();
-        var options = new LoadingOptions { Enabled = true };
-        var sut = CreateObserver(loader, dispatcher, options);
+        var sut = CreateObserver(loader, dispatcher, new LoadingOptions { Enabled = true });
 
-        var changeSet = new PackageChangeSet([], [], [], Guid.NewGuid().ToString(), Now);
+        var changeSet = new PackageChangeSet([], [], [], "corr-empty", Now);
 
-        await sut.OnPackagesChangedAsync(changeSet, CancellationToken.None);
+        await sut.OnPackagesReconciledAsync(changeSet, [], CancellationToken.None);
 
         Assert.Empty(dispatcher.LoadedEvents);
         Assert.False(loader.WasCalled);
@@ -58,53 +59,55 @@ public sealed class PackageAutoLoadingObserverTests
     {
         var loader = new FakePackageLoader();
         var dispatcher = new FakeLoadingEventDispatcher();
-        var options = new LoadingOptions { Enabled = false };
-        var sut = CreateObserver(loader, dispatcher, options);
+        var sut = CreateObserver(loader, dispatcher, new LoadingOptions { Enabled = false });
 
-        var changeSet = new PackageChangeSet(
-            Added: [new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now)],
-            Updated: [],
-            Removed: [],
-            CorrelationId: Guid.NewGuid().ToString(),
-            Timestamp: Now);
+        var appliedPackages = new[] { new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now) };
+        var changeSet = new PackageChangeSet([appliedPackages[0]], [], [], "corr-disabled", Now);
 
-        await sut.OnPackagesChangedAsync(changeSet, CancellationToken.None);
+        await sut.OnPackagesReconciledAsync(changeSet, appliedPackages, CancellationToken.None);
 
         Assert.Empty(dispatcher.LoadedEvents);
         Assert.False(loader.WasCalled);
     }
 
     [Fact]
-    public async Task LoadFailure_PublishFailedCalledAndSuccessfulPackagesStillPublished()
+    public async Task LoadFailure_PropagatesToCoreAndLoadingObservers()
     {
-        // Arrange — pkg-b fails, pkg-a succeeds
         var loader = new FakePackageLoader(failIds: ["pkg-b"]);
         var dispatcher = new FakeLoadingEventDispatcher();
-        var options = new LoadingOptions { Enabled = true };
-        var sut = CreateObserver(loader, dispatcher, options);
+        var coreDispatcher = new FakeObserverEventDispatcher();
+        var failureRecorder = new FakeFailureRecorder();
+        var failureTracker = new LoadingFailureTracker();
+        var metrics = new ReconciliationMetrics(new ReconciliationTelemetry());
+        var sut = CreateObserver(
+            loader,
+            dispatcher,
+            new LoadingOptions { Enabled = true },
+            coreDispatcher,
+            failureRecorder,
+            metrics,
+            failureTracker);
 
-        var changeSet = new PackageChangeSet(
-            Added:
-            [
-                new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now),
-                new ResolvedPackage("pkg-b", "2.0.0", "feed", "/path-b", Now)
-            ],
-            Updated: [],
-            Removed: [],
-            CorrelationId: Guid.NewGuid().ToString(),
-            Timestamp: Now);
+        var appliedPackages = new[]
+        {
+            new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now),
+            new ResolvedPackage("pkg-b", "2.0.0", "feed", "/path-b", Now)
+        };
+        var changeSet = new PackageChangeSet([appliedPackages[0], appliedPackages[1]], [], [], "corr-failure", Now);
 
-        // Act
-        await sut.OnPackagesChangedAsync(changeSet, CancellationToken.None);
+        await sut.OnPackagesReconciledAsync(changeSet, appliedPackages, CancellationToken.None);
 
-        // Assert — failed
         Assert.Single(dispatcher.FailedPackages);
         Assert.Equal("pkg-b", dispatcher.FailedPackages[0].packageId);
-
-        // Assert — loaded (only pkg-a)
         Assert.Single(dispatcher.LoadedEvents);
         Assert.Single(dispatcher.LoadedEvents[0].LoadedPackages);
         Assert.Equal("pkg-a", dispatcher.LoadedEvents[0].LoadedPackages[0].PackageId);
+
+        Assert.Single(coreDispatcher.FailedPackages);
+        Assert.Equal("pkg-b", coreDispatcher.FailedPackages[0].packageId);
+        Assert.Single(failureRecorder.RecordedFailures);
+        Assert.Equal(("pkg-b", "load", "Load failed for pkg-b", "corr-failure"), failureRecorder.RecordedFailures[0]);
+        Assert.Equal(["pkg-b"], failureTracker.TakeFailedPackageIds("corr-failure"));
     }
 
     [Fact]
@@ -112,61 +115,79 @@ public sealed class PackageAutoLoadingObserverTests
     {
         var loader = new FakePackageLoader();
         var dispatcher = new FakeLoadingEventDispatcher();
-        var options = new LoadingOptions { Enabled = true };
-        var sut = CreateObserver(loader, dispatcher, options);
+        var sut = CreateObserver(loader, dispatcher, new LoadingOptions { Enabled = true });
 
-        var correlationId = Guid.NewGuid();
-        var changeSet = new PackageChangeSet(
-            Added: [new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now)],
-            Updated: [],
-            Removed: [],
-            CorrelationId: correlationId.ToString(),
-            Timestamp: Now);
+        const string correlationId = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00";
+        var appliedPackages = new[] { new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now) };
+        var changeSet = new PackageChangeSet([appliedPackages[0]], [], [], correlationId, Now);
 
-        await sut.OnPackagesChangedAsync(changeSet, CancellationToken.None);
+        await sut.OnPackagesReconciledAsync(changeSet, appliedPackages, CancellationToken.None);
 
         Assert.Single(dispatcher.LoadedEvents);
         Assert.Equal(correlationId, dispatcher.LoadedEvents[0].CorrelationId);
     }
 
     [Fact]
-    public async Task IndependentCycles_EachDispatchPublishesLoadedEvent()
+    public async Task EmptyChangeSet_WithUnloadedAppliedPackages_PublishLoadedFired()
     {
-        // Calling OnPackagesChangedAsync twice with the same packages
-        // results in two PublishLoadedAsync calls because each cycle dispatches independently.
-        // IPackageLoader.EnsureLoadedAsync is responsible for true idempotency.
         var loader = new FakePackageLoader();
         var dispatcher = new FakeLoadingEventDispatcher();
-        var options = new LoadingOptions { Enabled = true };
-        var sut = CreateObserver(loader, dispatcher, options);
+        var sut = CreateObserver(loader, dispatcher, new LoadingOptions { Enabled = true });
 
-        var changeSet = new PackageChangeSet(
-            Added: [new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now)],
-            Updated: [],
-            Removed: [],
-            CorrelationId: Guid.NewGuid().ToString(),
-            Timestamp: Now);
+        var appliedPackages = new[] { new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now) };
+        var changeSet = new PackageChangeSet([], [], [], "corr-startup", Now);
 
-        await sut.OnPackagesChangedAsync(changeSet, CancellationToken.None);
-        await sut.OnPackagesChangedAsync(changeSet, CancellationToken.None);
+        await sut.OnPackagesReconciledAsync(changeSet, appliedPackages, CancellationToken.None);
 
-        // Each call dispatches independently — 2 events total
-        Assert.Equal(2, dispatcher.LoadedEvents.Count);
+        Assert.True(loader.WasCalled);
+        Assert.Single(dispatcher.LoadedEvents);
+        Assert.Single(dispatcher.LoadedEvents[0].LoadedPackages);
+        Assert.Equal("pkg-a", dispatcher.LoadedEvents[0].LoadedPackages[0].PackageId);
     }
 
-    #region Helpers
+    [Fact]
+    public async Task EmptyChangeSet_WithAlreadyLoadedAppliedPackages_DoesNotPublishAgain()
+    {
+        var loader = new FakePackageLoader(preloadedPackages: [new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now)]);
+        var dispatcher = new FakeLoadingEventDispatcher();
+        var sut = CreateObserver(loader, dispatcher, new LoadingOptions { Enabled = true });
+
+        var appliedPackages = new[] { new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now) };
+        var changeSet = new PackageChangeSet([], [], [], "corr-noop", Now);
+
+        await sut.OnPackagesReconciledAsync(changeSet, appliedPackages, CancellationToken.None);
+
+        Assert.False(loader.WasCalled);
+        Assert.Empty(dispatcher.LoadedEvents);
+    }
 
     private static PackageAutoLoadingObserver CreateObserver(
         FakePackageLoader loader,
         FakeLoadingEventDispatcher dispatcher,
-        LoadingOptions options) =>
-        new(loader, dispatcher, options, NullLogger<PackageAutoLoadingObserver>.Instance);
+        LoadingOptions options,
+        FakeObserverEventDispatcher? coreDispatcher = null,
+        FakeFailureRecorder? failureRecorder = null,
+        ReconciliationMetrics? metrics = null,
+        ILoadingFailureTracker? loadingFailureTracker = null) =>
+        new(
+            loader,
+            dispatcher,
+            new OptionsWrapper<LoadingOptions>(options),
+            NullLogger<PackageAutoLoadingObserver>.Instance,
+            coreDispatcher,
+            failureRecorder,
+            metrics,
+            loadingFailureTracker);
 
-    internal sealed class FakePackageLoader(IEnumerable<string>? failIds = null) : IPackageLoader
+    internal sealed class FakePackageLoader(
+        IEnumerable<string>? failIds = null,
+        IEnumerable<ResolvedPackage>? preloadedPackages = null) : IPackageLoader
     {
         private readonly HashSet<string> _failIds = failIds is not null
             ? new HashSet<string>(failIds, StringComparer.OrdinalIgnoreCase)
             : [];
+        private readonly Dictionary<string, PackageLoadSession> _sessions = CreateSessions(preloadedPackages);
+
         public bool WasCalled { get; private set; }
 
         public Task<PackageLoadResult> EnsureLoadedAsync(
@@ -181,16 +202,29 @@ public sealed class PackageAutoLoadingObserverTests
 
             foreach (var pkg in packages)
             {
+                var key = BuildKey(pkg.Id, pkg.Version);
                 if (_failIds.Contains(pkg.Id))
                 {
                     failed[pkg.Id] = $"Load failed for {pkg.Id}";
+                    continue;
                 }
-                else
+
+                if (_sessions.TryGetValue(key, out var existing))
                 {
-                    loaded.Add(new PackageLoadSession(
-                        pkg.Id, pkg.Version, pkg.InstallPath ?? "/install",
-                        $"ctx-{pkg.Id}", DateTimeOffset.UtcNow, true, null));
+                    loaded.Add(existing);
+                    continue;
                 }
+
+                var session = new PackageLoadSession(
+                    pkg.Id,
+                    pkg.Version,
+                    pkg.InstallPath,
+                    $"ctx-{pkg.Id}",
+                    DateTimeOffset.UtcNow,
+                    true,
+                    null);
+                _sessions[key] = session;
+                loaded.Add(session);
             }
 
             return Task.FromResult(new PackageLoadResult(loaded, failed));
@@ -198,14 +232,44 @@ public sealed class PackageAutoLoadingObserverTests
 
         public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
         {
-            context = null;
-            return false;
+            var key = BuildKey(packageId, version);
+            var removed = _sessions.Remove(key);
+            context = removed ? new PackageLoadContextHandle(key, new object()) : null;
+            return removed;
         }
 
         public bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context)
         {
-            context = null;
-            return false;
+            var key = BuildKey(packageId, version);
+            var exists = _sessions.ContainsKey(key);
+            context = exists ? new PackageLoadContextHandle(key, new object()) : null;
+            return exists;
+        }
+
+        private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";
+
+        private static Dictionary<string, PackageLoadSession> CreateSessions(IEnumerable<ResolvedPackage>? packages)
+        {
+            var sessions = new Dictionary<string, PackageLoadSession>(StringComparer.OrdinalIgnoreCase);
+            if (packages is null)
+            {
+                return sessions;
+            }
+
+            foreach (var package in packages)
+            {
+                var key = BuildKey(package.Id, package.Version);
+                sessions[key] = new PackageLoadSession(
+                    package.Id,
+                    package.Version,
+                    package.InstallPath,
+                    $"ctx-{package.Id}",
+                    DateTimeOffset.UtcNow,
+                    true,
+                    null);
+            }
+
+            return sessions;
         }
     }
 
@@ -227,5 +291,29 @@ public sealed class PackageAutoLoadingObserverTests
         }
     }
 
-    #endregion
+    internal sealed class FakeObserverEventDispatcher : IObserverEventDispatcher
+    {
+        public List<(string packageId, string correlationId)> FailedPackages { get; } = [];
+
+        public Task PublishChangingAsync(PackageChangeSet changeSet, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task PublishChangedAsync(PackageChangeSet changeSet, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task PublishReconciledAsync(PackageChangeSet changeSet, IReadOnlyList<ResolvedPackage> appliedPackages, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task NotifyPackageFailedAsync(string packageId, Exception exception, string correlationId, CancellationToken cancellationToken)
+        {
+            FailedPackages.Add((packageId, correlationId));
+            return Task.CompletedTask;
+        }
+    }
+
+    internal sealed class FakeFailureRecorder : IFailureRecorder
+    {
+        public List<(string packageId, string stage, string message, string correlationId)> RecordedFailures { get; } = [];
+
+        public Task RecordAsync(string packageId, string stage, string message, string correlationId, CancellationToken cancellationToken)
+        {
+            RecordedFailures.Add((packageId, stage, message, correlationId));
+            return Task.CompletedTask;
+        }
+    }
 }
