@@ -7,11 +7,12 @@ namespace Nuplane.Sources.Directory;
 
 /// <summary>
 /// A desired-state source that discovers NuGet packages from <c>.nupkg</c> files in a
-/// directory, optionally filtering by an allowlisted set of package identifiers.
+/// directory, optionally filtering by a set of package identifier patterns.
+/// Patterns support <c>*</c> (any sequence of characters) and <c>?</c> (any single character).
 /// </summary>
 /// <param name="sourceName">A descriptive name for this desired-state source.</param>
 /// <param name="directoryPath">The directory to scan for <c>.nupkg</c> files.</param>
-/// <param name="allowlistedPackageIds">An optional set of allowed package identifiers. If <see langword="null"/> or empty, all packages are allowed.</param>
+/// <param name="allowlistedPackageIds">An optional set of package identifier patterns. If <see langword="null"/> or empty, all packages are allowed.</param>
 /// <param name="logger">An optional logger for diagnostic output.</param>
 /// <param name="feedName">The optional local directory feed name to set on produced package requests.</param>
 /// <param name="stabilityProbe">An optional stability probe for partial-write safety. When provided, each discovered <c>.nupkg</c> file is probed for stability before being included.</param>
@@ -24,9 +25,9 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
     private readonly string _sourceName = string.IsNullOrWhiteSpace(sourceName) ? throw new ArgumentException("Source name is required.", nameof(sourceName)) : sourceName;
     private readonly string _directoryPath = string.IsNullOrWhiteSpace(directoryPath) ? throw new ArgumentException("Directory path is required.", nameof(directoryPath)) : directoryPath;
     private readonly string? _feedName = string.IsNullOrWhiteSpace(feedName) ? null : feedName;
-    private readonly HashSet<string> _allowlistedPackageIds = allowlistedPackageIds is null
-        ? new(StringComparer.OrdinalIgnoreCase)
-        : new HashSet<string>(allowlistedPackageIds, StringComparer.OrdinalIgnoreCase);
+    private readonly IReadOnlyList<string> _includePatterns = allowlistedPackageIds is null
+        ? []
+        : allowlistedPackageIds.Where(p => !string.IsNullOrWhiteSpace(p)).ToArray();
     private readonly ILogger<DirectoryNupkgDesiredSource> _logger = logger ?? NullLogger<DirectoryNupkgDesiredSource>.Instance;
 
     /// <inheritdoc />
@@ -100,7 +101,7 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
         }
 
         var packageId = match.Groups["id"].Value;
-        if (_allowlistedPackageIds.Count > 0 && !_allowlistedPackageIds.Contains(packageId))
+        if (_includePatterns.Count > 0 && !PackagePatternMatcher.MatchesAny(_includePatterns, packageId))
         {
             return null;
         }

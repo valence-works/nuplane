@@ -13,13 +13,11 @@ public sealed class CoreRuntimeRegistrationIsolationTests
         Directory.CreateDirectory(stateRoot);
         var stateFilePath = Path.Combine(stateRoot, "state.json");
 
-        services.AddNuplane(
-            configureSourceTrust: trust =>
-            {
-                trust.AllowedSourceNames.Add("NuGet.Main");
-                trust.AllowedPackageIds.Add("Test.Package");
-            },
-            stateFilePath: stateFilePath);
+        services.AddNuplane(nuplane =>
+        {
+            nuplane.WithStateFile(stateFilePath);
+            // No AutoloadPackages() — verifies the runtime resolves without loading registration.
+        });
 
         await using var provider = services.BuildServiceProvider();
 

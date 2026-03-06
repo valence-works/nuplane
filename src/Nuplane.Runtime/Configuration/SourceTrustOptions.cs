@@ -1,3 +1,5 @@
+using Nuplane.Abstractions;
+
 namespace Nuplane.Runtime.Configuration;
 
 /// <summary>
@@ -48,5 +50,6 @@ public sealed class SourceTrustOptions
     /// <param name="packageId">The package identifier to check.</param>
     /// <returns><see langword="true"/> if the package is allowed; otherwise <see langword="false"/>.</returns>
     public bool IsPackageAllowed(string packageId) =>
-        !RejectUnallowlistedPackages || AllowedPackageIds.Contains(packageId);
+        !RejectUnallowlistedPackages
+        || PackagePatternMatcher.MatchesAny(AllowedPackageIds, packageId);
 }

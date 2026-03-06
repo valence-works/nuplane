@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nuplane;
 using Nuplane.Abstractions;
 using Nuplane.Hosting;
 using Nuplane.Runtime.Configuration;
@@ -113,7 +114,7 @@ public sealed class StartupCycleTests
     [Fact]
     public void NoStartupCycle_WhenAutomaticReconciliationDisabled()
     {
-        // AC-4: When EnableAutomaticReconciliation is false (the default),
+        // AC-4: When PollEvery() is NOT called (the default),
         // ReconciliationHostedService is NOT registered via AddNuplane.
         var services = new ServiceCollection();
         var stateRoot = Path.Combine(Path.GetTempPath(), "nuplane-ac4-test", Guid.NewGuid().ToString("N"));
@@ -122,14 +123,11 @@ public sealed class StartupCycleTests
         {
             var stateFilePath = Path.Combine(stateRoot, "state.json");
 
-            NuplaneServiceCollectionExtensions.AddNuplane(
-                services,
-                configureSourceTrust: trust =>
-                {
-                    trust.AllowedSourceNames.Add("NuGet.Main");
-                    trust.AllowedPackageIds.Add("Test.Package");
-                },
-                stateFilePath: stateFilePath);
+            services.AddNuplane(nuplane =>
+            {
+                nuplane.WithStateFile(stateFilePath);
+                // No PollEvery() — EnableAutomaticReconciliation stays false
+            });
 
             // EnableAutomaticReconciliation defaults to false — no hosted service registered
             var hostedServiceDescriptor = services.FirstOrDefault(d =>
