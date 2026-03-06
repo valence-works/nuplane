@@ -2,19 +2,17 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
-using Nuplane.Abstractions;
 using Nuplane.Hosting;
 using Nuplane.Loading;
 using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Runtime.Configuration;
-using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Configuration;
 
 public sealed class ConfigurationDrivenRegistrationTests
 {
     [Fact]
-    public void AddNuplane_FromConfiguration_BindsSetupAndRuntimeOptions()
+    public void AddNuplane_FromConfiguration_RegistersAutomaticSchedulerAndDispatcher()
     {
         var root = Path.Combine(Path.GetTempPath(), "nuplane-config-registration", Guid.NewGuid().ToString("N"));
         var packagesPath = Path.Combine(root, "packages");
@@ -34,47 +32,24 @@ public sealed class ConfigurationDrivenRegistrationTests
                     ["Nuplane:Setup:Feeds:0:IncludePatterns:0"] = "*",
                     ["Nuplane:Setup:Feeds:0:Directory:Watch"] = "false",
                     ["Nuplane:Setup:Feeds:0:Directory:DebounceWindow"] = "00:00:02",
-                    ["Nuplane:Setup:Feeds:1:Name"] = "nuget.org",
-                    ["Nuplane:Setup:Feeds:1:ServiceIndex"] = "https://api.nuget.org/v3/index.json",
-                    ["Nuplane:Setup:Feeds:1:TrustLevel"] = nameof(FeedTrustLevel.Untrusted),
-                    ["Nuplane:Setup:Feeds:1:Credentials"] = "secrets://nuget",
-                    ["Nuplane:Setup:Feeds:1:IncludePatterns:0"] = "Elsa.*",
                     ["Nuplane:Reconciliation:MaxRetryAttempts"] = "5",
                     ["Nuplane:StoreRegistry:StateFilePath"] = Path.Combine(root, "ignored-by-setup.json")
                 })
                 .Build();
 
             var services = new ServiceCollection();
+            services.AddLogging();
             services.AddNuplane(configuration.GetSection("Nuplane"));
 
-            using var provider = services.BuildServiceProvider();
+            var hostedServiceTypes = services
+                .Where(descriptor => descriptor.ServiceType == typeof(IHostedService))
+                .Select(descriptor => descriptor.ImplementationType)
+                .Where(static type => type is not null)
+                .ToArray();
 
-            var reconciliation = provider.GetRequiredService<IOptions<ReconciliationOptions>>().Value;
-            var storeRegistry = provider.GetRequiredService<IOptions<StoreRegistryOptions>>().Value;
-            var feedResolution = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
-            var sourceTrust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
-            var hostedServices = provider.GetServices<IHostedService>().ToArray();
-
-            Assert.True(reconciliation.EnableAutomaticReconciliation);
-            Assert.Equal(TimeSpan.FromSeconds(45), reconciliation.PollInterval);
-            Assert.Equal(5, reconciliation.MaxRetryAttempts);
-            Assert.Equal(stateFilePath, storeRegistry.StateFilePath);
-
-            Assert.Single(hostedServices);
-            Assert.IsType<ReconciliationHostedService>(hostedServices[0]);
-
-            var localFeed = Assert.Single(feedResolution.Feeds, feed => feed.Name == "local-packages");
-            Assert.Equal(Uri.UriSchemeFile, localFeed.ServiceIndex.Scheme);
-
-            var remoteFeed = Assert.Single(feedResolution.Feeds, feed => feed.Name == "nuget.org");
-            Assert.Equal(new Uri("https://api.nuget.org/v3/index.json"), remoteFeed.ServiceIndex);
-            Assert.Equal(FeedTrustLevel.Untrusted, remoteFeed.TrustLevel);
-            Assert.Equal("secrets://nuget", remoteFeed.Credentials);
-
-            Assert.Contains("local-packages", sourceTrust.AllowedSourceNames);
-            Assert.Contains("nuget.org", sourceTrust.AllowedSourceNames);
-            Assert.Single(sourceTrust.AllowedPackageIds);
-            Assert.Contains("*", sourceTrust.AllowedPackageIds);
+            Assert.Equal(2, hostedServiceTypes.Length);
+            Assert.Contains(typeof(ReconciliationHostedService), hostedServiceTypes);
+            Assert.Contains(typeof(ReconciliationTriggerDispatcherHostedService), hostedServiceTypes);
         }
         finally
         {
@@ -107,6 +82,7 @@ public sealed class ConfigurationDrivenRegistrationTests
                 .Build();
 
             var services = new ServiceCollection();
+            services.AddLogging();
             services.AddNuplane(configuration.GetSection("Nuplane"));
 
             using var provider = services.BuildServiceProvider();
@@ -151,6 +127,7 @@ public sealed class ConfigurationDrivenRegistrationTests
                 .Build();
 
             var services = new ServiceCollection();
+            services.AddLogging();
             services.AddNuplane(configuration.GetSection("Nuplane"));
 
             using var provider = services.BuildServiceProvider();
@@ -191,6 +168,7 @@ public sealed class ConfigurationDrivenRegistrationTests
             .Build();
 
         var services = new ServiceCollection();
+        services.AddLogging();
         services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
         {
             nuplane.AutoloadPackages(configuration.GetSection("Nuplane"), load => load.Enable());

@@ -2,26 +2,24 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nuplane.Hosting;
 using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.DirectorySource.Hosting;
 
 /// <summary>
-/// A hosted service that triggers the reconciliation process for a directory source.
-/// This service monitors changes in the specified directory and triggers reconciliation based on configuration options.
+/// A hosted service that monitors a directory source and queues reconciliation triggers when it changes.
 /// </summary>
 internal sealed class DirectorySourceReconciliationTriggerHostedService(
     DirectorySourceOptions options,
-    IReconciliationService reconciliationService,
+    IReconciliationTriggerSink triggerSink,
     ILogger<DirectorySourceReconciliationTriggerHostedService> logger,
     WatcherDegradationTracker? watcherDegradationTracker = null)
     : BackgroundService
 {
     private readonly DirectorySourceOptions _options = options ?? throw new ArgumentNullException(nameof(options));
-    private readonly IReconciliationService _reconciliationService = reconciliationService ?? throw new ArgumentNullException(nameof(reconciliationService));
+    private readonly IReconciliationTriggerSink _triggerSink = triggerSink ?? throw new ArgumentNullException(nameof(triggerSink));
     private readonly ILogger<DirectorySourceReconciliationTriggerHostedService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private readonly DebouncedDirtySignal _reconciliationSignal = new(options?.DebounceWindow ?? throw new ArgumentNullException(nameof(options)));
+    private readonly DebouncedDirtySignal _reconciliationSignal = new(options.DebounceWindow);
 
     private FileSystemWatcher? _watcher;
 
@@ -69,12 +67,8 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
 
                 try
                 {
-                    var trigger = new ReconciliationTrigger(TriggerType.DirectoryChange, Source: _options.FeedName);
-                    var result = await _reconciliationService.TriggerAsync(trigger, stoppingToken);
-                    _logger.LogInformation(
-                        "Directory-triggered reconcile completed. Skipped={Skipped}, Degraded={IsDegraded}.",
-                        result.Skipped,
-                        result.IsDegraded);
+                    _triggerSink.Enqueue(new ReconciliationTrigger(TriggerType.DirectoryChange, Source: _options.FeedName));
+                    _logger.LogDebug("Queued directory-change reconciliation trigger for feed '{FeedName}'.", _options.FeedName);
                 }
                 catch (OperationCanceledException)
                 {
@@ -82,7 +76,7 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Directory-triggered reconcile failed.");
+                    _logger.LogWarning(ex, "Failed to queue directory-change reconciliation trigger for feed '{FeedName}'.", _options.FeedName);
                 }
             }
         }

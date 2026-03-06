@@ -240,6 +240,7 @@ public static class NuplaneServiceCollectionExtensions
         // Hosted service for periodic reconciliation
         if (builder.AutomaticReconciliation)
         {
+            EnsureTriggerIngressServices(services);
             services.AddHostedService<ReconciliationHostedService>();
         }
 
@@ -282,6 +283,8 @@ public static class NuplaneServiceCollectionExtensions
             // Register file-system watcher if enabled
             if (dirOpts.Watch)
             {
+                EnsureTriggerIngressServices(services);
+
                 var capturedOptions = new DirectorySourceOptions
                 {
                     DirectoryPath = normalizedPath,
@@ -294,7 +297,7 @@ public static class NuplaneServiceCollectionExtensions
                 services.AddSingleton<IHostedService>(sp =>
                     new DirectorySourceReconciliationTriggerHostedService(
                         capturedOptions,
-                        sp.GetRequiredService<IReconciliationService>(),
+                        sp.GetRequiredService<IReconciliationTriggerSink>(),
                         sp.GetRequiredService<ILogger<DirectorySourceReconciliationTriggerHostedService>>(),
                         sp.GetService<WatcherDegradationTracker>()));
             }
@@ -309,6 +312,13 @@ public static class NuplaneServiceCollectionExtensions
                 }
             });
         }
+    }
+
+    private static void EnsureTriggerIngressServices(IServiceCollection services)
+    {
+        services.TryAddSingleton<ReconciliationTriggerQueue>();
+        services.TryAddSingleton<IReconciliationTriggerSink>(sp => sp.GetRequiredService<ReconciliationTriggerQueue>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, ReconciliationTriggerDispatcherHostedService>());
     }
 
     private static void BindConfiguredOptions(IServiceCollection services, IConfiguration configuration)

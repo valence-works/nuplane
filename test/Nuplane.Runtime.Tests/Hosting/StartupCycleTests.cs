@@ -8,13 +8,11 @@ using Nuplane.Hosting;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.Runtime.Tests.Hosting;
 
 /// <summary>
-/// T011 — Verifies that <see cref="ReconciliationHostedService"/> fires a
-/// TriggerType.Startup cycle before the first periodic tick.
+/// Verifies that automatic reconciliation queues a <see cref="TriggerType.Startup"/> cycle before the first periodic tick.
 /// </summary>
 public sealed class StartupCycleTests
 {
@@ -24,98 +22,71 @@ public sealed class StartupCycleTests
     [Fact]
     public async Task StartupCycle_FiresBeforePeriodicTick()
     {
-        // Arrange
         var triggers = new ConcurrentQueue<TriggerType>();
         var service = new TrackingReconciliationService(triggers);
-        var sut = CreateHostedService(service);
+        var (dispatcher, scheduler) = CreateHostedServices(service);
 
-        using var cts = new CancellationTokenSource();
+        await dispatcher.StartAsync(CancellationToken.None);
+        await scheduler.StartAsync(CancellationToken.None);
 
-        // Act — start the hosted service and allow the startup cycle to run, then cancel
-        var executeTask = sut.StartAsync(cts.Token);
+        try
+        {
+            await WaitForConditionAsync(() => triggers.Count >= 1, TimeSpan.FromSeconds(5));
 
-        // Wait for at least the startup trigger to be recorded
-        await WaitForConditionAsync(() => triggers.Count >= 1, TimeSpan.FromSeconds(5));
-        await cts.CancelAsync();
-
-        try { await sut.StopAsync(CancellationToken.None); } catch (OperationCanceledException) { }
-
-        // Assert — the first trigger must be Startup
-        Assert.NotEmpty(triggers);
-        Assert.True(triggers.TryPeek(out var first));
-        Assert.Equal(TriggerType.Startup, first);
+            Assert.NotEmpty(triggers);
+            Assert.True(triggers.TryPeek(out var first));
+            Assert.Equal(TriggerType.Startup, first);
+        }
+        finally
+        {
+            await StopHostedServicesAsync(scheduler, dispatcher);
+        }
     }
 
     [Fact]
     public async Task StartupCycleFailure_IsNonFatal_HostContinuesToPeriodicLoop()
     {
-        // Arrange — service throws on first call (startup), succeeds on subsequent (periodic)
-        var callCount = 0;
-        var service = new DelegatingReconciliationService(trigger =>
-        {
-            var count = Interlocked.Increment(ref callCount);
-            if (count == 1)
-                throw new InvalidOperationException("Startup boom");
-            return Task.FromResult(new ReconciliationRunResult(false, EmptyChangeSet, [], false));
-        });
-
+        var service = new FailsFirstReconciliationService();
         var options = new ReconciliationOptions
         {
             EnableAutomaticReconciliation = true,
             PollInterval = TimeSpan.FromMilliseconds(50)
         };
 
-        var sut = CreateHostedService(service, options);
-        using var cts = new CancellationTokenSource();
+        var (dispatcher, scheduler) = CreateHostedServices(service, options);
 
-        // Act
-        var executeTask = sut.StartAsync(cts.Token);
-
-        // Wait for periodic to fire (callCount > 1 means we got past startup failure)
-        await WaitForConditionAsync(() => Volatile.Read(ref callCount) >= 2, TimeSpan.FromSeconds(5));
-        await cts.CancelAsync();
-
-        try { await sut.StopAsync(CancellationToken.None); } catch (OperationCanceledException) { }
-
-        // Assert — host survived the startup failure
-        Assert.True(Volatile.Read(ref callCount) >= 2);
-    }
-
-    [Fact]
-    public async Task StartupCycle_OperationCanceled_PropagatesAndStopsHost()
-    {
-        // Arrange — cancellation triggered before startup cycle can run
-        var service = new DelegatingReconciliationService(_ =>
-            throw new OperationCanceledException("Host shutting down"));
-
-        var sut = CreateHostedService(service);
-        using var cts = new CancellationTokenSource();
-
-        // Act & Assert — OperationCanceledException is propagated
-        var executeTask = sut.StartAsync(cts.Token);
-
-        // Give it a moment, then cancel to be safe
-        await Task.Delay(200);
-        await cts.CancelAsync();
+        await dispatcher.StartAsync(CancellationToken.None);
+        await scheduler.StartAsync(CancellationToken.None);
 
         try
         {
-            await sut.StopAsync(CancellationToken.None);
+            await WaitForConditionAsync(() => service.CallCount >= 2, TimeSpan.FromSeconds(5));
+            Assert.True(service.CallCount >= 2);
         }
-        catch (OperationCanceledException)
+        finally
         {
-            // Expected
+            await StopHostedServicesAsync(scheduler, dispatcher);
         }
+    }
 
-        // If we got here without hanging, the OperationCanceledException was properly handled
-        Assert.True(true);
+    [Fact]
+    public async Task StopAsync_Completes_WhenStartupDispatchObservesCancellation()
+    {
+        var service = new BlockingCancellationAwareReconciliationService();
+        var (dispatcher, scheduler) = CreateHostedServices(service);
+
+        await dispatcher.StartAsync(CancellationToken.None);
+        await scheduler.StartAsync(CancellationToken.None);
+
+        await WaitForConditionAsync(() => service.StartedCount >= 1, TimeSpan.FromSeconds(5));
+        await StopHostedServicesAsync(scheduler, dispatcher);
+
+        Assert.True(service.CancellationObserved);
     }
 
     [Fact]
     public void NoStartupCycle_WhenAutomaticReconciliationDisabled()
     {
-        // AC-4: When PollEvery() is NOT called (the default),
-        // ReconciliationHostedService is NOT registered via AddNuplane.
         var services = new ServiceCollection();
         var stateRoot = Path.Combine(Path.GetTempPath(), "nuplane-ac4-test", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(stateRoot);
@@ -126,10 +97,8 @@ public sealed class StartupCycleTests
             services.AddNuplane(nuplane =>
             {
                 nuplane.WithStateFile(stateFilePath);
-                // No PollEvery() — EnableAutomaticReconciliation stays false
             });
 
-            // EnableAutomaticReconciliation defaults to false — no hosted service registered
             var hostedServiceDescriptor = services.FirstOrDefault(d =>
                 d.ServiceType == typeof(IHostedService)
                 && d.ImplementationType == typeof(ReconciliationHostedService));
@@ -138,28 +107,42 @@ public sealed class StartupCycleTests
         }
         finally
         {
-            try { Directory.Delete(stateRoot, recursive: true); } catch { }
+            TryDeleteDirectory(stateRoot);
         }
     }
 
     #region Helpers
 
-    private static ReconciliationHostedService CreateHostedService(
+    private static (ReconciliationTriggerDispatcherHostedService Dispatcher, ReconciliationHostedService Scheduler) CreateHostedServices(
         IReconciliationService reconciliationService,
         ReconciliationOptions? options = null)
     {
         options ??= new ReconciliationOptions
         {
             EnableAutomaticReconciliation = true,
-            PollInterval = TimeSpan.FromHours(1) // Long interval so periodic doesn't interfere
+            PollInterval = TimeSpan.FromHours(1)
         };
 
-        return new ReconciliationHostedService(
-            reconciliationService,
-            new OptionsWrapper<ReconciliationOptions>(options),
-            new OptionsWrapper<ConvergenceOptions>(new ConvergenceOptions()),
-            NullLogger<ReconciliationHostedService>.Instance,
-            new ReconciliationMetrics(new ReconciliationTelemetry()));
+        var queue = new ReconciliationTriggerQueue();
+        var metrics = new ReconciliationMetrics(new ReconciliationTelemetry());
+
+        return (
+            new ReconciliationTriggerDispatcherHostedService(
+                queue,
+                reconciliationService,
+                metrics,
+                NullLogger<ReconciliationTriggerDispatcherHostedService>.Instance),
+            new ReconciliationHostedService(
+                queue,
+                new OptionsWrapper<ReconciliationOptions>(options),
+                new OptionsWrapper<ConvergenceOptions>(new ConvergenceOptions()),
+                NullLogger<ReconciliationHostedService>.Instance));
+    }
+
+    private static async Task StopHostedServicesAsync(ReconciliationHostedService scheduler, ReconciliationTriggerDispatcherHostedService dispatcher)
+    {
+        await scheduler.StopAsync(CancellationToken.None);
+        await dispatcher.StopAsync(CancellationToken.None);
     }
 
     private static async Task WaitForConditionAsync(Func<bool> condition, TimeSpan timeout)
@@ -171,12 +154,25 @@ public sealed class StartupCycleTests
         }
 
         if (!condition())
+        {
             throw new TimeoutException($"Condition not met within {timeout}.");
+        }
     }
 
-    /// <summary>
-    /// Tracks trigger types in order (thread-safe).
-    /// </summary>
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            Directory.Delete(path, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
     private sealed class TrackingReconciliationService(ConcurrentQueue<TriggerType> triggers) : IReconciliationService
     {
         public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken)
@@ -186,15 +182,48 @@ public sealed class StartupCycleTests
         }
     }
 
-    /// <summary>
-    /// Delegates to a callback for testing specific behaviors.
-    /// </summary>
-    private sealed class DelegatingReconciliationService(
-        Func<ReconciliationTrigger, Task<ReconciliationRunResult>> handler) : IReconciliationService
+    private sealed class BlockingCancellationAwareReconciliationService : IReconciliationService
     {
+        private int _startedCount;
+        private int _cancellationObserved;
 
-        public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken) =>
-            handler(trigger);
+        public int StartedCount => Volatile.Read(ref _startedCount);
+        public bool CancellationObserved => Volatile.Read(ref _cancellationObserved) == 1;
+
+        public async Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _startedCount);
+
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                Interlocked.Exchange(ref _cancellationObserved, 1);
+                throw;
+            }
+
+            return new ReconciliationRunResult(false, EmptyChangeSet, [], false);
+        }
+    }
+
+    private sealed class FailsFirstReconciliationService : IReconciliationService
+    {
+        private int _callCount;
+
+        public int CallCount => Volatile.Read(ref _callCount);
+
+        public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken)
+        {
+            var count = Interlocked.Increment(ref _callCount);
+            if (count == 1)
+            {
+                throw new InvalidOperationException("Startup boom");
+            }
+
+            return Task.FromResult(new ReconciliationRunResult(false, EmptyChangeSet, [], false));
+        }
     }
 
     #endregion
