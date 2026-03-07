@@ -8,6 +8,7 @@ internal sealed class NuplaneSetupOptionsValidator : IValidateOptions<NuplaneSet
     {
         ArgumentNullException.ThrowIfNull(options);
 
+
         var errors = new List<string>();
 
         if (options.AutomaticReconciliation && options.PollInterval <= TimeSpan.Zero)
@@ -53,6 +54,7 @@ internal sealed class NuplaneSetupOptionsValidator : IValidateOptions<NuplaneSet
                 errors.Add($"{label} Directory.DebounceWindow must be greater than zero.");
             }
         }
+
 
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
     }

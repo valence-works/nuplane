@@ -31,7 +31,7 @@ internal static class NuplaneFeedSetupConfiguration
                 else
                 {
                     configuredFeed.FromUri(
-                        new Uri(feedSection[nameof(NuplaneFeedSetupOptions.ServiceIndex)]!, UriKind.Absolute),
+                        new(feedSection[nameof(NuplaneFeedSetupOptions.ServiceIndex)]!, UriKind.Absolute),
                         trustLevel,
                         credentials);
                 }

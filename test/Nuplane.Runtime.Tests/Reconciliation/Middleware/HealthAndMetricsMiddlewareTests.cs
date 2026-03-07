@@ -69,7 +69,7 @@ public sealed class HealthAndMetricsMiddlewareTests
             dispatcher ?? new NullDispatcher(),
             new NullLogger(),
             new(new()),
-            new FeedResolutionOptions());
+            new());
 
     private static ReconciliationCycleContext Ctx(PackageChangeSet changeSet)
     {

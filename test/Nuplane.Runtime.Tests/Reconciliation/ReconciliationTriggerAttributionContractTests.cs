@@ -92,13 +92,13 @@ public sealed class ReconciliationTriggerAttributionContractTests
     {
         return ReconciliationServiceFactory.Create(
             sources: sources ?? [],
-            sourceTrustOptions: new SourceTrustOptions(),
+            sourceTrustOptions: new(),
             packageResolver: new NoOpResolver(),
-            reconciliationOptions: new ReconciliationOptions { EnableSingleFlight = enableSingleFlight },
+            reconciliationOptions: new() { EnableSingleFlight = enableSingleFlight },
             observerEventDispatcher: new ObserverEventDispatcher([]),
             healthEvaluator: new ReconciliationHealthEvaluator(),
             logger: spyLogger,
-            metrics: new ReconciliationMetrics(new ReconciliationTelemetry()));
+            metrics: new(new()));
     }
 
     private sealed class NoOpResolver : IPackageResolver

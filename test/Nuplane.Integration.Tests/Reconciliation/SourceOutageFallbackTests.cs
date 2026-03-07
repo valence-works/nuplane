@@ -13,8 +13,8 @@ public sealed class SourceOutageFallbackTests
         var source = new FlakySource();
         var service = CreateService(source, new() { MaxRetryAttempts = 1 });
 
-        var first = await service.TriggerAsync(new Nuplane.Runtime.Reconciliation.Models.ReconciliationTrigger(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
-        var second = await service.TriggerAsync(new Nuplane.Runtime.Reconciliation.Models.ReconciliationTrigger(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
+        var first = await service.TriggerAsync(new(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
+        var second = await service.TriggerAsync(new(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
 
         Assert.False(first.IsDegraded);
         Assert.True(second.IsDegraded);

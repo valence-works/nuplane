@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Loading.Events;
-using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Observability;
 using Nuplane.Store.State;
 
@@ -17,7 +16,6 @@ internal sealed class PackageAutoLoadingObserver(
     ILoadingEventDispatcher dispatcher,
     IOptions<LoadingOptions> loadingOptions,
     ILogger<PackageAutoLoadingObserver> logger,
-    IObserverEventDispatcher? observerEventDispatcher = null,
     IFailureRecorder? failureRecorder = null,
     ReconciliationMetrics? metrics = null,
     ILoadingFailureTracker? loadingFailureTracker = null)
@@ -27,10 +25,6 @@ internal sealed class PackageAutoLoadingObserver(
     private readonly ILoadingEventDispatcher _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
     private readonly LoadingOptions _loadingOptions = (loadingOptions ?? throw new ArgumentNullException(nameof(loadingOptions))).Value;
     private readonly ILogger<PackageAutoLoadingObserver> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private readonly IObserverEventDispatcher? _observerEventDispatcher = observerEventDispatcher;
-    private readonly IFailureRecorder? _failureRecorder = failureRecorder;
-    private readonly ReconciliationMetrics? _metrics = metrics;
-    private readonly ILoadingFailureTracker? _loadingFailureTracker = loadingFailureTracker;
 
     /// <inheritdoc />
     public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
@@ -63,7 +57,7 @@ internal sealed class PackageAutoLoadingObserver(
 
         foreach (var _ in packagesToLoad)
         {
-            _metrics?.RecordLoadAttemptStarted();
+            metrics?.RecordLoadAttemptStarted();
         }
 
         var sharedPolicy = _loadingOptions.SharedAssemblies
@@ -74,13 +68,13 @@ internal sealed class PackageAutoLoadingObserver(
 
         foreach (var _ in loadResult.Loaded)
         {
-            _metrics?.RecordLoadSucceeded();
+            metrics?.RecordLoadSucceeded();
         }
 
         foreach (var (packageId, reason) in loadResult.FailedByPackageId)
         {
-            _metrics?.RecordLoadFailed();
-            _loadingFailureTracker?.RecordFailure(changeSet.CorrelationId, packageId);
+            metrics?.RecordLoadFailed();
+            loadingFailureTracker?.RecordFailure(changeSet.CorrelationId, packageId);
 
             _logger.LogWarning(
                 "Package {PackageId} failed to load: {Reason}. CorrelationId={CorrelationId}",
@@ -88,24 +82,16 @@ internal sealed class PackageAutoLoadingObserver(
                 reason,
                 changeSet.CorrelationId);
 
-            if (_failureRecorder is not null)
+            if (failureRecorder is not null)
             {
-                await _failureRecorder.RecordAsync(packageId, "load", reason, changeSet.CorrelationId, ct);
+                await failureRecorder.RecordAsync(packageId, "load", reason, changeSet.CorrelationId, ct);
             }
 
-            if (_observerEventDispatcher is not null)
-            {
-                await _observerEventDispatcher.NotifyPackageFailedAsync(
-                    packageId,
-                    new InvalidOperationException(reason),
-                    changeSet.CorrelationId,
-                    ct);
-            }
 
             await _dispatcher.PublishFailedAsync(packageId, reason, ct);
         }
 
-        _metrics?.RecordLoaderBoundaryOutcome(loadResult.Loaded.Count, loadResult.FailedByPackageId.Count, skipped: 0);
+        metrics?.RecordLoaderBoundaryOutcome(loadResult.Loaded.Count, loadResult.FailedByPackageId.Count, skipped: 0);
 
         if (loadResult.Loaded.Count > 0)
         {

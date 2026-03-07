@@ -30,7 +30,7 @@ public sealed class NuplaneLoadingBuilder
 
         Services.Configure<LoadingOptions>(options =>
         {
-            options.SharedAssemblies.Add(new SharedAssemblyIdentity(name, publicKeyToken, majorVersion));
+            options.SharedAssemblies.Add(new(name, publicKeyToken, majorVersion));
         });
 
         return this;

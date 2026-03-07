@@ -42,12 +42,12 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new SourceTrustOptions { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "MyPlugin" } },
+            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "MyPlugin" } },
             desiredStateAggregator: new DesiredStateAggregator(),
             desiredActualDiffEngine: new DesiredActualDiffEngine(),
-            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOpts), new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(feedOpts))),
+            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOpts), new(new OptionsWrapper<FeedResolutionOptions>(feedOpts))),
             storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            reconciliationOptions: new ReconciliationOptions(),
+            reconciliationOptions: new(),
             observerEventDispatcher: new ObserverEventDispatcher([]),
             healthEvaluator: new ReconciliationHealthEvaluator(),
             feedResolutionOptions: feedOpts);
@@ -75,12 +75,12 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new SourceTrustOptions(),
+            sourceTrustOptions: new(),
             desiredStateAggregator: new DesiredStateAggregator(),
             desiredActualDiffEngine: new DesiredActualDiffEngine(),
-            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOpts), new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(feedOpts))),
+            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOpts), new(new OptionsWrapper<FeedResolutionOptions>(feedOpts))),
             storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            reconciliationOptions: new ReconciliationOptions(),
+            reconciliationOptions: new(),
             observerEventDispatcher: new ObserverEventDispatcher([]),
             healthEvaluator: new ReconciliationHealthEvaluator(),
             feedResolutionOptions: feedOpts);
@@ -109,12 +109,12 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new SourceTrustOptions { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "PluginA" } },
+            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "PluginA" } },
             desiredStateAggregator: new DesiredStateAggregator(),
             desiredActualDiffEngine: new DesiredActualDiffEngine(),
-            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOpts), new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(feedOpts))),
+            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOpts), new(new OptionsWrapper<FeedResolutionOptions>(feedOpts))),
             storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            reconciliationOptions: new ReconciliationOptions(),
+            reconciliationOptions: new(),
             observerEventDispatcher: new ObserverEventDispatcher([]),
             healthEvaluator: new ReconciliationHealthEvaluator(),
             feedResolutionOptions: feedOpts);

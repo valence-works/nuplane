@@ -74,7 +74,7 @@ public sealed class StartupLoadingEventIntegrationTests
             var firstObserver = new SpyPackageLoadingObserver();
             var firstLoader = new FakePackageLoader();
             var firstService = CreateService(source, firstLoader, firstObserver, stateFilePath);
-            await firstService.TriggerAsync(new ReconciliationTrigger(TriggerType.Startup), CancellationToken.None);
+            await firstService.TriggerAsync(new(TriggerType.Startup), CancellationToken.None);
 
             Assert.Single(firstObserver.ReceivedEvents);
 
@@ -82,7 +82,7 @@ public sealed class StartupLoadingEventIntegrationTests
             var secondLoader = new FakePackageLoader();
             var secondService = CreateService(source, secondLoader, secondObserver, stateFilePath);
 
-            var secondResult = await secondService.TriggerAsync(new ReconciliationTrigger(TriggerType.Startup), CancellationToken.None);
+            var secondResult = await secondService.TriggerAsync(new(TriggerType.Startup), CancellationToken.None);
 
             Assert.False(secondResult.Skipped);
             Assert.Empty(secondResult.ChangeSet.Added);
@@ -110,16 +110,14 @@ public sealed class StartupLoadingEventIntegrationTests
         var failureRecorder = new FailureRecorder(storeRegistry);
         var loadingFailureTracker = new LoadingFailureTracker();
         var coreObserver = new SpyCoreObserver();
-        var coreFailureDispatcher = new ObserverEventDispatcher([coreObserver]);
         var loadingObserver = new SpyPackageLoadingObserver();
         var loadingDispatcher = new LoadingEventDispatcher([loadingObserver], NullLogger<LoadingEventDispatcher>.Instance);
         var fakeLoader = new FakePackageLoader(failIds: ["plugin-fail"]);
         var autoLoadingObserver = new PackageAutoLoadingObserver(
             fakeLoader,
             loadingDispatcher,
-            new OptionsWrapper<LoadingOptions>(new LoadingOptions { Enabled = true }),
+            new OptionsWrapper<LoadingOptions>(new() { Enabled = true }),
             NullLogger<PackageAutoLoadingObserver>.Instance,
-            coreFailureDispatcher,
             failureRecorder,
             metrics: null,
             loadingFailureTracker);
@@ -133,15 +131,13 @@ public sealed class StartupLoadingEventIntegrationTests
             observerEventDispatcher: serviceObserverDispatcher,
             loadingFailureTracker: loadingFailureTracker);
 
-        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Startup), CancellationToken.None);
+        var result = await service.TriggerAsync(new(TriggerType.Startup), CancellationToken.None);
         var state = await storeRegistry.GetStateAsync(CancellationToken.None);
 
         Assert.True(result.IsDegraded);
         Assert.Contains("plugin-fail", result.FailedPackages);
         Assert.Single(loadingObserver.ReceivedFailures);
         Assert.Equal("plugin-fail", loadingObserver.ReceivedFailures[0].PackageId);
-        Assert.Single(coreObserver.PackageFailures);
-        Assert.Equal("plugin-fail", coreObserver.PackageFailures[0].packageId);
         Assert.True(state.LastFailureById.ContainsKey("plugin-fail"));
         Assert.Equal("load", state.LastFailureById["plugin-fail"].Stage);
     }
@@ -158,9 +154,8 @@ public sealed class StartupLoadingEventIntegrationTests
         var autoLoadingObserver = new PackageAutoLoadingObserver(
             loader,
             loadingDispatcher,
-            new OptionsWrapper<LoadingOptions>(new LoadingOptions { Enabled = true }),
+            new OptionsWrapper<LoadingOptions>(new() { Enabled = true }),
             NullLogger<PackageAutoLoadingObserver>.Instance,
-            observerEventDispatcher: null,
             failureRecorder: new FailureRecorder(storeRegistry),
             metrics: null,
             loadingFailureTracker: loadingFailureTracker);
@@ -234,7 +229,7 @@ public sealed class StartupLoadingEventIntegrationTests
         {
             var key = BuildKey(packageId, version);
             var removed = _sessions.Remove(key);
-            context = removed ? new PackageLoadContextHandle(key, new object()) : null;
+            context = removed ? new PackageLoadContextHandle(key, new()) : null;
             return removed;
         }
 
@@ -242,7 +237,7 @@ public sealed class StartupLoadingEventIntegrationTests
         {
             var key = BuildKey(packageId, version);
             var exists = _sessions.ContainsKey(key);
-            context = exists ? new PackageLoadContextHandle(key, new object()) : null;
+            context = exists ? new PackageLoadContextHandle(key, new()) : null;
             return exists;
         }
 
@@ -259,7 +254,7 @@ public sealed class StartupLoadingEventIntegrationTests
             foreach (var package in packages)
             {
                 var key = BuildKey(package.Id, package.Version);
-                sessions[key] = new PackageLoadSession(
+                sessions[key] = new(
                     package.Id,
                     package.Version,
                     package.InstallPath,

@@ -13,7 +13,7 @@ internal sealed class LoadingFailureTracker : ILoadingFailureTracker
 
         var packageIds = _failedPackageIdsByCorrelation.GetOrAdd(
             correlationId,
-            static _ => new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase));
+            static _ => new(StringComparer.OrdinalIgnoreCase));
 
         packageIds.TryAdd(packageId, 0);
     }

@@ -23,7 +23,7 @@ public sealed class CoreRuntimeRegistrationIsolationTests
         await using var provider = services.BuildServiceProvider();
 
         var runtime = provider.GetRequiredService<ReconciliationService>();
-        var result = await runtime.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var result = await runtime.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Empty(result.FailedPackages);

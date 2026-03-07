@@ -25,7 +25,7 @@ public sealed class PartialFailureIsolationTests
             packageResolver: new FailOneResolver("pkg-bad"),
             reconciliationOptions: new() { MaxRetryAttempts = 0 });
 
-        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.Contains("pkg-bad", result.FailedPackages);
         Assert.Contains(result.ChangeSet.Added, p => string.Equals(p.Id, "pkg-good", StringComparison.OrdinalIgnoreCase));

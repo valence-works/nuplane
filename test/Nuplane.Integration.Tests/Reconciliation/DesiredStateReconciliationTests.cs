@@ -19,8 +19,8 @@ public sealed class DesiredStateReconciliationTests
             sources: [source],
             sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } });
 
-        var first = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
-        var second = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var first = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
+        var second = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.False(first.Skipped);
         Assert.Single(first.ChangeSet.Added);
@@ -40,7 +40,7 @@ public sealed class DesiredStateReconciliationTests
             sources: [source],
             sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } });
 
-        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.False(result.Skipped);
         Assert.Empty(result.FailedPackages);
@@ -65,13 +65,13 @@ public sealed class DesiredStateReconciliationTests
             sources: [source],
             sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
             feedResolutionOptions: feedResolutionOptions,
-            feedTrustPolicyOptions: new FeedTrustPolicyOptions
+            feedTrustPolicyOptions: new()
             {
                 AllowUntrustedWithScopedOverride = false,
                 RequireOverrideReason = true
             });
 
-        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.False(result.Skipped);
         Assert.Contains("pkg-a", result.FailedPackages);

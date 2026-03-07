@@ -37,7 +37,7 @@ internal static class NuplaneFeedRegistrationServices
             {
                 if (!opts.Feeds.Any(f => string.Equals(f.Name, feed.Name, StringComparison.OrdinalIgnoreCase)))
                 {
-                    opts.Feeds.Add(new FeedDefinition(feed.Name, feedUri, feed.TrustLevel, feed.Credentials));
+                    opts.Feeds.Add(new(feed.Name, feedUri, feed.TrustLevel, feed.Credentials));
                 }
             });
 
@@ -87,7 +87,7 @@ internal static class NuplaneFeedRegistrationServices
             {
                 if (!opts.Feeds.Any(f => string.Equals(f.Name, feed.Name, StringComparison.OrdinalIgnoreCase)))
                 {
-                    opts.Feeds.Add(new FeedDefinition(feed.Name, serviceIndex, feed.TrustLevel, feed.Credentials));
+                    opts.Feeds.Add(new(feed.Name, serviceIndex, feed.TrustLevel, feed.Credentials));
                 }
             });
         }

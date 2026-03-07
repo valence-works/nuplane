@@ -20,9 +20,9 @@ public sealed class SingleFlightOverlapTests
             packageResolver: new SlowResolver(TimeSpan.FromMilliseconds(200)),
             reconciliationOptions: new() { EnableSingleFlight = true });
 
-        var firstRun = service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var firstRun = service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
         await Task.Delay(30);
-        var secondRun = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var secondRun = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
         var firstResult = await firstRun;
 
         Assert.False(firstResult.Skipped);

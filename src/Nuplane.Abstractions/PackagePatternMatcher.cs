@@ -58,7 +58,7 @@ public static class PackagePatternMatcher
                 .Replace("\\*", ".*", StringComparison.Ordinal)
                 .Replace("\\?", ".", StringComparison.Ordinal) + "$";
 
-            return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+            return new(regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
         });
 
         return regex.IsMatch(packageId);

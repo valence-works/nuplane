@@ -80,7 +80,7 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
     [Fact]
     public void OrderCandidates_LocalFileUriFeed_IncludedInCandidates()
     {
-        var localFeed = new FeedDefinition("local-drop", new Uri("file:///packages/local"), FeedTrustLevel.Trusted);
+        var localFeed = new FeedDefinition("local-drop", new("file:///packages/local"), FeedTrustLevel.Trusted);
         var opts = new FeedResolutionOptions();
         opts.Feeds.Add(localFeed);
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(opts));

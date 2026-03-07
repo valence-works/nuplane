@@ -71,12 +71,12 @@ public sealed class ScheduledTriggerAttributionIntegrationTests
     {
         return ReconciliationServiceFactory.Create(
             sources: [],
-            sourceTrustOptions: new SourceTrustOptions(),
+            sourceTrustOptions: new(),
             packageResolver: new NoOpResolver(),
             observerEventDispatcher: new ObserverEventDispatcher([]),
             healthEvaluator: healthEvaluator ?? new ReconciliationHealthEvaluator(),
             logger: spyLogger,
-            metrics: new ReconciliationMetrics(new ReconciliationTelemetry()));
+            metrics: new(new()));
     }
 
     private sealed class NoOpResolver : IPackageResolver

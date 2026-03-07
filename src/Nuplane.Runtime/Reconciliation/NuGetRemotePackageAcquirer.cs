@@ -139,7 +139,7 @@ internal sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions>
             var id = idProperty.GetString();
             if (!string.IsNullOrWhiteSpace(id))
             {
-                return new Uri(id, UriKind.Absolute);
+                return new(id, UriKind.Absolute);
             }
         }
 
@@ -156,6 +156,6 @@ internal sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions>
     {
         var invalidCharacters = Path.GetInvalidFileNameChars();
         var buffer = value.Select(ch => invalidCharacters.Contains(ch) ? '_' : ch).ToArray();
-        return new string(buffer);
+        return new(buffer);
     }
 }

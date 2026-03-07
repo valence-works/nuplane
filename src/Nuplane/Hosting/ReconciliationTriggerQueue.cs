@@ -9,7 +9,7 @@ namespace Nuplane.Hosting;
 /// </summary>
 internal sealed class ReconciliationTriggerQueue : IReconciliationTriggerIngress
 {
-    private readonly Channel<ReconciliationTriggerDispatchRequest> _requests = Channel.CreateUnbounded<ReconciliationTriggerDispatchRequest>(new UnboundedChannelOptions
+    private readonly Channel<ReconciliationTriggerDispatchRequest> _requests = Channel.CreateUnbounded<ReconciliationTriggerDispatchRequest>(new()
     {
         SingleReader = true,
         SingleWriter = false
@@ -18,7 +18,7 @@ internal sealed class ReconciliationTriggerQueue : IReconciliationTriggerIngress
     public void Enqueue(ReconciliationTrigger trigger)
     {
         ArgumentNullException.ThrowIfNull(trigger);
-        Write(new ReconciliationTriggerDispatchRequest(trigger, completionSource: null, CancellationToken.None));
+        Write(new(trigger, completionSource: null, CancellationToken.None));
     }
 
     public Task<ReconciliationRunResult> EnqueueAndWaitAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken)
@@ -39,7 +39,7 @@ internal sealed class ReconciliationTriggerQueue : IReconciliationTriggerIngress
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
 
-        Write(new ReconciliationTriggerDispatchRequest(trigger, completionSource, cancellationToken));
+        Write(new(trigger, completionSource, cancellationToken));
         return completionSource.Task;
     }
 

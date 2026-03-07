@@ -22,7 +22,7 @@ public sealed class FeedRuleMaxLimitTests
             packageResolver: new NuGetPackageResolver(),
             reconciliationOptions: new() { MaxRetryAttempts = 0 });
 
-        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.Equal(2, result.ChangeSet.Added.Count);
         Assert.Equal(new[] { "Pkg.A", "Pkg.B" }, result.ChangeSet.Added.Select(x => x.Id).ToArray());

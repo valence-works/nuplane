@@ -24,7 +24,7 @@ public sealed class RetryExhaustionTests
             packageResolver: new NuGetPackageResolver(),
             reconciliationOptions: options);
 
-        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.True(result.IsDegraded);
         Assert.Empty(result.ChangeSet.Added);

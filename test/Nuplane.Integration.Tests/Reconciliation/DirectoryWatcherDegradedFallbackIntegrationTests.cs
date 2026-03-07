@@ -54,12 +54,12 @@ public sealed class DirectoryWatcherDegradedFallbackIntegrationTests
 
         var service = ReconciliationServiceFactory.Create(
             sources: [failingSource],
-            sourceTrustOptions: new SourceTrustOptions(),
+            sourceTrustOptions: new(),
             packageResolver: new NoOpResolver(),
             observerEventDispatcher: new ObserverEventDispatcher([]),
             healthEvaluator: new ReconciliationHealthEvaluator(),
             logger: spyLogger,
-            metrics: new ReconciliationMetrics(new ReconciliationTelemetry()));
+            metrics: new(new()));
 
         // Trigger scheduled reconciliation — should complete even with source outage
         var trigger = new ReconciliationTrigger(TriggerType.Scheduled);
@@ -81,12 +81,12 @@ public sealed class DirectoryWatcherDegradedFallbackIntegrationTests
 
         var service = ReconciliationServiceFactory.Create(
             sources: [failingSource],
-            sourceTrustOptions: new SourceTrustOptions(),
+            sourceTrustOptions: new(),
             packageResolver: new NoOpResolver(),
             observerEventDispatcher: new ObserverEventDispatcher([]),
             healthEvaluator: new ReconciliationHealthEvaluator(),
             logger: spyLogger,
-            metrics: new ReconciliationMetrics(new ReconciliationTelemetry()));
+            metrics: new(new()));
 
         var trigger = new ReconciliationTrigger(TriggerType.Scheduled);
         await service.TriggerAsync(trigger, CancellationToken.None);

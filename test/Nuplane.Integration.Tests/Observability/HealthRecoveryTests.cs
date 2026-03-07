@@ -20,12 +20,12 @@ public sealed class HealthRecoveryTests
             reconciliationOptions: new() { MaxRetryAttempts = 0 });
 
         source.FailReads = true;
-        var degraded = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var degraded = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
         Assert.True(degraded.IsDegraded);
         Assert.True(evaluator.IsDegraded);
 
         source.FailReads = false;
-        var recovered = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var recovered = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
         Assert.False(recovered.IsDegraded);
         Assert.False(evaluator.IsDegraded);
     }

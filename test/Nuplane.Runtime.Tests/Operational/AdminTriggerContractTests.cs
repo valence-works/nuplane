@@ -138,7 +138,7 @@ public sealed class AdminTriggerContractTests
     public async Task Trigger_NullCorrelationId_Throws()
     {
         var service = new FakeReconciliationService(new(false, EmptyChangeSet(), [], false));
-        var (coordinator, dispatcher) = await CreateCoordinatorAsync(service, new SpyLogger());
+        var (coordinator, dispatcher) = await CreateCoordinatorAsync(service, new());
 
         try
         {
@@ -161,10 +161,10 @@ public sealed class AdminTriggerContractTests
         var dispatcher = new ReconciliationTriggerDispatcherHostedService(
             queue,
             reconciliationService,
-            new ReconciliationMetrics(new ReconciliationTelemetry()),
+            new(new()),
             NullLogger<ReconciliationTriggerDispatcherHostedService>.Instance);
         await dispatcher.StartAsync(CancellationToken.None);
-        return (new ManualReconcileCoordinator(queue, logger), dispatcher);
+        return (new(queue, logger), dispatcher);
     }
 
     private sealed class FakeReconciliationService(ReconciliationRunResult result) : IReconciliationService

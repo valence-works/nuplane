@@ -21,6 +21,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     private readonly ConcurrentDictionary<string, FeedResolutionDecision> _decisions = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, int> _attempts = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <inheritdoc />
     public MultiFeedPackageResolver(IOptions<FeedResolutionOptions> options, FeedResolutionPolicy policy)
         : this(options, policy, new NuGetRemotePackageAcquirer(options))
     {

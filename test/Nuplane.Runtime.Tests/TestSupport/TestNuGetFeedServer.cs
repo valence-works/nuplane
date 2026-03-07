@@ -14,7 +14,7 @@ internal sealed class TestNuGetFeedServer : IAsyncDisposable
     private readonly string _baseAddress;
 
     public int PackageDownloads { get; private set; }
-    public Uri ServiceIndexUri => new(new Uri(_baseAddress), "v3/index.json");
+    public Uri ServiceIndexUri => new(new(_baseAddress), "v3/index.json");
 
     public TestNuGetFeedServer(string packageId, string version, byte[] packageBytes)
     {

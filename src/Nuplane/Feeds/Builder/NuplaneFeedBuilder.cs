@@ -48,7 +48,7 @@ public sealed class NuplaneFeedBuilder
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        DirectoryOptions = new NuplaneDirectoryFeedOptions { DirectoryPath = path };
+        DirectoryOptions = new() { DirectoryPath = path };
         configure?.Invoke(DirectoryOptions);
         return this;
     }

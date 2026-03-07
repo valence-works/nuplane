@@ -87,7 +87,7 @@ public sealed class LockFileCoordinatorTests : IDisposable
     {
         var options = new LockFileOptions { Path = path, Mode = mode, RequireEntryInStrictMode = requireEntry };
         return new(
-            new LockFileStore(new OptionsWrapper<LockFileOptions>(options)),
+            new(new OptionsWrapper<LockFileOptions>(options)),
             new OptionsWrapper<LockFileOptions>(options));
     }
 

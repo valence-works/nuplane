@@ -33,7 +33,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
     {
         return ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new SourceTrustOptions { RejectUnallowlistedPackages = false },
+            sourceTrustOptions: new() { RejectUnallowlistedPackages = false },
             packageResolver: new NuGetPackageResolver());
     }
 
@@ -48,7 +48,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
         var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
-        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.Empty(result.ChangeSet.Added);
         Assert.Empty(result.ChangeSet.Updated);
@@ -69,7 +69,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
         var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
-        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.Empty(result.ChangeSet.Added);
         Assert.Empty(result.ChangeSet.Updated);
@@ -99,7 +99,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
         var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
-        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.Empty(result.ChangeSet.Added);
         Assert.Empty(result.ChangeSet.Updated);
@@ -128,7 +128,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
         var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
-        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.Empty(result.ChangeSet.Added);
         Assert.Empty(result.ChangeSet.Updated);
@@ -146,7 +146,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
         var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
-        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.Empty(result.ChangeSet.Added);
         Assert.Empty(result.ChangeSet.Updated);
@@ -177,13 +177,13 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
         var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
-        var established = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var established = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
         Assert.Single(established.ChangeSet.Added);
 
         // Now corrupt the manifest  
         await File.WriteAllTextAsync(manifestPath, "corrupt");
 
-        var degraded = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var degraded = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         // Source is non-mutating: returns empty desired set, so no new packages are added.
         // The diff engine may still remove previously-active packages since desired set is now empty.

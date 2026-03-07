@@ -18,7 +18,7 @@ public sealed class CleanupPolicyOptionsValidatorTests
     [Fact]
     public void Validate_NegativeRetainLastNVersions_Fails()
     {
-        var result = _sut.Validate(null, new CleanupPolicyOptions { RetainLastNVersions = -1 });
+        var result = _sut.Validate(null, new() { RetainLastNVersions = -1 });
 
         Assert.True(result.Failed);
         Assert.Contains("RetainLastNVersions must be greater than or equal to zero", result.FailureMessage);
@@ -27,7 +27,7 @@ public sealed class CleanupPolicyOptionsValidatorTests
     [Fact]
     public void Validate_NegativeRetainYoungerThanDays_Fails()
     {
-        var result = _sut.Validate(null, new CleanupPolicyOptions { RetainYoungerThanDays = -1 });
+        var result = _sut.Validate(null, new() { RetainYoungerThanDays = -1 });
 
         Assert.True(result.Failed);
         Assert.Contains("RetainYoungerThanDays must be greater than or equal to zero", result.FailureMessage);

@@ -29,7 +29,7 @@ public sealed class MultiFeedRetryExhaustionTests
 
         var resolver = new MultiFeedPackageResolver(
             new OptionsWrapper<FeedResolutionOptions>(feedOptions),
-            new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(feedOptions)));
+            new(new OptionsWrapper<FeedResolutionOptions>(feedOptions)));
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
@@ -43,7 +43,7 @@ public sealed class MultiFeedRetryExhaustionTests
             },
             feedResolutionOptions: feedOptions);
 
-        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.True(result.IsDegraded);
         Assert.Contains("pkg", result.FailedPackages);

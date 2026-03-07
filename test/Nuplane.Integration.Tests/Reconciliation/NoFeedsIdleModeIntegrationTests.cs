@@ -21,10 +21,10 @@ public sealed class NoFeedsIdleModeIntegrationTests
         var spyLogger = new SpyReconciliationLogger();
         var service = ReconciliationServiceFactory.Create(
             sources: [],
-            sourceTrustOptions: new SourceTrustOptions(),
+            sourceTrustOptions: new(),
             packageResolver: new NoOpResolver(),
             storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            reconciliationOptions: new ReconciliationOptions(),
+            reconciliationOptions: new(),
             observerEventDispatcher: new ObserverEventDispatcher([]),
             healthEvaluator: new ReconciliationHealthEvaluator(),
             logger: spyLogger);
@@ -42,10 +42,10 @@ public sealed class NoFeedsIdleModeIntegrationTests
         var spyLogger = new SpyReconciliationLogger();
         var service = ReconciliationServiceFactory.Create(
             sources: [],
-            sourceTrustOptions: new SourceTrustOptions(),
+            sourceTrustOptions: new(),
             packageResolver: new NoOpResolver(),
             storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            reconciliationOptions: new ReconciliationOptions(),
+            reconciliationOptions: new(),
             observerEventDispatcher: new ObserverEventDispatcher([]),
             healthEvaluator: new ReconciliationHealthEvaluator(),
             logger: spyLogger);
@@ -66,10 +66,10 @@ public sealed class NoFeedsIdleModeIntegrationTests
     {
         var service = ReconciliationServiceFactory.Create(
             sources: [],
-            sourceTrustOptions: new SourceTrustOptions(),
+            sourceTrustOptions: new(),
             packageResolver: new NoOpResolver(),
             storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
-            reconciliationOptions: new ReconciliationOptions(),
+            reconciliationOptions: new(),
             observerEventDispatcher: new ObserverEventDispatcher([]),
             healthEvaluator: new ReconciliationHealthEvaluator());
 

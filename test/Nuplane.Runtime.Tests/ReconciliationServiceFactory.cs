@@ -44,13 +44,13 @@ internal static class ReconciliationServiceFactory
         var diffEngine = desiredActualDiffEngine ?? new DesiredActualDiffEngine();
         var store = storeRegistry ?? new StoreRegistry(new StoreStateSerializer(), stateFilePath: null);
         var reconOptions = reconciliationOptions ?? new ReconciliationOptions();
-        var metricsInstance = metrics ?? new ReconciliationMetrics(new ReconciliationTelemetry());
+        var metricsInstance = metrics ?? new ReconciliationMetrics(new());
         var feedResolution = feedResolutionOptions ?? new FeedResolutionOptions();
         var feedTrust = feedTrustPolicyOptions ?? new FeedTrustPolicyOptions();
         var lockOptions = new LockFileOptions();
         var cleanupOptions = cleanupPolicyOptions ?? new CleanupPolicyOptions();
 
-        return new ReconciliationService(
+        return new(
             sources ?? [],
             new OptionsWrapper<SourceTrustOptions>(sourceTrustOptions ?? new SourceTrustOptions()),
             desiredStateAgg,
@@ -64,12 +64,12 @@ internal static class ReconciliationServiceFactory
             metricsInstance,
             new OptionsWrapper<FeedResolutionOptions>(feedResolution),
             new OptionsWrapper<FeedTrustPolicyOptions>(feedTrust),
-            lockFileCoordinator ?? new LockFileCoordinator(new LockFileStore(new OptionsWrapper<LockFileOptions>(lockOptions)), new OptionsWrapper<LockFileOptions>(lockOptions)),
+            lockFileCoordinator ?? new LockFileCoordinator(new(new OptionsWrapper<LockFileOptions>(lockOptions)), new OptionsWrapper<LockFileOptions>(lockOptions)),
             new OptionsWrapper<CleanupPolicyOptions>(cleanupOptions),
             retryPolicy ?? new ReconciliationRetryPolicy(new OptionsWrapper<ReconciliationOptions>(reconOptions)),
             dryRunPlanner ?? new DryRunPlanner(diffEngine),
             feedTrustPolicyEvaluator ?? new FeedTrustPolicyEvaluator(),
-            packageCleanupService ?? new PackageCleanupService(new CleanupPolicyEvaluator()),
+            packageCleanupService ?? new PackageCleanupService(new()),
             failureRecorder ?? new FailureRecorder(store),
             loadingOptions is null ? null : new OptionsWrapper<LoadingOptions>(loadingOptions),
             packageLoader,

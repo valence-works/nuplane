@@ -40,7 +40,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
     {
         return ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new SourceTrustOptions { RejectUnallowlistedPackages = false },
+            sourceTrustOptions: new() { RejectUnallowlistedPackages = false },
             packageResolver: new NuGetPackageResolver());
     }
 
@@ -67,8 +67,8 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
         var service1 = CreateService(source1);
         var service2 = CreateService(source2);
 
-        var result1 = await service1.TriggerAsync(new Nuplane.Runtime.Reconciliation.Models.ReconciliationTrigger(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
-        var result2 = await service2.TriggerAsync(new Nuplane.Runtime.Reconciliation.Models.ReconciliationTrigger(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
+        var result1 = await service1.TriggerAsync(new(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
+        var result2 = await service2.TriggerAsync(new(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
 
         Assert.False(result1.IsDegraded);
         Assert.False(result2.IsDegraded);
@@ -99,7 +99,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
         var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
-        var first = await service.TriggerAsync(new Nuplane.Runtime.Reconciliation.Models.ReconciliationTrigger(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
+        var first = await service.TriggerAsync(new(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
         Assert.Single(first.ChangeSet.Added);
         Assert.Equal("1.0.0", first.ChangeSet.Added[0].Version);
 
@@ -114,7 +114,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
             }
         }));
 
-        var second = await service.TriggerAsync(new Nuplane.Runtime.Reconciliation.Models.ReconciliationTrigger(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
+        var second = await service.TriggerAsync(new(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
 
         Assert.Single(second.ChangeSet.Updated);
         Assert.Equal("Pkg", second.ChangeSet.Updated[0].Id);
@@ -141,7 +141,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
         var source = new DesiredManifestPackageSource(new(), options);
         var service = CreateService(source);
 
-        await service.TriggerAsync(new Nuplane.Runtime.Reconciliation.Models.ReconciliationTrigger(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
+        await service.TriggerAsync(new(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
 
         // Remove one package from manifest
         File.WriteAllText(manifestPath, JsonSerializer.Serialize(new
@@ -154,7 +154,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
             }
         }));
 
-        var result = await service.TriggerAsync(new Nuplane.Runtime.Reconciliation.Models.ReconciliationTrigger(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
+        var result = await service.TriggerAsync(new(Nuplane.Runtime.Reconciliation.Models.TriggerType.Manual), CancellationToken.None);
 
         Assert.Single(result.ChangeSet.Removed);
         Assert.Equal("RemoveMe", result.ChangeSet.Removed[0]);

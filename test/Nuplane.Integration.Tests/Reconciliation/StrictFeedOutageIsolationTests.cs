@@ -30,12 +30,12 @@ public sealed class StrictFeedOutageIsolationTests
             {
                 AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-impacted", "pkg-ok" }
             },
-            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOptions), new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(feedOptions))),
+            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOptions), new(new OptionsWrapper<FeedResolutionOptions>(feedOptions)), new StubRemotePackageAcquirer()),
             storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
             reconciliationOptions: new() { MaxRetryAttempts = 0 },
             feedResolutionOptions: feedOptions);
 
-        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.Contains("pkg-impacted", result.FailedPackages);
         Assert.Contains(result.ChangeSet.Added, x => string.Equals(x.Id, "pkg-ok", StringComparison.OrdinalIgnoreCase));
@@ -45,5 +45,11 @@ public sealed class StrictFeedOutageIsolationTests
     private sealed class StaticSource(IReadOnlyList<PackageRequest> requests) : IDesiredPackageSource
     {
         public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct) => Task.FromResult(requests);
+    }
+
+    private sealed class StubRemotePackageAcquirer : IRemotePackageAcquirer
+    {
+        public Task<string> AcquireAsync(FeedDefinition feed, string packageId, string version, CancellationToken cancellationToken) =>
+            Task.FromResult(Path.Combine(Path.GetTempPath(), "nuplane-test", feed.Name, packageId, version));
     }
 }

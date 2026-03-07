@@ -142,25 +142,25 @@ public sealed class StartupCycleTests
         IReconciliationService reconciliationService,
         ReconciliationOptions? options = null)
     {
-        options ??= new ReconciliationOptions
+        options ??= new()
         {
             EnableAutomaticReconciliation = true,
             PollInterval = TimeSpan.FromHours(1)
         };
 
         var queue = new ReconciliationTriggerQueue();
-        var metrics = new ReconciliationMetrics(new ReconciliationTelemetry());
+        var metrics = new ReconciliationMetrics(new());
 
         return (
-            new ReconciliationTriggerDispatcherHostedService(
+            new(
                 queue,
                 reconciliationService,
                 metrics,
                 NullLogger<ReconciliationTriggerDispatcherHostedService>.Instance),
-            new ReconciliationHostedService(
+            new(
                 queue,
                 new OptionsWrapper<ReconciliationOptions>(options),
-                new OptionsWrapper<ConvergenceOptions>(new ConvergenceOptions()),
+                new OptionsWrapper<ConvergenceOptions>(new()),
                 NullLogger<ReconciliationHostedService>.Instance));
     }
 
@@ -229,7 +229,7 @@ public sealed class StartupCycleTests
                 throw;
             }
 
-            return new ReconciliationRunResult(false, EmptyChangeSet, [], false);
+            return new(false, EmptyChangeSet, [], false);
         }
     }
 

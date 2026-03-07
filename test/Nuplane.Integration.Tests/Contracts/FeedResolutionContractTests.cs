@@ -20,7 +20,7 @@ public sealed class FeedResolutionContractTests
         options.Value.Feeds.Add(new("feed-b", new("https://b.example/v3/index.json"), FeedTrustLevel.Trusted));
         options.Value.UnavailableFeeds.Add("feed-a");
 
-        var resolver = new MultiFeedPackageResolver(options, new(options));
+        var resolver = new MultiFeedPackageResolver(options, new(options), new StubRemotePackageAcquirer());
         var request = new PackageRequest("pkg", "1.0.0", "feed-b", PackageUpdatePolicy.Exact, "source");
 
         var resolved = await resolver.ResolveAsync(request, CancellationToken.None);
@@ -43,7 +43,7 @@ public sealed class FeedResolutionContractTests
         options.Value.SetPriority("feed-b", 20);
         options.Value.UnavailableFeeds.Add("feed-a");
 
-        var resolver = new MultiFeedPackageResolver(options, new(options));
+        var resolver = new MultiFeedPackageResolver(options, new(options), new StubRemotePackageAcquirer());
         var request = new PackageRequest("pkg", "1.0.0", null, PackageUpdatePolicy.Exact, "source");
 
         var resolved = await resolver.ResolveAsync(request, CancellationToken.None);
@@ -51,5 +51,11 @@ public sealed class FeedResolutionContractTests
 
         options.Value.StopOnFirstSuccessfulFeed = true;
         await Assert.ThrowsAsync<FeedUnavailableException>(() => resolver.ResolveAsync(request, CancellationToken.None));
+    }
+
+    private sealed class StubRemotePackageAcquirer : IRemotePackageAcquirer
+    {
+        public Task<string> AcquireAsync(FeedDefinition feed, string packageId, string version, CancellationToken cancellationToken) =>
+            Task.FromResult(Path.Combine(Path.GetTempPath(), "nuplane-test", feed.Name, packageId, version));
     }
 }

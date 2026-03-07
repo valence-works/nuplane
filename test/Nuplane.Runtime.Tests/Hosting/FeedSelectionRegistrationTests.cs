@@ -76,7 +76,7 @@ public sealed class FeedSelectionRegistrationTests
 
                     nuplane.AddFeed("DROP-FOLDER", feed =>
                     {
-                        feed.FromUri(new Uri("https://api.nuget.org/v3/index.json"));
+                        feed.FromUri(new("https://api.nuget.org/v3/index.json"));
                     });
                 }));
 
@@ -114,7 +114,7 @@ public sealed class FeedSelectionRegistrationTests
 
                 nuplane.AddFeed("nuget.org", feed =>
                 {
-                    feed.FromUri(new Uri("https://api.nuget.org/v3/index.json"));
+                    feed.FromUri(new("https://api.nuget.org/v3/index.json"));
                     feed.Include("Elsa.*");
                 });
             });

@@ -18,7 +18,7 @@ public sealed class LockFileOptionsValidatorTests
     [Fact]
     public void Validate_BlankPath_Fails()
     {
-        var result = _sut.Validate(null, new LockFileOptions { Path = "   " });
+        var result = _sut.Validate(null, new() { Path = "   " });
 
         Assert.True(result.Failed);
         Assert.Contains("Lock file path must be provided", result.FailureMessage);

@@ -88,7 +88,7 @@ public sealed class LoadingEventDispatcherTests
 
     private static PackageLoadedEvent CreateEvent() =>
         new("corr-loading-dispatcher", DateTimeOffset.UtcNow,
-            [new PackageLoadSession("pkg-a", "1.0.0", "/install", "ctx-a", DateTimeOffset.UtcNow, true, null)]);
+            [new("pkg-a", "1.0.0", "/install", "ctx-a", DateTimeOffset.UtcNow, true, null)]);
 
     private sealed class SpyObserver : IPackageLoadingObserver
     {

@@ -13,13 +13,13 @@ public sealed class ObserverContractTests
 
         var service = ReconciliationServiceFactory.Create(
             sources: [new StaticSource([new("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")])],
-            sourceTrustOptions: new SourceTrustOptions
+            sourceTrustOptions: new()
             {
                 AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" }
             },
             observerEventDispatcher: new Nuplane.Runtime.Events.ObserverEventDispatcher([observer]));
 
-        var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.False(result.Skipped);
         Assert.Equal(["Changing", "Changed"], observer.Events);

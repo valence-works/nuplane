@@ -46,7 +46,7 @@ public sealed record ReconciliationTrigger
                 throw new ArgumentException("Observed change triggers require an observation kind.", nameof(observationKind));
             }
 
-            ObservedOrigin = new FeedObservationOrigin(source ?? throw new ArgumentNullException(nameof(source)), observationKind.Value);
+            ObservedOrigin = new(source ?? throw new ArgumentNullException(nameof(source)), observationKind.Value);
         }
         else if (!string.IsNullOrWhiteSpace(source) || observationKind is not null)
         {

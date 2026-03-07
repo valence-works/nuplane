@@ -3,7 +3,6 @@ using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Loading.Events;
 using Nuplane.Loading.Hosting;
-using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Observability;
 using Nuplane.Store.State;
 
@@ -18,7 +17,7 @@ public sealed class PackageAutoLoadingObserverTests
     {
         var loader = new FakePackageLoader();
         var dispatcher = new FakeLoadingEventDispatcher();
-        var sut = CreateObserver(loader, dispatcher, new LoadingOptions { Enabled = true });
+        var sut = CreateObserver(loader, dispatcher, new() { Enabled = true });
 
         var appliedPackages = new[]
         {
@@ -44,7 +43,7 @@ public sealed class PackageAutoLoadingObserverTests
     {
         var loader = new FakePackageLoader();
         var dispatcher = new FakeLoadingEventDispatcher();
-        var sut = CreateObserver(loader, dispatcher, new LoadingOptions { Enabled = true });
+        var sut = CreateObserver(loader, dispatcher, new() { Enabled = true });
 
         var changeSet = new PackageChangeSet([], [], [], "corr-empty", Now);
 
@@ -59,7 +58,7 @@ public sealed class PackageAutoLoadingObserverTests
     {
         var loader = new FakePackageLoader();
         var dispatcher = new FakeLoadingEventDispatcher();
-        var sut = CreateObserver(loader, dispatcher, new LoadingOptions { Enabled = false });
+        var sut = CreateObserver(loader, dispatcher, new() { Enabled = false });
 
         var appliedPackages = new[] { new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now) };
         var changeSet = new PackageChangeSet([appliedPackages[0]], [], [], "corr-disabled", Now);
@@ -75,15 +74,13 @@ public sealed class PackageAutoLoadingObserverTests
     {
         var loader = new FakePackageLoader(failIds: ["pkg-b"]);
         var dispatcher = new FakeLoadingEventDispatcher();
-        var coreDispatcher = new FakeObserverEventDispatcher();
         var failureRecorder = new FakeFailureRecorder();
         var failureTracker = new LoadingFailureTracker();
-        var metrics = new ReconciliationMetrics(new ReconciliationTelemetry());
+        var metrics = new ReconciliationMetrics(new());
         var sut = CreateObserver(
             loader,
             dispatcher,
-            new LoadingOptions { Enabled = true },
-            coreDispatcher,
+            new() { Enabled = true },
             failureRecorder,
             metrics,
             failureTracker);
@@ -103,8 +100,6 @@ public sealed class PackageAutoLoadingObserverTests
         Assert.Single(dispatcher.LoadedEvents[0].LoadedPackages);
         Assert.Equal("pkg-a", dispatcher.LoadedEvents[0].LoadedPackages[0].PackageId);
 
-        Assert.Single(coreDispatcher.FailedPackages);
-        Assert.Equal("pkg-b", coreDispatcher.FailedPackages[0].packageId);
         Assert.Single(failureRecorder.RecordedFailures);
         Assert.Equal(("pkg-b", "load", "Load failed for pkg-b", "corr-failure"), failureRecorder.RecordedFailures[0]);
         Assert.Equal(["pkg-b"], failureTracker.TakeFailedPackageIds("corr-failure"));
@@ -115,7 +110,7 @@ public sealed class PackageAutoLoadingObserverTests
     {
         var loader = new FakePackageLoader();
         var dispatcher = new FakeLoadingEventDispatcher();
-        var sut = CreateObserver(loader, dispatcher, new LoadingOptions { Enabled = true });
+        var sut = CreateObserver(loader, dispatcher, new() { Enabled = true });
 
         const string correlationId = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00";
         var appliedPackages = new[] { new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now) };
@@ -132,7 +127,7 @@ public sealed class PackageAutoLoadingObserverTests
     {
         var loader = new FakePackageLoader();
         var dispatcher = new FakeLoadingEventDispatcher();
-        var sut = CreateObserver(loader, dispatcher, new LoadingOptions { Enabled = true });
+        var sut = CreateObserver(loader, dispatcher, new() { Enabled = true });
 
         var appliedPackages = new[] { new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now) };
         var changeSet = new PackageChangeSet([], [], [], "corr-startup", Now);
@@ -148,9 +143,9 @@ public sealed class PackageAutoLoadingObserverTests
     [Fact]
     public async Task EmptyChangeSet_WithAlreadyLoadedAppliedPackages_DoesNotPublishAgain()
     {
-        var loader = new FakePackageLoader(preloadedPackages: [new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now)]);
+        var loader = new FakePackageLoader(preloadedPackages: [new("pkg-a", "1.0.0", "feed", "/path-a", Now)]);
         var dispatcher = new FakeLoadingEventDispatcher();
-        var sut = CreateObserver(loader, dispatcher, new LoadingOptions { Enabled = true });
+        var sut = CreateObserver(loader, dispatcher, new() { Enabled = true });
 
         var appliedPackages = new[] { new ResolvedPackage("pkg-a", "1.0.0", "feed", "/path-a", Now) };
         var changeSet = new PackageChangeSet([], [], [], "corr-noop", Now);
@@ -165,7 +160,6 @@ public sealed class PackageAutoLoadingObserverTests
         FakePackageLoader loader,
         FakeLoadingEventDispatcher dispatcher,
         LoadingOptions options,
-        FakeObserverEventDispatcher? coreDispatcher = null,
         FakeFailureRecorder? failureRecorder = null,
         ReconciliationMetrics? metrics = null,
         ILoadingFailureTracker? loadingFailureTracker = null) =>
@@ -174,7 +168,6 @@ public sealed class PackageAutoLoadingObserverTests
             dispatcher,
             new OptionsWrapper<LoadingOptions>(options),
             NullLogger<PackageAutoLoadingObserver>.Instance,
-            coreDispatcher,
             failureRecorder,
             metrics,
             loadingFailureTracker);
@@ -234,7 +227,7 @@ public sealed class PackageAutoLoadingObserverTests
         {
             var key = BuildKey(packageId, version);
             var removed = _sessions.Remove(key);
-            context = removed ? new PackageLoadContextHandle(key, new object()) : null;
+            context = removed ? new PackageLoadContextHandle(key, new()) : null;
             return removed;
         }
 
@@ -242,7 +235,7 @@ public sealed class PackageAutoLoadingObserverTests
         {
             var key = BuildKey(packageId, version);
             var exists = _sessions.ContainsKey(key);
-            context = exists ? new PackageLoadContextHandle(key, new object()) : null;
+            context = exists ? new PackageLoadContextHandle(key, new()) : null;
             return exists;
         }
 
@@ -259,7 +252,7 @@ public sealed class PackageAutoLoadingObserverTests
             foreach (var package in packages)
             {
                 var key = BuildKey(package.Id, package.Version);
-                sessions[key] = new PackageLoadSession(
+                sessions[key] = new(
                     package.Id,
                     package.Version,
                     package.InstallPath,
@@ -287,21 +280,6 @@ public sealed class PackageAutoLoadingObserverTests
         public Task PublishFailedAsync(string packageId, string reason, CancellationToken cancellationToken)
         {
             FailedPackages.Add((packageId, reason));
-            return Task.CompletedTask;
-        }
-    }
-
-    internal sealed class FakeObserverEventDispatcher : IObserverEventDispatcher
-    {
-        public List<(string packageId, string correlationId)> FailedPackages { get; } = [];
-
-        public Task PublishChangingAsync(PackageChangeSet changeSet, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task PublishChangedAsync(PackageChangeSet changeSet, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task PublishReconciledAsync(PackageChangeSet changeSet, IReadOnlyList<ResolvedPackage> appliedPackages, CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task NotifyPackageFailedAsync(string packageId, Exception exception, string correlationId, CancellationToken cancellationToken)
-        {
-            FailedPackages.Add((packageId, correlationId));
             return Task.CompletedTask;
         }
     }
