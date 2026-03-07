@@ -200,3 +200,14 @@
 - T016 middleware stage classes in Phase C can be written in parallel before wiring into `ReconciliationPipeline`.
 - T024–T026 in Phase F are independent and can be parallelised across developers.
 
+---
+
+## Follow-on Feature Grouping Queue
+
+> After the trust regrouping pass, continue immediately with these cleanups in order:
+>
+> 1. `feed setup / feed registration`
+> 2. `reconciliation policy options + validators`
+
+- [ ] Regroup `feed setup / feed registration` by feature rather than infrastructure/type
+- [ ] Regroup `reconciliation policy options + validators` by feature rather than infrastructure/type
