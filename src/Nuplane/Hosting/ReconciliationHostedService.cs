@@ -46,7 +46,7 @@ internal sealed class ReconciliationHostedService : BackgroundService
 
         try
         {
-            _triggerSink.Enqueue(new ReconciliationTrigger(TriggerType.Startup));
+            _triggerSink.Enqueue(ReconciliationTrigger.Startup());
             _logger.LogDebug("Startup reconciliation trigger queued");
         }
         catch (Exception ex)
@@ -60,7 +60,7 @@ internal sealed class ReconciliationHostedService : BackgroundService
         {
             try
             {
-                _triggerSink.Enqueue(new ReconciliationTrigger(TriggerType.Scheduled));
+                _triggerSink.Enqueue(ReconciliationTrigger.Scheduled());
                 _logger.LogDebug("Scheduled reconciliation trigger queued");
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

@@ -39,7 +39,7 @@ internal sealed class HealthAndMetricsMiddleware(
         {
             var triggerType = trigger.Type.ToString();
             metrics.RecordTrigger(triggerType);
-            logger.LogTrigger(context.CorrelationId, triggerType, trigger.Source);
+            logger.LogTrigger(context.CorrelationId, triggerType, trigger.ObservedOrigin?.FeedName);
         }
 
         var changeSet = context.ChangeSet!;

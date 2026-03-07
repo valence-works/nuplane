@@ -52,12 +52,11 @@ public sealed class ScheduledTriggerAttributionIntegrationTests
         var spyLogger = new SpyReconciliationLogger();
         var service = CreateService(spyLogger);
 
-        await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Scheduled), CancellationToken.None);
-        await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual, CorrelationId: "m-1"), CancellationToken.None);
-        await service.TriggerAsync(new ReconciliationTrigger(
-            TriggerType.ObservedChange,
-            Source: "test-feed",
-            ObservationKind: FeedObservationKind.DirectoryWatcher), CancellationToken.None);
+        await service.TriggerAsync(ReconciliationTrigger.Scheduled(), CancellationToken.None);
+        await service.TriggerAsync(ReconciliationTrigger.Manual("m-1"), CancellationToken.None);
+        await service.TriggerAsync(
+            ReconciliationTrigger.Observed(FeedObservationOrigin.DirectoryWatcher("test-feed")),
+            CancellationToken.None);
 
         Assert.Equal(3, spyLogger.RecordedTriggers.Count);
         Assert.Equal(nameof(TriggerType.Scheduled), spyLogger.RecordedTriggers[0].TriggerType);

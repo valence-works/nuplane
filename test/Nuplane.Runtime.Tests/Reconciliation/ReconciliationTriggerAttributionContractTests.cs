@@ -28,15 +28,12 @@ public sealed class ReconciliationTriggerAttributionContractTests
     }
 
     [Fact]
-    public async Task TriggerAsync_ObservedChange_PropagatesTriggerWithSource()
+    public async Task TriggerAsync_ObservedChange_PropagatesStructuredOrigin()
     {
         var spyLogger = new SpyReconciliationLogger();
         var service = CreateService(spyLogger);
 
-        var trigger = new ReconciliationTrigger(
-            TriggerType.ObservedChange,
-            Source: "local-feed",
-            ObservationKind: FeedObservationKind.DirectoryWatcher);
+        var trigger = ReconciliationTrigger.Observed(FeedObservationOrigin.DirectoryWatcher("local-feed"));
         var result = await service.TriggerAsync(trigger, CancellationToken.None);
 
         Assert.False(result.Skipped);
@@ -51,7 +48,7 @@ public sealed class ReconciliationTriggerAttributionContractTests
         var spyLogger = new SpyReconciliationLogger();
         var service = CreateService(spyLogger);
 
-        var trigger = new ReconciliationTrigger(TriggerType.Manual, CorrelationId: "admin-42");
+        var trigger = new ReconciliationTrigger(TriggerType.Manual, correlationId: "admin-42");
         var result = await service.TriggerAsync(trigger, CancellationToken.None);
 
         Assert.False(result.Skipped);
@@ -66,11 +63,8 @@ public sealed class ReconciliationTriggerAttributionContractTests
         var slowSource = new SlowDesiredSource(TimeSpan.FromMilliseconds(300));
         var service = CreateService(spyLogger, enableSingleFlight: true, sources: [slowSource]);
 
-        var trigger1 = new ReconciliationTrigger(TriggerType.Scheduled);
-        var trigger2 = new ReconciliationTrigger(
-            TriggerType.ObservedChange,
-            Source: "blocked-feed",
-            ObservationKind: FeedObservationKind.DirectoryWatcher);
+        var trigger1 = ReconciliationTrigger.Scheduled();
+        var trigger2 = ReconciliationTrigger.Observed(FeedObservationOrigin.DirectoryWatcher("blocked-feed"));
 
         // Start first trigger (will be slow due to slow desired source)
         var task1 = service.TriggerAsync(trigger1, CancellationToken.None);

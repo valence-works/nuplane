@@ -27,6 +27,7 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         Directory.CreateDirectory(_options.DirectoryPath);
+        var observationOrigin = FeedObservationOrigin.DirectoryWatcher(_options.FeedName);
 
         try
         {
@@ -41,6 +42,7 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
             _watcher.Deleted += OnChanged;
             _watcher.Renamed += OnRenamed;
             _watcher.EnableRaisingEvents = true;
+            observationDegradationTracker?.MarkRecovered(observationOrigin);
         }
         catch (Exception ex)
         {
@@ -49,7 +51,7 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
                 "Directory watcher failed to start for feed '{FeedName}' at '{DirectoryPath}'. Falling back to scheduled reconciliation only.",
                 _options.FeedName,
                 _options.DirectoryPath);
-            observationDegradationTracker?.MarkDegraded();
+            observationDegradationTracker?.MarkDegraded(observationOrigin);
             return;
         }
 
@@ -68,10 +70,7 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
 
                 try
                 {
-                    _triggerSink.Enqueue(new ReconciliationTrigger(
-                        TriggerType.ObservedChange,
-                        Source: _options.FeedName,
-                        ObservationKind: FeedObservationKind.DirectoryWatcher));
+                    _triggerSink.Enqueue(ReconciliationTrigger.Observed(observationOrigin));
                     _logger.LogDebug("Queued observed-change reconciliation trigger for feed '{FeedName}'.", _options.FeedName);
                 }
                 catch (OperationCanceledException)
@@ -86,6 +85,8 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
         }
         finally
         {
+            observationDegradationTracker?.MarkRecovered(observationOrigin);
+
             if (_watcher is not null)
             {
                 _watcher.EnableRaisingEvents = false;

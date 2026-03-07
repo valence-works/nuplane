@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Abstractions;
+using Nuplane.Configuration;
 
 namespace Nuplane.Builder;
 
@@ -28,8 +29,17 @@ public sealed class NuplaneBuilder
     /// <param name="interval">How often the reconciliation cycle runs.</param>
     public NuplaneBuilder PollEvery(TimeSpan interval)
     {
+        // Do this:
+        Services.Configure<NuplaneSetupOptions>(options =>
+        {
+            options.AutomaticReconciliation = true;
+            options.PollInterval = interval;
+        });
+        
+        // Not this:
         AutomaticReconciliation = true;
         PollInterval = interval;
+        
         return this;
     }
 

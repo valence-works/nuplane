@@ -3,7 +3,6 @@ using Nuplane.Abstractions;
 using Nuplane.DirectorySource;
 using Nuplane.DirectorySource.Hosting;
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Runtime.Tests.TestSupport;
 
 namespace Nuplane.Runtime.Tests.Extensions;
@@ -59,7 +58,7 @@ public sealed class DirectoryObservationContractTests
     }
 
     [Fact]
-    public async Task ObservedChangeTrigger_IncludesFeedNameAsSource()
+    public async Task ObservedChangeTrigger_IncludesStructuredFeedOrigin()
     {
         using var tempDir = new TempDirectory();
         var spy = new SpyTriggerSink();
@@ -90,8 +89,9 @@ public sealed class DirectoryObservationContractTests
         Assert.NotEmpty(spy.Triggers);
         var trigger = spy.Triggers[0];
         Assert.Equal(TriggerType.ObservedChange, trigger.Type);
-        Assert.Equal("my-local-feed", trigger.Source);
-        Assert.Equal(FeedObservationKind.DirectoryWatcher, trigger.ObservationKind);
+        Assert.NotNull(trigger.ObservedOrigin);
+        Assert.Equal("my-local-feed", trigger.ObservedOrigin.FeedName);
+        Assert.Equal(FeedObservationKind.DirectoryWatcher, trigger.ObservedOrigin.Kind);
 
         cts.Cancel();
         try { await serviceTask; } catch (OperationCanceledException) { }

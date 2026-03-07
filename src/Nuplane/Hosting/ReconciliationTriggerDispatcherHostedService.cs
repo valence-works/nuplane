@@ -25,6 +25,7 @@ internal sealed class ReconciliationTriggerDispatcherHostedService(
         await foreach (var request in _triggerQueue.ReadAllAsync(stoppingToken))
         {
             var trigger = request.Trigger;
+            var triggerSource = trigger.ObservedOrigin?.FeedName;
             using var dispatchCts = request.CancellationToken.CanBeCanceled
                 ? CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, request.CancellationToken)
                 : null;
@@ -40,7 +41,7 @@ internal sealed class ReconciliationTriggerDispatcherHostedService(
                     _logger.LogDebug(
                         "Reconciliation trigger skipped (single-flight active). TriggerType={TriggerType}, Source={TriggerSource}",
                         trigger.Type,
-                        trigger.Source);
+                        triggerSource);
                 }
 
                 request.CompletionSource?.TrySetResult(result);
@@ -64,7 +65,7 @@ internal sealed class ReconciliationTriggerDispatcherHostedService(
                         ex,
                         "Unhandled exception while dispatching reconciliation trigger. TriggerType={TriggerType}, Source={TriggerSource}",
                         trigger.Type,
-                        trigger.Source);
+                        triggerSource);
                 }
             }
         }

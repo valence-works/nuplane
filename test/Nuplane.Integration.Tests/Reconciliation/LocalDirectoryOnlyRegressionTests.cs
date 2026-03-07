@@ -52,10 +52,7 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
             healthEvaluator: new ReconciliationHealthEvaluator(),
             feedResolutionOptions: feedOpts);
 
-        var trigger = new ReconciliationTrigger(
-            TriggerType.ObservedChange,
-            Source: "local-drop",
-            ObservationKind: FeedObservationKind.DirectoryWatcher);
+        var trigger = ReconciliationTrigger.Observed(FeedObservationOrigin.DirectoryWatcher("local-drop"));
         var result = await service.TriggerAsync(trigger, CancellationToken.None);
 
         Assert.False(result.Skipped);
@@ -88,10 +85,7 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
             healthEvaluator: new ReconciliationHealthEvaluator(),
             feedResolutionOptions: feedOpts);
 
-        var trigger = new ReconciliationTrigger(
-            TriggerType.ObservedChange,
-            Source: "local-drop",
-            ObservationKind: FeedObservationKind.DirectoryWatcher);
+        var trigger = ReconciliationTrigger.Observed(FeedObservationOrigin.DirectoryWatcher("local-drop"));
         var result = await service.TriggerAsync(trigger, CancellationToken.None);
 
         Assert.False(result.Skipped);
@@ -128,7 +122,7 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
         // Multiple triggers should all succeed
         for (var i = 0; i < 3; i++)
         {
-            var trigger = new ReconciliationTrigger(TriggerType.Scheduled);
+            var trigger = ReconciliationTrigger.Scheduled();
             var result = await service.TriggerAsync(trigger, CancellationToken.None);
             Assert.False(result.Skipped);
         }
