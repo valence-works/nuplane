@@ -209,5 +209,5 @@
 > 1. `feed setup / feed registration`
 > 2. `reconciliation policy options + validators`
 
-- [ ] Regroup `feed setup / feed registration` by feature rather than infrastructure/type
+- [x] Regroup `feed setup / feed registration` by feature rather than infrastructure/type
 - [ ] Regroup `reconciliation policy options + validators` by feature rather than infrastructure/type

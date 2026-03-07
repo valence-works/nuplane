@@ -2,12 +2,11 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Builder;
-using Nuplane.DirectorySource;
-using Nuplane.DirectorySource.Hosting;
+using Nuplane.Feeds.Registration;
+using Nuplane.Feeds.Setup;
 using Nuplane.Hosting;
 using Nuplane.Options.Validation;
 using Nuplane.Runtime.Configuration;
@@ -19,7 +18,6 @@ using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.FeedPolicy;
 using Nuplane.Runtime.Sources;
 using Nuplane.Setup;
-using Nuplane.Sources.Directory;
 using Nuplane.Store.State;
 
 namespace Nuplane;
@@ -192,75 +190,8 @@ public static class NuplaneServiceCollectionExtensions
         var builder = new NuplaneBuilder(services);
         configure(builder);
 
-        ConfigureRegisteredFeedSourceTrustOptions(services);
+        NuplaneFeedRegistrationServices.ConfigureSourceTrustOptions(services);
         return services;
-    }
-
-    internal static void RegisterBuilderFeed(IServiceCollection services, NuplaneFeedBuilder feed)
-    {
-        if (feed.DirectoryOptions is { } dirOpts)
-        {
-            var normalizedPath = Path.GetFullPath(dirOpts.DirectoryPath);
-            var feedUri = new Uri("file:///" + normalizedPath.Replace('\\', '/').TrimStart('/'));
-
-            // Register feed definition into FeedResolutionOptions
-            services.PostConfigure<FeedResolutionOptions>(opts =>
-            {
-                if (!opts.Feeds.Any(f => string.Equals(f.Name, feed.Name, StringComparison.OrdinalIgnoreCase)))
-                {
-                    opts.Feeds.Add(new FeedDefinition(feed.Name, feedUri, feed.TrustLevel, feed.Credentials));
-                }
-            });
-
-            // Register desired-state source
-            var capturedFeed = feed;
-            var capturedPath = normalizedPath;
-            services.AddSingleton<IDesiredPackageSource>(sp =>
-            {
-                var probeLogger = sp.GetService<ILogger<NupkgFileStabilityProbe>>();
-                var probe = probeLogger is not null ? new NupkgFileStabilityProbe(probeLogger) : null;
-                var patterns = DistinctNonBlank(capturedFeed.IncludePatterns).ToArray();
-                return new DirectoryNupkgDesiredSource(
-                    capturedFeed.Name,
-                    capturedPath,
-                    patterns,
-                    sp.GetService<ILogger<DirectoryNupkgDesiredSource>>(),
-                    capturedFeed.Name,
-                    probe);
-            });
-
-            // Register file-system watcher if enabled
-            if (dirOpts.Watch)
-            {
-                EnsureTriggerIngressServices(services);
-
-                var capturedOptions = new DirectorySourceOptions
-                {
-                    DirectoryPath = normalizedPath,
-                    FeedName = feed.Name,
-                    SourceName = feed.Name,
-                    TriggerReconciliationOnChange = true,
-                    DebounceWindow = dirOpts.DebounceWindow,
-                };
-
-                services.AddSingleton<IHostedService>(sp =>
-                    new DirectorySourceReconciliationTriggerHostedService(
-                        capturedOptions,
-                        sp.GetRequiredService<IReconciliationTriggerIngress>(),
-                        sp.GetRequiredService<ILogger<DirectorySourceReconciliationTriggerHostedService>>(),
-                        sp.GetService<ObservationDegradationTracker>()));
-            }
-        }
-        else if (feed.ServiceIndex is { } serviceIndex)
-        {
-            services.PostConfigure<FeedResolutionOptions>(opts =>
-            {
-                if (!opts.Feeds.Any(f => string.Equals(f.Name, feed.Name, StringComparison.OrdinalIgnoreCase)))
-                {
-                    opts.Feeds.Add(new FeedDefinition(feed.Name, serviceIndex, feed.TrustLevel, feed.Credentials));
-                }
-            });
-        }
     }
 
     internal static void EnsureTriggerIngressServices(IServiceCollection services)
@@ -293,91 +224,7 @@ public static class NuplaneServiceCollectionExtensions
             builder.WithStateFile(stateFilePath);
         }
 
-        foreach (var feedSection in configuration.GetSection(nameof(NuplaneSetupOptions.Feeds)).GetChildren())
-        {
-            builder.AddFeed(feedSection[nameof(NuplaneFeedSetupOptions.Name)]!, configuredFeed =>
-            {
-                var directoryPath = feedSection[nameof(NuplaneFeedSetupOptions.DirectoryPath)];
-                var trustLevel = feedSection.GetValue<FeedTrustLevel?>(nameof(NuplaneFeedSetupOptions.TrustLevel))
-                    ?? FeedTrustLevel.Trusted;
-                var credentials = feedSection[nameof(NuplaneFeedSetupOptions.Credentials)];
-
-                if (!string.IsNullOrWhiteSpace(directoryPath))
-                {
-                    var directorySection = feedSection.GetSection(nameof(NuplaneFeedSetupOptions.Directory));
-                    configuredFeed.FromDirectory(directoryPath, dir =>
-                    {
-                        dir.Watch = directorySection.GetValue<bool?>(nameof(NuplaneDirectoryFeedSetupOptions.Watch)) ?? true;
-                        dir.DebounceWindow = directorySection.GetValue<TimeSpan?>(nameof(NuplaneDirectoryFeedSetupOptions.DebounceWindow))
-                            ?? TimeSpan.FromSeconds(1);
-                    });
-                }
-                else
-                {
-                    configuredFeed.FromUri(
-                        new Uri(feedSection[nameof(NuplaneFeedSetupOptions.ServiceIndex)]!, UriKind.Absolute),
-                        trustLevel,
-                        credentials);
-                }
-
-                configuredFeed.Trust(trustLevel);
-
-                if (feedSection.GetValue<bool?>(nameof(NuplaneFeedSetupOptions.IncludeAll)) is true)
-                {
-                    configuredFeed.IncludeAll();
-                }
-                else
-                {
-                    foreach (var pattern in DistinctNonBlank(
-                                 feedSection
-                                     .GetSection(nameof(NuplaneFeedSetupOptions.IncludePatterns))
-                                     .GetChildren()
-                                     .Select(static child => child.Value ?? string.Empty)))
-                    {
-                        configuredFeed.Include(pattern);
-                    }
-                }
-            });
-        }
-    }
-
-    private static void ConfigureRegisteredFeedSourceTrustOptions(IServiceCollection services)
-    {
-        var registrations = services
-            .Where(static descriptor => descriptor.ServiceType == typeof(NuplaneFeedRegistration))
-            .Select(static descriptor => descriptor.ImplementationInstance)
-            .OfType<NuplaneFeedRegistration>()
-            .ToArray();
-
-        if (registrations.Length == 0)
-        {
-            return;
-        }
-
-        var hasExplicitUnrestrictedFeed = registrations.Any(static registration => registration.HasExplicitUnrestrictedPackageSelection);
-        var allIncludePatterns = registrations
-            .SelectMany(static registration => registration.IncludePatterns)
-            .ToArray();
-
-        services.Configure<SourceTrustOptions>(opts =>
-        {
-            foreach (var registration in registrations)
-            {
-                opts.AllowedSourceNames.Add(registration.Name);
-            }
-
-            if (hasExplicitUnrestrictedFeed)
-            {
-                opts.AllowedPackageIds.Clear();
-                opts.AllowedPackageIds.Add("*");
-                return;
-            }
-
-            foreach (var pattern in allIncludePatterns)
-            {
-                opts.AllowedPackageIds.Add(pattern);
-            }
-        });
+        NuplaneFeedSetupConfiguration.ApplyConfiguredFeeds(builder, configuration);
     }
 
     private static void ConfigureBoundOptions<TOptions>(IServiceCollection services, IConfiguration configuration, string sectionName)
@@ -397,10 +244,4 @@ public static class NuplaneServiceCollectionExtensions
 
         return configuration.GetSection(sectionName);
     }
-
-
-    private static IEnumerable<string> DistinctNonBlank(IEnumerable<string>? values) =>
-        (values ?? [])
-        .Where(static value => !string.IsNullOrWhiteSpace(value))
-        .Distinct(StringComparer.OrdinalIgnoreCase);
 }

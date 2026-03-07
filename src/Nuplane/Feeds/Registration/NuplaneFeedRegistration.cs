@@ -1,4 +1,4 @@
-namespace Nuplane.Builder;
+namespace Nuplane.Feeds.Registration;
 
 /// <summary>
 /// Internal registration-time snapshot of a feed's source-trust-relevant shape.
@@ -8,4 +8,3 @@ internal sealed record NuplaneFeedRegistration(
     string Name,
     IReadOnlyList<string> IncludePatterns,
     bool HasExplicitUnrestrictedPackageSelection);
-

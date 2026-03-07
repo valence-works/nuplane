@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Nuplane.Abstractions;
+using Nuplane.Feeds.Registration;
 using Nuplane.Hosting;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Store.State;
@@ -50,7 +51,7 @@ public sealed class NuplaneBuilder
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(configure);
 
-        if (HasRegisteredFeed(name))
+        if (NuplaneFeedRegistrationServices.HasRegisteredFeed(Services, name))
         {
             throw new InvalidOperationException($"A Nuplane feed named '{name}' has already been registered.");
         }
@@ -58,11 +59,8 @@ public sealed class NuplaneBuilder
         var feedBuilder = new NuplaneFeedBuilder(name);
         configure(feedBuilder);
 
-        NuplaneServiceCollectionExtensions.RegisterBuilderFeed(Services, feedBuilder);
-        Services.AddSingleton(new NuplaneFeedRegistration(
-            feedBuilder.Name,
-            DistinctNonBlank(feedBuilder.IncludePatterns).ToArray(),
-            HasExplicitUnrestrictedPackageSelection(feedBuilder)));
+        NuplaneFeedRegistrationServices.Register(Services, feedBuilder);
+        NuplaneFeedRegistrationServices.AddRegistrationMarker(Services, feedBuilder);
         return this;
     }
 
@@ -92,18 +90,4 @@ public sealed class NuplaneBuilder
         Services.AddSingleton<INuplaneObserver, T>();
         return this;
     }
-
-    private bool HasRegisteredFeed(string name) =>
-        Services.Any(descriptor =>
-            descriptor.ServiceType == typeof(NuplaneFeedRegistration)
-            && descriptor.ImplementationInstance is NuplaneFeedRegistration registration
-            && string.Equals(registration.Name, name, StringComparison.OrdinalIgnoreCase));
-
-    private static bool HasExplicitUnrestrictedPackageSelection(NuplaneFeedBuilder feed) =>
-        feed.IncludePatterns.Any(static pattern => string.Equals(pattern, "*", StringComparison.Ordinal));
-
-    private static IEnumerable<string> DistinctNonBlank(IEnumerable<string>? values) =>
-        (values ?? [])
-        .Where(static value => !string.IsNullOrWhiteSpace(value))
-        .Distinct(StringComparer.OrdinalIgnoreCase);
 }
