@@ -6,6 +6,7 @@ using Nuplane.Builder;
 using Nuplane.DirectorySource;
 using Nuplane.DirectorySource.Hosting;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Sources;
 using Nuplane.Sources.Directory;
 
 namespace Nuplane.Feeds.Registration;
@@ -88,6 +89,14 @@ internal static class NuplaneFeedRegistrationServices
                     opts.Feeds.Add(new(feed.Name, serviceIndex, feed.TrustLevel, feed.Credentials));
                 }
             });
+
+            var patterns = DistinctNonBlank(feed.IncludePatterns).ToArray();
+            if (patterns.Length > 0)
+            {
+                var capturedFeedName = feed.Name;
+                services.AddSingleton<IDesiredPackageSource>(
+                    _ => new FeedRuleDesiredSource(capturedFeedName, patterns));
+            }
         }
     }
 

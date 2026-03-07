@@ -10,7 +10,7 @@ public sealed class FeedRuleMaxLimitTests
     {
         var source = new FeedRuleDesiredSource(
             feedName: "feed-a",
-            includeIdPrefixes: ["Pkg."],
+            includePatterns: ["Pkg.*"],
             maxPackages: 2,
             availablePackageIds: ["Pkg.C", "Pkg.A", "Pkg.B"]);
 
