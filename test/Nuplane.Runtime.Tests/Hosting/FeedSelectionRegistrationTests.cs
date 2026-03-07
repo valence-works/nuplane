@@ -57,6 +57,45 @@ public sealed class FeedSelectionRegistrationTests
     }
 
     [Fact]
+    public void AddNuplane_DuplicateBuilderFeedNames_Throws()
+    {
+        var packagesPath = Path.Combine(Path.GetTempPath(), "nuplane-duplicate-feed-builder", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(packagesPath);
+
+        try
+        {
+            var services = new ServiceCollection();
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                services.AddNuplane(nuplane =>
+                {
+                    nuplane.AddFeed("drop-folder", feed =>
+                    {
+                        feed.FromDirectory(packagesPath);
+                    });
+
+                    nuplane.AddFeed("DROP-FOLDER", feed =>
+                    {
+                        feed.FromUri(new Uri("https://api.nuget.org/v3/index.json"));
+                    });
+                }));
+
+            Assert.Contains("already been registered", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(packagesPath, recursive: true);
+            }
+            catch
+            {
+                // Best effort cleanup for temp test content.
+            }
+        }
+    }
+
+    [Fact]
     public void AddNuplane_BuilderIncludeAll_CollapsesAllowlistToWildcard()
     {
         var packagesPath = Path.Combine(Path.GetTempPath(), "nuplane-include-all-builder", Guid.NewGuid().ToString("N"));

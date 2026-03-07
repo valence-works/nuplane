@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Builder;
@@ -34,21 +35,9 @@ public static class NuplaneBuilderLoadingExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         var loadingSection = GetNamedSectionOrSelf(configuration, LoadingSectionName);
-        var loadingOptions = BindSection<LoadingOptions>(loadingSection);
+        builder.Services.Configure<LoadingOptions>(options => loadingSection.Bind(options));
 
-        var configuredBuilder = builder.AutoloadPackages(loadingBuilder =>
-        {
-            ApplyLoadingOptions(loadingBuilder, loadingOptions);
-            configure?.Invoke(loadingBuilder);
-        });
-
-        // ActiveStoreRoot participates in runtime validation but does not affect builder control flow.
-        configuredBuilder.Services.PostConfigure<LoadingOptions>(opts =>
-        {
-            opts.ActiveStoreRoot = loadingOptions.ActiveStoreRoot;
-        });
-
-        return configuredBuilder;
+        return AutoloadPackagesCore(builder, configure, enableByDefault: false);
     }
 
     /// <summary>
@@ -61,47 +50,8 @@ public static class NuplaneBuilderLoadingExtensions
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> is <see langword="null"/>.</exception>
     public static NuplaneBuilder AutoloadPackages(
         this NuplaneBuilder builder,
-        Action<NuplaneLoadingBuilder>? configure = null)
-    {
-        ArgumentNullException.ThrowIfNull(builder);
-
-        var loadingBuilder = new NuplaneLoadingBuilder();
-        configure?.Invoke(loadingBuilder);
-
-        var services = builder.Services;
-
-        // ── Core loading services ─────────────────────────────────────────────────
-        services.AddSingleton<LoadingOptionsValidator>();
-        services.AddSingleton<IValidateOptions<LoadingOptions>, LoadingOptionsValidation>();
-
-        services
-            .AddOptions<LoadingOptions>()
-            .Configure(opts =>
-            {
-                opts.Enabled = loadingBuilder.Enabled;
-                opts.DeactivationTimeout = loadingBuilder.DeactivationTimeout;
-                foreach (var sa in loadingBuilder.SharedAssemblies)
-                {
-                    opts.SharedAssemblies.Add(sa);
-                }
-            })
-            .ValidateOnStart();
-
-        services.AddSingleton<ILoadingFailureTracker, LoadingFailureTracker>();
-        services.AddSingleton<SharedAssemblyPolicyMatcher>();
-        services.AddSingleton<PackageLoader>();
-        services.AddSingleton<IPackageLoader>(sp => sp.GetRequiredService<PackageLoader>());
-        services.AddSingleton<PackageTypeScanner>();
-        services.AddSingleton<IPackageTypeScanner>(sp => sp.GetRequiredService<PackageTypeScanner>());
-        services.AddSingleton<PackageUnloadCoordinator>();
-        services.AddSingleton<IPackageUnloadCoordinator>(sp => sp.GetRequiredService<PackageUnloadCoordinator>());
-
-        // ── Loading observer + event dispatcher ───────────────────────────────────
-        services.AddSingleton<ILoadingEventDispatcher, LoadingEventDispatcher>();
-        services.AddSingleton<INuplaneObserver, PackageAutoLoadingObserver>();
-
-        return builder;
-    }
+        Action<NuplaneLoadingBuilder>? configure = null) =>
+        AutoloadPackagesCore(builder, configure, enableByDefault: true);
 
     /// <summary>
     /// Registers a loading event observer that is notified after packages are loaded into
@@ -120,31 +70,41 @@ public static class NuplaneBuilderLoadingExtensions
         return builder;
     }
 
-    private static void ApplyLoadingOptions(NuplaneLoadingBuilder loadingBuilder, LoadingOptions options)
+    private static NuplaneBuilder AutoloadPackagesCore(
+        NuplaneBuilder builder,
+        Action<NuplaneLoadingBuilder>? configure,
+        bool enableByDefault)
     {
-        if (!options.Enabled)
-        {
-            loadingBuilder.Disable();
-        }
-        else
+        ArgumentNullException.ThrowIfNull(builder);
+
+        var services = builder.Services;
+
+        // ── Core loading services ─────────────────────────────────────────────────
+        services.TryAddSingleton<LoadingOptionsValidator>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<LoadingOptions>, LoadingOptionsValidation>());
+        services.AddOptions<LoadingOptions>().ValidateOnStart();
+
+        services.TryAddSingleton<ILoadingFailureTracker, LoadingFailureTracker>();
+        services.TryAddSingleton<SharedAssemblyPolicyMatcher>();
+        services.TryAddSingleton<PackageLoader>();
+        services.TryAddSingleton<IPackageLoader>(sp => sp.GetRequiredService<PackageLoader>());
+        services.TryAddSingleton<PackageTypeScanner>();
+        services.TryAddSingleton<IPackageTypeScanner>(sp => sp.GetRequiredService<PackageTypeScanner>());
+        services.TryAddSingleton<PackageUnloadCoordinator>();
+        services.TryAddSingleton<IPackageUnloadCoordinator>(sp => sp.GetRequiredService<PackageUnloadCoordinator>());
+
+        // ── Loading observer + event dispatcher ───────────────────────────────────
+        services.TryAddSingleton<ILoadingEventDispatcher, LoadingEventDispatcher>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<INuplaneObserver, PackageAutoLoadingObserver>());
+
+        var loadingBuilder = new NuplaneLoadingBuilder(services);
+        if (enableByDefault)
         {
             loadingBuilder.Enable();
         }
 
-        loadingBuilder.WithDeactivationTimeout(options.DeactivationTimeout);
-
-        foreach (var sharedAssembly in options.SharedAssemblies)
-        {
-            loadingBuilder.SharedAssembly(sharedAssembly.Name, sharedAssembly.PublicKeyToken, sharedAssembly.MajorVersion);
-        }
-    }
-
-    private static TOptions BindSection<TOptions>(IConfiguration configuration)
-        where TOptions : class, new()
-    {
-        var options = new TOptions();
-        configuration.Bind(options);
-        return options;
+        configure?.Invoke(loadingBuilder);
+        return builder;
     }
 
     private static IConfigurationSection GetNamedSectionOrSelf(IConfiguration configuration, string sectionName)

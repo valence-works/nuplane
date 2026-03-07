@@ -79,12 +79,11 @@ public static class NuplaneServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         var setupSection = GetNamedSectionOrSelf(configuration, SetupSectionName);
-        var setupOptions = BindSection<NuplaneSetupOptions>(setupSection);
 
         return services.AddNuplane(builder =>
         {
             BindConfiguredOptions(builder.Services, configuration);
-            ApplySetupOptions(builder, setupOptions);
+            ApplySetupConfiguration(builder, setupSection);
             configure?.Invoke(builder);
         });
     }
@@ -193,61 +192,11 @@ public static class NuplaneServiceCollectionExtensions
         var builder = new NuplaneBuilder(services);
         configure(builder);
 
-        // ── Apply builder state ───────────────────────────────────────────────────
-
-        // Reconciliation polling
-        services.Configure<ReconciliationOptions>(opts =>
-        {
-            opts.EnableAutomaticReconciliation = builder.AutomaticReconciliation;
-            opts.PollInterval = builder.PollInterval;
-        });
-
-        // Source trust: collect include patterns across all feeds, auto-wire source names.
-        // Only explicit unrestricted selection ('*' / IncludeAll) collapses the global package allowlist to '*'.
-        var hasExplicitUnrestrictedFeed = builder.Feeds.Any(HasExplicitUnrestrictedPackageSelection);
-        var allIncludePatterns = builder.Feeds.SelectMany(feed => DistinctNonBlank(feed.IncludePatterns)).ToArray();
-        services.Configure<SourceTrustOptions>(opts =>
-        {
-            foreach (var feed in builder.Feeds)
-            {
-                opts.AllowedSourceNames.Add(feed.Name);
-            }
-
-            if (hasExplicitUnrestrictedFeed)
-            {
-                opts.AllowedPackageIds.Add("*");
-                return;
-            }
-
-            foreach (var pattern in allIncludePatterns)
-            {
-                opts.AllowedPackageIds.Add(pattern);
-            }
-        });
-
-        // State file
-        services.Configure<StoreRegistryOptions>(opts =>
-        {
-            opts.StateFilePath = builder.StateFilePath;
-        });
-
-        // Feeds
-        foreach (var feed in builder.Feeds)
-        {
-            RegisterBuilderFeed(services, feed);
-        }
-
-        // Hosted service for periodic reconciliation
-        if (builder.AutomaticReconciliation)
-        {
-            EnsureTriggerIngressServices(services);
-            services.AddHostedService<ReconciliationHostedService>();
-        }
-
+        ConfigureRegisteredFeedSourceTrustOptions(services);
         return services;
     }
 
-    private static void RegisterBuilderFeed(IServiceCollection services, NuplaneFeedBuilder feed)
+    internal static void RegisterBuilderFeed(IServiceCollection services, NuplaneFeedBuilder feed)
     {
         if (feed.DirectoryOptions is { } dirOpts)
         {
@@ -329,44 +278,61 @@ public static class NuplaneServiceCollectionExtensions
         }
     }
 
-    private static void ApplySetupOptions(NuplaneBuilder builder, NuplaneSetupOptions options)
+    private static void ApplySetupConfiguration(NuplaneBuilder builder, IConfiguration configuration)
     {
-        if (options.AutomaticReconciliation)
+        if (configuration.GetValue<bool?>(nameof(NuplaneSetupOptions.AutomaticReconciliation)) is true)
         {
-            builder.PollEvery(options.PollInterval);
+            builder.PollEvery(
+                configuration.GetValue<TimeSpan?>(nameof(NuplaneSetupOptions.PollInterval))
+                ?? TimeSpan.FromSeconds(60));
         }
 
-        if (!string.IsNullOrWhiteSpace(options.StateFilePath))
+        var stateFilePath = configuration[nameof(NuplaneSetupOptions.StateFilePath)];
+        if (!string.IsNullOrWhiteSpace(stateFilePath))
         {
-            builder.WithStateFile(options.StateFilePath);
+            builder.WithStateFile(stateFilePath);
         }
 
-        foreach (var feed in options.Feeds)
+        foreach (var feedSection in configuration.GetSection(nameof(NuplaneSetupOptions.Feeds)).GetChildren())
         {
-            builder.AddFeed(feed.Name, configuredFeed =>
+            builder.AddFeed(feedSection[nameof(NuplaneFeedSetupOptions.Name)]!, configuredFeed =>
             {
-                if (!string.IsNullOrWhiteSpace(feed.DirectoryPath))
+                var directoryPath = feedSection[nameof(NuplaneFeedSetupOptions.DirectoryPath)];
+                var trustLevel = feedSection.GetValue<FeedTrustLevel?>(nameof(NuplaneFeedSetupOptions.TrustLevel))
+                    ?? FeedTrustLevel.Trusted;
+                var credentials = feedSection[nameof(NuplaneFeedSetupOptions.Credentials)];
+
+                if (!string.IsNullOrWhiteSpace(directoryPath))
                 {
-                    configuredFeed.FromDirectory(feed.DirectoryPath, dir =>
+                    var directorySection = feedSection.GetSection(nameof(NuplaneFeedSetupOptions.Directory));
+                    configuredFeed.FromDirectory(directoryPath, dir =>
                     {
-                        dir.Watch = feed.Directory.Watch;
-                        dir.DebounceWindow = feed.Directory.DebounceWindow;
+                        dir.Watch = directorySection.GetValue<bool?>(nameof(NuplaneDirectoryFeedSetupOptions.Watch)) ?? true;
+                        dir.DebounceWindow = directorySection.GetValue<TimeSpan?>(nameof(NuplaneDirectoryFeedSetupOptions.DebounceWindow))
+                            ?? TimeSpan.FromSeconds(1);
                     });
                 }
                 else
                 {
-                    configuredFeed.FromUri(new Uri(feed.ServiceIndex!, UriKind.Absolute), feed.TrustLevel, feed.Credentials);
+                    configuredFeed.FromUri(
+                        new Uri(feedSection[nameof(NuplaneFeedSetupOptions.ServiceIndex)]!, UriKind.Absolute),
+                        trustLevel,
+                        credentials);
                 }
 
-                configuredFeed.Trust(feed.TrustLevel);
+                configuredFeed.Trust(trustLevel);
 
-                if (feed.IncludeAll)
+                if (feedSection.GetValue<bool?>(nameof(NuplaneFeedSetupOptions.IncludeAll)) is true)
                 {
                     configuredFeed.IncludeAll();
                 }
                 else
                 {
-                    foreach (var pattern in DistinctNonBlank(feed.IncludePatterns))
+                    foreach (var pattern in DistinctNonBlank(
+                                 feedSection
+                                     .GetSection(nameof(NuplaneFeedSetupOptions.IncludePatterns))
+                                     .GetChildren()
+                                     .Select(static child => child.Value ?? string.Empty)))
                     {
                         configuredFeed.Include(pattern);
                     }
@@ -375,19 +341,50 @@ public static class NuplaneServiceCollectionExtensions
         }
     }
 
+    private static void ConfigureRegisteredFeedSourceTrustOptions(IServiceCollection services)
+    {
+        var registrations = services
+            .Where(static descriptor => descriptor.ServiceType == typeof(NuplaneFeedRegistration))
+            .Select(static descriptor => descriptor.ImplementationInstance)
+            .OfType<NuplaneFeedRegistration>()
+            .ToArray();
+
+        if (registrations.Length == 0)
+        {
+            return;
+        }
+
+        var hasExplicitUnrestrictedFeed = registrations.Any(static registration => registration.HasExplicitUnrestrictedPackageSelection);
+        var allIncludePatterns = registrations
+            .SelectMany(static registration => registration.IncludePatterns)
+            .ToArray();
+
+        services.Configure<SourceTrustOptions>(opts =>
+        {
+            foreach (var registration in registrations)
+            {
+                opts.AllowedSourceNames.Add(registration.Name);
+            }
+
+            if (hasExplicitUnrestrictedFeed)
+            {
+                opts.AllowedPackageIds.Clear();
+                opts.AllowedPackageIds.Add("*");
+                return;
+            }
+
+            foreach (var pattern in allIncludePatterns)
+            {
+                opts.AllowedPackageIds.Add(pattern);
+            }
+        });
+    }
+
     private static void ConfigureBoundOptions<TOptions>(IServiceCollection services, IConfiguration configuration, string sectionName)
         where TOptions : class, new()
     {
         var section = GetNamedSectionOrSelf(configuration, sectionName);
         services.Configure<TOptions>(options => section.Bind(options));
-    }
-
-    private static TOptions BindSection<TOptions>(IConfiguration configuration)
-        where TOptions : class, new()
-    {
-        var options = new TOptions();
-        configuration.Bind(options);
-        return options;
     }
 
     private static IConfigurationSection GetNamedSectionOrSelf(IConfiguration configuration, string sectionName)
@@ -401,8 +398,6 @@ public static class NuplaneServiceCollectionExtensions
         return configuration.GetSection(sectionName);
     }
 
-    private static bool HasExplicitUnrestrictedPackageSelection(NuplaneFeedBuilder feed) =>
-        feed.IncludePatterns.Any(static pattern => string.Equals(pattern, "*", StringComparison.Ordinal));
 
     private static IEnumerable<string> DistinctNonBlank(IEnumerable<string>? values) =>
         (values ?? [])

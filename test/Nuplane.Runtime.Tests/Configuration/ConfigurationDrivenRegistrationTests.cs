@@ -151,6 +151,59 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
+    public void AutoloadPackages_FromBuilder_EnablesLoadingByDefault_AndAppliesCodeConfiguration()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(nuplane =>
+        {
+            nuplane.AutoloadPackages(load =>
+            {
+                load.WithDeactivationTimeout(TimeSpan.FromSeconds(12));
+                load.SharedAssembly("Nuplane.Abstractions", "31bf3856ad364e35", 1);
+            });
+        });
+
+        using var provider = services.BuildServiceProvider();
+
+        var loading = provider.GetRequiredService<IOptions<LoadingOptions>>().Value;
+
+        Assert.True(loading.Enabled);
+        Assert.Equal(TimeSpan.FromSeconds(12), loading.DeactivationTimeout);
+
+        var sharedAssembly = Assert.Single(loading.SharedAssemblies);
+        Assert.Equal("Nuplane.Abstractions", sharedAssembly.Name);
+        Assert.Equal("31bf3856ad364e35", sharedAssembly.PublicKeyToken);
+        Assert.Equal(1, sharedAssembly.MajorVersion);
+    }
+
+    [Fact]
+    public void AutoloadPackages_FromConfiguration_PreservesDisabledState_WhenNotOverridden()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Loading:Enabled"] = "false",
+                ["Nuplane:Loading:DeactivationTimeout"] = "00:00:20"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
+        {
+            nuplane.AutoloadPackages(configuration.GetSection("Nuplane"));
+        });
+
+        using var provider = services.BuildServiceProvider();
+
+        var loading = provider.GetRequiredService<IOptions<LoadingOptions>>().Value;
+
+        Assert.False(loading.Enabled);
+        Assert.Equal(TimeSpan.FromSeconds(20), loading.DeactivationTimeout);
+    }
+
+    [Fact]
     public void AutoloadPackages_FromConfiguration_BindsLoadingOptions_AndAllowsCodeOverride()
     {
         var activeStoreRoot = Path.Combine(Path.GetTempPath(), "nuplane-active-store", Guid.NewGuid().ToString("N"));

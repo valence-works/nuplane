@@ -3,7 +3,8 @@ using Nuplane.Abstractions;
 namespace Nuplane.Configuration;
 
 /// <summary>
-/// Declarative configuration for a single Nuplane feed.
+/// Declarative translation model for a single feed in the <c>Nuplane:Setup</c> section.
+/// This shape is consumed only while translating configuration into builder registrations.
 /// </summary>
 // ReSharper disable UnusedAutoPropertyAccessor.Global
 // ReSharper disable CollectionNeverUpdated.Global

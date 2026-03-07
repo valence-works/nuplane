@@ -1,4 +1,5 @@
 using System.Runtime.Loader;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Nuplane.Loading.Hosting.Builder;
 
@@ -8,9 +9,12 @@ namespace Nuplane.Loading.Hosting.Builder;
 /// </summary>
 public sealed class NuplaneLoadingBuilder
 {
-    internal bool Enabled { get; private set; } = true;
-    internal TimeSpan DeactivationTimeout { get; private set; } = TimeSpan.FromSeconds(15);
-    internal List<SharedAssemblyIdentity> SharedAssemblies { get; } = [];
+    private IServiceCollection Services { get; }
+
+    internal NuplaneLoadingBuilder(IServiceCollection services)
+    {
+        Services = services ?? throw new ArgumentNullException(nameof(services));
+    }
 
     /// <summary>
     /// Registers a shared assembly whose types are resolved from the host's default
@@ -24,7 +28,11 @@ public sealed class NuplaneLoadingBuilder
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        SharedAssemblies.Add(new SharedAssemblyIdentity(name, publicKeyToken, majorVersion));
+        Services.Configure<LoadingOptions>(options =>
+        {
+            options.SharedAssemblies.Add(new SharedAssemblyIdentity(name, publicKeyToken, majorVersion));
+        });
+
         return this;
     }
 
@@ -35,7 +43,11 @@ public sealed class NuplaneLoadingBuilder
     /// <param name="timeout">The maximum deactivation timeout.</param>
     public NuplaneLoadingBuilder WithDeactivationTimeout(TimeSpan timeout)
     {
-        DeactivationTimeout = timeout;
+        Services.Configure<LoadingOptions>(options =>
+        {
+            options.DeactivationTimeout = timeout;
+        });
+
         return this;
     }
 
@@ -45,7 +57,11 @@ public sealed class NuplaneLoadingBuilder
     /// </summary>
     public NuplaneLoadingBuilder Enable()
     {
-        Enabled = true;
+        Services.Configure<LoadingOptions>(options =>
+        {
+            options.Enabled = true;
+        });
+
         return this;
     }
 
@@ -55,7 +71,11 @@ public sealed class NuplaneLoadingBuilder
     /// </summary>
     public NuplaneLoadingBuilder Disable()
     {
-        Enabled = false;
+        Services.Configure<LoadingOptions>(options =>
+        {
+            options.Enabled = false;
+        });
+
         return this;
     }
 }

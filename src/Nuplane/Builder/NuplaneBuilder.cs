@@ -1,6 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Nuplane.Abstractions;
-using Nuplane.Configuration;
+using Nuplane.Hosting;
+using Nuplane.Runtime.Configuration;
+using Nuplane.Store.State;
 
 namespace Nuplane.Builder;
 
@@ -13,11 +17,6 @@ public sealed class NuplaneBuilder
     /// <summary>Gets the underlying <see cref="IServiceCollection"/>.</summary>
     public IServiceCollection Services { get; }
 
-    internal bool AutomaticReconciliation { get; private set; }
-    internal TimeSpan PollInterval { get; private set; } = TimeSpan.FromSeconds(60);
-    internal string? StateFilePath { get; private set; }
-    internal List<NuplaneFeedBuilder> Feeds { get; } = [];
-
     internal NuplaneBuilder(IServiceCollection services)
     {
         Services = services;
@@ -29,17 +28,14 @@ public sealed class NuplaneBuilder
     /// <param name="interval">How often the reconciliation cycle runs.</param>
     public NuplaneBuilder PollEvery(TimeSpan interval)
     {
-        // Do this:
-        Services.Configure<NuplaneSetupOptions>(options =>
+        Services.Configure<ReconciliationOptions>(options =>
         {
-            options.AutomaticReconciliation = true;
+            options.EnableAutomaticReconciliation = true;
             options.PollInterval = interval;
         });
-        
-        // Not this:
-        AutomaticReconciliation = true;
-        PollInterval = interval;
-        
+
+        NuplaneServiceCollectionExtensions.EnsureTriggerIngressServices(Services);
+        Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, ReconciliationHostedService>());
         return this;
     }
 
@@ -54,9 +50,19 @@ public sealed class NuplaneBuilder
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(configure);
 
+        if (HasRegisteredFeed(name))
+        {
+            throw new InvalidOperationException($"A Nuplane feed named '{name}' has already been registered.");
+        }
+
         var feedBuilder = new NuplaneFeedBuilder(name);
         configure(feedBuilder);
-        Feeds.Add(feedBuilder);
+
+        NuplaneServiceCollectionExtensions.RegisterBuilderFeed(Services, feedBuilder);
+        Services.AddSingleton(new NuplaneFeedRegistration(
+            feedBuilder.Name,
+            DistinctNonBlank(feedBuilder.IncludePatterns).ToArray(),
+            HasExplicitUnrestrictedPackageSelection(feedBuilder)));
         return this;
     }
 
@@ -68,7 +74,10 @@ public sealed class NuplaneBuilder
     public NuplaneBuilder WithStateFile(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        StateFilePath = path;
+        Services.Configure<StoreRegistryOptions>(options =>
+        {
+            options.StateFilePath = path;
+        });
         return this;
     }
 
@@ -83,4 +92,18 @@ public sealed class NuplaneBuilder
         Services.AddSingleton<INuplaneObserver, T>();
         return this;
     }
+
+    private bool HasRegisteredFeed(string name) =>
+        Services.Any(descriptor =>
+            descriptor.ServiceType == typeof(NuplaneFeedRegistration)
+            && descriptor.ImplementationInstance is NuplaneFeedRegistration registration
+            && string.Equals(registration.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    private static bool HasExplicitUnrestrictedPackageSelection(NuplaneFeedBuilder feed) =>
+        feed.IncludePatterns.Any(static pattern => string.Equals(pattern, "*", StringComparison.Ordinal));
+
+    private static IEnumerable<string> DistinctNonBlank(IEnumerable<string>? values) =>
+        (values ?? [])
+        .Where(static value => !string.IsNullOrWhiteSpace(value))
+        .Distinct(StringComparer.OrdinalIgnoreCase);
 }

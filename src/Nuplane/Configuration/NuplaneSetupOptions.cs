@@ -1,8 +1,9 @@
 namespace Nuplane.Configuration;
 
 /// <summary>
-/// Declarative root configuration for the builder-only Nuplane setup surface.
-/// Bind this from the <c>Nuplane:Setup</c> section.
+/// Declarative translation model for the <c>Nuplane:Setup</c> section.
+/// This shape exists to map configuration onto the fluent builder surface; runtime services consume
+/// the dedicated option types that the builder ultimately configures.
 /// </summary>
 public sealed class NuplaneSetupOptions
 {
@@ -24,8 +25,7 @@ public sealed class NuplaneSetupOptions
     public string? StateFilePath { get; set; }
 
     /// <summary>
-    /// Gets or sets the configured Nuplane feeds.
+    /// Gets or sets the configured Nuplane feeds to translate into builder registrations.
     /// </summary>
     public List<NuplaneFeedSetupOptions> Feeds { get; set; } = [];
 }
-

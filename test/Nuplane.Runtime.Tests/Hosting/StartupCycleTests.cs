@@ -20,6 +20,31 @@ public sealed class StartupCycleTests
         new([], [], [], string.Empty, DateTimeOffset.UtcNow);
 
     [Fact]
+    public void PollEvery_RegistersAutomaticReconciliationOptionsAndHostedServices()
+    {
+        var services = new ServiceCollection();
+
+        services.AddNuplane(nuplane =>
+        {
+            nuplane.PollEvery(TimeSpan.FromSeconds(15));
+        });
+
+        using var provider = services.BuildServiceProvider();
+
+        var options = provider.GetRequiredService<IOptions<ReconciliationOptions>>().Value;
+        var hostedServiceTypes = services
+            .Where(descriptor => descriptor.ServiceType == typeof(IHostedService))
+            .Select(descriptor => descriptor.ImplementationType)
+            .Where(static type => type is not null)
+            .ToArray();
+
+        Assert.True(options.EnableAutomaticReconciliation);
+        Assert.Equal(TimeSpan.FromSeconds(15), options.PollInterval);
+        Assert.Contains(typeof(ReconciliationHostedService), hostedServiceTypes);
+        Assert.Contains(typeof(ReconciliationTriggerDispatcherHostedService), hostedServiceTypes);
+    }
+
+    [Fact]
     public async Task StartupCycle_FiresBeforePeriodicTick()
     {
         var triggers = new ConcurrentQueue<TriggerType>();
