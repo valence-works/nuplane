@@ -1,7 +1,7 @@
 using Nuplane.Runtime.Operational;
 using Nuplane.Runtime.Reconciliation;
 
-namespace Nuplane.Contracts;
+namespace Nuplane.Admin;
 
 /// <summary>
 /// Defines the in-process admin operations contract.

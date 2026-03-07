@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Options;
-using Nuplane.Configuration;
 
-namespace Nuplane.Options.Validation;
+namespace Nuplane.Setup;
 
 internal sealed class NuplaneSetupOptionsValidator : IValidateOptions<NuplaneSetupOptions>
 {
@@ -58,4 +57,3 @@ internal sealed class NuplaneSetupOptionsValidator : IValidateOptions<NuplaneSet
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
     }
 }
-

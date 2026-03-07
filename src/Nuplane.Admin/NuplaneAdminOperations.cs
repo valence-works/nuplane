@@ -1,9 +1,8 @@
-using Nuplane.Contracts;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Operational;
 using Nuplane.Runtime.Reconciliation;
 
-namespace Nuplane.Operational;
+namespace Nuplane.Admin;
 
 /// <summary>
 /// Default implementation of <see cref="INuplaneAdminOperations"/> that delegates

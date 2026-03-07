@@ -1,4 +1,4 @@
-namespace Nuplane.Configuration;
+namespace Nuplane.Setup;
 
 /// <summary>
 /// Declarative configuration for a directory-backed Nuplane feed.
@@ -17,4 +17,3 @@ public sealed class NuplaneDirectoryFeedSetupOptions
     /// </summary>
     public TimeSpan DebounceWindow { get; set; } = TimeSpan.FromSeconds(1);
 }
-

@@ -6,7 +6,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Builder;
-using Nuplane.Configuration;
 using Nuplane.DirectorySource;
 using Nuplane.DirectorySource.Hosting;
 using Nuplane.Hosting;
@@ -19,6 +18,7 @@ using Nuplane.Runtime.Desired;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.FeedPolicy;
 using Nuplane.Runtime.Sources;
+using Nuplane.Setup;
 using Nuplane.Sources.Directory;
 using Nuplane.Store.State;
 

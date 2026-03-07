@@ -1,4 +1,4 @@
-namespace Nuplane.Configuration;
+namespace Nuplane.Setup;
 
 /// <summary>
 /// Declarative translation model for the <c>Nuplane:Setup</c> section.

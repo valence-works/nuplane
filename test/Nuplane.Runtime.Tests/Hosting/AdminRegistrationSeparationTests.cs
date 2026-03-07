@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
-using Nuplane.Admin.Api;
-using Nuplane.Contracts;
+using Nuplane.Admin;
 
 namespace Nuplane.Runtime.Tests.Hosting;
 
@@ -31,4 +30,3 @@ public sealed class AdminRegistrationSeparationTests
         Assert.NotNull(provider.GetRequiredService<INuplaneAdminOperations>());
     }
 }
-

@@ -2,7 +2,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Nuplane.Runtime.Tests" />
-    <InternalsVisibleTo Include="Nuplane.Admin.Api" />
+    <InternalsVisibleTo Include="Nuplane.Admin" />
   </ItemGroup>
 
   <ItemGroup>

@@ -11,7 +11,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Nuplane\Nuplane.csproj" />
+    <ProjectReference Include="..\Nuplane.Admin\Nuplane.Admin.csproj" />
+    <ProjectReference Include="..\Nuplane.Runtime\Nuplane.Runtime.csproj" />
   </ItemGroup>
 
 </Project>

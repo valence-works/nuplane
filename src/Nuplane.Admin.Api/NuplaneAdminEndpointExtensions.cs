@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Nuplane.Contracts;
+using Nuplane.Admin;
 using Nuplane.Runtime.Reconciliation;
 
 namespace Nuplane.Admin.Api;

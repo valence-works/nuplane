@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <ProjectReference Include="..\Nuplane\Nuplane.csproj" />
+    <ProjectReference Include="..\Nuplane.Runtime\Nuplane.Runtime.csproj" />
+  </ItemGroup>
+
+</Project>
+
