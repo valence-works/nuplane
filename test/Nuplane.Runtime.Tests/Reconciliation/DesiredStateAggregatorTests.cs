@@ -1,8 +1,8 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Sources;
 
-namespace Nuplane.Runtime.Tests.Reconciliation;
+namespace Nuplane.Runtime.Tests.Sources;
 
 public sealed class DesiredStateAggregatorTests
 {

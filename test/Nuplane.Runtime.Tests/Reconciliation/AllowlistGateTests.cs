@@ -1,8 +1,8 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Trust;
 
-namespace Nuplane.Runtime.Tests.Reconciliation;
+namespace Nuplane.Runtime.Tests.Trust;
 
 public sealed class AllowlistGateTests
 {

@@ -1,8 +1,8 @@
 using System.Text.Json;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Desired;
+using Nuplane.Runtime.Sources;
 
-namespace Nuplane.Runtime.Tests.Desired;
+namespace Nuplane.Runtime.Tests.Sources;
 
 /// <summary>
 /// Unit tests for <see cref="DesiredManifestReader"/> covering schema parsing,
@@ -16,14 +16,14 @@ public sealed class DesiredManifestParserTests : IDisposable
 
     public DesiredManifestParserTests()
     {
-        Directory.CreateDirectory(_tempDir);
+        System.IO.Directory.CreateDirectory(_tempDir);
     }
 
     public void Dispose()
     {
-        if (Directory.Exists(_tempDir))
+        if (System.IO.Directory.Exists(_tempDir))
         {
-            Directory.Delete(_tempDir, recursive: true);
+            System.IO.Directory.Delete(_tempDir, recursive: true);
         }
     }
 

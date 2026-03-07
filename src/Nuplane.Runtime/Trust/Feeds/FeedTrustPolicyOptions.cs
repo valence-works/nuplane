@@ -1,6 +1,6 @@
 using Nuplane.Abstractions;
 
-namespace Nuplane.Runtime.Configuration;
+namespace Nuplane.Runtime.Feeds.Configuration;
 
 /// <summary>
 /// Configuration options governing how feed trust levels are evaluated, including

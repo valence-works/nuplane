@@ -1,8 +1,8 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Feeds.Configuration;
+using Nuplane.Runtime.Feeds.Policy;
 using Nuplane.Runtime.Observability;
 using Nuplane.Store.State;
-using Nuplane.Runtime.Reconciliation.FeedPolicy;
 
 namespace Nuplane.Runtime.Reconciliation.Middleware;
 

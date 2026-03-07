@@ -1,8 +1,8 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Sources;
 
-namespace Nuplane.Runtime.Tests.Desired;
+namespace Nuplane.Runtime.Tests.Sources;
 
 /// <summary>
 /// T034 — Regression test verifying that duplicate-source nondeterminism is prevented.

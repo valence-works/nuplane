@@ -1,8 +1,8 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Sources;
 
-namespace Nuplane.Runtime.Tests.Desired;
+namespace Nuplane.Runtime.Tests.Sources;
 
 /// <summary>
 /// T032 — Contract test verifying multi-source aggregation output stability.

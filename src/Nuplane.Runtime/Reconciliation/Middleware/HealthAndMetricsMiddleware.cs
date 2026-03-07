@@ -1,6 +1,7 @@
 using Nuplane.Loading;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
+using Nuplane.Runtime.Feeds.Configuration;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Observability;
 

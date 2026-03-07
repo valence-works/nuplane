@@ -6,6 +6,7 @@ using Nuplane.Builder;
 using Nuplane.DirectorySource;
 using Nuplane.DirectorySource.Hosting;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Feeds.Configuration;
 using Nuplane.Runtime.Sources;
 using Nuplane.Sources.Directory;
 

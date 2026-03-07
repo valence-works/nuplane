@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Feeds.Configuration;
 
 namespace Nuplane.Options.Validation;
 

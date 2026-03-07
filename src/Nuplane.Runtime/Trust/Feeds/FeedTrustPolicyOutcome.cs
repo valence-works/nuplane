@@ -1,6 +1,6 @@
 using Nuplane.Abstractions;
 
-namespace Nuplane.Runtime.Reconciliation.Models;
+namespace Nuplane.Runtime.Feeds.Policy;
 
 /// <summary>
 /// Represents the outcome of a trust policy evaluation for a package/feed pair.

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Desired;
+using Nuplane.Runtime.Sources;
 using Nuplane.Runtime.Reconciliation;
 
 namespace Nuplane.Integration.Tests.Reconciliation;

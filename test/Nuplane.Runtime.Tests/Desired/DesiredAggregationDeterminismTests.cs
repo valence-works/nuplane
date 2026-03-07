@@ -1,8 +1,8 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Sources;
 
-namespace Nuplane.Runtime.Tests.Desired;
+namespace Nuplane.Runtime.Tests.Sources;
 
 /// <summary>
 /// T031 — Verifies deterministic duplicate tie-break precedence when multiple
