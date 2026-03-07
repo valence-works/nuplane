@@ -1,5 +1,4 @@
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.Integration.Tests;
 

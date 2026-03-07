@@ -1,5 +1,4 @@
 using Nuplane.Options.Validation;
-using Nuplane.Runtime.Configuration;
 
 namespace Nuplane.Runtime.Tests.Configuration;
 

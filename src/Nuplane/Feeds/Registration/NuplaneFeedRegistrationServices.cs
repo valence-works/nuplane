@@ -6,8 +6,6 @@ using Nuplane.Builder;
 using Nuplane.DirectorySource;
 using Nuplane.DirectorySource.Hosting;
 using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Reconciliation;
 using Nuplane.Sources.Directory;
 
 namespace Nuplane.Feeds.Registration;

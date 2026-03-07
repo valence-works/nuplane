@@ -2,7 +2,6 @@ using Nuplane.Abstractions;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.Middleware;
-using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.Runtime.Tests.Reconciliation.Middleware;
 

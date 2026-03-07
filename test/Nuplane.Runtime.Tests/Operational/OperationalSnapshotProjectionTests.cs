@@ -1,6 +1,5 @@
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Operational;
-using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Operational;
