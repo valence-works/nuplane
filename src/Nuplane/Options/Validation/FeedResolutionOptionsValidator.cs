@@ -7,11 +7,18 @@ internal sealed class FeedResolutionOptionsValidator : IValidateOptions<FeedReso
 {
     public ValidateOptionsResult Validate(string? name, FeedResolutionOptions options)
     {
+        var errors = new List<string>();
+
         if (options.Feeds.Count > 0 && options.ValidateDeterministicOrdering && !options.DeterministicFeedOrder)
         {
-            return ValidateOptionsResult.Fail("Deterministic feed ordering validation is enabled, but DeterministicFeedOrder is false.");
+            errors.Add("Deterministic feed ordering validation is enabled, but DeterministicFeedOrder is false.");
         }
 
-        return ValidateOptionsResult.Success;
+        if (options.PackageInstallRoot is not null && string.IsNullOrWhiteSpace(options.PackageInstallRoot))
+        {
+            errors.Add("FeedResolution PackageInstallRoot cannot be blank when provided.");
+        }
+
+        return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
     }
 }

@@ -44,6 +44,12 @@ public sealed class FeedResolutionOptions
     public bool ValidateDeterministicOrdering { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets the root directory where resolved packages are extracted for runtime use.
+    /// When not set, Nuplane uses a process-local default under the application base directory.
+    /// </summary>
+    public string? PackageInstallRoot { get; set; }
+
+    /// <summary>
     /// Sets the resolution priority for the specified feed.
     /// </summary>
     /// <param name="feedName">The feed name.</param>

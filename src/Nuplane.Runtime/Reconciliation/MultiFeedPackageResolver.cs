@@ -3,26 +3,42 @@ using System.IO.Compression;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Versioning;
-using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Runtime.Reconciliation.FeedPolicy;
+using Nuplane.Runtime.Reconciliation.Models;
+using Nuplane.Runtime.Versioning;
 
 namespace Nuplane.Runtime.Reconciliation;
-
 
 /// <summary>
 /// Resolves packages across multiple feeds using priority ordering and feed availability
 /// tracking, recording resolution decisions for observability.
 /// </summary>
-public sealed class MultiFeedPackageResolver(IOptions<FeedResolutionOptions> options, FeedResolutionPolicy policy) : IPackageResolver
+public sealed class MultiFeedPackageResolver : IPackageResolver
 {
-    private readonly FeedResolutionOptions _options = (options ?? throw new ArgumentNullException(nameof(options))).Value;
-    private readonly FeedResolutionPolicy _policy = policy ?? throw new ArgumentNullException(nameof(policy));
+    private readonly FeedResolutionOptions _options;
+    private readonly FeedResolutionPolicy _policy;
+    private readonly IRemotePackageAcquirer _remotePackageAcquirer;
     private readonly ConcurrentDictionary<string, FeedResolutionDecision> _decisions = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, int> _attempts = new(StringComparer.OrdinalIgnoreCase);
 
+    public MultiFeedPackageResolver(IOptions<FeedResolutionOptions> options, FeedResolutionPolicy policy)
+        : this(options, policy, new NuGetRemotePackageAcquirer(options))
+    {
+    }
+
+    internal MultiFeedPackageResolver(
+        IOptions<FeedResolutionOptions> options,
+        FeedResolutionPolicy policy,
+        IRemotePackageAcquirer remotePackageAcquirer)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        _options = options.Value;
+        _policy = policy ?? throw new ArgumentNullException(nameof(policy));
+        _remotePackageAcquirer = remotePackageAcquirer ?? throw new ArgumentNullException(nameof(remotePackageAcquirer));
+    }
+
     /// <inheritdoc />
-    public Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)
+    public async Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
@@ -54,7 +70,7 @@ public sealed class MultiFeedPackageResolver(IOptions<FeedResolutionOptions> opt
             }
 
             var selectedVersion = NuGetVersionRangeParser.SelectVersion(request.VersionRange);
-            var installPath = ResolveInstallPath(candidate, request.Id, selectedVersion);
+            var installPath = await ResolveInstallPathAsync(candidate, request.Id, selectedVersion, cancellationToken);
             var resolved = new ResolvedPackage(
                 request.Id,
                 selectedVersion,
@@ -70,7 +86,7 @@ public sealed class MultiFeedPackageResolver(IOptions<FeedResolutionOptions> opt
                 correlationId: string.Empty,
                 decisionPath: "ordered-candidate-success");
 
-            return Task.FromResult(resolved);
+            return resolved;
         }
 
         _decisions[request.Id] = FeedResolutionDecision.Failed(
@@ -86,14 +102,14 @@ public sealed class MultiFeedPackageResolver(IOptions<FeedResolutionOptions> opt
 
     /// <summary>
     /// Resolves the install path for a package from the specified feed.
-    /// For local directory feeds (<c>file://</c> scheme), the nupkg is extracted to an install directory.
-    /// For remote feeds, a synthetic path is returned (to be populated by a future acquisition step).
+    /// Local directory feeds extract the <c>.nupkg</c> into a stable install directory;
+    /// remote feeds are downloaded and extracted via the configured remote package acquirer.
     /// </summary>
-    private static string ResolveInstallPath(FeedDefinition feed, string packageId, string version)
+    private async Task<string> ResolveInstallPathAsync(FeedDefinition feed, string packageId, string version, CancellationToken cancellationToken)
     {
         if (!IsLocalDirectoryFeed(feed))
         {
-            return $"/packages/{packageId}/{version}";
+            return await _remotePackageAcquirer.AcquireAsync(feed, packageId, version, cancellationToken);
         }
 
         var feedDirectoryPath = feed.ServiceIndex.LocalPath;
@@ -108,36 +124,34 @@ public sealed class MultiFeedPackageResolver(IOptions<FeedResolutionOptions> opt
         }
 
         var installDir = Path.Combine(feedDirectoryPath, ".installed", packageId, version);
+        var completionMarkerPath = Path.Combine(installDir, ".nuplane-ready");
 
-        if (!Directory.Exists(installDir))
+        if (!File.Exists(completionMarkerPath))
         {
+            if (Directory.Exists(installDir))
+            {
+                Directory.Delete(installDir, recursive: true);
+            }
+
             Directory.CreateDirectory(installDir);
             ZipFile.ExtractToDirectory(nupkgPath, installDir, overwriteFiles: true);
+            await File.WriteAllTextAsync(completionMarkerPath, string.Empty, cancellationToken);
         }
 
         return installDir;
     }
 
-    /// <summary>
-    /// Determines whether a feed definition represents a local directory feed.
-    /// </summary>
     private static bool IsLocalDirectoryFeed(FeedDefinition feed) =>
         feed.ServiceIndex.Scheme.Equals("file", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Tries to retrieve the feed resolution decision for the specified package.
     /// </summary>
-    /// <param name="packageId">The package identifier.</param>
-    /// <param name="decision">The resolution decision, if found.</param>
-    /// <returns><see langword="true"/> if a decision was found; otherwise <see langword="false"/>.</returns>
     public bool TryGetDecision(string packageId, out FeedResolutionDecision decision) =>
         _decisions.TryGetValue(packageId, out decision!);
 
     /// <summary>
     /// Gets the number of resolution attempts for the specified package.
     /// </summary>
-    /// <param name="packageId">The package identifier.</param>
-    /// <returns>The number of attempts, or 0 if no attempts have been made.</returns>
     public int GetAttempts(string packageId) => _attempts.GetValueOrDefault(packageId, 0);
-
 }
