@@ -101,6 +101,27 @@ public sealed class CachedFeedVersionEnumeratorTests
     }
 
     [Fact]
+    public async Task Cancellation_PropagatesToInnerEnumeration()
+    {
+        var inner = Substitute.For<IFeedVersionEnumerator>();
+        using var cts = new CancellationTokenSource();
+        inner.EnumerateVersionsAsync(TestFeed, "Pkg", Arg.Any<CancellationToken>())
+            .Returns(async callInfo =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), callInfo.Arg<CancellationToken>());
+                return new PackageVersionList("Pkg", "test-feed", ["1.0.0"], DateTimeOffset.UtcNow);
+            });
+
+        var cached = new CachedFeedVersionEnumerator(inner, CreateOptions(TimeSpan.FromMinutes(5)));
+        var enumerationTask = cached.EnumerateVersionsAsync(TestFeed, "Pkg", cts.Token);
+
+        cts.CancelAfter(TimeSpan.FromMilliseconds(50));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => enumerationTask);
+        await inner.Received(1).EnumerateVersionsAsync(TestFeed, "Pkg", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task EnumeratedAt_ReflectsOriginalTimestamp()
     {
         var originalTime = DateTimeOffset.UtcNow.AddMinutes(-5);

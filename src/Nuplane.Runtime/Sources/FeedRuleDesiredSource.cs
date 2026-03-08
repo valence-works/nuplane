@@ -93,6 +93,7 @@ public sealed class FeedRuleDesiredSource : IDesiredPackageSource
         var candidateIds = _availablePackageIds is not null
             ? ResolveCatalogMode(parsed)
             : ResolveDirectMode(parsed);
+        candidateIds = DistinctCandidates(candidateIds);
 
         var selected = _selector.Select(candidateIds.Select(c => c.Id).ToArray(), _maxPackages);
 
@@ -134,6 +135,14 @@ public sealed class FeedRuleDesiredSource : IDesiredPackageSource
                                && !p.PackageGlob.Contains('*')
                                && !p.PackageGlob.Contains('?'))
             .Select(p => new PackageCandidate(p.PackageGlob, p.VersionRange))
+            .ToArray();
+    }
+
+    private static PackageCandidate[] DistinctCandidates(PackageCandidate[] candidates)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return candidates
+            .Where(candidate => seen.Add(candidate.Id))
             .ToArray();
     }
 

@@ -45,17 +45,17 @@ internal sealed class CachedFeedVersionEnumerator : IFeedVersionEnumerator
         var pending = _inflight.GetOrAdd(
             key,
             _ => new Lazy<Task<PackageVersionList>>(
-                () => RefreshCacheAsync(key, feed, packageId),
+                () => RefreshCacheAsync(key, feed, packageId, cancellationToken),
                 LazyThreadSafetyMode.ExecutionAndPublication));
 
         return await pending.Value.WaitAsync(cancellationToken);
     }
 
-    private async Task<PackageVersionList> RefreshCacheAsync(string key, FeedDefinition feed, string packageId)
+    private async Task<PackageVersionList> RefreshCacheAsync(string key, FeedDefinition feed, string packageId, CancellationToken cancellationToken)
     {
         try
         {
-            var result = await _inner.EnumerateVersionsAsync(feed, packageId, CancellationToken.None);
+            var result = await _inner.EnumerateVersionsAsync(feed, packageId, cancellationToken);
             result = result with { CacheHit = false };
             _cache[key] = new CacheEntry(result, DateTimeOffset.UtcNow);
             return result;

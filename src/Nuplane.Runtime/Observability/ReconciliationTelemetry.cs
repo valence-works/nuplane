@@ -100,6 +100,12 @@ public sealed class ReconciliationTelemetry : IDisposable
     /// <summary>Counter for rollback operations performed.</summary>
     public Counter<long> RollbackPerformedCounter { get; }
 
+    /// <summary>Counter for version resolution outcomes by feed and outcome.</summary>
+    public Counter<long> VersionResolutionCounter { get; }
+
+    /// <summary>Histogram recording version resolution duration in milliseconds.</summary>
+    public Histogram<double> VersionResolutionDurationMilliseconds { get; }
+
     /// <summary>Counter for loader boundary successes.</summary>
     public Counter<long> LoaderBoundarySucceededCounter { get; }
 
@@ -163,6 +169,8 @@ public sealed class ReconciliationTelemetry : IDisposable
         AdminTriggerCounter = _meter.CreateCounter<long>("nuplane.convergence.admin.trigger");
         AdminRejectedCounter = _meter.CreateCounter<long>("nuplane.convergence.admin.rejected");
         RollbackPerformedCounter = _meter.CreateCounter<long>("nuplane.convergence.rollback.performed");
+        VersionResolutionCounter = _meter.CreateCounter<long>("nuplane.resolution.version.total");
+        VersionResolutionDurationMilliseconds = _meter.CreateHistogram<double>("nuplane.resolution.version.duration.ms");
         LoaderBoundarySucceededCounter = _meter.CreateCounter<long>("nuplane.convergence.loader.succeeded");
         LoaderBoundaryFailedCounter = _meter.CreateCounter<long>("nuplane.convergence.loader.failed");
         LoaderBoundarySkippedCounter = _meter.CreateCounter<long>("nuplane.convergence.loader.skipped");

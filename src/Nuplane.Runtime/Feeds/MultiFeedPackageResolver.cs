@@ -7,6 +7,7 @@ using Nuplane.Abstractions;
 using Nuplane.Runtime.Feeds.Configuration;
 using Nuplane.Runtime.Feeds.Policy;
 using Nuplane.Runtime.Feeds.Versioning;
+using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Runtime.Versioning;
 
@@ -24,16 +25,28 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     private readonly IFeedVersionEnumerator _versionEnumerator;
     private readonly IVersionRangeEvaluator _versionRangeEvaluator;
     private readonly ILogger<MultiFeedPackageResolver> _logger;
+    private readonly ReconciliationMetrics? _metrics;
     private readonly ConcurrentDictionary<string, FeedResolutionDecision> _decisions = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, int> _attempts = new(StringComparer.OrdinalIgnoreCase);
 
-    internal MultiFeedPackageResolver(
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MultiFeedPackageResolver"/> class.
+    /// </summary>
+    /// <param name="options">Feed resolution options.</param>
+    /// <param name="policy">Feed ordering and failover policy.</param>
+    /// <param name="remotePackageAcquirer">Downloads concrete package versions for remote feeds.</param>
+    /// <param name="versionEnumerator">Enumerates candidate versions from feeds.</param>
+    /// <param name="versionRangeEvaluator">Selects the best concrete version for a requested range.</param>
+    /// <param name="logger">Logger for feed resolution diagnostics.</param>
+    /// <param name="metrics">Optional metrics sink for version resolution outcomes.</param>
+    public MultiFeedPackageResolver(
         IOptions<FeedResolutionOptions> options,
         FeedResolutionPolicy policy,
         IRemotePackageAcquirer remotePackageAcquirer,
         IFeedVersionEnumerator versionEnumerator,
         IVersionRangeEvaluator versionRangeEvaluator,
-        ILogger<MultiFeedPackageResolver> logger)
+        ILogger<MultiFeedPackageResolver> logger,
+        ReconciliationMetrics? metrics = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         _options = options.Value;
@@ -42,6 +55,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         _versionEnumerator = versionEnumerator ?? throw new ArgumentNullException(nameof(versionEnumerator));
         _versionRangeEvaluator = versionRangeEvaluator ?? throw new ArgumentNullException(nameof(versionRangeEvaluator));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _metrics = metrics;
     }
 
     /// <inheritdoc />
@@ -88,8 +102,8 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     feedUnavailable: false,
                     failureReason: selectedVersion.FailureReason ?? $"No version matched '{request.VersionRange}'.",
                     selectedFeed: candidate.Name,
-                    EnumeratedVersionCount: selectedVersion.EnumeratedCount,
-                    CacheHit: selectedVersion.CacheHit);
+                    enumeratedVersionCount: selectedVersion.EnumeratedCount,
+                    cacheHit: selectedVersion.CacheHit);
                 _decisions[request.Id] = lastFailure;
                 continue;
             }
@@ -109,8 +123,8 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                 resolved,
                 correlationId: string.Empty,
                 decisionPath: "ordered-candidate-success",
-                EnumeratedVersionCount: selectedVersion.EnumeratedCount,
-                CacheHit: selectedVersion.CacheHit);
+                enumeratedVersionCount: selectedVersion.EnumeratedCount,
+                cacheHit: selectedVersion.CacheHit);
 
             return resolved;
         }
@@ -157,38 +171,63 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         }
 
         var stopwatch = Stopwatch.StartNew();
-        var versionList = await _versionEnumerator.EnumerateVersionsAsync(feed, request.Id, cancellationToken);
-        var result = _versionRangeEvaluator.SelectBestMatch(request.VersionRange, versionList.Versions);
-        stopwatch.Stop();
-
-        _logger.LogDebug(
-            "Version resolution for {PackageId} on feed {FeedName}: range={VersionRange}, selected={SelectedVersion}, candidates={CandidateCount}, cacheHit={CacheHit}, durationMs={DurationMs}",
-            request.Id,
-            feed.Name,
-            request.VersionRange,
-            result.SelectedVersion ?? "(none)",
-            result.CandidateCount,
-            versionList.CacheHit,
-            stopwatch.ElapsedMilliseconds);
-
-        if (!result.Success)
+        try
         {
-            _logger.LogWarning(
-                "Version resolution failed for {PackageId} on feed {FeedName}: {FailureReason}; candidates={CandidateCount}, cacheHit={CacheHit}, durationMs={DurationMs}",
+            var versionList = await _versionEnumerator.EnumerateVersionsAsync(feed, request.Id, cancellationToken);
+            var result = _versionRangeEvaluator.SelectBestMatch(request.VersionRange, versionList.Versions);
+            stopwatch.Stop();
+
+            _logger.LogDebug(
+                "Version resolution for {PackageId} on feed {FeedName}: range={VersionRange}, selected={SelectedVersion}, candidates={CandidateCount}, cacheHit={CacheHit}, durationMs={DurationMs}",
                 request.Id,
                 feed.Name,
-                result.FailureReason,
+                request.VersionRange,
+                result.SelectedVersion ?? "(none)",
                 result.CandidateCount,
                 versionList.CacheHit,
                 stopwatch.ElapsedMilliseconds);
-            return VersionSelection.Failed(
-                "version-range-no-match",
-                result.FailureReason,
-                result.CandidateCount,
-                versionList.CacheHit);
-        }
 
-        return VersionSelection.Succeeded(result.SelectedVersion!, result.CandidateCount, versionList.CacheHit);
+            if (!result.Success)
+            {
+                _metrics?.RecordVersionResolution(feed.Name, "no-match", versionList.CacheHit, stopwatch.Elapsed);
+                _logger.LogWarning(
+                    "Version resolution failed for {PackageId} on feed {FeedName}: {FailureReason}; candidates={CandidateCount}, cacheHit={CacheHit}, durationMs={DurationMs}",
+                    request.Id,
+                    feed.Name,
+                    result.FailureReason,
+                    result.CandidateCount,
+                    versionList.CacheHit,
+                    stopwatch.ElapsedMilliseconds);
+                return VersionSelection.Failed(
+                    "version-range-no-match",
+                    result.FailureReason,
+                    result.CandidateCount,
+                    versionList.CacheHit);
+            }
+
+            _metrics?.RecordVersionResolution(feed.Name, "resolved", versionList.CacheHit, stopwatch.Elapsed);
+            return VersionSelection.Succeeded(result.SelectedVersion!, result.CandidateCount, versionList.CacheHit);
+        }
+        catch (OperationCanceledException)
+        {
+            stopwatch.Stop();
+            _metrics?.RecordVersionResolution(feed.Name, "cancelled", cacheHit: false, stopwatch.Elapsed);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _metrics?.RecordVersionResolution(feed.Name, "error", cacheHit: false, stopwatch.Elapsed);
+            _logger.LogError(
+                ex,
+                "Version resolution failed with an exception for {PackageId} on feed {FeedName}; durationMs={DurationMs}",
+                request.Id,
+                feed.Name,
+                stopwatch.ElapsedMilliseconds);
+            return VersionSelection.Failed(
+                "version-enumeration-error",
+                $"Failed to enumerate or evaluate versions for package '{request.Id}' on feed '{feed.Name}': {ex.Message}");
+        }
     }
 
     internal readonly record struct VersionSelection(

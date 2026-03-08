@@ -190,7 +190,8 @@ public static class NuplaneServiceCollectionExtensions
                 sp.GetRequiredService<IRemotePackageAcquirer>(),
                 sp.GetRequiredService<IFeedVersionEnumerator>(),
                 sp.GetRequiredService<IVersionRangeEvaluator>(),
-                sp.GetService<ILogger<MultiFeedPackageResolver>>() ?? NullLogger<MultiFeedPackageResolver>.Instance));
+                sp.GetService<ILogger<MultiFeedPackageResolver>>() ?? NullLogger<MultiFeedPackageResolver>.Instance,
+                sp.GetRequiredService<ReconciliationMetrics>()));
         services.AddSingleton<StoreStateSerializer>();
         services.AddSingleton<IStoreStateSerializer>(sp => sp.GetRequiredService<StoreStateSerializer>());
         services.AddSingleton<StoreRegistry>(sp =>
