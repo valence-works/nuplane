@@ -104,6 +104,21 @@ public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
     /// <summary>Records a rollback operation.</summary>
     public void RecordRollbackPerformed() => _telemetry.RollbackPerformedCounter.Add(1);
 
+    /// <summary>Records a version resolution outcome.</summary>
+    public void RecordVersionResolution(string feedName, string outcome, bool cacheHit, TimeSpan duration)
+    {
+        _telemetry.VersionResolutionCounter.Add(
+            1,
+            new KeyValuePair<string, object?>("feed", feedName),
+            new KeyValuePair<string, object?>("outcome", outcome),
+            new KeyValuePair<string, object?>("cache_hit", cacheHit));
+        _telemetry.VersionResolutionDurationMilliseconds.Record(
+            duration.TotalMilliseconds,
+            new KeyValuePair<string, object?>("feed", feedName),
+            new KeyValuePair<string, object?>("outcome", outcome),
+            new KeyValuePair<string, object?>("cache_hit", cacheHit));
+    }
+
     /// <summary>Records a loader boundary outcome.</summary>
     /// <param name="succeeded">Number of loaders that succeeded.</param>
     /// <param name="failed">Number of loaders that failed.</param>

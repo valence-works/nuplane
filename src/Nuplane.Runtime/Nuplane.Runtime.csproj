@@ -12,6 +12,10 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Nuplane.Runtime.Tests" />
     <InternalsVisibleTo Include="Nuplane.Integration.Tests" />
+    <InternalsVisibleTo Include="Nuplane.NuGet" />
+    <InternalsVisibleTo Include="Nuplane.NuGet.Tests" />
+    <InternalsVisibleTo Include="Nuplane" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 
 </Project>

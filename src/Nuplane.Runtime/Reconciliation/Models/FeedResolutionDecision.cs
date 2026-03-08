@@ -15,6 +15,8 @@ namespace Nuplane.Runtime.Reconciliation.Models;
 /// <param name="CorrelationId">The correlation identifier of the reconciliation cycle.</param>
 /// <param name="FeedUnavailable">Whether the failure was due to feed unavailability.</param>
 /// <param name="FailureReason">The reason for failure, if the resolution failed.</param>
+/// <param name="EnumeratedVersionCount">The number of versions returned by the feed during version enumeration.</param>
+/// <param name="CacheHit">Whether the version list was served from cache.</param>
 public sealed record FeedResolutionDecision(
     string PackageId,
     string? RequestedFeed,
@@ -24,7 +26,9 @@ public sealed record FeedResolutionDecision(
     string DecisionPath,
     string CorrelationId,
     bool FeedUnavailable,
-    string? FailureReason)
+    string? FailureReason,
+    int EnumeratedVersionCount = 0,
+    bool CacheHit = false)
 {
     /// <summary>
     /// Creates a resolved decision record for a successful feed resolution.
@@ -34,7 +38,9 @@ public sealed record FeedResolutionDecision(
         IReadOnlyList<string> candidateFeeds,
         ResolvedPackage selected,
         string correlationId,
-        string decisionPath) =>
+        string decisionPath,
+        int enumeratedVersionCount = 0,
+        bool cacheHit = false) =>
         new(
             request.Id,
             request.FeedName,
@@ -44,7 +50,9 @@ public sealed record FeedResolutionDecision(
             decisionPath,
             correlationId,
             FeedUnavailable: false,
-            FailureReason: null);
+            FailureReason: null,
+            EnumeratedVersionCount: enumeratedVersionCount,
+            CacheHit: cacheHit);
 
     /// <summary>
     /// Creates a failed decision record for an unsuccessful feed resolution.
@@ -55,15 +63,20 @@ public sealed record FeedResolutionDecision(
         string correlationId,
         string decisionPath,
         bool feedUnavailable,
-        string failureReason) =>
+        string failureReason,
+        string? selectedFeed = null,
+        int enumeratedVersionCount = 0,
+        bool cacheHit = false) =>
         new(
             request.Id,
             request.FeedName,
             candidateFeeds,
-            SelectedFeed: null,
+            SelectedFeed: selectedFeed,
             SelectedVersion: null,
             decisionPath,
             correlationId,
             feedUnavailable,
-            failureReason);
-}
+            failureReason,
+            enumeratedVersionCount,
+            cacheHit);
+    }

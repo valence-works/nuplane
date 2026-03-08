@@ -1,11 +1,14 @@
 using System.IO.Compression;
 using System.Text;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Events;
 using Nuplane.Runtime.Feeds;
 using Nuplane.Runtime.Feeds.Configuration;
+using Nuplane.Runtime.Feeds.Versioning;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Sources;
@@ -48,7 +51,13 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
             sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "MyPlugin" } },
             desiredStateAggregator: new DesiredStateAggregator(),
             desiredActualDiffEngine: new DesiredActualDiffEngine(),
-            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOpts), new(new OptionsWrapper<FeedResolutionOptions>(feedOpts))),
+            packageResolver: new MultiFeedPackageResolver(
+                new OptionsWrapper<FeedResolutionOptions>(feedOpts),
+                new(new OptionsWrapper<FeedResolutionOptions>(feedOpts)),
+                Substitute.For<IRemotePackageAcquirer>(),
+                Substitute.For<IFeedVersionEnumerator>(),
+                Substitute.For<IVersionRangeEvaluator>(),
+                NullLogger<MultiFeedPackageResolver>.Instance),
             storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
             reconciliationOptions: new(),
             observerEventDispatcher: new ObserverEventDispatcher([]),
@@ -81,7 +90,13 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
             sourceTrustOptions: new(),
             desiredStateAggregator: new DesiredStateAggregator(),
             desiredActualDiffEngine: new DesiredActualDiffEngine(),
-            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOpts), new(new OptionsWrapper<FeedResolutionOptions>(feedOpts))),
+            packageResolver: new MultiFeedPackageResolver(
+                new OptionsWrapper<FeedResolutionOptions>(feedOpts),
+                new(new OptionsWrapper<FeedResolutionOptions>(feedOpts)),
+                Substitute.For<IRemotePackageAcquirer>(),
+                Substitute.For<IFeedVersionEnumerator>(),
+                Substitute.For<IVersionRangeEvaluator>(),
+                NullLogger<MultiFeedPackageResolver>.Instance),
             storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
             reconciliationOptions: new(),
             observerEventDispatcher: new ObserverEventDispatcher([]),
@@ -115,7 +130,13 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
             sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "PluginA" } },
             desiredStateAggregator: new DesiredStateAggregator(),
             desiredActualDiffEngine: new DesiredActualDiffEngine(),
-            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOpts), new(new OptionsWrapper<FeedResolutionOptions>(feedOpts))),
+            packageResolver: new MultiFeedPackageResolver(
+                new OptionsWrapper<FeedResolutionOptions>(feedOpts),
+                new(new OptionsWrapper<FeedResolutionOptions>(feedOpts)),
+                Substitute.For<IRemotePackageAcquirer>(),
+                Substitute.For<IFeedVersionEnumerator>(),
+                Substitute.For<IVersionRangeEvaluator>(),
+                NullLogger<MultiFeedPackageResolver>.Instance),
             storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
             reconciliationOptions: new(),
             observerEventDispatcher: new ObserverEventDispatcher([]),

@@ -50,6 +50,12 @@ public sealed class FeedResolutionOptions
     public string? PackageInstallRoot { get; set; }
 
     /// <summary>
+    /// Gets or sets the TTL for version enumeration cache entries.
+    /// Default is 5 minutes. Set to <see cref="TimeSpan.Zero"/> to disable caching.
+    /// </summary>
+    public TimeSpan VersionCacheTtl { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
     /// Sets the resolution priority for the specified feed.
     /// </summary>
     /// <param name="feedName">The feed name.</param>

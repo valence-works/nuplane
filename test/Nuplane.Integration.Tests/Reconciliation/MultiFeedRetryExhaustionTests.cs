@@ -1,7 +1,10 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Feeds;
 using Nuplane.Runtime.Feeds.Configuration;
+using Nuplane.Runtime.Feeds.Versioning;
 using Nuplane.Runtime.Reconciliation;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
@@ -27,7 +30,11 @@ public sealed class MultiFeedRetryExhaustionTests
 
         var resolver = new MultiFeedPackageResolver(
             new OptionsWrapper<FeedResolutionOptions>(feedOptions),
-            new(new OptionsWrapper<FeedResolutionOptions>(feedOptions)));
+            new(new OptionsWrapper<FeedResolutionOptions>(feedOptions)),
+            Substitute.For<IRemotePackageAcquirer>(),
+            Substitute.For<IFeedVersionEnumerator>(),
+            Substitute.For<IVersionRangeEvaluator>(),
+            NullLogger<MultiFeedPackageResolver>.Instance);
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],

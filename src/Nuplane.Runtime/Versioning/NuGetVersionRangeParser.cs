@@ -2,13 +2,17 @@ namespace Nuplane.Runtime.Versioning;
 
 /// <summary>
 /// Parses NuGet version range expressions and extracts concrete version strings.
+/// Used only for local directory feeds where nupkg files are already on disk and
+/// a concrete version is needed to locate the file. Remote feed version selection
+/// is handled by <see cref="Nuplane.Runtime.Feeds.Versioning.IVersionRangeEvaluator"/>.
 /// </summary>
 internal static class NuGetVersionRangeParser
 {
     /// <summary>
     /// Extracts a concrete version string from a NuGet version range expression.
-    /// For exact versions, returns the version as-is.
+    /// For exact versions (e.g., "[1.0.0]" or "1.0.0"), returns the version as-is.
     /// For range expressions (e.g., "[1.0.0, 2.0.0)"), returns the lower bound.
+    /// Returns "0.0.0" for empty or null input.
     /// </summary>
     public static string SelectVersion(string versionRange)
     {

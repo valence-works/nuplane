@@ -1,4 +1,5 @@
 using Nuplane.Abstractions;
+using Nuplane.Runtime.Versioning;
 
 namespace Nuplane.Runtime.Sources;
 
@@ -84,13 +85,23 @@ public sealed class FeedRuleDesiredSource : IDesiredPackageSource
     {
         ct.ThrowIfCancellationRequested();
 
-        var candidateIds = _availablePackageIds is not null
-            ? ResolveCatalogMode()
-            : ResolveDirectMode();
+        // Parse each include pattern to separate the package glob from the optional version range.
+        var parsed = _includePatterns
+            .Select(IncludePatternParser.Parse)
+            .ToArray();
 
-        var selected = _selector.Select(candidateIds, _maxPackages);
+        var candidateIds = _availablePackageIds is not null
+            ? ResolveCatalogMode(parsed)
+            : ResolveDirectMode(parsed);
+        candidateIds = DistinctCandidates(candidateIds);
+
+        var selected = _selector.Select(candidateIds.Select(c => c.Id).ToArray(), _maxPackages);
+
+        // Build a lookup from package ID to its version range.
+        var rangeByPackageId = candidateIds.ToDictionary(c => c.Id, c => c.VersionRange, StringComparer.OrdinalIgnoreCase);
+
         var requests = selected
-            .Select(id => new PackageRequest(id, "[1.0.0,)", _feedName, PackageUpdatePolicy.Range, $"feed-rule:{_feedName}"))
+            .Select(id => new PackageRequest(id, rangeByPackageId.GetValueOrDefault(id, string.Empty), _feedName, PackageUpdatePolicy.Range, $"feed-rule:{_feedName}"))
             .ToArray();
 
         return Task.FromResult<IReadOnlyList<PackageRequest>>(requests);
@@ -98,23 +109,42 @@ public sealed class FeedRuleDesiredSource : IDesiredPackageSource
 
     /// <summary>
     /// Catalog mode: filters <c>_availablePackageIds</c> using wildcard pattern matching.
+    /// Each matched ID inherits the version range from its matching pattern.
     /// </summary>
-    private string[] ResolveCatalogMode()
+    private PackageCandidate[] ResolveCatalogMode(ParsedIncludePattern[] parsed)
     {
+        var globs = parsed.Select(p => p.PackageGlob).ToArray();
         return _availablePackageIds!
-            .Where(id => PackagePatternMatcher.MatchesAny(_includePatterns, id))
+            .Where(id => PackagePatternMatcher.MatchesAny(globs, id))
+            .Select(id =>
+            {
+                // Find the first matching pattern to inherit its version range.
+                var match = parsed.FirstOrDefault(p => PackagePatternMatcher.MatchesAny([p.PackageGlob], id));
+                return new PackageCandidate(id, match?.VersionRange ?? string.Empty);
+            })
             .ToArray();
     }
 
     /// <summary>
     /// Direct mode: non-wildcard patterns are exact package IDs; wildcard patterns are skipped.
     /// </summary>
-    private string[] ResolveDirectMode()
+    private static PackageCandidate[] ResolveDirectMode(ParsedIncludePattern[] parsed)
     {
-        return _includePatterns
-            .Where(static pattern => !string.IsNullOrWhiteSpace(pattern)
-                                     && !pattern.Contains('*')
-                                     && !pattern.Contains('?'))
+        return parsed
+            .Where(static p => !string.IsNullOrWhiteSpace(p.PackageGlob)
+                               && !p.PackageGlob.Contains('*')
+                               && !p.PackageGlob.Contains('?'))
+            .Select(p => new PackageCandidate(p.PackageGlob, p.VersionRange))
             .ToArray();
     }
+
+    private static PackageCandidate[] DistinctCandidates(PackageCandidate[] candidates)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return candidates
+            .Where(candidate => seen.Add(candidate.Id))
+            .ToArray();
+    }
+
+    private sealed record PackageCandidate(string Id, string VersionRange);
 }

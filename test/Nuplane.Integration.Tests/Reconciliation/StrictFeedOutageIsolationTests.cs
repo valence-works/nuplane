@@ -1,8 +1,11 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Feeds;
 using Nuplane.Runtime.Feeds.Configuration;
+using Nuplane.Runtime.Feeds.Versioning;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Store.State;
 
@@ -30,7 +33,13 @@ public sealed class StrictFeedOutageIsolationTests
             {
                 AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-impacted", "pkg-ok" }
             },
-            packageResolver: new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(feedOptions), new(new OptionsWrapper<FeedResolutionOptions>(feedOptions)), new StubRemotePackageAcquirer()),
+            packageResolver: new MultiFeedPackageResolver(
+                new OptionsWrapper<FeedResolutionOptions>(feedOptions),
+                new(new OptionsWrapper<FeedResolutionOptions>(feedOptions)),
+                new StubRemotePackageAcquirer(),
+                StubVersionEnumerator("1.0.0"),
+                StubVersionRangeEvaluator(),
+                NullLogger<MultiFeedPackageResolver>.Instance),
             storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
             reconciliationOptions: new() { MaxRetryAttempts = 0 },
             feedResolutionOptions: feedOptions);
@@ -51,5 +60,28 @@ public sealed class StrictFeedOutageIsolationTests
     {
         public Task<string> AcquireAsync(FeedDefinition feed, string packageId, string version, CancellationToken cancellationToken) =>
             Task.FromResult(Path.Combine(Path.GetTempPath(), "nuplane-test", feed.Name, packageId, version));
+    }
+
+    private static IFeedVersionEnumerator StubVersionEnumerator(params string[] versions)
+    {
+        var enumerator = Substitute.For<IFeedVersionEnumerator>();
+        enumerator.EnumerateVersionsAsync(Arg.Any<FeedDefinition>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(args => new PackageVersionList(
+                (string)args[1], ((FeedDefinition)args[0]).Name, versions, DateTimeOffset.UtcNow));
+        return enumerator;
+    }
+
+    private static IVersionRangeEvaluator StubVersionRangeEvaluator()
+    {
+        var evaluator = Substitute.For<IVersionRangeEvaluator>();
+        evaluator.SelectBestMatch(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>())
+            .Returns(args =>
+            {
+                var versions = (IReadOnlyList<string>)args[1];
+                return versions.Count > 0
+                    ? new VersionResolutionResult(true, versions[^1], versions.Count, null)
+                    : new VersionResolutionResult(false, null, 0, "No versions");
+            });
+        return evaluator;
     }
 }
