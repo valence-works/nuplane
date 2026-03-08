@@ -102,8 +102,8 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     feedUnavailable: false,
                     failureReason: selectedVersion.FailureReason ?? $"No version matched '{request.VersionRange}'.",
                     selectedFeed: candidate.Name,
-                     enumeratedVersionCount: selectedVersion.EnumeratedCount,
-                     cacheHit: selectedVersion.CacheHit);
+                    enumeratedVersionCount: selectedVersion.EnumeratedCount,
+                    cacheHit: selectedVersion.CacheHit);
                 _decisions[request.Id] = lastFailure;
                 continue;
             }
@@ -120,11 +120,11 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
             _decisions[request.Id] = FeedResolutionDecision.Resolved(
                 request,
                 candidateNames,
-                 resolved,
-                 correlationId: string.Empty,
-                 decisionPath: "ordered-candidate-success",
-                 enumeratedVersionCount: selectedVersion.EnumeratedCount,
-                 cacheHit: selectedVersion.CacheHit);
+                resolved,
+                correlationId: string.Empty,
+                decisionPath: "ordered-candidate-success",
+                enumeratedVersionCount: selectedVersion.EnumeratedCount,
+                cacheHit: selectedVersion.CacheHit);
 
             return resolved;
         }
@@ -211,6 +211,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         catch (OperationCanceledException)
         {
             stopwatch.Stop();
+            _metrics?.RecordVersionResolution(feed.Name, "cancelled", cacheHit: false, stopwatch.Elapsed);
             throw;
         }
         catch (Exception ex)
