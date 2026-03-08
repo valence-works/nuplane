@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.IO.Compression;
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
@@ -52,6 +53,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         _attempts.AddOrUpdate(request.Id, 1, (_, current) => current + 1);
         var candidates = _policy.OrderCandidates(request);
         var candidateNames = candidates.Select(x => x.Name).ToArray();
+        FeedResolutionDecision? lastFailure = null;
 
         foreach (var candidate in candidates)
         {
@@ -76,15 +78,26 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
             }
 
             var selectedVersion = await ResolveVersionAsync(candidate, request, cancellationToken);
-            if (selectedVersion is null)
+            if (!selectedVersion.Success)
             {
+                lastFailure = FeedResolutionDecision.Failed(
+                    request,
+                    candidateNames,
+                    correlationId: string.Empty,
+                    decisionPath: selectedVersion.DecisionPath,
+                    feedUnavailable: false,
+                    failureReason: selectedVersion.FailureReason ?? $"No version matched '{request.VersionRange}'.",
+                    selectedFeed: candidate.Name,
+                    EnumeratedVersionCount: selectedVersion.EnumeratedCount,
+                    CacheHit: selectedVersion.CacheHit);
+                _decisions[request.Id] = lastFailure;
                 continue;
             }
 
-            var installPath = await ResolveInstallPathAsync(candidate, request.Id, selectedVersion.Value.Version, cancellationToken);
+            var installPath = await ResolveInstallPathAsync(candidate, request.Id, selectedVersion.Version!, cancellationToken);
             var resolved = new ResolvedPackage(
                 request.Id,
-                selectedVersion.Value.Version,
+                selectedVersion.Version!,
                 candidate.Name,
                 installPath,
                 DateTimeOffset.UtcNow,
@@ -96,10 +109,16 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                 resolved,
                 correlationId: string.Empty,
                 decisionPath: "ordered-candidate-success",
-                EnumeratedVersionCount: selectedVersion.Value.EnumeratedCount,
-                CacheHit: selectedVersion.Value.CacheHit);
+                EnumeratedVersionCount: selectedVersion.EnumeratedCount,
+                CacheHit: selectedVersion.CacheHit);
 
             return resolved;
+        }
+
+        if (lastFailure is not null)
+        {
+            _decisions[request.Id] = lastFailure;
+            throw new NoEligibleFeedException(request.Id, lastFailure.FailureReason ?? "No candidate feed matched the requested version.");
         }
 
         _decisions[request.Id] = FeedResolutionDecision.Failed(
@@ -118,7 +137,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     /// For local directory feeds, the version is extracted from the request's range directly.
     /// For remote feeds, version enumeration and range evaluation are used.
     /// </summary>
-    private async Task<VersionSelection?> ResolveVersionAsync(
+    private async Task<VersionSelection> ResolveVersionAsync(
         FeedDefinition feed,
         PackageRequest request,
         CancellationToken cancellationToken)
@@ -126,36 +145,66 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         // Local directory feeds have exact versions already specified in the package request.
         if (IsLocalDirectoryFeed(feed))
         {
+            if (string.IsNullOrWhiteSpace(request.VersionRange))
+            {
+                return VersionSelection.Failed(
+                    "local-directory-explicit-version-required",
+                    $"Local directory feed '{feed.Name}' requires an explicit version for package '{request.Id}'; empty or whitespace version ranges are not supported.");
+            }
+
             var localVersion = NuGetVersionRangeParser.SelectVersion(request.VersionRange);
-            return new VersionSelection(localVersion, 0, CacheHit: false);
+            return VersionSelection.Succeeded(localVersion, 0, cacheHit: false);
         }
 
+        var stopwatch = Stopwatch.StartNew();
         var versionList = await _versionEnumerator.EnumerateVersionsAsync(feed, request.Id, cancellationToken);
-
         var result = _versionRangeEvaluator.SelectBestMatch(request.VersionRange, versionList.Versions);
+        stopwatch.Stop();
 
         _logger.LogDebug(
-            "Version resolution for {PackageId} on feed {FeedName}: range={VersionRange}, selected={SelectedVersion}, candidates={CandidateCount}",
+            "Version resolution for {PackageId} on feed {FeedName}: range={VersionRange}, selected={SelectedVersion}, candidates={CandidateCount}, cacheHit={CacheHit}, durationMs={DurationMs}",
             request.Id,
             feed.Name,
             request.VersionRange,
             result.SelectedVersion ?? "(none)",
-            result.CandidateCount);
+            result.CandidateCount,
+            versionList.CacheHit,
+            stopwatch.ElapsedMilliseconds);
 
         if (!result.Success)
         {
             _logger.LogWarning(
-                "Version resolution failed for {PackageId} on feed {FeedName}: {FailureReason}",
+                "Version resolution failed for {PackageId} on feed {FeedName}: {FailureReason}; candidates={CandidateCount}, cacheHit={CacheHit}, durationMs={DurationMs}",
                 request.Id,
                 feed.Name,
-                result.FailureReason);
-            return null;
+                result.FailureReason,
+                result.CandidateCount,
+                versionList.CacheHit,
+                stopwatch.ElapsedMilliseconds);
+            return VersionSelection.Failed(
+                "version-range-no-match",
+                result.FailureReason,
+                result.CandidateCount,
+                versionList.CacheHit);
         }
 
-        return new VersionSelection(result.SelectedVersion!, result.CandidateCount, CacheHit: false);
+        return VersionSelection.Succeeded(result.SelectedVersion!, result.CandidateCount, versionList.CacheHit);
     }
 
-    internal readonly record struct VersionSelection(string Version, int EnumeratedCount, bool CacheHit);
+    internal readonly record struct VersionSelection(
+        bool Success,
+        string? Version,
+        int EnumeratedCount,
+        bool CacheHit,
+        string? FailureReason,
+        string DecisionPath)
+    {
+        public static VersionSelection Succeeded(string version, int enumeratedCount, bool cacheHit) =>
+            new(true, version, enumeratedCount, cacheHit, null, "ordered-candidate-success");
+
+        public static VersionSelection Failed(string decisionPath, string? failureReason, int enumeratedCount = 0, bool cacheHit = false) =>
+            new(false, null, enumeratedCount, cacheHit, failureReason, decisionPath);
+    }
 
     /// <summary>
     /// Resolves the install path for a package from the specified feed.
@@ -213,4 +262,3 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     public int GetAttempts(string packageId) => _attempts.GetValueOrDefault(packageId, 0);
 
 }
-

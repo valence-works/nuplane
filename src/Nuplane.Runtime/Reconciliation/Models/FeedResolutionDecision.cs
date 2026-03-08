@@ -63,15 +63,20 @@ public sealed record FeedResolutionDecision(
         string correlationId,
         string decisionPath,
         bool feedUnavailable,
-        string failureReason) =>
+        string failureReason,
+        string? selectedFeed = null,
+        int EnumeratedVersionCount = 0,
+        bool CacheHit = false) =>
         new(
             request.Id,
             request.FeedName,
             candidateFeeds,
-            SelectedFeed: null,
+            SelectedFeed: selectedFeed,
             SelectedVersion: null,
             decisionPath,
             correlationId,
             feedUnavailable,
-            failureReason);
-}
+            failureReason,
+            EnumeratedVersionCount,
+            CacheHit);
+} 
