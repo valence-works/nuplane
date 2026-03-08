@@ -49,6 +49,35 @@ public sealed class FeedRuleDesiredSourceTests
     }
 
     [Fact]
+    public async Task GetDesiredAsync_DirectMode_DuplicatePatterns_AreDeduplicatedCaseInsensitively()
+    {
+        var source = new FeedRuleDesiredSource(
+            feedName: "feed-a",
+            includePatterns: ["Contoso.Plugin.Auth", "contoso.plugin.auth [2.0.0]", "Contoso.Plugin.Logging"]);
+
+        var result = await source.GetDesiredAsync(CancellationToken.None);
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(new[] { "Contoso.Plugin.Auth", "Contoso.Plugin.Logging" }, result.Select(x => x.Id).ToArray());
+        Assert.Equal(string.Empty, result[0].VersionRange);
+        Assert.Equal(string.Empty, result[1].VersionRange);
+    }
+
+    [Fact]
+    public async Task GetDesiredAsync_DirectMode_DuplicatePatterns_PreserveFirstOccurrence()
+    {
+        var source = new FeedRuleDesiredSource(
+            feedName: "feed-a",
+            includePatterns: ["Contoso.Plugin.Auth [1.0.0]", "contoso.plugin.auth [2.0.0]"]);
+
+        var result = await source.GetDesiredAsync(CancellationToken.None);
+
+        var request = Assert.Single(result);
+        Assert.Equal("Contoso.Plugin.Auth", request.Id);
+        Assert.Equal("[1.0.0]", request.VersionRange);
+    }
+
+    [Fact]
     public async Task GetDesiredAsync_DirectMode_WildcardPatterns_AreSkipped()
     {
         var source = new FeedRuleDesiredSource(

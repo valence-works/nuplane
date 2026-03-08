@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Builder;
@@ -190,7 +191,8 @@ public static class NuplaneServiceCollectionExtensions
                 sp.GetRequiredService<IRemotePackageAcquirer>(),
                 sp.GetRequiredService<IFeedVersionEnumerator>(),
                 sp.GetRequiredService<IVersionRangeEvaluator>(),
-                sp.GetRequiredService<ILogger<MultiFeedPackageResolver>>()));
+                sp.GetService<ILogger<MultiFeedPackageResolver>>() ?? NullLogger<MultiFeedPackageResolver>.Instance,
+                sp.GetRequiredService<ReconciliationMetrics>()));
         services.AddSingleton<StoreStateSerializer>();
         services.AddSingleton<IStoreStateSerializer>(sp => sp.GetRequiredService<StoreStateSerializer>());
         services.AddSingleton<EffectiveStorePersistenceSettings>(sp =>

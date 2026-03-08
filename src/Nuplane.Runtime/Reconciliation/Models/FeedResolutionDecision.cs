@@ -39,8 +39,8 @@ public sealed record FeedResolutionDecision(
         ResolvedPackage selected,
         string correlationId,
         string decisionPath,
-        int EnumeratedVersionCount = 0,
-        bool CacheHit = false) =>
+        int enumeratedVersionCount = 0,
+        bool cacheHit = false) =>
         new(
             request.Id,
             request.FeedName,
@@ -51,8 +51,8 @@ public sealed record FeedResolutionDecision(
             correlationId,
             FeedUnavailable: false,
             FailureReason: null,
-            EnumeratedVersionCount: EnumeratedVersionCount,
-            CacheHit: CacheHit);
+            EnumeratedVersionCount: enumeratedVersionCount,
+            CacheHit: cacheHit);
 
     /// <summary>
     /// Creates a failed decision record for an unsuccessful feed resolution.
@@ -63,15 +63,20 @@ public sealed record FeedResolutionDecision(
         string correlationId,
         string decisionPath,
         bool feedUnavailable,
-        string failureReason) =>
+        string failureReason,
+        string? selectedFeed = null,
+        int enumeratedVersionCount = 0,
+        bool cacheHit = false) =>
         new(
             request.Id,
             request.FeedName,
             candidateFeeds,
-            SelectedFeed: null,
+            SelectedFeed: selectedFeed,
             SelectedVersion: null,
             decisionPath,
             correlationId,
             feedUnavailable,
-            failureReason);
-}
+            failureReason,
+            enumeratedVersionCount,
+            cacheHit);
+    }

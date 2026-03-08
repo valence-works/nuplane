@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 
 namespace Nuplane.Runtime.Tests.Hosting;
@@ -17,6 +18,18 @@ public sealed class FeedSelectionRegistrationTests
         var sourceTrust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
 
         Assert.Empty(sourceTrust.AllowedPackageIds);
+    }
+
+    [Fact]
+    public void AddNuplane_WithoutAddLogging_StillRegistersPackageResolver()
+    {
+        var services = new ServiceCollection();
+        services.AddNuplane(_ => { });
+
+        using var provider = services.BuildServiceProvider();
+
+        var resolver = provider.GetRequiredService<IPackageResolver>();
+        Assert.NotNull(resolver);
     }
 
     [Fact]

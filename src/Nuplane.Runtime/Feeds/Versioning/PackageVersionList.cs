@@ -7,8 +7,10 @@ namespace Nuplane.Runtime.Feeds.Versioning;
 /// <param name="FeedName">The feed that produced this list.</param>
 /// <param name="Versions">The available version strings, sorted ascending by SemVer.</param>
 /// <param name="EnumeratedAt">The timestamp when the versions were enumerated.</param>
-internal sealed record PackageVersionList(
+/// <param name="CacheHit">Whether this result was served from the version cache.</param>
+public sealed record PackageVersionList(
     string PackageId,
     string FeedName,
     IReadOnlyList<string> Versions,
-    DateTimeOffset EnumeratedAt);
+    DateTimeOffset EnumeratedAt,
+    bool CacheHit = false);

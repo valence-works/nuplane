@@ -27,7 +27,9 @@ public sealed class CachedFeedVersionEnumeratorTests
         var result1 = await cached.EnumerateVersionsAsync(TestFeed, "Pkg", CancellationToken.None);
         var result2 = await cached.EnumerateVersionsAsync(TestFeed, "Pkg", CancellationToken.None);
 
-        Assert.Same(result1, result2);
+        Assert.False(result1.CacheHit);
+        Assert.True(result2.CacheHit);
+        Assert.Equal(result1 with { CacheHit = true }, result2);
         await inner.Received(1).EnumerateVersionsAsync(TestFeed, "Pkg", Arg.Any<CancellationToken>());
     }
 
@@ -95,6 +97,28 @@ public sealed class CachedFeedVersionEnumeratorTests
         var results = await Task.WhenAll(tasks);
 
         Assert.All(results, r => Assert.Equal(versionList, r));
+        await inner.Received(1).EnumerateVersionsAsync(TestFeed, "Pkg", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Cancellation_PropagatesToInnerEnumeration()
+    {
+        var inner = Substitute.For<IFeedVersionEnumerator>();
+        using var cts = new CancellationTokenSource();
+        inner.EnumerateVersionsAsync(TestFeed, "Pkg", Arg.Any<CancellationToken>())
+            .Returns(async callInfo =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), callInfo.Arg<CancellationToken>());
+                return new PackageVersionList("Pkg", "test-feed", ["1.0.0"], DateTimeOffset.UtcNow);
+            });
+
+        var cached = new CachedFeedVersionEnumerator(inner, CreateOptions(TimeSpan.FromMinutes(5)));
+        var enumerationTask = cached.EnumerateVersionsAsync(TestFeed, "Pkg", cts.Token);
+
+        cts.CancelAfter(TimeSpan.FromMilliseconds(50));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => enumerationTask);
+        await inner.Received(1).EnumerateVersionsAsync(TestFeed, "Pkg", Arg.Any<CancellationToken>());
     }
 
     [Fact]
