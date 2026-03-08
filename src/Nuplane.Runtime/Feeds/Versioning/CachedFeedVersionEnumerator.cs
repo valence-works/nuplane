@@ -14,6 +14,7 @@ internal sealed class CachedFeedVersionEnumerator : IFeedVersionEnumerator
     private readonly IFeedVersionEnumerator _inner;
     private readonly TimeSpan _ttl;
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Lazy<Task<PackageVersionList>>> _inflight = new(StringComparer.OrdinalIgnoreCase);
 
     public CachedFeedVersionEnumerator(IFeedVersionEnumerator inner, IOptions<FeedResolutionOptions> options)
     {
@@ -38,12 +39,31 @@ internal sealed class CachedFeedVersionEnumerator : IFeedVersionEnumerator
 
         if (_cache.TryGetValue(key, out var entry) && !entry.IsExpired(_ttl))
         {
-            return entry.Value;
+            return entry.Value with { CacheHit = true };
         }
 
-        var result = await _inner.EnumerateVersionsAsync(feed, packageId, cancellationToken);
-        _cache[key] = new CacheEntry(result, DateTimeOffset.UtcNow);
-        return result;
+        var pending = _inflight.GetOrAdd(
+            key,
+            _ => new Lazy<Task<PackageVersionList>>(
+                () => RefreshCacheAsync(key, feed, packageId),
+                LazyThreadSafetyMode.ExecutionAndPublication));
+
+        return await pending.Value.WaitAsync(cancellationToken);
+    }
+
+    private async Task<PackageVersionList> RefreshCacheAsync(string key, FeedDefinition feed, string packageId)
+    {
+        try
+        {
+            var result = await _inner.EnumerateVersionsAsync(feed, packageId, CancellationToken.None);
+            result = result with { CacheHit = false };
+            _cache[key] = new CacheEntry(result, DateTimeOffset.UtcNow);
+            return result;
+        }
+        finally
+        {
+            _inflight.TryRemove(key, out _);
+        }
     }
 
     private sealed record CacheEntry(PackageVersionList Value, DateTimeOffset CachedAt)

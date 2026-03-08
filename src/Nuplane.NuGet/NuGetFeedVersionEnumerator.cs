@@ -1,6 +1,7 @@
 using NuGet.Common;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
+using NuGet.Versioning;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Feeds.Versioning;
 
@@ -22,14 +23,21 @@ internal sealed class NuGetFeedVersionEnumerator : IFeedVersionEnumerator
 
         var repository = Repository.Factory.GetCoreV3(feed.ServiceIndex.AbsoluteUri);
         var resource = await repository.GetResourceAsync<FindPackageByIdResource>(cancellationToken);
+        using var cacheContext = new SourceCacheContext();
 
-        var versions = await resource.GetAllVersionsAsync(packageId, new SourceCacheContext(), NullLogger.Instance, cancellationToken);
+        var versions = await resource.GetAllVersionsAsync(packageId, cacheContext, NullLogger.Instance, cancellationToken);
+        var sorted = NormalizeVersions(versions);
 
-        var sorted = versions
+        return new PackageVersionList(packageId, feed.Name, sorted, DateTimeOffset.UtcNow);
+    }
+
+    internal static IReadOnlyList<string> NormalizeVersions(IEnumerable<NuGetVersion> versions)
+    {
+        ArgumentNullException.ThrowIfNull(versions);
+
+        return versions
             .OrderBy(v => v)
             .Select(v => v.ToNormalizedString())
             .ToList();
-
-        return new PackageVersionList(packageId, feed.Name, sorted, DateTimeOffset.UtcNow);
     }
 }
