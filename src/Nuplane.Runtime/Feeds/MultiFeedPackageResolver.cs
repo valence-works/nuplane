@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
 using System.IO.Compression;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Feeds.Configuration;
 using Nuplane.Runtime.Feeds.Policy;
+using Nuplane.Runtime.Feeds.Versioning;
 using Nuplane.Runtime.Reconciliation.Models;
 using Nuplane.Runtime.Versioning;
 
@@ -18,24 +20,27 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     private readonly FeedResolutionOptions _options;
     private readonly FeedResolutionPolicy _policy;
     private readonly IRemotePackageAcquirer _remotePackageAcquirer;
+    private readonly IFeedVersionEnumerator _versionEnumerator;
+    private readonly IVersionRangeEvaluator _versionRangeEvaluator;
+    private readonly ILogger<MultiFeedPackageResolver> _logger;
     private readonly ConcurrentDictionary<string, FeedResolutionDecision> _decisions = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, int> _attempts = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <inheritdoc />
-    public MultiFeedPackageResolver(IOptions<FeedResolutionOptions> options, FeedResolutionPolicy policy)
-        : this(options, policy, new NuGetRemotePackageAcquirer(options))
-    {
-    }
 
     internal MultiFeedPackageResolver(
         IOptions<FeedResolutionOptions> options,
         FeedResolutionPolicy policy,
-        IRemotePackageAcquirer remotePackageAcquirer)
+        IRemotePackageAcquirer remotePackageAcquirer,
+        IFeedVersionEnumerator versionEnumerator,
+        IVersionRangeEvaluator versionRangeEvaluator,
+        ILogger<MultiFeedPackageResolver> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         _options = options.Value;
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
         _remotePackageAcquirer = remotePackageAcquirer ?? throw new ArgumentNullException(nameof(remotePackageAcquirer));
+        _versionEnumerator = versionEnumerator ?? throw new ArgumentNullException(nameof(versionEnumerator));
+        _versionRangeEvaluator = versionRangeEvaluator ?? throw new ArgumentNullException(nameof(versionRangeEvaluator));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <inheritdoc />
@@ -70,11 +75,16 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                 continue;
             }
 
-            var selectedVersion = NuGetVersionRangeParser.SelectVersion(request.VersionRange);
-            var installPath = await ResolveInstallPathAsync(candidate, request.Id, selectedVersion, cancellationToken);
+            var selectedVersion = await ResolveVersionAsync(candidate, request, cancellationToken);
+            if (selectedVersion is null)
+            {
+                continue;
+            }
+
+            var installPath = await ResolveInstallPathAsync(candidate, request.Id, selectedVersion.Value.Version, cancellationToken);
             var resolved = new ResolvedPackage(
                 request.Id,
-                selectedVersion,
+                selectedVersion.Value.Version,
                 candidate.Name,
                 installPath,
                 DateTimeOffset.UtcNow,
@@ -85,7 +95,9 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                 candidateNames,
                 resolved,
                 correlationId: string.Empty,
-                decisionPath: "ordered-candidate-success");
+                decisionPath: "ordered-candidate-success",
+                EnumeratedVersionCount: selectedVersion.Value.EnumeratedCount,
+                CacheHit: selectedVersion.Value.CacheHit);
 
             return resolved;
         }
@@ -100,6 +112,50 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
 
         throw new NoEligibleFeedException(request.Id, "No candidate feed was available.");
     }
+
+    /// <summary>
+    /// Resolves the concrete version for a package from the specified feed.
+    /// For local directory feeds, the version is extracted from the request's range directly.
+    /// For remote feeds, version enumeration and range evaluation are used.
+    /// </summary>
+    private async Task<VersionSelection?> ResolveVersionAsync(
+        FeedDefinition feed,
+        PackageRequest request,
+        CancellationToken cancellationToken)
+    {
+        // Local directory feeds have exact versions already specified in the package request.
+        if (IsLocalDirectoryFeed(feed))
+        {
+            var localVersion = NuGetVersionRangeParser.SelectVersion(request.VersionRange);
+            return new VersionSelection(localVersion, 0, CacheHit: false);
+        }
+
+        var versionList = await _versionEnumerator.EnumerateVersionsAsync(feed, request.Id, cancellationToken);
+
+        var result = _versionRangeEvaluator.SelectBestMatch(request.VersionRange, versionList.Versions);
+
+        _logger.LogDebug(
+            "Version resolution for {PackageId} on feed {FeedName}: range={VersionRange}, selected={SelectedVersion}, candidates={CandidateCount}",
+            request.Id,
+            feed.Name,
+            request.VersionRange,
+            result.SelectedVersion ?? "(none)",
+            result.CandidateCount);
+
+        if (!result.Success)
+        {
+            _logger.LogWarning(
+                "Version resolution failed for {PackageId} on feed {FeedName}: {FailureReason}",
+                request.Id,
+                feed.Name,
+                result.FailureReason);
+            return null;
+        }
+
+        return new VersionSelection(result.SelectedVersion!, result.CandidateCount, CacheHit: false);
+    }
+
+    internal readonly record struct VersionSelection(string Version, int EnumeratedCount, bool CacheHit);
 
     /// <summary>
     /// Resolves the install path for a package from the specified feed.
@@ -155,5 +211,6 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     /// Gets the number of resolution attempts for the specified package.
     /// </summary>
     public int GetAttempts(string packageId) => _attempts.GetValueOrDefault(packageId, 0);
+
 }
 

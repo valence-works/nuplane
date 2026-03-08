@@ -1,8 +1,11 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Feeds;
 using Nuplane.Runtime.Feeds.Configuration;
 using Nuplane.Runtime.Feeds.Policy;
+using Nuplane.Runtime.Feeds.Versioning;
 using Nuplane.Runtime.Tests.TestSupport;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
@@ -33,7 +36,12 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
         var opts = new FeedResolutionOptions();
         opts.Feeds.Add(localFeed);
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(opts));
-        var resolver = new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(opts), policy);
+        var resolver = new MultiFeedPackageResolver(
+            new OptionsWrapper<FeedResolutionOptions>(opts), policy,
+            Substitute.For<IRemotePackageAcquirer>(),
+            Substitute.For<IFeedVersionEnumerator>(),
+            Substitute.For<IVersionRangeEvaluator>(),
+            NullLogger<MultiFeedPackageResolver>.Instance);
 
         var request = new PackageRequest("MyPlugin", "1.0.0", "local-drop", PackageUpdatePolicy.Exact, "local-source");
         var result = await resolver.ResolveAsync(request, CancellationToken.None);
@@ -53,7 +61,12 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
         var opts = new FeedResolutionOptions();
         opts.Feeds.Add(localFeed);
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(opts));
-        var resolver = new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(opts), policy);
+        var resolver = new MultiFeedPackageResolver(
+            new OptionsWrapper<FeedResolutionOptions>(opts), policy,
+            Substitute.For<IRemotePackageAcquirer>(),
+            Substitute.For<IFeedVersionEnumerator>(),
+            Substitute.For<IVersionRangeEvaluator>(),
+            NullLogger<MultiFeedPackageResolver>.Instance);
 
         // No explicit feed name; resolution should still find the local feed via priority ordering
         var request = new PackageRequest("MyPlugin", "1.0.0", FeedName: null, PackageUpdatePolicy.Exact, "local-source");
@@ -69,7 +82,12 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
     {
         var opts = new FeedResolutionOptions();
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(opts));
-        var resolver = new MultiFeedPackageResolver(new OptionsWrapper<FeedResolutionOptions>(opts), policy);
+        var resolver = new MultiFeedPackageResolver(
+            new OptionsWrapper<FeedResolutionOptions>(opts), policy,
+            Substitute.For<IRemotePackageAcquirer>(),
+            Substitute.For<IFeedVersionEnumerator>(),
+            Substitute.For<IVersionRangeEvaluator>(),
+            NullLogger<MultiFeedPackageResolver>.Instance);
 
         var request = new PackageRequest("MyPlugin", "1.0.0", FeedName: null, PackageUpdatePolicy.Exact, "local-source");
 

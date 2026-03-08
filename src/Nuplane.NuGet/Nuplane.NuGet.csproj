@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="NuGet.Protocol" />
+    <PackageReference Include="NuGet.Versioning" />
+    <ProjectReference Include="..\Nuplane.Runtime\Nuplane.Runtime.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Nuplane.NuGet.Tests" />
+    <InternalsVisibleTo Include="Nuplane" />
+  </ItemGroup>
+
+</Project>

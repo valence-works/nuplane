@@ -97,13 +97,13 @@ contract and/or integration tests as applicable.
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T025 [P] [US2] Unit tests for `IncludePatterns` version range syntax validation: valid NuGet ranges pass, invalid syntax fails, empty range (no version) passes, bare version passes in `test/Nuplane.Runtime.Tests/Configuration/FeedResolutionOptionsValidatorTests.cs`
-- [ ] T026 [P] [US2] Extend `FeedRuleDesiredSourceTests` for version range parsing: exact version `[2.0.0]`, bounded range `[1.0.0, 2.0.0)`, bare version `1.0.0`, wildcard with range `MyPackage.* [1.0.0,)` in `test/Nuplane.Runtime.Tests/Sources/FeedRuleDesiredSourceTests.cs`
-- [ ] T027 [P] [US2] Extend `MultiFeedPackageResolverTests` for range-based resolution: bounded range selects best match, exact version resolves, no-match returns failure with diagnostic, bare version resolves in `test/Nuplane.Runtime.Tests/Feeds/MultiFeedPackageResolverTests.cs`
+- [X] T025 [P] [US2] Unit tests for `IncludePatterns` version range syntax validation: valid NuGet ranges pass, invalid syntax fails, empty range (no version) passes, bare version passes in `test/Nuplane.Runtime.Tests/Configuration/FeedResolutionOptionsValidatorTests.cs`
+- [X] T026 [P] [US2] Extend `FeedRuleDesiredSourceTests` for version range parsing: exact version `[2.0.0]`, bounded range `[1.0.0, 2.0.0)`, bare version `1.0.0`, wildcard with range `MyPackage.* [1.0.0,)` in `test/Nuplane.Runtime.Tests/Sources/FeedRuleDesiredSourceTests.cs`
+- [X] T027 [P] [US2] Extend `MultiFeedPackageResolverTests` for range-based resolution: bounded range selects best match, exact version resolves, no-match returns failure with diagnostic, bare version resolves in `test/Nuplane.Runtime.Tests/Feeds/MultiFeedPackageResolverTests.cs`
 
 ### Implementation for User Story 2
 
-- [ ] T028 [US2] Extend `FeedResolutionOptionsValidator` to validate version range syntax in `IncludePatterns` entries using `IVersionRangeEvaluator.IsValidRange()`, reject invalid ranges at startup with descriptive error per FR-007 in `src/Nuplane/Options/Validation/FeedResolutionOptionsValidator.cs`
+- [X] T028 [US2] Extend `FeedResolutionOptionsValidator` to validate version range syntax in `IncludePatterns` entries using `IVersionRangeEvaluator.IsValidRange()`, reject invalid ranges at startup with descriptive error per FR-007 in `src/Nuplane/Options/Validation/FeedResolutionOptionsValidator.cs`
 
 **Checkpoint**: Operators can pin versions or constrain ranges via configuration. Invalid syntax is caught at startup.
 
@@ -117,7 +117,7 @@ contract and/or integration tests as applicable.
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T029 [US3] Add reconciliation re-resolution tests: (1) updated feed with new version within range → resolves to newer version, (2) new version outside range → active version unchanged, (3) latest (no range) with newer version on feed → updates to newer version in `test/Nuplane.Runtime.Tests/Feeds/MultiFeedPackageResolverTests.cs`
+- [X] T029 [US3] Add reconciliation re-resolution tests: (1) updated feed with new version within range → resolves to newer version, (2) new version outside range → active version unchanged, (3) latest (no range) with newer version on feed → updates to newer version in `test/Nuplane.Runtime.Tests/Feeds/MultiFeedPackageResolverTests.cs`
 
 **Checkpoint**: System stays current with feed updates within configured constraints.
 
@@ -127,8 +127,8 @@ contract and/or integration tests as applicable.
 
 **Purpose**: Cleanup deprecated code, validate end-to-end scenarios
 
-- [ ] T030 [P] Simplify or remove `NuGetVersionRangeParser.SelectVersion` (version selection now delegated to `Nuplane.NuGet` via `IVersionRangeEvaluator`) in `src/Nuplane.Runtime/Versioning/NuGetVersionRangeParser.cs`
-- [ ] T031 Run `quickstart.md` validation scenarios: latest version resolution, pinned version `[x.y.z]`, bounded range `[x, y)`, bare version shorthand, cache TTL configuration, invalid syntax startup rejection, and verify existing `DirectoryNupkgDesiredSource` tests pass (FR-009 regression check)
+- [X] T030 [P] Simplify or remove `NuGetVersionRangeParser.SelectVersion` (version selection now delegated to `Nuplane.NuGet` via `IVersionRangeEvaluator`) in `src/Nuplane.Runtime/Versioning/NuGetVersionRangeParser.cs`
+- [X] T031 Run `quickstart.md` validation scenarios: latest version resolution, pinned version `[x.y.z]`, bounded range `[x, y)`, bare version shorthand, cache TTL configuration, invalid syntax startup rejection, and verify existing `DirectoryNupkgDesiredSource` tests pass (FR-009 regression check)
 
 ---
 

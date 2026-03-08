@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Nuplane.Runtime.Reconciliation;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
@@ -9,6 +10,7 @@ public sealed class CoreRuntimeRegistrationIsolationTests
     public async Task AddNuplane_ResolvesAndRunsWithoutLoadingRegistration()
     {
         var services = new ServiceCollection();
+        services.AddLogging();
         var stateRoot = Path.Combine(Path.GetTempPath(), "nuplane-core-registration-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(stateRoot);
         var stateFilePath = Path.Combine(stateRoot, "state.json");
