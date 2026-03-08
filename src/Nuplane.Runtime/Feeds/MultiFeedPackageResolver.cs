@@ -153,7 +153,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
             }
 
             var localVersion = NuGetVersionRangeParser.SelectVersion(request.VersionRange);
-            return VersionSelection.Succeeded(localVersion, 0, CacheHit: false);
+            return VersionSelection.Succeeded(localVersion, 0, cacheHit: false);
         }
 
         var stopwatch = Stopwatch.StartNew();
@@ -199,11 +199,11 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         string? FailureReason,
         string DecisionPath)
     {
-        public static VersionSelection Succeeded(string version, int enumeratedCount, bool CacheHit) =>
-            new(true, version, enumeratedCount, CacheHit, null, "ordered-candidate-success");
+        public static VersionSelection Succeeded(string version, int enumeratedCount, bool cacheHit) =>
+            new(true, version, enumeratedCount, cacheHit, null, "ordered-candidate-success");
 
-        public static VersionSelection Failed(string decisionPath, string? failureReason, int enumeratedCount = 0, bool CacheHit = false) =>
-            new(false, null, enumeratedCount, CacheHit, failureReason, decisionPath);
+        public static VersionSelection Failed(string decisionPath, string? failureReason, int enumeratedCount = 0, bool cacheHit = false) =>
+            new(false, null, enumeratedCount, cacheHit, failureReason, decisionPath);
     }
 
     /// <summary>
