@@ -27,7 +27,7 @@ As an operator hosting Nuplane, I want reconciliation state to persist automatic
 
 1. **Given** Nuplane starts without an explicit state file path, **When** the first successful reconciliation persists state, **Then** the system writes store state to a deterministic default path under the host application directory.
 2. **Given** state was previously persisted to the default path, **When** the host restarts, **Then** the system loads the existing state before serving reconciliation-dependent operations.
-3. **Given** an operator does not set a state file path, **When** startup completes, **Then** the system emits an informational log showing that the default state persistence path is in effect.
+3. **Given** an operator does not set a state file path, **When** the store registry is first used, **Then** the system emits an informational log showing that the default state persistence path is in effect.
 
 ---
 
@@ -43,7 +43,7 @@ As an operator who wants short-lived or test-only behavior, I want to explicitly
 
 1. **Given** the operator enables explicit in-memory mode, **When** reconciliation records active versions, failures, or source snapshots, **Then** the system keeps that data only in memory for the lifetime of the process.
 2. **Given** the operator enables explicit in-memory mode, **When** the host restarts, **Then** the system starts with empty store state and does not attempt to read a persisted state file.
-3. **Given** explicit in-memory mode is enabled, **When** startup completes, **Then** the system emits a warning or informational log stating that reconciliation state persistence is disabled by configuration.
+3. **Given** explicit in-memory mode is enabled, **When** the store registry is first used, **Then** the system emits a warning or informational log stating that reconciliation state persistence is disabled by configuration.
 
 ---
 
@@ -59,15 +59,16 @@ As an operator supplying custom persistence settings, I want invalid or conflict
 
 1. **Given** an operator configures a blank custom state path, **When** startup validation runs, **Then** startup fails with a descriptive error.
 2. **Given** an operator configures both a custom persisted path and explicit in-memory mode, **When** startup validation runs, **Then** startup fails because the persistence mode is ambiguous.
-3. **Given** an operator configures a valid custom path, **When** startup completes, **Then** the system uses that path instead of the default path and logs the effective persistence mode.
+3. **Given** an operator configures a valid custom path, **When** the store registry is first used, **Then** the system uses that path instead of the default path and logs the effective persistence mode.
 
 ### Edge Cases
 
 - What happens when the default path's parent directory does not exist? The system MUST create required directories before the first successful save.
 - What happens when the configured custom path is relative? The system MUST resolve it deterministically against the host application root before use and log the effective resolved path.
 - What happens when the process cannot write to the resolved persistence location? The system MUST fail the reconciliation/apply operation, surface the failure clearly, and MUST NOT silently downgrade to in-memory persistence.
-- What happens when a host upgrades from the current behavior where no path means in-memory only? The new default MUST be documented and observable in startup logs so the behavior change is visible.
+- What happens when a host upgrades from the current behavior where no path means in-memory only? The new default MUST be documented and observable in effective store activation logs so the behavior change is visible.
 - What happens when multiple reconciliation writes occur with the same effective path? Existing serialized store updates MUST remain deterministic and preserve store consistency.
+- What happens when the host starts but no reconciliation-dependent store operation occurs yet? Store-state loading remains lazy and does not block host startup; the first reconciliation-dependent store operation triggers effective settings resolution and load.
 
 ## Requirements *(mandatory)*
 
@@ -75,11 +76,11 @@ As an operator supplying custom persistence settings, I want invalid or conflict
 
 - **FR-001**: The setup-to-runtime configuration pipeline MUST determine a single effective store persistence mode at startup: custom persisted path, default persisted path, or explicit in-memory mode.
 - **FR-002**: When no explicit state file path is configured and explicit in-memory mode is not enabled, the system MUST resolve a deterministic default state file path of `.nuplane/store-state.json` under the host application's base directory, using a `.nuplane` storage folder convention consistent with existing package storage defaults.
-- **FR-003**: The store registry runtime component MUST load persisted reconciliation state from the effective path during startup and MUST save updated active versions, last-known-good versions, failure records, and source snapshots back to that same path during runtime operations.
+- **FR-003**: The store registry runtime component MUST lazily load persisted reconciliation state from the effective path before the first reconciliation-dependent store read or write, and MUST save updated active versions, last-known-good versions, failure records, and source snapshots back to that same path during runtime operations.
 - **FR-004**: The setup and runtime configuration surface MUST expose a `UseInMemoryStore` boolean option that explicitly disables state persistence and runs the store registry in in-memory mode without requiring omission of the path setting as a side effect.
 - **FR-005**: Startup options validation MUST reject blank custom paths, the combination of `UseInMemoryStore=true` with `StateFilePath` set, and any other persistence configuration that cannot be interpreted into a single effective mode. Validation failures MUST prevent startup.
 - **FR-006**: When a custom state path is provided, the system MUST use that path instead of the default path and MUST preserve existing configured-path behavior.
-- **FR-007**: Startup logging MUST record the effective persistence mode and, when persistence is enabled, the resolved state file path so operators can verify how reconciliation state will be stored.
+- **FR-007**: When the effective store persistence settings are first activated, the system MUST record the effective persistence mode and, when persistence is enabled, the resolved state file path so operators can verify how reconciliation state will be stored.
 - **FR-008**: The defaulting behavior MUST be applied before reconciliation services and operational projections begin using store state, so all runtime components observe the same effective persistence configuration.
 
 ### Operational & Safety Requirements *(mandatory)*
@@ -87,7 +88,7 @@ As an operator supplying custom persistence settings, I want invalid or conflict
 - **OSR-001**: Effective state path resolution MUST be deterministic. Given the same configuration and host root, startup MUST resolve the same persistence mode and path every time.
 - **OSR-002**: Existing transactional store safety guarantees MUST remain unchanged. Persisted state updates MUST continue to protect last-known-good tracking and MUST NOT introduce partial-write ambiguity into reconciliation flows. If persistence is enabled and a store-state write fails, the reconciliation/apply operation MUST fail rather than report success with non-durable state.
 - **OSR-003**: State persistence configuration MUST remain local to the host environment. No new external sources, network locations, or secret-bearing storage mechanisms may be introduced by this feature.
-- **OSR-004**: The feature MUST emit structured logs for startup mode selection and persistence failures so operators can distinguish persisted mode from explicit in-memory mode and diagnose write failures quickly.
+- **OSR-004**: The feature MUST emit structured logs for effective store activation mode selection and persistence failures so operators can distinguish persisted mode from explicit in-memory mode and diagnose write failures quickly.
 - **OSR-005**: Automated tests MUST cover default-path resolution, explicit in-memory mode, configured-path override, startup validation failures, and restart behavior proving persisted state is reloaded when persistence is enabled.
 
 ### Key Entities *(include if feature involves data)*
@@ -104,7 +105,7 @@ As an operator supplying custom persistence settings, I want invalid or conflict
 - **SC-002**: After a host restart, persisted active-version and last-known-good state are restored from the default or custom path in 100% of automated restart validation scenarios.
 - **SC-003**: Operators who want ephemeral behavior can enable explicit in-memory mode and observe zero persisted state files created across restart validation scenarios.
 - **SC-004**: Invalid or conflicting persistence configuration is rejected before runtime services begin processing in 100% of validation test scenarios.
-- **SC-005**: Startup logs always disclose the effective persistence mode, and when persistence is enabled, the resolved state path, making the runtime behavior directly observable.
+- **SC-005**: Effective store activation logs always disclose the persistence mode, and when persistence is enabled, the resolved state path, making the runtime behavior directly observable without blocking host startup.
 
 ## Assumptions
 

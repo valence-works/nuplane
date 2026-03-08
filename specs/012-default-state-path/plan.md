@@ -7,7 +7,7 @@
 
 ## Summary
 
-Nuplane currently treats an omitted `StateFilePath` as an implicit in-memory store. That makes persistence optional by accident and silently drops reconciliation state across restarts. This feature changes the startup pipeline to resolve a single effective persistence mode: use the configured path, otherwise default to `.nuplane/store-state.json` under `AppContext.BaseDirectory`, unless the operator explicitly opts into `UseInMemoryStore=true`. The design keeps low-level `StoreRegistry(string? stateFilePath)` test semantics intact, introduces centralized effective-settings resolution and `IValidateOptions<T>` validation, adds structured startup logging for the resolved mode/path, and preserves transactional safety by failing reconciliation if a persisted-state write fails.
+Nuplane currently treats an omitted `StateFilePath` as an implicit in-memory store. That makes persistence optional by accident and silently drops reconciliation state across restarts. This feature changes the configuration pipeline to resolve a single effective persistence mode: use the configured path, otherwise default to `.nuplane/store-state.json` under `AppContext.BaseDirectory`, unless the operator explicitly opts into `UseInMemoryStore=true`. The design keeps low-level `StoreRegistry(string? stateFilePath)` test semantics intact, introduces centralized effective-settings resolution and `IValidateOptions<T>` validation, keeps store-state loading lazy on first store activation rather than eagerly blocking host startup, adds structured first-activation logging for the resolved mode/path, and preserves transactional safety by failing reconciliation if a persisted-state write fails.
 
 ## Technical Context
 
@@ -28,7 +28,7 @@ Nuplane currently treats an omitted `StateFilePath` as an implicit in-memory sto
 - **Deterministic reconciliation**: ✅ PASS — Effective state mode/path is resolved once from stable startup inputs. Repeated starts with the same config and host root produce the same persistence mode and path. No new retry loops are introduced.
 - **Transactional store safety**: ✅ PASS — State persistence remains inside `StoreRegistry` save points. Persisted-mode write failure continues to propagate as an operation failure rather than silently downgrading to ephemeral state, preserving LKG correctness.
 - **Source integrity**: ✅ PASS — Feature is local filesystem only. No new external sources, credentials, or trust boundaries are introduced.
-- **Observability**: ✅ PASS — Plan includes structured startup logs for effective persistence mode/path and explicit failure logs for persistence errors.
+- **Observability**: ✅ PASS — Plan includes structured first-activation logs for effective persistence mode/path and explicit failure logs for persistence errors.
 - **Test discipline**: ✅ PASS — Unit, configuration-boundary, and integration restart tests are defined, including regression coverage for the missing-path bug.
 - **Decomposition discipline**: ✅ PASS — Requirements map to concrete elements: setup options, store options, validators, builder methods, runtime resolver/settings, store registry, and config/boundary tests. `UseInMemoryStore` has explicit consumer and validator tasks.
 - **Options validation discipline**: ✅ PASS — Options stay data-only. Validation is implemented via `IValidateOptions<NuplaneSetupOptions>` and `IValidateOptions<StoreRegistryOptions>`, with `ValidateOnStart()` added for store options.
@@ -61,7 +61,7 @@ src/
 │       └── NuplaneSetupOptionsValidator.cs      # reject blank path + in-memory/path conflicts
 └── Nuplane.Store/
     └── State/
-        ├── StoreRegistry.cs                     # consume effective settings and log resolved mode/path
+        ├── StoreRegistry.cs                     # lazily consume effective settings and log resolved mode/path on first activation
         ├── StoreRegistryOptions.cs              # add UseInMemoryStore and updated docs
         ├── StoreRegistryOptionsValidator.cs     # NEW: runtime/store-level options validation
         └── EffectiveStorePersistenceSettings.cs # NEW: resolved mode/path model (or equivalent helper)
@@ -87,7 +87,7 @@ test/
 - **Deterministic reconciliation**: ✅ PASS — Chosen design resolves effective settings once and exposes a single normalized path to runtime consumers.
 - **Transactional store safety**: ✅ PASS — `StoreRegistry` remains the only writer; persisted-mode save exceptions continue to fail the operation.
 - **Source integrity**: ✅ PASS — Still local-only filesystem behavior.
-- **Observability**: ✅ PASS — Logging moved into the effective-settings/store activation path, which guarantees a single authoritative description of the chosen mode.
+- **Observability**: ✅ PASS — Logging occurs when effective store settings are first activated, which guarantees a single authoritative description of the chosen mode without requiring eager startup loading.
 - **Test discipline**: ✅ PASS — Plan includes regression tests for default path behavior, explicit in-memory opt-out, configuration precedence, and restart reload semantics.
 - **Decomposition discipline**: ✅ PASS — Config shape, validation, runtime resolution, builder API, and tests are separated into artifact-level tasks.
 - **Options validation discipline**: ✅ PASS — Store options now participate in fail-fast startup validation alongside setup options.
