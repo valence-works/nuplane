@@ -161,7 +161,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         var result = _versionRangeEvaluator.SelectBestMatch(request.VersionRange, versionList.Versions);
         stopwatch.Stop();
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Version resolution for {PackageId} on feed {FeedName}: range={VersionRange}, selected={SelectedVersion}, candidates={CandidateCount}, cacheHit={CacheHit}, durationMs={DurationMs}",
             request.Id,
             feed.Name,
