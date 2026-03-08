@@ -58,7 +58,7 @@ Defines the external configuration and builder contract for selecting store pers
 - No external network locations, remote storage, or cloud endpoints are supported or introduced.
 - No credentials, secrets, or authentication tokens are stored in or required by the state file.
 - The state file contains reconciliation metadata only (active versions, LKG versions, failure records, source snapshots).
-- The persistence path MUST NOT be configurable to point outside the host's trust boundary (e.g., no URL schemes, no UNC paths in cross-platform contexts).
+- The persistence path is intended to resolve to a local filesystem path within the host's trust boundary; URL schemes or UNC-style remote paths are not supported by this contract and may not be validated or restricted by the runtime.
 
 ## Builder Contract
 
