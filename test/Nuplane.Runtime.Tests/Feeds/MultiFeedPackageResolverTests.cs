@@ -259,6 +259,39 @@ public sealed class MultiFeedPackageResolverTests
     }
 
     [Fact]
+    public async Task ResolveAsync_RemoteFeed_EnumerationException_RecordsFailureDecision()
+    {
+        var options = new FeedResolutionOptions();
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json"), FeedTrustLevel.Trusted));
+        var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
+        var policy = new FeedResolutionPolicy(wrappedOptions);
+
+        var enumerator = Substitute.For<IFeedVersionEnumerator>();
+        enumerator.EnumerateVersionsAsync(Arg.Any<FeedDefinition>(), "MyPlugin", Arg.Any<CancellationToken>())
+            .Returns<Task<PackageVersionList>>(_ => throw new InvalidOperationException("Feed timeout"));
+
+        var resolver = new MultiFeedPackageResolver(
+            wrappedOptions,
+            policy,
+            Substitute.For<IRemotePackageAcquirer>(),
+            enumerator,
+            Substitute.For<IVersionRangeEvaluator>(),
+            NullLogger<MultiFeedPackageResolver>.Instance);
+
+        var request = new PackageRequest("MyPlugin", "", "remote", PackageUpdatePolicy.Range, "source");
+
+        var exception = await Assert.ThrowsAsync<NoEligibleFeedException>(
+            () => resolver.ResolveAsync(request, CancellationToken.None));
+
+        Assert.Contains("Feed timeout", exception.Message, StringComparison.Ordinal);
+        Assert.True(resolver.TryGetDecision("MyPlugin", out var decision));
+        Assert.Equal("remote", decision.SelectedFeed);
+        Assert.Equal("version-enumeration-error", decision.DecisionPath);
+        Assert.False(decision.FeedUnavailable);
+        Assert.Contains("Feed timeout", decision.FailureReason, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ResolveAsync_LocalFeed_WithoutExplicitVersion_ThrowsClearError()
     {
         var options = new FeedResolutionOptions();
