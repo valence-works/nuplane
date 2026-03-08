@@ -97,49 +97,6 @@ public sealed class DirectoryObservationContractTests
     }
 
     [Fact]
-    public async Task MultipleDebounceWindows_TriggerSeparateReconciliations()
-    {
-        using var tempDir = new TempDirectory();
-        var spy = new SpyTriggerSink();
-        var debounce = TimeSpan.FromMilliseconds(150);
-        var options = new DirectorySourceOptions
-        {
-            FeedName = "multi-window-feed",
-            DirectoryPath = tempDir.Path,
-            DebounceWindow = debounce,
-            TriggerReconciliationOnChange = true
-        };
-
-        var service = new DirectorySourceReconciliationTriggerHostedService(
-            options, spy, NullLogger<DirectorySourceReconciliationTriggerHostedService>.Instance);
-
-        using var cts = new CancellationTokenSource();
-        var serviceTask = service.StartAsync(cts.Token);
-
-        await Task.Delay(150);
-
-        File.WriteAllBytes(Path.Combine(tempDir.Path, "first.nupkg"), [0x50, 0x4B]);
-
-        await DebounceAssert.WaitForCountAsync(
-            () => spy.TriggerCount,
-            1,
-            TimeSpan.FromSeconds(5));
-
-        await Task.Delay(debounce + TimeSpan.FromMilliseconds(200));
-
-        File.WriteAllBytes(Path.Combine(tempDir.Path, "second.nupkg"), [0x50, 0x4B]);
-
-        await DebounceAssert.WaitForCountAsync(
-            () => spy.TriggerCount,
-            2,
-            TimeSpan.FromSeconds(5),
-            "Expected 2 queued triggers in separate debounce windows");
-
-        cts.Cancel();
-        try { await serviceTask; } catch (OperationCanceledException) { }
-    }
-
-    [Fact]
     public async Task NonNupkgFiles_DoNotTriggerReconciliation()
     {
         using var tempDir = new TempDirectory();

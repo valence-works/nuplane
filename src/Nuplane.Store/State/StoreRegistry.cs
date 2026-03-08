@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Microsoft.Extensions.Logging;
 
 namespace Nuplane.Store.State;
 
@@ -7,31 +8,43 @@ namespace Nuplane.Store.State;
 /// last-known-good versions, failure records, and source snapshots. Supports lazy loading
 /// from a serialized state file.
 /// </summary>
-public sealed class StoreRegistry : IStoreRegistry
+public sealed partial class StoreRegistry : IStoreRegistry
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly IStoreStateSerializer _serializer;
     private readonly string? _stateFilePath;
+    private readonly ILogger<StoreRegistry> _logger;
+    private readonly EffectiveStorePersistenceSettings? _effectiveSettings;
     private StoreStateRecord _currentState = StoreStateRecord.Empty();
     private bool _loaded;
+    private bool _activationLogged;
 
     /// <summary>
     /// Initializes a new instance of <see cref="StoreRegistry"/> with a serializer and optional state file path.
+    /// This constructor preserves low-level test composition semantics where <see langword="null"/>
+    /// means in-memory mode.
     /// </summary>
     public StoreRegistry(IStoreStateSerializer serializer, string? stateFilePath)
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _stateFilePath = stateFilePath;
+        _logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<StoreRegistry>.Instance;
     }
 
     /// <summary>
-    /// Initializes a new instance of <see cref="StoreRegistry"/> with a serializer and options.
+    /// Initializes a new instance of <see cref="StoreRegistry"/> with resolved effective persistence settings.
+    /// Used by DI-based construction to apply default path behavior and structured activation logging.
     /// </summary>
-    public StoreRegistry(IStoreStateSerializer serializer, StoreRegistryOptions options)
+    public StoreRegistry(
+        IStoreStateSerializer serializer,
+        EffectiveStorePersistenceSettings effectiveSettings,
+        ILogger<StoreRegistry> logger)
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-        ArgumentNullException.ThrowIfNull(options);
-        _stateFilePath = options.StateFilePath;
+        ArgumentNullException.ThrowIfNull(effectiveSettings);
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _effectiveSettings = effectiveSettings;
+        _stateFilePath = effectiveSettings.ResolvedStateFilePath;
     }
 
 
@@ -192,6 +205,12 @@ public sealed class StoreRegistry : IStoreRegistry
 
     private async Task EnsureLoadedUnderLockAsync(CancellationToken cancellationToken)
     {
+        if (!_activationLogged && _effectiveSettings is not null)
+        {
+            _activationLogged = true;
+            LogEffectiveSettings(_effectiveSettings);
+        }
+
         if (string.IsNullOrWhiteSpace(_stateFilePath) || _loaded)
         {
             return;
@@ -200,4 +219,32 @@ public sealed class StoreRegistry : IStoreRegistry
         _currentState = await _serializer.LoadAsync(_stateFilePath, cancellationToken);
         _loaded = true;
     }
+
+    private void LogEffectiveSettings(EffectiveStorePersistenceSettings settings)
+    {
+        switch (settings.Mode)
+        {
+            case StorePersistenceMode.DefaultPath:
+                LogDefaultPathActivated(_logger, settings.ResolvedStateFilePath!);
+                break;
+            case StorePersistenceMode.ConfiguredPath:
+                LogConfiguredPathActivated(_logger, settings.ResolvedStateFilePath!);
+                break;
+            case StorePersistenceMode.InMemory:
+                LogInMemoryModeActivated(_logger);
+                break;
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Store persistence activated with default path: {StateFilePath}")]
+    private static partial void LogDefaultPathActivated(ILogger logger, string stateFilePath);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Store persistence activated with configured path: {StateFilePath}")]
+    private static partial void LogConfiguredPathActivated(ILogger logger, string stateFilePath);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Store persistence is disabled by configuration (UseInMemoryStore=true). Reconciliation state will not survive host restart.")]
+    private static partial void LogInMemoryModeActivated(ILogger logger);
 }

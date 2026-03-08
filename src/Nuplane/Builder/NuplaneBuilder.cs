@@ -66,7 +66,7 @@ public sealed class NuplaneBuilder
 
     /// <summary>
     /// Specifies the file path for persisting store state across host restarts.
-    /// When not set, state is kept in memory only.
+    /// When not set, state persists to the default <c>.nuplane/store-state.json</c> location.
     /// </summary>
     /// <param name="path">The file path for the state file.</param>
     public NuplaneBuilder WithStateFile(string path)
@@ -75,6 +75,19 @@ public sealed class NuplaneBuilder
         Services.Configure<StoreRegistryOptions>(options =>
         {
             options.StateFilePath = path;
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Explicitly disables store state persistence, running the store registry in memory only.
+    /// No state file is created or read, and reconciliation state is lost on host restart.
+    /// </summary>
+    public NuplaneBuilder UseInMemoryStore()
+    {
+        Services.Configure<StoreRegistryOptions>(options =>
+        {
+            options.UseInMemoryStore = true;
         });
         return this;
     }

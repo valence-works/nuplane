@@ -1,6 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Nuplane" />
+    <InternalsVisibleTo Include="Nuplane.Store.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
     <ProjectReference Include="..\Nuplane.Abstractions\Nuplane.Abstractions.csproj" />
   </ItemGroup>
 

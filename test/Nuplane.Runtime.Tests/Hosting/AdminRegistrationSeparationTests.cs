@@ -9,7 +9,7 @@ public sealed class AdminRegistrationSeparationTests
     public void AddNuplane_DoesNotRegisterAdminOperationsByDefault()
     {
         var services = new ServiceCollection();
-
+        services.AddLogging();
         services.AddNuplane(_ => { });
 
         using var provider = services.BuildServiceProvider();
@@ -21,7 +21,7 @@ public sealed class AdminRegistrationSeparationTests
     public void AddNuplaneAdmin_RegistersAdminOperationsWhenOptedIn()
     {
         var services = new ServiceCollection();
-
+        services.AddLogging();
         services.AddNuplane(_ => { });
         services.AddNuplaneAdmin();
 
