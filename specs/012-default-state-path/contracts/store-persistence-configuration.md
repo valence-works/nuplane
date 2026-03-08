@@ -52,6 +52,14 @@ Defines the external configuration and builder contract for selecting store pers
 - Programmatic builder configuration and `Nuplane:Setup` translation continue to override directly bound `Nuplane:StoreRegistry` values, matching existing `StateFilePath` behavior.
 - The final resolved `StoreRegistryOptions` object is the single source of truth for runtime behavior.
 
+## Trust & Security Boundary
+
+- Store persistence operates exclusively on the local filesystem under the host application's base directory.
+- No external network locations, remote storage, or cloud endpoints are supported or introduced.
+- No credentials, secrets, or authentication tokens are stored in or required by the state file.
+- The state file contains reconciliation metadata only (active versions, LKG versions, failure records, source snapshots).
+- The persistence path MUST NOT be configurable to point outside the host's trust boundary (e.g., no URL schemes, no UNC paths in cross-platform contexts).
+
 ## Builder Contract
 
 ### Persisted path

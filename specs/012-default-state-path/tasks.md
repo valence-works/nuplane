@@ -17,9 +17,9 @@
 
 **Purpose**: Establish shared option shapes and the resolved persistence model used by all stories.
 
-- [ ] T001 Extend `StoreRegistryOptions` with `UseInMemoryStore` and updated XML docs in `src/Nuplane.Store/State/StoreRegistryOptions.cs`
-- [ ] T002 [P] Extend `NuplaneSetupOptions` with `UseInMemoryStore` and updated XML docs in `src/Nuplane/Setup/NuplaneSetupOptions.cs`
-- [ ] T003 [P] Create `EffectiveStorePersistenceSettings` and `StorePersistenceMode` in `src/Nuplane.Store/State/EffectiveStorePersistenceSettings.cs`
+- [X] T001 Extend `StoreRegistryOptions` with `UseInMemoryStore` and updated XML docs in `src/Nuplane.Store/State/StoreRegistryOptions.cs`
+- [X] T002 [P] Extend `NuplaneSetupOptions` with `UseInMemoryStore` and updated XML docs in `src/Nuplane/Setup/NuplaneSetupOptions.cs`
+- [X] T003 [P] Create `EffectiveStorePersistenceSettings` and `StorePersistenceMode` in `src/Nuplane.Store/State/EffectiveStorePersistenceSettings.cs`
 
 ---
 
@@ -29,15 +29,15 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T004 Add `UseInMemoryStore()` builder API in `src/Nuplane/Builder/NuplaneBuilder.cs`
-- [ ] T005 Update setup-to-store translation, `StoreRegistry` construction, and `StoreRegistryOptions` `ValidateOnStart()` wiring in `src/Nuplane/NuplaneServiceCollectionExtensions.cs`
-- [ ] T006 Implement `StoreRegistryOptionsValidator` in `src/Nuplane.Store/State/StoreRegistryOptionsValidator.cs`
-- [ ] T007 Update `NuplaneSetupOptionsValidator` for blank-path and in-memory/path conflict rules in `src/Nuplane/Setup/NuplaneSetupOptionsValidator.cs`
-- [ ] T008 [P] Add `NuplaneSetupOptionsValidator` regression tests in `test/Nuplane.Runtime.Tests/Configuration/NuplaneSetupOptionsValidatorTests.cs`
-- [ ] T009 [P] Add `StoreRegistryOptionsValidator` regression tests in `test/Nuplane.Store.Tests/State/StoreRegistryOptionsValidatorTests.cs`
-- [ ] T010 Add persisted-write failure regression coverage for transactional safety in `test/Nuplane.Store.Tests/State/StoreRegistryTests.cs`
-- [ ] T011 [P] Document the local-only persistence boundary and no-secret handling in `specs/012-default-state-path/contracts/store-persistence-configuration.md`
-- [ ] T012 [P] Add first-activation logging assertions for effective persistence mode observability in `test/Nuplane.Runtime.Tests/Configuration/ConfigurationDrivenRegistrationTests.cs`
+- [X] T004 Add `UseInMemoryStore()` builder API in `src/Nuplane/Builder/NuplaneBuilder.cs`
+- [X] T005 Update setup-to-store translation, `StoreRegistry` construction, and `StoreRegistryOptions` `ValidateOnStart()` wiring in `src/Nuplane/NuplaneServiceCollectionExtensions.cs`
+- [X] T006 Implement `StoreRegistryOptionsValidator` in `src/Nuplane.Store/State/StoreRegistryOptionsValidator.cs`
+- [X] T007 Update `NuplaneSetupOptionsValidator` for blank-path and in-memory/path conflict rules in `src/Nuplane/Setup/NuplaneSetupOptionsValidator.cs`
+- [X] T008 [P] Add `NuplaneSetupOptionsValidator` regression tests in `test/Nuplane.Runtime.Tests/Configuration/NuplaneSetupOptionsValidatorTests.cs`
+- [X] T009 [P] Add `StoreRegistryOptionsValidator` regression tests in `test/Nuplane.Store.Tests/State/StoreRegistryOptionsValidatorTests.cs`
+- [X] T010 Add persisted-write failure regression coverage for transactional safety in `test/Nuplane.Store.Tests/State/StoreRegistryTests.cs`
+- [X] T011 [P] Document the local-only persistence boundary and no-secret handling in `specs/012-default-state-path/contracts/store-persistence-configuration.md`
+- [X] T012 [P] Add first-activation logging assertions for effective persistence mode observability in `test/Nuplane.Runtime.Tests/Configuration/ConfigurationDrivenRegistrationTests.cs`
 
 **Checkpoint**: Foundation ready - user story implementation can now begin.
 
@@ -53,15 +53,15 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T013 [P] [US1] Add default-path save/load tests in `test/Nuplane.Store.Tests/State/StoreRegistryTests.cs`
-- [ ] T014 [P] [US1] Add configuration-boundary tests for default-path resolution and precedence in `test/Nuplane.Runtime.Tests/Configuration/ConfigurationDrivenRegistrationTests.cs`
-- [ ] T015 [US1] Add restart-load regression tests for implicit default persistence in `test/Nuplane.Integration.Tests/Reconciliation/StartupLoadingEventIntegrationTests.cs`
+- [X] T013 [P] [US1] Add default-path save/load tests in `test/Nuplane.Store.Tests/State/StoreRegistryTests.cs`
+- [X] T014 [P] [US1] Add configuration-boundary tests for default-path resolution and precedence in `test/Nuplane.Runtime.Tests/Configuration/ConfigurationDrivenRegistrationTests.cs`
+- [X] T015 [US1] Add restart-load regression tests for implicit default persistence in `test/Nuplane.Integration.Tests/Reconciliation/StartupLoadingEventIntegrationTests.cs`
 
 ### Implementation for User Story 1
 
-- [ ] T016 [US1] Implement default-path derivation and full-path normalization in `src/Nuplane.Store/State/EffectiveStorePersistenceSettings.cs`
-- [ ] T017 [US1] Update `StoreRegistry` to lazily resolve/load effective persisted settings on first store access and log default/configured persisted modes in `src/Nuplane.Store/State/StoreRegistry.cs`
-- [ ] T018 [US1] Finalize service registration to resolve effective persisted settings for DI-created registries in `src/Nuplane/NuplaneServiceCollectionExtensions.cs`
+- [X] T016 [US1] Implement default-path derivation and full-path normalization in `src/Nuplane.Store/State/EffectiveStorePersistenceSettings.cs`
+- [X] T017 [US1] Update `StoreRegistry` to lazily resolve/load effective persisted settings on first store access and log default/configured persisted modes in `src/Nuplane.Store/State/StoreRegistry.cs`
+- [X] T018 [US1] Finalize service registration to resolve effective persisted settings for DI-created registries in `src/Nuplane/NuplaneServiceCollectionExtensions.cs`
 
 **Checkpoint**: User Story 1 should be functional and testable independently.
 
@@ -75,15 +75,15 @@
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T019 [P] [US2] Add explicit in-memory mode tests in `test/Nuplane.Store.Tests/State/StoreRegistryTests.cs`
-- [ ] T020 [P] [US2] Add setup/builder precedence tests for `UseInMemoryStore` in `test/Nuplane.Runtime.Tests/Configuration/ConfigurationDrivenRegistrationTests.cs`
-- [ ] T021 [US2] Add restart regression tests proving explicit in-memory mode starts empty in `test/Nuplane.Integration.Tests/Reconciliation/StartupLoadingEventIntegrationTests.cs`
+- [X] T019 [P] [US2] Add explicit in-memory mode tests in `test/Nuplane.Store.Tests/State/StoreRegistryTests.cs`
+- [X] T020 [P] [US2] Add setup/builder precedence tests for `UseInMemoryStore` in `test/Nuplane.Runtime.Tests/Configuration/ConfigurationDrivenRegistrationTests.cs`
+- [X] T021 [US2] Add restart regression tests proving explicit in-memory mode starts empty in `test/Nuplane.Integration.Tests/Reconciliation/StartupLoadingEventIntegrationTests.cs`
 
 ### Implementation for User Story 2
 
-- [ ] T022 [US2] Implement explicit in-memory builder configuration in `src/Nuplane/Builder/NuplaneBuilder.cs`
-- [ ] T023 [US2] Update setup translation and precedence handling for `UseInMemoryStore` in `src/Nuplane/NuplaneServiceCollectionExtensions.cs`
-- [ ] T024 [US2] Update `StoreRegistry` to honor explicit in-memory mode on first store access and emit the corresponding activation log in `src/Nuplane.Store/State/StoreRegistry.cs`
+- [X] T022 [US2] Implement explicit in-memory builder configuration in `src/Nuplane/Builder/NuplaneBuilder.cs`
+- [X] T023 [US2] Update setup translation and precedence handling for `UseInMemoryStore` in `src/Nuplane/NuplaneServiceCollectionExtensions.cs`
+- [X] T024 [US2] Update `StoreRegistry` to honor explicit in-memory mode on first store access and emit the corresponding activation log in `src/Nuplane.Store/State/StoreRegistry.cs`
 
 **Checkpoint**: User Stories 1 and 2 should both work independently.
 
@@ -97,15 +97,15 @@
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T025 [P] [US3] Add setup-validator tests for blank paths and in-memory/path conflicts in `test/Nuplane.Runtime.Tests/Configuration/NuplaneSetupOptionsValidatorTests.cs`
-- [ ] T026 [P] [US3] Add store-validator tests for blank paths and in-memory/path conflicts in `test/Nuplane.Store.Tests/State/StoreRegistryOptionsValidatorTests.cs`
-- [ ] T027 [US3] Add startup fail-fast boundary tests for invalid persistence config in `test/Nuplane.Runtime.Tests/Configuration/ConfigurationDrivenRegistrationTests.cs`
+- [X] T025 [P] [US3] Add setup-validator tests for blank paths and in-memory/path conflicts in `test/Nuplane.Runtime.Tests/Configuration/NuplaneSetupOptionsValidatorTests.cs`
+- [X] T026 [P] [US3] Add store-validator tests for blank paths and in-memory/path conflicts in `test/Nuplane.Store.Tests/State/StoreRegistryOptionsValidatorTests.cs`
+- [X] T027 [US3] Add startup fail-fast boundary tests for invalid persistence config in `test/Nuplane.Runtime.Tests/Configuration/ConfigurationDrivenRegistrationTests.cs`
 
 ### Implementation for User Story 3
 
-- [ ] T028 [US3] Implement setup-surface persistence conflict validation in `src/Nuplane/Setup/NuplaneSetupOptionsValidator.cs`
-- [ ] T029 [US3] Implement runtime/store persistence conflict validation in `src/Nuplane.Store/State/StoreRegistryOptionsValidator.cs`
-- [ ] T030 [US3] Register `StoreRegistryOptionsValidator` and enforce store-options fail-fast startup in `src/Nuplane/NuplaneServiceCollectionExtensions.cs`
+- [X] T028 [US3] Implement setup-surface persistence conflict validation in `src/Nuplane/Setup/NuplaneSetupOptionsValidator.cs`
+- [X] T029 [US3] Implement runtime/store persistence conflict validation in `src/Nuplane.Store/State/StoreRegistryOptionsValidator.cs`
+- [X] T030 [US3] Register `StoreRegistryOptionsValidator` and enforce store-options fail-fast startup in `src/Nuplane/NuplaneServiceCollectionExtensions.cs`
 
 **Checkpoint**: All user stories should now be independently functional.
 
@@ -115,8 +115,8 @@
 
 **Purpose**: Final documentation alignment and end-to-end validation across user stories.
 
-- [ ] T031 [P] Align persistence configuration examples and validation notes in `specs/012-default-state-path/quickstart.md`
-- [ ] T032 Run quickstart validation scenarios from `specs/012-default-state-path/quickstart.md`
+- [X] T031 [P] Align persistence configuration examples and validation notes in `specs/012-default-state-path/quickstart.md`
+- [X] T032 Run quickstart validation scenarios from `specs/012-default-state-path/quickstart.md`
 
 ---
 

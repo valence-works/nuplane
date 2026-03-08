@@ -97,6 +97,72 @@ public sealed class StartupLoadingEventIntegrationTests
     }
 
     [Fact]
+    public async Task RestartedHost_WithDefaultPath_ReloadsPersistedState()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "nuplane-default-restart", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        var defaultStatePath = Path.Combine(tempRoot, ".nuplane", "store-state.json");
+
+        try
+        {
+            var source = new StaticSource([
+                new("plugin-default", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "test-source")
+            ]);
+
+            // First run: persist state via a default-style path
+            var firstObserver = new SpyPackageLoadingObserver();
+            var firstLoader = new FakePackageLoader();
+            var firstService = CreateService(source, firstLoader, firstObserver, defaultStatePath);
+            await firstService.TriggerAsync(new(TriggerType.Startup), CancellationToken.None);
+
+            Assert.Single(firstObserver.ReceivedEvents);
+            Assert.True(File.Exists(defaultStatePath), "State file should exist after first reconciliation");
+
+            // Second run: restart with same path — state should be reloaded
+            var secondObserver = new SpyPackageLoadingObserver();
+            var secondLoader = new FakePackageLoader();
+            var secondService = CreateService(source, secondLoader, secondObserver, defaultStatePath);
+
+            var secondResult = await secondService.TriggerAsync(new(TriggerType.Startup), CancellationToken.None);
+
+            Assert.False(secondResult.Skipped);
+            Assert.Empty(secondResult.ChangeSet.Added);
+            Assert.Single(secondObserver.ReceivedEvents);
+            Assert.Equal("plugin-default", secondObserver.ReceivedEvents[0].LoadedPackages[0].PackageId);
+        }
+        finally
+        {
+            try { Directory.Delete(tempRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task RestartedHost_WithInMemoryMode_StartsEmpty()
+    {
+        var source = new StaticSource([
+            new("plugin-ephemeral", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "test-source")
+        ]);
+
+        // First run: persist state in memory only (null path)
+        var firstObserver = new SpyPackageLoadingObserver();
+        var firstLoader = new FakePackageLoader();
+        var firstService = CreateService(source, firstLoader, firstObserver, stateFilePath: null);
+        var firstResult = await firstService.TriggerAsync(new(TriggerType.Startup), CancellationToken.None);
+
+        Assert.Single(firstResult.ChangeSet.Added);
+
+        // Second run: simulate restart — in-memory mode starts fresh
+        var secondObserver = new SpyPackageLoadingObserver();
+        var secondLoader = new FakePackageLoader();
+        var secondService = CreateService(source, secondLoader, secondObserver, stateFilePath: null);
+        var secondResult = await secondService.TriggerAsync(new(TriggerType.Startup), CancellationToken.None);
+
+        // Should see the package as "added" again since no prior state was loaded
+        Assert.Single(secondResult.ChangeSet.Added);
+        Assert.Equal("plugin-ephemeral", secondResult.ChangeSet.Added[0].Id);
+    }
+
+    [Fact]
     public async Task LoaderFailure_PropagatesIntoCoreObservers_StoreState_AndReconciliationResult()
     {
         var source = new StaticSource([

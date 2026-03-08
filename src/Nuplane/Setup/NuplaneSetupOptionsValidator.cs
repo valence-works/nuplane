@@ -21,6 +21,11 @@ internal sealed class NuplaneSetupOptionsValidator : IValidateOptions<NuplaneSet
             errors.Add("Nuplane setup StateFilePath cannot be blank when provided.");
         }
 
+        if (options.UseInMemoryStore && !string.IsNullOrEmpty(options.StateFilePath))
+        {
+            errors.Add("Nuplane setup UseInMemoryStore cannot be combined with a non-empty StateFilePath.");
+        }
+
         var feedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < options.Feeds.Count; i++)
         {

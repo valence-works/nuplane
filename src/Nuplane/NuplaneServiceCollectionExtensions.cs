@@ -130,6 +130,7 @@ public static class NuplaneServiceCollectionExtensions
         services.AddSingleton<IValidateOptions<FeedResolutionOptions>, FeedCredentialCompositeValidator>();
         services.AddSingleton<IValidateOptions<ConvergenceOptions>, ConvergenceOptionsValidator>();
         services.AddSingleton<IValidateOptions<TrustedSourcePolicyOptions>, TrustedSourcePolicyOptionsValidator>();
+        services.AddSingleton<IValidateOptions<StoreRegistryOptions>, StoreRegistryOptionsValidator>();
 
         // ── Options ────────────────────────────────────────────────────────────────
         services.AddOptions<NuplaneSetupOptions>().ValidateOnStart();
@@ -141,7 +142,7 @@ public static class NuplaneServiceCollectionExtensions
         services.AddOptions<CleanupPolicyOptions>().ValidateOnStart();
         services.AddOptions<ConvergenceOptions>().ValidateOnStart();
         services.AddOptions<TrustedSourcePolicyOptions>().ValidateOnStart();
-        services.AddOptions<StoreRegistryOptions>();
+        services.AddOptions<StoreRegistryOptions>().ValidateOnStart();
 
         // ── Core services ─────────────────────────────────────────────────────────
         services.AddSingleton<DesiredManifestReader>();
@@ -192,10 +193,14 @@ public static class NuplaneServiceCollectionExtensions
                 sp.GetRequiredService<ILogger<MultiFeedPackageResolver>>()));
         services.AddSingleton<StoreStateSerializer>();
         services.AddSingleton<IStoreStateSerializer>(sp => sp.GetRequiredService<StoreStateSerializer>());
+        services.AddSingleton<EffectiveStorePersistenceSettings>(sp =>
+            EffectiveStorePersistenceSettings.Resolve(
+                sp.GetRequiredService<IOptions<StoreRegistryOptions>>().Value));
         services.AddSingleton<StoreRegistry>(sp =>
             new(
                 sp.GetRequiredService<IStoreStateSerializer>(),
-                sp.GetRequiredService<IOptions<StoreRegistryOptions>>().Value));
+                sp.GetRequiredService<EffectiveStorePersistenceSettings>(),
+                sp.GetRequiredService<ILogger<StoreRegistry>>()));
         services.AddSingleton<IStoreRegistry>(sp => sp.GetRequiredService<StoreRegistry>());
         services.AddSingleton<FailureRecorder>();
         services.AddSingleton<IFailureRecorder>(sp => sp.GetRequiredService<FailureRecorder>());
@@ -241,6 +246,11 @@ public static class NuplaneServiceCollectionExtensions
         if (!string.IsNullOrWhiteSpace(stateFilePath))
         {
             builder.WithStateFile(stateFilePath);
+        }
+
+        if (configuration.GetValue<bool?>(nameof(NuplaneSetupOptions.UseInMemoryStore)) is true)
+        {
+            builder.UseInMemoryStore();
         }
 
         NuplaneFeedSetupConfiguration.ApplyConfiguredFeeds(builder, configuration);
