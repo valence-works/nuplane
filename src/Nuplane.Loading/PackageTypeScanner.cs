@@ -1,5 +1,5 @@
-using System.Runtime.Loader;
 using System.Reflection;
+using System.Runtime.Loader;
 
 namespace Nuplane.Loading;
 
@@ -41,30 +41,67 @@ public sealed class PackageTypeScanner : IPackageTypeScanner
 
         foreach (var assembly in loadContext.Assemblies.ToArray())
         {
-            Type[] candidates;
-            try
+            foreach (var type in GetCandidateTypes(assembly))
             {
-                candidates = assembly.GetExportedTypes();
-            }
-            catch (ReflectionTypeLoadException ex)
-            {
-                candidates = ex.Types.Where(type => type is not null).Cast<Type>().ToArray();
-            }
-
-            foreach (var type in candidates)
-            {
-                if (type.IsAbstract || type.IsInterface)
+                if (!CanInspect(type))
                 {
                     continue;
                 }
 
-                if (interfaceType.IsAssignableFrom(type))
+                try
                 {
-                    discovered.Add(type);
+                    if (interfaceType.IsAssignableFrom(type))
+                    {
+                        discovered.Add(type);
+                    }
+                }
+                catch (Exception ex) when (IsSkippableTypeInspectionException(ex))
+                {
+                    continue;
                 }
             }
         }
 
         return discovered;
     }
+
+    private static IReadOnlyList<Type> GetCandidateTypes(Assembly assembly)
+    {
+        try
+        {
+            return assembly.GetExportedTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            return ex.Types.Where(type => type is not null).Cast<Type>().ToArray();
+        }
+        catch (Exception ex) when (IsSkippableAssemblyInspectionException(ex))
+        {
+            return [];
+        }
+    }
+
+    private static bool CanInspect(Type type)
+    {
+        try
+        {
+            return !type.IsAbstract && !type.IsInterface;
+        }
+        catch (Exception ex) when (IsSkippableTypeInspectionException(ex))
+        {
+            return false;
+        }
+    }
+
+    private static bool IsSkippableAssemblyInspectionException(Exception ex) =>
+        ex is FileNotFoundException
+            or FileLoadException
+            or TypeLoadException
+            or BadImageFormatException;
+
+    private static bool IsSkippableTypeInspectionException(Exception ex) =>
+        ex is FileNotFoundException
+            or FileLoadException
+            or TypeLoadException
+            or ReflectionTypeLoadException;
 }

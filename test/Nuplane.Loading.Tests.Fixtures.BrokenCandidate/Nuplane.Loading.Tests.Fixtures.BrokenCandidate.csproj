@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Nuplane.Loading.Tests.Fixtures.BrokenDependency\Nuplane.Loading.Tests.Fixtures.BrokenDependency.csproj" />
+  </ItemGroup>
+</Project>
+

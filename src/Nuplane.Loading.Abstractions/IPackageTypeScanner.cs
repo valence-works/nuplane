@@ -25,7 +25,10 @@ public interface IPackageTypeScanner
     /// <typeparam name="TInterface">The contract type to scan for.</typeparam>
     /// <param name="packageId">The package identifier.</param>
     /// <param name="version">The package version.</param>
-    /// <returns>The discovered matching types.</returns>
+    /// <returns>
+    /// The discovered matching types. Scanning is best-effort: assemblies or exported types that cannot be inspected
+    /// because dependent assemblies are unavailable are skipped, and any remaining resolvable matches are returned.
+    /// </returns>
     IReadOnlyList<Type> FindTypes<TInterface>(string packageId, string version);
 
     /// <summary>
@@ -34,6 +37,9 @@ public interface IPackageTypeScanner
     /// <param name="interfaceType">The interface or base type to scan for.</param>
     /// <param name="packageId">The package identifier.</param>
     /// <param name="version">The package version.</param>
-    /// <returns>The discovered matching types.</returns>
+    /// <returns>
+    /// The discovered matching types. Scanning is best-effort: assemblies or exported types that cannot be inspected
+    /// because dependent assemblies are unavailable are skipped, and any remaining resolvable matches are returned.
+    /// </returns>
     IReadOnlyList<Type> FindTypes(Type interfaceType, string packageId, string version);
 }
