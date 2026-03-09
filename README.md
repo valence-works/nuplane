@@ -219,6 +219,108 @@ For unrestricted feeds, prefer one of these explicit forms:
 - configuration alias: `"IncludeAll": true`
 - fluent API: `feed.IncludeAll()`
 
+---
+
+## Kubernetes And Restart Persistence
+
+Nuplane keeps runtime state and extracted packages on disk. If a pod restarts with an empty filesystem, Nuplane will need to reconcile and acquire packages again.
+
+To avoid that, persist both of these paths on a mounted volume:
+
+- the package install root
+- the store state file
+
+Recommended approach:
+
+- use one persistent volume per replica
+- mount it at a stable path such as `/var/lib/nuplane`
+- configure package extraction under `/var/lib/nuplane/packages`
+- configure store state at `/var/lib/nuplane/store-state.json`
+
+Example configuration:
+
+```json
+{
+  "Nuplane": {
+    "Setup": {
+      "StateFilePath": "/var/lib/nuplane/store-state.json",
+      "AutomaticReconciliation": true,
+      "PollInterval": "00:01:00",
+      "Feeds": [
+        {
+          "Name": "nuget.org",
+          "ServiceIndex": "https://api.nuget.org/v3/index.json",
+          "IncludePatterns": [
+            "*"
+          ]
+        }
+      ]
+    },
+    "FeedResolution": {
+      "PackageInstallRoot": "/var/lib/nuplane/packages"
+    }
+  }
+}
+```
+
+Operational guidance:
+
+- prefer a per-replica persistent volume, not a single shared read-write-many package store across replicas
+- for Kubernetes, a `StatefulSet` with one volume per replica is the best fit when warm restarts matter
+- if `UseInMemoryStore=true` is enabled, restart persistence is intentionally disabled
+- if `PackageInstallRoot` is not persisted, Nuplane may need to download and extract packages again after pod restart even if the store state file is preserved
+
+With both paths persisted, a restarted pod can typically reload prior active state and reuse previously extracted packages instead of rebuilding its local package store from scratch.
+
+Example `StatefulSet` sketch:
+
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nuplane-host
+spec:
+  serviceName: nuplane-host
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nuplane-host
+  template:
+    metadata:
+      labels:
+        app: nuplane-host
+    spec:
+      containers:
+      - name: app
+        image: your-registry/nuplane-host:latest
+        volumeMounts:
+        - name: nuplane-data
+          mountPath: /var/lib/nuplane
+        env:
+        - name: Nuplane__Setup__StateFilePath
+          value: /var/lib/nuplane/store-state.json
+        - name: Nuplane__FeedResolution__PackageInstallRoot
+          value: /var/lib/nuplane/packages
+  volumeClaimTemplates:
+  - metadata:
+      name: nuplane-data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+```
+
+This keeps each replica's package cache and persisted state warm across pod restarts while avoiding a shared multi-writer package store.
+
+Storage planning notes:
+
+- size the PVC for more than just the currently active package set; leave headroom for staged downloads, retained previous versions, and transient extraction work
+- Nuplane may keep prior package versions on disk to preserve transactional safety and last-known-good behavior
+- if you enable cleanup policies, align retention settings with your rollback expectations and available disk budget
+- if you do not enable cleanup, expect disk usage to grow over time as new package versions are acquired
+
 > Breaking change: omitted include filters no longer mean “accept everything.”
 > A feed without `IncludePatterns`, `IncludeAll`, or `feed.IncludeAll()` now contributes no packages.
 
