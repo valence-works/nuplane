@@ -1,5 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <Title>Nuplane Store</Title>
+    <Description>Deterministic on-disk package store for Nuplane with state tracking and atomic package activation support.</Description>
+    <PackageTags>$(NuplanePackageTags);store;state-management;filesystem;runtime</PackageTags>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Nuplane" />
     <InternalsVisibleTo Include="Nuplane.Store.Tests" />

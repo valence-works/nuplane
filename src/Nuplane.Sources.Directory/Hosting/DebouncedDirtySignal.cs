@@ -1,6 +1,6 @@
 using System.Threading.Channels;
 
-namespace Nuplane.Hosting;
+namespace Nuplane.Sources.Directory.Hosting;
 
 /// <summary>
 /// Coalesces repeated signals into a single settled notification after a quiet debounce window.

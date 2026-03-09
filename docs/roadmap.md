@@ -56,6 +56,19 @@ Implementation notes:
 **Optional (Phase 3+):**
 - `Nuplane.Loading` — optional assembly loading/unload attempts (ALC-based)
 
+### Module Pattern
+
+Nuplane modules are logical feature areas that may span multiple packages.
+
+Rules:
+- A module owns its module-specific options, primitives, hosted services, and registration helpers.
+- The core `Nuplane` package owns runtime composition and generic feed abstractions, but it should not retain implementation details for optional or source-specific modules.
+- Module-specific registration APIs should live with the module package itself, typically as `IServiceCollection` extensions.
+- Builder-level composition in `Nuplane` may delegate into module-owned registration services, but the module remains the owner of the concrete implementation types.
+
+Example:
+- The directory-source module is centered on `Nuplane.Sources.Directory` and owns directory options, watcher hosting, and module registration extensions.
+
 ---
 
 ## Repo Layout
@@ -87,6 +100,7 @@ samples/
     Nuplane.Sample.AspNetCore/
 test/
     Nuplane.Runtime.Tests/
+  Nuplane.Sources.Directory.Tests/
     Nuplane.Store.Tests/
     Nuplane.NuGet.Tests/
     Nuplane.Integration.Tests/

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <ProjectReference Include="..\..\src\Nuplane.Sources.Directory\Nuplane.Sources.Directory.csproj" />
+    <ProjectReference Include="..\..\src\Nuplane.Runtime\Nuplane.Runtime.csproj" />
+    <ProjectReference Include="..\..\src\Nuplane.Abstractions\Nuplane.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

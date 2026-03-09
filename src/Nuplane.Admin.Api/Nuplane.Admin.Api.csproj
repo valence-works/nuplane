@@ -4,6 +4,9 @@
     <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Title>Nuplane Admin API</Title>
+    <Description>ASP.NET Core endpoint extensions for exposing Nuplane admin snapshot and manual reconciliation APIs.</Description>
+    <PackageTags>$(NuplanePackageTags);aspnetcore;minimal-api;admin;operations</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

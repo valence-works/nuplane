@@ -1,14 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Nuplane.Abstractions;
 using Nuplane.Builder;
-using Nuplane.DirectorySource;
-using Nuplane.DirectorySource.Hosting;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Feeds.Configuration;
 using Nuplane.Runtime.Sources;
 using Nuplane.Sources.Directory;
+using Nuplane.Sources.Directory.Registration;
 
 namespace Nuplane.Feeds.Registration;
 
@@ -30,53 +27,13 @@ internal static class NuplaneFeedRegistrationServices
     {
         if (feed.DirectoryOptions is { } dirOpts)
         {
-            var normalizedPath = Path.GetFullPath(dirOpts.DirectoryPath);
-            var feedUri = new Uri("file:///" + normalizedPath.Replace('\\', '/').TrimStart('/'));
-
-            services.PostConfigure<FeedResolutionOptions>(opts =>
-            {
-                if (!opts.Feeds.Any(f => string.Equals(f.Name, feed.Name, StringComparison.OrdinalIgnoreCase)))
-                {
-                    opts.Feeds.Add(new(feed.Name, feedUri, feed.TrustLevel, feed.Credentials));
-                }
-            });
-
-            var capturedFeed = feed;
-            var capturedPath = normalizedPath;
-            services.AddSingleton<IDesiredPackageSource>(sp =>
-            {
-                var probeLogger = sp.GetService<ILogger<NupkgFileStabilityProbe>>();
-                var probe = probeLogger is not null ? new NupkgFileStabilityProbe(probeLogger) : null;
-                var patterns = DistinctNonBlank(capturedFeed.IncludePatterns).ToArray();
-                return new DirectoryNupkgDesiredSource(
-                    capturedFeed.Name,
-                    capturedPath,
-                    patterns,
-                    sp.GetService<ILogger<DirectoryNupkgDesiredSource>>(),
-                    capturedFeed.Name,
-                    probe);
-            });
-
-            if (dirOpts.Watch)
-            {
-                NuplaneServiceCollectionExtensions.EnsureTriggerIngressServices(services);
-
-                var capturedOptions = new DirectorySourceOptions
-                {
-                    DirectoryPath = normalizedPath,
-                    FeedName = feed.Name,
-                    SourceName = feed.Name,
-                    TriggerReconciliationOnChange = true,
-                    DebounceWindow = dirOpts.DebounceWindow,
-                };
-
-                services.AddSingleton<IHostedService>(sp =>
-                    new DirectorySourceReconciliationTriggerHostedService(
-                        capturedOptions,
-                        sp.GetRequiredService<global::Nuplane.Runtime.Reconciliation.IReconciliationTriggerIngress>(),
-                        sp.GetRequiredService<ILogger<DirectorySourceReconciliationTriggerHostedService>>(),
-                        sp.GetService<global::Nuplane.Runtime.Health.ObservationDegradationTracker>()));
-            }
+            DirectorySourceRegistrationServices.RegisterFeed(
+                services,
+                feed.Name,
+                dirOpts,
+                feed.IncludePatterns,
+                feed.TrustLevel,
+                feed.Credentials);
 
             return;
         }

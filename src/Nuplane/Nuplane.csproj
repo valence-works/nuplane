@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <Title>Nuplane</Title>
+    <Description>Primary DI and configuration entrypoint for Nuplane runtime services in .NET applications.</Description>
+    <PackageTags>$(NuplanePackageTags);dependency-injection;configuration;hosting;runtime</PackageTags>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Nuplane.Runtime.Tests" />
     <InternalsVisibleTo Include="Nuplane.Admin" />

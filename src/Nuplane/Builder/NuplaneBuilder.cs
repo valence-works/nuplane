@@ -35,7 +35,6 @@ public sealed class NuplaneBuilder
             options.PollInterval = interval;
         });
 
-        NuplaneServiceCollectionExtensions.EnsureTriggerIngressServices(Services);
         Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, ReconciliationHostedService>());
         return this;
     }

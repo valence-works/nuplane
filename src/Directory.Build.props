@@ -7,6 +7,28 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <PackageId>$(MSBuildProjectName)</PackageId>
+    <Authors>Valence Works</Authors>
+    <Company>Valence Works</Company>
+    <Product>Nuplane</Product>
+    <PackageProjectUrl>https://www.nuplane.io</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/valence-works/nuplane</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageDescription Condition="'$(PackageDescription)' == '' and '$(Description)' != ''">$(Description)</PackageDescription>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>logo.png</PackageIcon>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <NuplanePackageTags>nuplane;dotnet;nuget;runtime-control-plane;package-management</NuplanePackageTags>
   </PropertyGroup>
-</Project>
 
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../README.md" Pack="true" PackagePath="" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)../LICENSE" Pack="true" PackagePath="" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)../logo.png" Pack="true" PackagePath="" Visible="false" />
+  </ItemGroup>
+</Project>

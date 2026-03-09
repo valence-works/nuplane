@@ -84,7 +84,4 @@ public static class NuplaneServiceCollectionExtensions
         NuplaneFeedRegistrationServices.ConfigureSourceTrustOptions(services);
         return services;
     }
-
-    internal static void EnsureTriggerIngressServices(IServiceCollection services) =>
-        NuplaneCoreRuntimeRegistrationServices.EnsureTriggerIngressServices(services);
 }

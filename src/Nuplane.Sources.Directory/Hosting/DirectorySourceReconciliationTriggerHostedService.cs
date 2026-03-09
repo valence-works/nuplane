@@ -1,16 +1,15 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Nuplane.Hosting;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.Models;
 
-namespace Nuplane.DirectorySource.Hosting;
+namespace Nuplane.Sources.Directory.Hosting;
 
 /// <summary>
 /// A hosted service that monitors a directory source and queues reconciliation triggers when it changes.
 /// </summary>
-internal sealed class DirectorySourceReconciliationTriggerHostedService(
+public sealed class DirectorySourceReconciliationTriggerHostedService(
     DirectorySourceOptions options,
     IReconciliationTriggerIngress triggerSink,
     ILogger<DirectorySourceReconciliationTriggerHostedService> logger,
@@ -24,9 +23,10 @@ internal sealed class DirectorySourceReconciliationTriggerHostedService(
 
     private FileSystemWatcher? _watcher;
 
+    /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        Directory.CreateDirectory(_options.DirectoryPath);
+        System.IO.Directory.CreateDirectory(_options.DirectoryPath);
         var observationOrigin = FeedObservationOrigin.DirectoryWatcher(_options.FeedName);
 
         try

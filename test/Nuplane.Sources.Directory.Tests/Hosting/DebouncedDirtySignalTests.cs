@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using Nuplane.Hosting;
+using Nuplane.Sources.Directory.Hosting;
 
-namespace Nuplane.Runtime.Tests.Extensions;
+namespace Nuplane.Sources.Directory.Tests.Hosting;
 
 /// <summary>
 /// Contract tests for the debounced dirty-signal primitive used by directory observation.

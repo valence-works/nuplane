@@ -1,4 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Title>Nuplane Loading Hosting</Title>
+    <Description>Hosting and builder extensions for enabling Nuplane package autoloading and load-event observers in .NET applications.</Description>
+    <PackageTags>$(NuplanePackageTags);loading;hosting;extensions;dependency-injection</PackageTags>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Nuplane.Loading.Tests" />
     <InternalsVisibleTo Include="Nuplane.Integration.Tests" />

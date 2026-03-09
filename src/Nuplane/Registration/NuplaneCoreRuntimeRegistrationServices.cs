@@ -18,6 +18,7 @@ internal static class NuplaneCoreRuntimeRegistrationServices
         NuplaneFeedVersioningRegistrationServices.RegisterPackageResolution(services);
         NuplaneStorePersistenceRegistrationServices.RegisterStorePersistence(services);
         NuplaneReconciliationObservabilityRegistrationServices.RegisterRuntime(services);
+        EnsureTriggerIngressServices(services);
     }
 
     internal static void EnsureTriggerIngressServices(IServiceCollection services)

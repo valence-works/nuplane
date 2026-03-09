@@ -1,4 +1,5 @@
 using Nuplane.Abstractions;
+using Nuplane.Sources.Directory.Builder;
 
 namespace Nuplane.Builder;
 

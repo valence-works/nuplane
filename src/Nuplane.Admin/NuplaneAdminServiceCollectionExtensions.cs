@@ -20,7 +20,6 @@ public static class NuplaneAdminServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        NuplaneServiceCollectionExtensions.EnsureTriggerIngressServices(services);
         services.AddSingleton<OperationalSnapshotProjector>();
         services.AddSingleton<ManualReconcileCoordinator>();
         services.AddSingleton<INuplaneAdminOperations, NuplaneAdminOperations>();

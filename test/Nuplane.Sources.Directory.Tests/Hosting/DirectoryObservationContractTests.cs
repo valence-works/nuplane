@@ -1,15 +1,14 @@
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
-using Nuplane.DirectorySource;
-using Nuplane.DirectorySource.Hosting;
 using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Tests.TestSupport;
+using Nuplane.Runtime.Reconciliation.Models;
+using Nuplane.Sources.Directory.Hosting;
+using Nuplane.Sources.Directory.Tests.TestSupport;
 
-namespace Nuplane.Runtime.Tests.Extensions;
+namespace Nuplane.Sources.Directory.Tests.Hosting;
 
 /// <summary>
 /// Contract tests for directory observation coalescing/debounce invariants.
-/// Verifies that bursty file-system events are coalesced to at most one
-/// trigger emission per debounce window.
 /// </summary>
 public sealed class DirectoryObservationContractTests
 {
@@ -134,6 +133,7 @@ public sealed class DirectoryObservationContractTests
         private readonly List<ReconciliationTrigger> _triggers = [];
 
         public int TriggerCount => _triggerCount;
+
         public IReadOnlyList<ReconciliationTrigger> Triggers
         {
             get

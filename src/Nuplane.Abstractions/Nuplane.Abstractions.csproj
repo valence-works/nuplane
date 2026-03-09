@@ -1,3 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Title>Nuplane Abstractions</Title>
+    <Description>Contracts and data models for Nuplane package reconciliation, desired-state sources, and observer callbacks.</Description>
+    <PackageTags>$(NuplanePackageTags);abstractions;contracts;observers</PackageTags>
+  </PropertyGroup>
 </Project>
 

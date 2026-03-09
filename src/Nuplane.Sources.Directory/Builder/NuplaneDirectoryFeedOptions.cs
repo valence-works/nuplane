@@ -1,4 +1,4 @@
-namespace Nuplane.Builder;
+namespace Nuplane.Sources.Directory.Builder;
 
 /// <summary>
 /// Configuration options for a directory-backed local feed when using the builder API.

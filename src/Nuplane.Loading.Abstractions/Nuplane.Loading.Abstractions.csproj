@@ -2,6 +2,9 @@
 
     <PropertyGroup>
         <rootnamespace>Nuplane.Loading</rootnamespace>
+        <Title>Nuplane Loading Abstractions</Title>
+        <Description>Contracts and models for Nuplane runtime assembly loading, package load events, and shared assembly policies.</Description>
+        <PackageTags>$(NuplanePackageTags);loading;assemblyloadcontext;contracts;plugins</PackageTags>
     </PropertyGroup>
 
     <ItemGroup>
