@@ -1,11 +1,24 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Sources;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 
 public sealed class CoreRuntimeRegistrationIsolationTests
 {
+    [Fact]
+    public void AddNuplane_RegistersDesiredStateAggregationAndDryRunPlanningServices()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(_ => { });
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.NotNull(provider.GetRequiredService<IDesiredStateAggregator>());
+        Assert.NotNull(provider.GetRequiredService<IDryRunPlanner>());
+    }
+
     [Fact]
     public async Task AddNuplane_ResolvesAndRunsWithoutLoadingRegistration()
     {
