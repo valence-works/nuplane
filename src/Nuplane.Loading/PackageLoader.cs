@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using System.Runtime.Versioning;
 using Nuplane.Abstractions;
 
 namespace Nuplane.Loading;
@@ -53,7 +54,7 @@ public sealed class PackageLoader : IPackageLoader
 
             try
             {
-                var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath);
+                var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath, package.Id);
                 var context = new PackageAssemblyLoadContext(mainAssemblyPath, sharedPolicy, _matcher);
                 var assemblyName = AssemblyName.GetAssemblyName(mainAssemblyPath);
                 context.LoadFromAssemblyName(assemblyName);
@@ -95,7 +96,7 @@ public sealed class PackageLoader : IPackageLoader
         var key = BuildKey(packageId, version);
         _sessions.TryRemove(key, out _);
 
-        if (_contexts.TryRemove(key, out var removed) && removed is not null)
+        if (_contexts.TryRemove(key, out var removed))
         {
             context = new(key, removed);
             return true;
@@ -109,7 +110,7 @@ public sealed class PackageLoader : IPackageLoader
     public bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context)
     {
         var key = BuildKey(packageId, version);
-        if (_contexts.TryGetValue(key, out var existing) && existing is not null)
+        if (_contexts.TryGetValue(key, out var existing))
         {
             context = new(key, existing);
             return true;
@@ -121,19 +122,82 @@ public sealed class PackageLoader : IPackageLoader
 
     private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";
 
-    private static string ResolveMainAssemblyPath(string installPath)
+    private static string ResolveMainAssemblyPath(string installPath, string packageId) =>
+        ResolveMainAssemblyPath(installPath, packageId, hostTargetFrameworkOverride: null);
+
+    private static string ResolveMainAssemblyPath(string installPath, string packageId, string? hostTargetFrameworkOverride)
     {
         if (string.IsNullOrWhiteSpace(installPath) || !Directory.Exists(installPath))
         {
             throw new DirectoryNotFoundException($"Install path '{installPath}' does not exist.");
         }
 
-        // Prefer assemblies under a conventional "lib" folder (e.g., lib/<tfm>/) if present.
         var libPath = Path.Combine(installPath, "lib");
-        var searchRoot = Directory.Exists(libPath) ? libPath : installPath;
+        if (Directory.Exists(libPath) && TryResolveFrameworkSpecificAssemblyPath(libPath, installPath, packageId, hostTargetFrameworkOverride, out var frameworkSpecificAssemblyPath))
+        {
+            return frameworkSpecificAssemblyPath;
+        }
 
-        var assemblies = Directory
-            .EnumerateFiles(searchRoot, "*.dll", SearchOption.AllDirectories)
+        var searchRoot = Directory.Exists(libPath) ? libPath : installPath;
+        return ResolveAssemblyFromCandidates(
+            Directory.EnumerateFiles(searchRoot, "*.dll", SearchOption.AllDirectories),
+            installPath,
+            packageId,
+            selectedFramework: null);
+    }
+
+    private static bool TryResolveFrameworkSpecificAssemblyPath(
+        string libPath,
+        string installPath,
+        string packageId,
+        string? hostTargetFrameworkOverride,
+        out string assemblyPath)
+    {
+        var frameworkDirectories = Directory
+            .EnumerateDirectories(libPath)
+            .Select(FrameworkDirectory.Create)
+            .Where(candidate => candidate is not null)
+            .Cast<FrameworkDirectory>()
+            .ToArray();
+
+        if (frameworkDirectories.Length == 0)
+        {
+            assemblyPath = string.Empty;
+            return false;
+        }
+
+        var hostFramework = ResolveHostFramework(hostTargetFrameworkOverride);
+        if (hostFramework is null)
+        {
+            throw new InvalidOperationException(
+                $"Nuplane could not determine the current host target framework while resolving '{packageId}' from '{installPath}'.");
+        }
+
+        var selectedDirectory = SelectBestFrameworkDirectory(hostFramework, frameworkDirectories);
+        if (selectedDirectory is null)
+        {
+            var availableFrameworks = string.Join(", ", frameworkDirectories.Select(candidate => candidate.FolderName).OrderBy(name => name, StringComparer.OrdinalIgnoreCase));
+            throw new InvalidOperationException(
+                $"No compatible target framework assets were found under '{installPath}' for host framework '{GetFrameworkDisplayName(hostFramework)}'. Available frameworks: {availableFrameworks}.");
+        }
+
+        assemblyPath = ResolveAssemblyFromCandidates(
+            Directory.EnumerateFiles(selectedDirectory.Path, "*.dll", SearchOption.AllDirectories),
+            installPath,
+            packageId,
+            selectedDirectory.FolderName);
+
+        return true;
+    }
+
+    private static string ResolveAssemblyFromCandidates(
+        IEnumerable<string> candidatePaths,
+        string installPath,
+        string packageId,
+        string? selectedFramework)
+    {
+        var assemblies = candidatePaths
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         if (assemblies.Length == 0)
@@ -141,33 +205,208 @@ public sealed class PackageLoader : IPackageLoader
             throw new FileNotFoundException($"No loadable assembly found under '{installPath}'.");
         }
 
-        // If there is only a single assembly, use it directly.
         if (assemblies.Length == 1)
         {
             return assemblies[0];
         }
 
-        // Try to select an assembly whose file name matches the package directory name.
-        var packageDirectoryName = Path.GetFileName(Path.GetFullPath(installPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        if (!string.IsNullOrEmpty(packageDirectoryName))
-        {
-            var matchingByName = assemblies
-                .Where(path =>
-                    string.Equals(
-                        Path.GetFileNameWithoutExtension(path),
-                        packageDirectoryName,
-                        StringComparison.OrdinalIgnoreCase))
-                .ToArray();
+        var matchingByPackageId = assemblies
+            .Where(path => string.Equals(Path.GetFileNameWithoutExtension(path), packageId, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
 
-            if (matchingByName.Length == 1)
-            {
-                return matchingByName[0];
-            }
+        if (matchingByPackageId.Length == 1)
+        {
+            return matchingByPackageId[0];
         }
 
-        // Ambiguous case: multiple candidate assemblies and no clear main assembly.
+        var frameworkSuffix = selectedFramework is null ? string.Empty : $" for target framework '{selectedFramework}'";
         throw new InvalidOperationException(
-            $"Multiple assemblies were found under '{installPath}', and a main assembly could not be determined. " +
-            "Ensure the package contains a single loadable assembly or that the main assembly file name matches the package directory name.");
+            $"Multiple assemblies were found under '{installPath}'{frameworkSuffix}, and a main assembly could not be determined for package '{packageId}'. " +
+            "Ensure the package contains a single loadable assembly for the selected target framework or that one assembly name matches the package ID.");
+    }
+
+    private static FrameworkDirectory? SelectBestFrameworkDirectory(
+        FrameworkTarget hostFramework,
+        IReadOnlyList<FrameworkDirectory> frameworkDirectories)
+    {
+        return hostFramework.Kind switch
+        {
+            FrameworkKind.NetCoreApp =>
+                SelectHighestCompatibleFramework(frameworkDirectories, FrameworkKind.NetCoreApp, hostFramework.Version)
+                ?? SelectHighestCompatibleFramework(frameworkDirectories, FrameworkKind.NetStandard, GetCompatibleNetStandardVersion(hostFramework)),
+            FrameworkKind.NetStandard => SelectHighestCompatibleFramework(frameworkDirectories, FrameworkKind.NetStandard, hostFramework.Version),
+            FrameworkKind.NetFramework =>
+                SelectHighestCompatibleFramework(frameworkDirectories, FrameworkKind.NetFramework, hostFramework.Version)
+                ?? SelectHighestCompatibleFramework(frameworkDirectories, FrameworkKind.NetStandard, new Version(2, 0)),
+            _ => null
+        };
+    }
+
+    private static FrameworkDirectory? SelectHighestCompatibleFramework(
+        IReadOnlyList<FrameworkDirectory> frameworkDirectories,
+        FrameworkKind kind,
+        Version maxVersion)
+    {
+        return frameworkDirectories
+            .Where(candidate => candidate.Target.Kind == kind && candidate.Target.Version.CompareTo(maxVersion) <= 0)
+            .OrderByDescending(candidate => candidate.Target.Version)
+            .FirstOrDefault();
+    }
+
+    private static Version GetCompatibleNetStandardVersion(FrameworkTarget hostFramework) => hostFramework.Kind switch
+    {
+        FrameworkKind.NetCoreApp => new Version(2, 1),
+        FrameworkKind.NetFramework => new Version(2, 0),
+        FrameworkKind.NetStandard => hostFramework.Version,
+        _ => new Version(0, 0)
+    };
+
+    private static FrameworkTarget? GetCurrentHostFramework()
+    {
+        var targetFrameworkName = typeof(PackageLoader).Assembly
+            .GetCustomAttribute<TargetFrameworkAttribute>()?
+            .FrameworkName;
+
+        if (string.IsNullOrWhiteSpace(targetFrameworkName))
+        {
+            targetFrameworkName = AppContext.TargetFrameworkName;
+        }
+
+        if (string.IsNullOrWhiteSpace(targetFrameworkName))
+        {
+            return null;
+        }
+
+        var frameworkName = new FrameworkName(targetFrameworkName);
+        return frameworkName.Identifier switch
+        {
+            ".NETCoreApp" => new FrameworkTarget(FrameworkKind.NetCoreApp, new Version(frameworkName.Version.Major, frameworkName.Version.Minor), $"net{frameworkName.Version.Major}.{frameworkName.Version.Minor}"),
+            ".NETStandard" => new FrameworkTarget(FrameworkKind.NetStandard, new Version(frameworkName.Version.Major, frameworkName.Version.Minor), $"netstandard{frameworkName.Version.Major}.{frameworkName.Version.Minor}"),
+            ".NETFramework" => new FrameworkTarget(FrameworkKind.NetFramework, frameworkName.Version, $"net{frameworkName.Version.Major}{frameworkName.Version.Minor}"),
+            _ => null
+        };
+    }
+
+    private static FrameworkTarget? ResolveHostFramework(string? hostTargetFrameworkOverride)
+    {
+        if (!string.IsNullOrWhiteSpace(hostTargetFrameworkOverride))
+        {
+            return TryParseFrameworkTarget(hostTargetFrameworkOverride, out var overriddenFramework)
+                ? overriddenFramework
+                : null;
+        }
+
+        return GetCurrentHostFramework();
+    }
+
+    private static string GetFrameworkDisplayName(FrameworkTarget framework) => framework.DisplayName;
+
+    private enum FrameworkKind
+    {
+        Unknown,
+        NetCoreApp,
+        NetStandard,
+        NetFramework
+    }
+
+    private sealed record FrameworkTarget(FrameworkKind Kind, Version Version, string DisplayName);
+
+    private sealed record FrameworkDirectory(string Path, string FolderName, FrameworkTarget Target)
+    {
+        public static FrameworkDirectory? Create(string path)
+        {
+            var folderName = System.IO.Path.GetFileName(path);
+            return TryParseFrameworkTarget(folderName, out var target)
+                ? new FrameworkDirectory(path, folderName, target)
+                : null;
+        }
+    }
+
+    private static bool TryParseFrameworkTarget(string folderName, out FrameworkTarget target)
+    {
+        if (TryParseNetCoreApp(folderName, out var netCoreApp))
+        {
+            target = netCoreApp;
+            return true;
+        }
+
+        if (TryParseNetStandard(folderName, out var netStandard))
+        {
+            target = netStandard;
+            return true;
+        }
+
+        if (TryParseNetFramework(folderName, out var netFramework))
+        {
+            target = netFramework;
+            return true;
+        }
+
+        target = null!;
+        return false;
+    }
+
+    private static bool TryParseNetCoreApp(string folderName, out FrameworkTarget target)
+    {
+        const string prefix = "net";
+        if (!folderName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || !folderName.Contains('.'))
+        {
+            target = null!;
+            return false;
+        }
+
+        var versionText = folderName[prefix.Length..];
+        if (!Version.TryParse(versionText, out var version))
+        {
+            target = null!;
+            return false;
+        }
+
+        target = new FrameworkTarget(FrameworkKind.NetCoreApp, new Version(version.Major, version.Minor), $"net{version.Major}.{version.Minor}");
+        return true;
+    }
+
+    private static bool TryParseNetStandard(string folderName, out FrameworkTarget target)
+    {
+        const string prefix = "netstandard";
+        if (!folderName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            target = null!;
+            return false;
+        }
+
+        var versionText = folderName[prefix.Length..];
+        if (!Version.TryParse(versionText, out var version))
+        {
+            target = null!;
+            return false;
+        }
+
+        target = new FrameworkTarget(FrameworkKind.NetStandard, new Version(version.Major, version.Minor), $"netstandard{version.Major}.{version.Minor}");
+        return true;
+    }
+
+    private static bool TryParseNetFramework(string folderName, out FrameworkTarget target)
+    {
+        const string prefix = "net";
+        if (!folderName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || folderName.Contains('.'))
+        {
+            target = null!;
+            return false;
+        }
+
+        var versionDigits = folderName[prefix.Length..];
+        if (versionDigits.Length is < 2 or > 3 || !versionDigits.All(char.IsDigit))
+        {
+            target = null!;
+            return false;
+        }
+
+        var major = int.Parse(versionDigits[..1]);
+        var minor = int.Parse(versionDigits[1..2]);
+        var build = versionDigits.Length == 3 ? int.Parse(versionDigits[2..3]) : -1;
+        var version = build >= 0 ? new Version(major, minor, build) : new Version(major, minor);
+        target = new FrameworkTarget(FrameworkKind.NetFramework, version, folderName);
+        return true;
     }
 }

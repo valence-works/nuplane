@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Runtime.Versioning;
 using Nuplane.Abstractions;
 using Nuplane.Loading.Tests.Fixtures;
 
@@ -67,13 +69,93 @@ public sealed class PackageLoaderTests : IDisposable
         Assert.Single(result.FailedByPackageId);
     }
 
+    [Fact]
+    public void ResolveMainAssemblyPath_MultiTargetPackage_PicksExactHostFrameworkAssembly()
+    {
+        var installPath = CreateMultiTargetInstallDir("Nuplane.Loading.Tests.Fixtures", GetHostFrameworkFolderName(), "net8.0", "net9.0");
+
+        var resolvedAssemblyPath = GetResolvedAssemblyPath(installPath, "Nuplane.Loading.Tests.Fixtures", GetHostFrameworkFolderName());
+
+        Assert.Contains($"{Path.DirectorySeparatorChar}lib{Path.DirectorySeparatorChar}{GetHostFrameworkFolderName()}{Path.DirectorySeparatorChar}", resolvedAssemblyPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveMainAssemblyPath_MultiTargetPackage_PicksNearestCompatibleLowerFrameworkAssembly()
+    {
+        var installPath = CreateMultiTargetInstallDir("Nuplane.Loading.Tests.Fixtures", "net8.0", "net9.0");
+
+        var resolvedAssemblyPath = GetResolvedAssemblyPath(installPath, "Nuplane.Loading.Tests.Fixtures", "net10.0");
+
+        Assert.Contains($"{Path.DirectorySeparatorChar}lib{Path.DirectorySeparatorChar}net9.0{Path.DirectorySeparatorChar}", resolvedAssemblyPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task EnsureLoadedAsync_MultiTargetPackage_WithOnlyHigherFrameworks_FailsClearly()
+    {
+        var installPath = CreateMultiTargetInstallDir("Nuplane.Loading.Tests.Fixtures", "net11.0");
+        var loader = new PackageLoader();
+        var package = Pkg("Nuplane.Loading.Tests.Fixtures", "1.0.0", installPath);
+
+        var result = await loader.EnsureLoadedAsync([package], [], CancellationToken.None);
+
+        Assert.Empty(result.Loaded);
+        var error = Assert.Single(result.FailedByPackageId).Value;
+        Assert.Contains("No compatible target framework assets", error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("net11.0", error, StringComparison.OrdinalIgnoreCase);
+    }
+
     private string CreateInstallDir(string pkgName)
     {
         var dir = _tempDir.CreateSubdirectory(pkgName);
-        // Copy the Fixture assembly into the directory so PackageLoader finds a single DLL
-        var sourceDll = typeof(FixtureMarker).Assembly.Location;
-        File.Copy(sourceDll, Path.Combine(dir.FullName, Path.GetFileName(sourceDll)));
+        CopyFixtureAssembly(dir.FullName, typeof(FixtureMarker).Assembly.GetName().Name!);
         return dir.FullName;
+    }
+
+    private string CreateMultiTargetInstallDir(string packageId, params string[] frameworks)
+    {
+        var packageDir = _tempDir.CreateSubdirectory(packageId);
+        foreach (var framework in frameworks)
+        {
+            var frameworkDir = Directory.CreateDirectory(Path.Combine(packageDir.FullName, "lib", framework));
+            CopyFixtureAssembly(frameworkDir.FullName, packageId);
+        }
+
+        return packageDir.FullName;
+    }
+
+    private static void CopyFixtureAssembly(string destinationDirectory, string assemblyFileNameWithoutExtension)
+    {
+        var sourceDll = typeof(FixtureMarker).Assembly.Location;
+        File.Copy(sourceDll, Path.Combine(destinationDirectory, $"{assemblyFileNameWithoutExtension}.dll"));
+    }
+
+    private static string GetResolvedAssemblyPath(string installPath, string packageId, string hostTargetFramework)
+    {
+        var method = typeof(PackageLoader).GetMethod(
+            "ResolveMainAssemblyPath",
+            BindingFlags.NonPublic | BindingFlags.Static,
+            binder: null,
+            [typeof(string), typeof(string), typeof(string)],
+            modifiers: null);
+
+        Assert.NotNull(method);
+        return Assert.IsType<string>(method.Invoke(null, [installPath, packageId, hostTargetFramework]));
+    }
+
+    private static string GetHostFrameworkFolderName()
+    {
+        var attribute = typeof(PackageLoaderTests).Assembly.GetCustomAttributes(typeof(TargetFrameworkAttribute), inherit: false)
+            .OfType<TargetFrameworkAttribute>()
+            .Single();
+
+        var frameworkName = new FrameworkName(attribute.FrameworkName);
+        return frameworkName.Identifier switch
+        {
+            ".NETCoreApp" => $"net{frameworkName.Version.Major}.{frameworkName.Version.Minor}",
+            ".NETStandard" => $"netstandard{frameworkName.Version.Major}.{frameworkName.Version.Minor}",
+            ".NETFramework" => $"net{frameworkName.Version.Major}{frameworkName.Version.Minor}",
+            _ => throw new InvalidOperationException($"Unsupported test host framework '{attribute.FrameworkName}'.")
+        };
     }
 
     private static ResolvedPackage Pkg(string id, string version, string installPath) =>
