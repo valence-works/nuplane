@@ -40,8 +40,9 @@ public sealed class NuplaneBuilder
     }
 
     /// <summary>
-    /// Registers a named feed as a desired-state source. Call <see cref="NuplaneFeedBuilder.FromDirectory"/>
-    /// or <see cref="NuplaneFeedBuilder.FromUri"/> inside <paramref name="configure"/> to set the feed location.
+    /// Registers a named feed as a desired-state source. Call <see cref="NuplaneFeedBuilder.FromUri"/>
+    /// inside <paramref name="configure"/> to set the feed location, or use module-owned builder extensions
+    /// such as <c>AddDirectoryFeed</c> for source-specific feeds.
     /// </summary>
     /// <param name="name">The unique name of the feed.</param>
     /// <param name="configure">A callback to configure the feed's location, trust, and package patterns.</param>

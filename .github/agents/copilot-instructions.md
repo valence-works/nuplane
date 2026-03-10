@@ -20,6 +20,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-03
 - C# / .NET 8.0, 9.0, 10.0 (multi-target) + Microsoft.Extensions.{Options, Logging, DependencyInjection, Configuration} v10.0.3 (011-version-range-resolution)
 - File-system-based package install root (no database) (011-version-range-resolution)
 - JSON file persistence via `StoreStateSerializer`; default path under local filesystem (012-default-state-path)
+- C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0` + `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Configuration.Binder`, `Microsoft.Extensions.Logging`, xUnit, NSubstitute (013-module-pattern-expansion)
+- File-backed package store and state registry managed by `Nuplane.Store`; no new persistence model introduced by this feature (013-module-pattern-expansion)
 
 - C# on .NET 8 (LTS) + `NuGet.Protocol`/NuGet Client SDK, `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Logging`, `System.Diagnostics.Metrics` (001-phase1-runtime-baseline)
 
@@ -39,9 +41,8 @@ test/
 C# on .NET 8 (LTS): Follow standard conventions
 
 ## Recent Changes
+- 013-module-pattern-expansion: Added C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0` + `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Configuration.Binder`, `Microsoft.Extensions.Logging`, xUnit, NSubstitute
 - 012-default-state-path: Added C# / .NET 8.0, 9.0, 10.0 (multi-target) + Microsoft.Extensions.{Options, Logging, DependencyInjection, Configuration} v10.0.3
-- 011-version-range-resolution: Added C# / .NET 8.0, 9.0, 10.0 (multi-target) + Microsoft.Extensions.{Options, Logging, DependencyInjection, Configuration} v10.0.3
-- 009-startup-and-loading-events: Added C# on .NET multi-targeting (`net8.0;net9.0;net10.0`) + `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.Logging`, `Microsoft.Extensions.DependencyInjection`; xUnit for tests
 
 
 <!-- MANUAL ADDITIONS START -->

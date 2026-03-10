@@ -1,11 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging" />
     <ProjectReference Include="..\..\src\Nuplane.Runtime\Nuplane.Runtime.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Loading\Nuplane.Loading.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Loading.Hosting\Nuplane.Loading.Hosting.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Store\Nuplane.Store.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Sources.Directory\Nuplane.Sources.Directory.csproj" />
+    <ProjectReference Include="..\..\src\Nuplane.Sources.Directory.Hosting\Nuplane.Sources.Directory.Hosting.csproj" />
   </ItemGroup>
 
 </Project>

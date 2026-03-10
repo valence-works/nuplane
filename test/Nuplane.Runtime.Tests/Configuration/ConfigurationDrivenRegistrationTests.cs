@@ -3,11 +3,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Nuplane.Abstractions;
 using Nuplane.Hosting;
 using Nuplane.Loading;
 using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Setup;
+using Nuplane.Sources.Directory;
+using Nuplane.Sources.Directory.Hosting.Builder;
+using Nuplane.Sources.Directory.Hosting.Configuration;
 using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Configuration;
@@ -86,7 +90,10 @@ public sealed class ConfigurationDrivenRegistrationTests
 
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddNuplane(configuration.GetSection("Nuplane"));
+            services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
+            {
+                nuplane.AddDirectoryFeedsFromConfiguration(configuration.GetSection("Nuplane"));
+            });
 
             using var provider = services.BuildServiceProvider();
 
@@ -131,7 +138,10 @@ public sealed class ConfigurationDrivenRegistrationTests
 
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddNuplane(configuration.GetSection("Nuplane"));
+            services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
+            {
+                nuplane.AddDirectoryFeedsFromConfiguration(configuration.GetSection("Nuplane"));
+            });
 
             using var provider = services.BuildServiceProvider();
 
@@ -658,6 +668,170 @@ public sealed class ConfigurationDrivenRegistrationTests
         finally
         {
             try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void AddNuplaneLoading_DirectRegistration_RegistersLoadingServices()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplaneLoading(options =>
+        {
+            options.Enabled = true;
+            options.DeactivationTimeout = TimeSpan.FromSeconds(30);
+        });
+
+        using var provider = services.BuildServiceProvider();
+
+        var loading = provider.GetRequiredService<IOptions<LoadingOptions>>().Value;
+
+        Assert.True(loading.Enabled);
+        Assert.Equal(TimeSpan.FromSeconds(30), loading.DeactivationTimeout);
+    }
+
+    [Fact]
+    public void AddNuplaneLoading_FollowedByBuilder_LastRegistrationWins()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Direct registration enables loading
+        services.AddNuplaneLoading(options => options.Enabled = true);
+
+        // Builder registration disables loading (last wins)
+        services.AddNuplane(nuplane =>
+        {
+            nuplane.AutoloadPackages(load => load.Disable());
+        });
+
+        using var provider = services.BuildServiceProvider();
+
+        var loading = provider.GetRequiredService<IOptions<LoadingOptions>>().Value;
+
+        Assert.False(loading.Enabled);
+    }
+
+    [Fact]
+    public void AddNuplaneLoading_AndBuilder_DoNotDuplicatePackageLoader()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        services.AddNuplaneLoading();
+        services.AddNuplane(nuplane => nuplane.AutoloadPackages());
+
+        var loaderCount = services.Count(d => d.ServiceType == typeof(IPackageLoader));
+        Assert.Equal(1, loaderCount);
+    }
+
+    [Fact]
+    public void AddDirectoryFeed_FromBuilder_RegistersSourceTrustAndDesiredSource()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "nuplane-dir-builder-trust", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddNuplane(nuplane =>
+            {
+                nuplane.AddDirectoryFeed("dir-feed", root, feed =>
+                {
+                    feed.Include("Plugin.*");
+                });
+            });
+
+            using var provider = services.BuildServiceProvider();
+            var trust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
+
+            Assert.Contains("dir-feed", trust.AllowedSourceNames);
+            Assert.Contains("Plugin.*", trust.AllowedPackageIds);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void AddDirectoryFeed_DirectRegistration_FollowedByBuilder_LastSourceWins()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "nuplane-dir-direct-builder", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddLogging();
+
+            // Direct registration first
+            services.AddNuplaneDirectorySource(o =>
+            {
+                o.FeedName = "local";
+                o.DirectoryPath = root;
+                o.TriggerReconciliationOnChange = false;
+            });
+
+            // Builder registration second (replaces the directory source for same feed)
+            services.AddNuplane(nuplane =>
+            {
+                nuplane.AddDirectoryFeed("local", root, feed =>
+                {
+                    feed.Watch = false;
+                    feed.IncludeAll();
+                });
+            });
+
+            // Only one desired source for the feed
+            var sourceCount = services.Count(d => d.ServiceType == typeof(IDesiredPackageSource));
+            Assert.Equal(1, sourceCount);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void AddDirectoryFeed_AndDirectRegistration_DifferentFeeds_BothRegistered()
+    {
+        var root1 = Path.Combine(Path.GetTempPath(), "nuplane-dir-multi-1", Guid.NewGuid().ToString("N"));
+        var root2 = Path.Combine(Path.GetTempPath(), "nuplane-dir-multi-2", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root1);
+        Directory.CreateDirectory(root2);
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddLogging();
+
+            // Direct registration for feed-a
+            services.AddNuplaneDirectorySource(o =>
+            {
+                o.FeedName = "feed-a";
+                o.DirectoryPath = root1;
+                o.TriggerReconciliationOnChange = false;
+            });
+
+            // Builder registration for feed-b
+            services.AddNuplane(nuplane =>
+            {
+                nuplane.AddDirectoryFeed("feed-b", root2, feed =>
+                {
+                    feed.Include("X.*");
+                });
+            });
+
+            // Both feeds should have their own desired source
+            var sourceCount = services.Count(d => d.ServiceType == typeof(IDesiredPackageSource));
+            Assert.Equal(2, sourceCount);
+        }
+        finally
+        {
+            try { Directory.Delete(root1, recursive: true); } catch { }
+            try { Directory.Delete(root2, recursive: true); } catch { }
         }
     }
 

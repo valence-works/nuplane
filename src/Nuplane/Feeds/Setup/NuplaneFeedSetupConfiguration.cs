@@ -11,30 +11,23 @@ internal static class NuplaneFeedSetupConfiguration
     {
         foreach (var feedSection in configuration.GetSection(nameof(NuplaneSetupOptions.Feeds)).GetChildren())
         {
+            // Directory-backed feeds are handled by Nuplane.Sources.Directory.Hosting
+            var directoryPath = feedSection[nameof(NuplaneFeedSetupOptions.DirectoryPath)];
+            if (!string.IsNullOrWhiteSpace(directoryPath))
+            {
+                continue;
+            }
+
             builder.AddFeed(feedSection[nameof(NuplaneFeedSetupOptions.Name)]!, configuredFeed =>
             {
-                var directoryPath = feedSection[nameof(NuplaneFeedSetupOptions.DirectoryPath)];
                 var trustLevel = feedSection.GetValue<FeedTrustLevel?>(nameof(NuplaneFeedSetupOptions.TrustLevel))
                     ?? FeedTrustLevel.Trusted;
                 var credentials = feedSection[nameof(NuplaneFeedSetupOptions.Credentials)];
 
-                if (!string.IsNullOrWhiteSpace(directoryPath))
-                {
-                    var directorySection = feedSection.GetSection(nameof(NuplaneFeedSetupOptions.Directory));
-                    configuredFeed.FromDirectory(directoryPath, dir =>
-                    {
-                        dir.Watch = directorySection.GetValue<bool?>(nameof(NuplaneDirectoryFeedSetupOptions.Watch)) ?? true;
-                        dir.DebounceWindow = directorySection.GetValue<TimeSpan?>(nameof(NuplaneDirectoryFeedSetupOptions.DebounceWindow))
-                            ?? TimeSpan.FromSeconds(1);
-                    });
-                }
-                else
-                {
-                    configuredFeed.FromUri(
-                        new(feedSection[nameof(NuplaneFeedSetupOptions.ServiceIndex)]!, UriKind.Absolute),
-                        trustLevel,
-                        credentials);
-                }
+                configuredFeed.FromUri(
+                    new(feedSection[nameof(NuplaneFeedSetupOptions.ServiceIndex)]!, UriKind.Absolute),
+                    trustLevel,
+                    credentials);
 
                 configuredFeed.Trust(trustLevel);
 

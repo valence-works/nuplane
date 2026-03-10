@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nuplane.Loading.Events;
 
-namespace Nuplane.Loading.Hosting;
+namespace Nuplane.Loading;
 
 /// <summary>
 /// Fans out loading domain events to all registered <see cref="IPackageLoadingObserver"/>

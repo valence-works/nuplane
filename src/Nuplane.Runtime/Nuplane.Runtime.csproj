@@ -11,7 +11,7 @@
     <PackageReference Include="Microsoft.Extensions.Options" />
     <ProjectReference Include="..\Nuplane.Abstractions\Nuplane.Abstractions.csproj" />
     <ProjectReference Include="..\Nuplane.Store\Nuplane.Store.csproj" />
-    <ProjectReference Include="..\Nuplane.Loading.Abstractions\Nuplane.Loading.Abstractions.csproj" />
+    <ProjectReference Include="..\Nuplane.Loading\Nuplane.Loading.csproj" />
   </ItemGroup>
 
   <ItemGroup>
