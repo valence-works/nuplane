@@ -42,10 +42,8 @@ public static class DirectorySourceRegistrationServices
 
         services.PostConfigure<FeedResolutionOptions>(opts =>
         {
-            if (!opts.Feeds.Any(f => string.Equals(f.Name, feedName, StringComparison.OrdinalIgnoreCase)))
-            {
-                opts.Feeds.Add(new(feedName, feedUri, trustLevel, credentials));
-            }
+            opts.Feeds.RemoveAll(f => string.Equals(f.Name, feedName, StringComparison.OrdinalIgnoreCase));
+            opts.Feeds.Add(new(feedName, feedUri, trustLevel, credentials));
         });
 
         var marker = new DirectoryFeedRegistrationMarker(feedName);

@@ -55,7 +55,7 @@ public static class ModuleRegistrationState
                 continue;
 
             if (descriptor.ImplementationType == typeof(TImplementation)
-                || descriptor.ImplementationFactory?.Method.ReturnType == typeof(TImplementation))
+                || descriptor.ImplementationInstance is TImplementation)
             {
                 services.RemoveAt(i);
             }
