@@ -1,5 +1,4 @@
 using Nuplane.Abstractions;
-using Nuplane.Sources.Directory.Builder;
 
 namespace Nuplane.Builder;
 
@@ -13,7 +12,6 @@ public sealed class NuplaneFeedBuilder
     internal Uri? ServiceIndex { get; private set; }
     internal FeedTrustLevel TrustLevel { get; private set; } = FeedTrustLevel.Trusted;
     internal string? Credentials { get; private set; }
-    internal NuplaneDirectoryFeedOptions? DirectoryOptions { get; private set; }
     internal List<string> IncludePatterns { get; } = [];
     internal List<string> ExcludePatterns { get; } = [];
 
@@ -35,22 +33,6 @@ public sealed class NuplaneFeedBuilder
         ServiceIndex = serviceIndex;
         TrustLevel = trustLevel;
         Credentials = credentials;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures this feed to discover packages from a local directory containing <c>.nupkg</c> files.
-    /// A file-system watcher is enabled by default; set <see cref="NuplaneDirectoryFeedOptions.Watch"/> to
-    /// <see langword="false"/> to opt out.
-    /// </summary>
-    /// <param name="path">The directory path to scan for <c>.nupkg</c> files.</param>
-    /// <param name="configure">An optional callback to further configure directory options.</param>
-    public NuplaneFeedBuilder FromDirectory(string path, Action<NuplaneDirectoryFeedOptions>? configure = null)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-
-        DirectoryOptions = new() { DirectoryPath = path };
-        configure?.Invoke(DirectoryOptions);
         return this;
     }
 

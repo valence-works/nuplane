@@ -4,8 +4,6 @@ using Nuplane.Builder;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Feeds.Configuration;
 using Nuplane.Runtime.Sources;
-using Nuplane.Sources.Directory;
-using Nuplane.Sources.Directory.Registration;
 
 namespace Nuplane.Feeds.Registration;
 
@@ -23,21 +21,18 @@ internal static class NuplaneFeedRegistrationServices
             DistinctNonBlank(feed.IncludePatterns).ToArray(),
             HasExplicitUnrestrictedPackageSelection(feed)));
 
+    internal static void AddRegistrationMarkerFromModule(
+        IServiceCollection services,
+        string feedName,
+        IEnumerable<string> includePatterns,
+        bool hasExplicitUnrestrictedPackageSelection) =>
+        services.AddSingleton(new NuplaneFeedRegistration(
+            feedName,
+            DistinctNonBlank(includePatterns).ToArray(),
+            hasExplicitUnrestrictedPackageSelection));
+
     internal static void Register(IServiceCollection services, NuplaneFeedBuilder feed)
     {
-        if (feed.DirectoryOptions is { } dirOpts)
-        {
-            DirectorySourceRegistrationServices.RegisterFeed(
-                services,
-                feed.Name,
-                dirOpts,
-                feed.IncludePatterns,
-                feed.TrustLevel,
-                feed.Credentials);
-
-            return;
-        }
-
         if (feed.ServiceIndex is { } serviceIndex)
         {
             services.PostConfigure<FeedResolutionOptions>(opts =>

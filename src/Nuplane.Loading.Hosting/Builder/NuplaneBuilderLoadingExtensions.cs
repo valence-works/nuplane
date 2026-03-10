@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Builder;
 using Nuplane.Loading.Extensions;
+using Nuplane.Loading.Registration;
 
 namespace Nuplane.Loading.Hosting.Builder;
 
@@ -79,22 +80,10 @@ public static class NuplaneBuilderLoadingExtensions
 
         var services = builder.Services;
 
-        // ── Core loading services ─────────────────────────────────────────────────
-        services.TryAddSingleton<LoadingOptionsValidator>();
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<LoadingOptions>, LoadingOptionsValidation>());
-        services.AddOptions<LoadingOptions>().ValidateOnStart();
+        // ── Delegate to module-owned registration services ────────────────────────
+        LoadingRegistrationServices.Register(services);
 
-        services.TryAddSingleton<ILoadingFailureTracker, LoadingFailureTracker>();
-        services.TryAddSingleton<SharedAssemblyPolicyMatcher>();
-        services.TryAddSingleton<PackageLoader>();
-        services.TryAddSingleton<IPackageLoader>(sp => sp.GetRequiredService<PackageLoader>());
-        services.TryAddSingleton<PackageTypeScanner>();
-        services.TryAddSingleton<IPackageTypeScanner>(sp => sp.GetRequiredService<PackageTypeScanner>());
-        services.TryAddSingleton<PackageUnloadCoordinator>();
-        services.TryAddSingleton<IPackageUnloadCoordinator>(sp => sp.GetRequiredService<PackageUnloadCoordinator>());
-
-        // ── Loading observer + event dispatcher ───────────────────────────────────
-        services.TryAddSingleton<ILoadingEventDispatcher, LoadingEventDispatcher>();
+        // ── Loading observer (bridges reconciliation and loading) ─────────────────
         services.TryAddEnumerable(ServiceDescriptor.Singleton<INuplaneObserver, PackageAutoLoadingObserver>());
 
         var loadingBuilder = new NuplaneLoadingBuilder(services);

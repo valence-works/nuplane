@@ -118,6 +118,12 @@ Nuplane emits events such as package-change completion or package-loading comple
 An opt-in subsystem that loads resolved packages into isolated assembly load contexts.
 Nuplane can manage shared contract assemblies, deactivation timeout, and unload coordination, but your host still decides what to do with loaded types.
 
+### Module registration
+
+Each optional Nuplane module (loading, directory-source) provides its own direct `IServiceCollection` registration extension.
+You can register modules independently of the builder surface, or use the module-owned builder integration package for fluent configuration.
+If the same module is registered through both paths, the last registration wins and the service graph remains deduplicated.
+
 ### Configuration-driven setup
 
 A way to declare Nuplane infrastructure in configuration instead of code.
@@ -133,12 +139,15 @@ Use the `Nuplane` configuration section for infrastructure, then keep host-owned
 ```csharp
 using Nuplane;
 using Nuplane.Loading.Hosting.Builder;
+using Nuplane.Sources.Directory.Hosting.Builder;
+using Nuplane.Sources.Directory.Hosting.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 var nuplaneConfiguration = builder.Configuration.GetSection("Nuplane");
 
 builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
 {
+    nuplane.AddDirectoryFeedsFromConfiguration(nuplaneConfiguration);
     nuplane.AutoloadPackages(nuplaneConfiguration.GetSection("Loading"));
     nuplane.OnPackagesChanged<PackageChangeObserver>();
     nuplane.OnPackagesLoaded<PluginDiscoveryObserver>();
@@ -347,15 +356,11 @@ If you prefer code-first setup, the fluent API remains available:
 builder.Services.AddNuplane(nuplane =>
 {
     nuplane.PollEvery(TimeSpan.FromSeconds(60));
-    nuplane.AddFeed("local-packages", feed =>
+    nuplane.AddDirectoryFeed("local-packages", "packages", dir =>
     {
-        feed.FromDirectory("packages", dir =>
-        {
-            dir.Watch = true;
-            dir.DebounceWindow = TimeSpan.FromSeconds(1);
-        });
-
-        feed.IncludeAll();
+        dir.Watch = true;
+        dir.DebounceWindow = TimeSpan.FromSeconds(1);
+        dir.IncludeAll();
     });
 });
 ```
@@ -409,15 +414,11 @@ Nuplane can discover desired packages from configured feeds and sources.
 ```csharp
 builder.Services.AddNuplane(nuplane =>
 {
-    nuplane.AddFeed("local-packages", feed =>
+    nuplane.AddDirectoryFeed("local-packages", "packages", dir =>
     {
-        feed.FromDirectory("packages", dir =>
-        {
-            dir.Watch = true;
-            dir.DebounceWindow = TimeSpan.FromSeconds(1);
-        });
-
-        feed.Include("MyApp.Plugins.*");
+        dir.Watch = true;
+        dir.DebounceWindow = TimeSpan.FromSeconds(1);
+        dir.Include("MyApp.Plugins.*");
     });
 });
 ```

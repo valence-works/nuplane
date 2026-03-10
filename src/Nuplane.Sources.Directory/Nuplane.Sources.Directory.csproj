@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Nuplane" />
+    <InternalsVisibleTo Include="Nuplane.Sources.Directory.Hosting" />
     <InternalsVisibleTo Include="Nuplane.Sources.Directory.Tests" />
   </ItemGroup>
 

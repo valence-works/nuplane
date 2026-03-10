@@ -345,13 +345,22 @@ Nuplane (consumer package)
   └── Nuplane.Runtime
         ├── Nuplane.Abstractions
         ├── Nuplane.Store
-        ├── Nuplane.Sources.Directory
         └── Nuplane.Loading (optional)
               └── Nuplane.Loading.Abstractions
+
+Nuplane.Sources.Directory.Hosting (builder integration)
+  ├── Nuplane
+  └── Nuplane.Sources.Directory
+        └── Nuplane.Runtime
+
+Nuplane.Loading.Hosting (builder integration)
+  ├── Nuplane
+  └── Nuplane.Loading
 ```
 
 - **Nuplane.Runtime** must not reference `Microsoft.Extensions.Hosting.Abstractions` — keep it dependency-lean.
-- **Nuplane** (consumer package) owns the hosted service and DI registration that bridges Runtime and Hosting.
+- **Nuplane** (consumer package) owns core composition, feed abstractions, and generic runtime registration. It does NOT own module-specific builder conveniences, options, hosted services, or registration helpers.
+- **Module hosting packages** (`*.Hosting`) own module-specific builder extensions and configuration-driven setup translation.
 
 ### Multi-Targeting
 
@@ -374,6 +383,62 @@ Combined with `TreatWarningsAsErrors`, missing XML documentation on public types
 ### Central Package Management
 
 Package versions are managed centrally in `Directory.Packages.props`. Never specify versions in individual `.csproj` files — use `<PackageReference Include="..." />` without a `Version` attribute.
+
+---
+
+## Module Ownership & Builder Integration
+
+### Module Boundary Rule
+
+Each optional or source-specific capability (e.g., directory-source, loading) is treated as a **module** with its own package set. Module-specific items belong to the module's own packages, NOT to the core `Nuplane` package:
+
+| Concern | Owner |
+|---------|-------|
+| Options classes | Module implementation package (`Nuplane.Loading`, `Nuplane.Sources.Directory`) |
+| Registration services | Module implementation package |
+| Hosted services | Module implementation or hosting package |
+| Direct `IServiceCollection` extensions | Module implementation package |
+| Builder extensions (`NuplaneBuilder`) | Module hosting/builder integration package (`*.Hosting`) |
+| Configuration-driven setup translation | Module hosting/builder integration package |
+
+### Registration Surface Rules
+
+- Every module MUST expose at least one `IServiceCollection.Add{Module}(...)` extension method for direct registration.
+- Module-specific `NuplaneBuilder` extensions (fluent builder APIs) live in the module's hosting package.
+- Duplicate registration follows **last-registration-wins** semantics using `TryAdd` / replace patterns.
+- Core `Nuplane` retains only generic runtime composition, feed abstractions, and URI-based feed registration.
+
+### Builder Integration Pattern
+
+Module hosting packages provide builder extensions that delegate to module-owned registration services:
+
+```csharp
+// Nuplane.Sources.Directory.Hosting
+public static NuplaneBuilder AddDirectoryFeed(
+    this NuplaneBuilder builder, string name, string path,
+    Action<NuplaneDirectoryFeedConfiguration>? configure = null)
+{
+    // Delegates to DirectorySourceRegistrationServices.RegisterFeed(...)
+}
+```
+
+For configuration-driven directory feeds, call `AddDirectoryFeedsFromConfiguration`:
+
+```csharp
+services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
+{
+    nuplane.AddDirectoryFeedsFromConfiguration(configuration.GetSection("Nuplane"));
+    nuplane.AutoloadPackages(configuration.GetSection("Nuplane"));
+});
+```
+
+### Adding a New Module
+
+1. Create the implementation package with options, registration services, and direct `IServiceCollection` extension.
+2. Create a `*.Hosting` package for builder extensions and configuration-driven setup translation.
+3. Add `InternalsVisibleTo` from relevant packages to the hosting package.
+4. Add tests in the module's test project and integration test project.
+5. Do NOT add module-specific code to the core `Nuplane` package.
 
 ---
 

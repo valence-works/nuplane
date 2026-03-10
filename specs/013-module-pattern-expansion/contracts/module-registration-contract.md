@@ -10,6 +10,10 @@ Define the supported public registration surfaces for optional Nuplane modules a
 ## Directory-source module contract
 - Owning implementation project: `src/Nuplane.Sources.Directory`
 - Required direct surface: `services.AddNuplaneDirectorySource(Action<DirectorySourceOptions> configure)`
+- Builder integration project: `src/Nuplane.Sources.Directory.Hosting`
+- Builder surface: `NuplaneBuilder.AddDirectoryFeed(name, path, configure?)`
+- Configuration-driven surface: `NuplaneBuilder.AddDirectoryFeedsFromConfiguration(configuration)`
+- **Status**: Implemented.
 - Required behavior:
   - Registers the directory desired-state source, trusted feed wiring, and directory observation trigger behavior from the module package.
   - Preserves `DirectorySourceOptions` ownership and module-owned hosted-service registration.
@@ -17,7 +21,10 @@ Define the supported public registration surfaces for optional Nuplane modules a
 
 ## Loading module contract
 - Owning implementation project: `src/Nuplane.Loading`
-- Required direct surface: a module-owned `IServiceCollection` extension for loading registration in the loading implementation package.
+- Required direct surface: `services.AddNuplaneLoading(Action<LoadingOptions>? configure)`
+- Builder integration project: `src/Nuplane.Loading.Hosting`
+- Builder surfaces: `NuplaneBuilder.AutoloadPackages(...)`, `NuplaneBuilder.OnPackagesLoaded<T>()`
+- **Status**: Implemented.
 - Expected direct-surface behavior:
   - Registers loading options, validators, loader/unload services, and loading observer dispatch infrastructure through module registration services.
   - Works without requiring the fluent `NuplaneBuilder` surface.
@@ -37,3 +44,4 @@ Define the supported public registration surfaces for optional Nuplane modules a
 - Core compatibility wrappers may exist only while the replacement module-owned surface is being introduced.
 - By feature completion, superseded core wrappers for module-specific registration must be removed.
 - Documentation must identify the replacement module-owned surface before wrapper removal.
+- **Status**: Complete. `NuplaneFeedBuilder.FromDirectory(...)` removed from core. Core `Nuplane` no longer references `Nuplane.Sources.Directory`. See `docs/coding-conventions.md` for migration guidance.

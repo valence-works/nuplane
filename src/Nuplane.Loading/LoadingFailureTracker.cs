@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace Nuplane.Loading.Hosting;
+namespace Nuplane.Loading;
 
 internal sealed class LoadingFailureTracker : ILoadingFailureTracker
 {

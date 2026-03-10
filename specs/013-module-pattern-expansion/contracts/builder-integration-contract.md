@@ -18,9 +18,11 @@ Define where fluent builder conveniences live and how they interact with module-
   - Avoid duplicating loading-specific orchestration logic that belongs in `src/Nuplane.Loading`.
 
 ## Directory builder contract
-- Owning project after this feature: `src/Nuplane.Sources.Directory.Hosting`
-- Supported builder responsibility:
-  - Provide the fluent directory-source convenience currently exposed through core feed-builder APIs.
+- Owning project: `src/Nuplane.Sources.Directory.Hosting`
+- Supported builder surfaces:
+  - `NuplaneBuilder.AddDirectoryFeed(name, path, configure?)`
+  - `NuplaneBuilder.AddDirectoryFeedsFromConfiguration(configuration)`
+- **Status**: Implemented. Core wrappers (`NuplaneFeedBuilder.FromDirectory`) removed.
 - Required behavior:
   - Delegate to shared directory module registration services.
   - Preserve directory watcher debounce, trust wiring, and module-owned options behavior.
@@ -34,3 +36,4 @@ Define where fluent builder conveniences live and how they interact with module-
 ## Documentation contract
 - Module documentation must name the builder integration package explicitly.
 - Migration notes must tell consumers when a core builder API has moved and which module-owned package replaces it.
+- **Status**: Complete. `docs/coding-conventions.md` (Module Ownership section), `README.md`, and `docs/roadmap.md` updated.

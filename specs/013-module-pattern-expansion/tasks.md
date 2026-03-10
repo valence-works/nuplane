@@ -11,10 +11,10 @@
 
 **Purpose**: Prepare project scaffolding, docs anchors, and validation artifacts used by the feature.
 
-- [ ] T001 Add feature scope and migration framing for module pattern expansion in docs/roadmap.md
-- [ ] T002 Add public feature overview and module-registration migration note in README.md
-- [ ] T003 [P] Add the new `Nuplane.Sources.Directory.Hosting` project entry in nuplane.sln
-- [ ] T004 [P] Create the feature validation evidence stub in specs/013-module-pattern-expansion/quickstart-validation.md
+- [x] T001 Add feature scope and migration framing for module pattern expansion in docs/roadmap.md
+- [x] T002 Add public feature overview and module-registration migration note in README.md
+- [x] T003 [P] Add the new `Nuplane.Sources.Directory.Hosting` project entry in nuplane.sln
+- [x] T004 [P] Create the feature validation evidence stub in specs/013-module-pattern-expansion/quickstart-validation.md
 
 ---
 
@@ -24,14 +24,14 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T005 Create shared module replacement-state helpers for deterministic last-registration-wins behavior in src/Nuplane/Registration/ModuleRegistrationState.cs
-- [ ] T006 [P] Move loading options ownership from abstractions into the loading module in src/Nuplane.Loading/LoadingOptions.cs and src/Nuplane.Loading.Abstractions/LoadingOptions.cs
-- [ ] T007 [P] Move loading options validator ownership into the loading module in src/Nuplane.Loading/LoadingOptionsValidator.cs and src/Nuplane.Loading.Abstractions/LoadingOptionsValidator.cs
-- [ ] T008 Add reusable loading registration and `ValidateOnStart()` wiring in src/Nuplane.Loading/Registration/LoadingRegistrationServices.cs and src/Nuplane.Loading/Extensions/LoadingOptionsValidation.cs
-- [ ] T009 [P] Preserve trusted-source and credential delegation boundaries in src/Nuplane.Sources.Directory/Registration/DirectorySourceRegistrationServices.cs
-- [ ] T010 [P] Add store/LKG regression coverage proving module-registration refactors do not mutate transactional behavior in test/Nuplane.Store.Tests/Transactions/PackageTransactionCoordinatorTests.cs
-- [ ] T011 [P] Add baseline observability compatibility coverage for module registration changes in test/Nuplane.Integration.Tests/Reconciliation/ModuleRegistrationCompatibilityTests.cs
-- [ ] T012 Update project references for the loading ownership split in src/Nuplane.Loading/Nuplane.Loading.csproj and src/Nuplane.Loading.Hosting/Nuplane.Loading.Hosting.csproj
+- [x] T005 Create shared module replacement-state helpers for deterministic last-registration-wins behavior in src/Nuplane/Registration/ModuleRegistrationState.cs
+- [x] T006 [P] Move loading options ownership from abstractions into the loading module in src/Nuplane.Loading/LoadingOptions.cs and src/Nuplane.Loading.Abstractions/LoadingOptions.cs
+- [x] T007 [P] Move loading options validator ownership into the loading module in src/Nuplane.Loading/LoadingOptionsValidator.cs and src/Nuplane.Loading.Abstractions/LoadingOptionsValidator.cs
+- [x] T008 Add reusable loading registration and `ValidateOnStart()` wiring in src/Nuplane.Loading/Registration/LoadingRegistrationServices.cs and src/Nuplane.Loading/Extensions/LoadingOptionsValidation.cs
+- [x] T009 [P] Preserve trusted-source and credential delegation boundaries in src/Nuplane.Sources.Directory/Registration/DirectorySourceRegistrationServices.cs
+- [x] T010 [P] Add store/LKG regression coverage proving module-registration refactors do not mutate transactional behavior in test/Nuplane.Store.Tests/Transactions/PackageTransactionCoordinatorTests.cs
+- [x] T011 [P] Add baseline observability compatibility coverage for module registration changes in test/Nuplane.Integration.Tests/Reconciliation/ModuleRegistrationCompatibilityTests.cs
+- [x] T012 Update project references for the loading ownership split in src/Nuplane.Loading/Nuplane.Loading.csproj and src/Nuplane.Loading.Hosting/Nuplane.Loading.Hosting.csproj
 
 **Checkpoint**: Foundation ready; user stories can start.
 
@@ -47,17 +47,17 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T013 [P] [US1] Add ownership-boundary tests for loading and directory modules in test/Nuplane.Runtime.Tests/Reconciliation/ModuleOwnershipBoundaryTests.cs
-- [ ] T014 [P] [US1] Add loading implementation ownership regression tests in test/Nuplane.Loading.Tests/LoadingOwnershipContractTests.cs
-- [ ] T015 [US1] Extend core runtime isolation regression coverage in test/Nuplane.Runtime.Tests/Reconciliation/CoreRuntimeRegistrationIsolationTests.cs
+- [x] T013 [P] [US1] Add ownership-boundary tests for loading and directory modules in test/Nuplane.Runtime.Tests/Reconciliation/ModuleOwnershipBoundaryTests.cs
+- [x] T014 [P] [US1] Add loading implementation ownership regression tests in test/Nuplane.Loading.Tests/LoadingOwnershipContractTests.cs
+- [x] T015 [US1] Extend core runtime isolation regression coverage in test/Nuplane.Runtime.Tests/Reconciliation/CoreRuntimeRegistrationIsolationTests.cs
 
 ### Implementation for User Story 1
 
-- [ ] T016 [P] [US1] Move loading event-dispatch implementation into the loading module in src/Nuplane.Loading/LoadingEventDispatcher.cs and src/Nuplane.Loading.Hosting/LoadingEventDispatcher.cs
-- [ ] T017 [P] [US1] Move package auto-loading observer ownership into the loading module in src/Nuplane.Loading/PackageAutoLoadingObserver.cs and src/Nuplane.Loading.Hosting/PackageAutoLoadingObserver.cs
-- [ ] T018 [P] [US1] Normalize directory module extension wiring around module-owned helpers in src/Nuplane.Sources.Directory/NuplaneDirectorySourceServiceCollectionExtensions.cs
-- [ ] T019 [US1] Apply shared replacement semantics to loading and directory registration services in src/Nuplane.Loading/Registration/LoadingRegistrationServices.cs and src/Nuplane.Sources.Directory/Registration/DirectorySourceRegistrationServices.cs
-- [ ] T020 [US1] Remove remaining module-specific ownership from core registration plumbing in src/Nuplane/Feeds/Registration/NuplaneFeedRegistrationServices.cs and src/Nuplane/Nuplane.csproj
+- [x] T016 [P] [US1] Move loading event-dispatch implementation into the loading module in src/Nuplane.Loading/LoadingEventDispatcher.cs and src/Nuplane.Loading.Hosting/LoadingEventDispatcher.cs
+- [x] T017 [P] [US1] Move package auto-loading observer ownership into the loading module in src/Nuplane.Loading/PackageAutoLoadingObserver.cs and src/Nuplane.Loading.Hosting/PackageAutoLoadingObserver.cs
+- [x] T018 [P] [US1] Normalize directory module extension wiring around module-owned helpers in src/Nuplane.Sources.Directory/NuplaneDirectorySourceServiceCollectionExtensions.cs
+- [x] T019 [US1] Apply shared replacement semantics to loading and directory registration services in src/Nuplane.Loading/Registration/LoadingRegistrationServices.cs and src/Nuplane.Sources.Directory/Registration/DirectorySourceRegistrationServices.cs
+- [x] T020 [US1] Remove remaining module-specific ownership from core registration plumbing in src/Nuplane/Feeds/Registration/NuplaneFeedRegistrationServices.cs and src/Nuplane/Nuplane.csproj
 
 **Checkpoint**: User Story 1 is independently functional and testable.
 
@@ -71,17 +71,17 @@
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T021 [P] [US2] Add loading direct-registration determinism tests in test/Nuplane.Loading.Tests/LoadingRegistrationDeterminismTests.cs
-- [ ] T022 [P] [US2] Add directory direct-registration determinism tests in test/Nuplane.Sources.Directory.Tests/DirectorySourceRegistrationDeterminismTests.cs
-- [ ] T023 [US2] Add integration coverage for module-owned registration without core implementation reach-through in test/Nuplane.Integration.Tests/Reconciliation/ModuleRegistrationCompatibilityTests.cs
+- [x] T021 [P] [US2] Add loading direct-registration determinism tests in test/Nuplane.Loading.Tests/LoadingRegistrationDeterminismTests.cs
+- [x] T022 [P] [US2] Add directory direct-registration determinism tests in test/Nuplane.Sources.Directory.Tests/DirectorySourceRegistrationDeterminismTests.cs
+- [x] T023 [US2] Add integration coverage for module-owned registration without core implementation reach-through in test/Nuplane.Integration.Tests/Reconciliation/ModuleRegistrationCompatibilityTests.cs
 
 ### Implementation for User Story 2
 
-- [ ] T024 [P] [US2] Add the module-owned loading `IServiceCollection` extension surface in src/Nuplane.Loading/NuplaneLoadingServiceCollectionExtensions.cs
-- [ ] T025 [P] [US2] Add loading configuration-binding overloads and direct-registration helpers in src/Nuplane.Loading/Registration/LoadingRegistrationServices.cs
-- [ ] T026 [P] [US2] Refactor loading builder APIs to delegate to the direct module registration path in src/Nuplane.Loading.Hosting/Builder/NuplaneBuilderLoadingExtensions.cs
-- [ ] T027 [P] [US2] Update directory direct registration to replace prior module state deterministically in src/Nuplane.Sources.Directory/NuplaneDirectorySourceServiceCollectionExtensions.cs and src/Nuplane.Sources.Directory/Registration/DirectorySourceRegistrationServices.cs
-- [ ] T028 [US2] Extend registration/configuration coverage for direct module surfaces in test/Nuplane.Runtime.Tests/Configuration/ConfigurationDrivenRegistrationTests.cs
+- [x] T024 [P] [US2] Add the module-owned loading `IServiceCollection` extension surface in src/Nuplane.Loading/NuplaneLoadingServiceCollectionExtensions.cs
+- [x] T025 [P] [US2] Add loading configuration-binding overloads and direct-registration helpers in src/Nuplane.Loading/Registration/LoadingRegistrationServices.cs
+- [x] T026 [P] [US2] Refactor loading builder APIs to delegate to the direct module registration path in src/Nuplane.Loading.Hosting/Builder/NuplaneBuilderLoadingExtensions.cs
+- [x] T027 [P] [US2] Update directory direct registration to replace prior module state deterministically in src/Nuplane.Sources.Directory/NuplaneDirectorySourceServiceCollectionExtensions.cs and src/Nuplane.Sources.Directory/Registration/DirectorySourceRegistrationServices.cs
+- [x] T028 [US2] Extend registration/configuration coverage for direct module surfaces in test/Nuplane.Runtime.Tests/Configuration/ConfigurationDrivenRegistrationTests.cs
 
 **Checkpoint**: User Stories 1 and 2 are independently functional and testable.
 
@@ -95,17 +95,17 @@
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T029 [P] [US3] Add directory builder integration contract tests in test/Nuplane.Runtime.Tests/Configuration/DirectoryBuilderIntegrationTests.cs
-- [ ] T030 [P] [US3] Add override-precedence regression tests for direct-plus-builder registration in test/Nuplane.Runtime.Tests/Configuration/ConfigurationDrivenRegistrationTests.cs
-- [ ] T031 [US3] Add integration coverage for wrapper removal and module-owned builder usage in test/Nuplane.Integration.Tests/Reconciliation/ModuleRegistrationCompatibilityTests.cs
+- [x] T029 [P] [US3] Add directory builder integration contract tests in test/Nuplane.Runtime.Tests/Configuration/DirectoryBuilderIntegrationTests.cs
+- [x] T030 [P] [US3] Add override-precedence regression tests for direct-plus-builder registration in test/Nuplane.Runtime.Tests/Configuration/ConfigurationDrivenRegistrationTests.cs
+- [x] T031 [US3] Add integration coverage for wrapper removal and module-owned builder usage in test/Nuplane.Integration.Tests/Reconciliation/ModuleRegistrationCompatibilityTests.cs
 
 ### Implementation for User Story 3
 
-- [ ] T032 [P] [US3] Create the directory builder integration project in src/Nuplane.Sources.Directory.Hosting/Nuplane.Sources.Directory.Hosting.csproj
-- [ ] T033 [P] [US3] Add module-owned directory builder extensions in src/Nuplane.Sources.Directory.Hosting/Builder/NuplaneBuilderDirectoryExtensions.cs
-- [ ] T034 [P] [US3] Move directory setup-configuration translation into the builder integration package in src/Nuplane.Sources.Directory.Hosting/Configuration/NuplaneDirectoryFeedSetupConfiguration.cs
-- [ ] T035 [US3] Remove core directory builder wrappers from src/Nuplane/Feeds/Builder/NuplaneFeedBuilder.cs and src/Nuplane/Feeds/Setup/NuplaneFeedSetupConfiguration.cs
-- [ ] T036 [US3] Document the steady-state builder ownership and migration policy in docs/coding-conventions.md and README.md
+- [x] T032 [P] [US3] Create the directory builder integration project in src/Nuplane.Sources.Directory.Hosting/Nuplane.Sources.Directory.Hosting.csproj
+- [x] T033 [P] [US3] Add module-owned directory builder extensions in src/Nuplane.Sources.Directory.Hosting/Builder/NuplaneBuilderDirectoryExtensions.cs
+- [x] T034 [P] [US3] Move directory setup-configuration translation into the builder integration package in src/Nuplane.Sources.Directory.Hosting/Configuration/NuplaneDirectoryFeedSetupConfiguration.cs
+- [x] T035 [US3] Remove core directory builder wrappers from src/Nuplane/Feeds/Builder/NuplaneFeedBuilder.cs and src/Nuplane/Feeds/Setup/NuplaneFeedSetupConfiguration.cs
+- [x] T036 [US3] Document the steady-state builder ownership and migration policy in docs/coding-conventions.md and README.md
 
 **Checkpoint**: All user stories are independently functional and testable.
 
@@ -115,10 +115,10 @@
 
 **Purpose**: Final consistency, samples, and end-to-end validation across stories.
 
-- [ ] T037 [P] Update sample consumers to use module-owned direct registration and builder packages in samples/Nuplane.Sample.AspNetCore/Program.cs and samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj
-- [ ] T038 [P] Finalize repository module-boundary guidance in docs/roadmap.md and specs/013-module-pattern-expansion/contracts/module-registration-contract.md
-- [ ] T039 [P] Finalize builder-ownership guidance in specs/013-module-pattern-expansion/contracts/builder-integration-contract.md and specs/013-module-pattern-expansion/quickstart.md
-- [ ] T040 Run quickstart validation and capture the evidence in specs/013-module-pattern-expansion/quickstart-validation.md
+- [x] T037 [P] Update sample consumers to use module-owned direct registration and builder packages in samples/Nuplane.Sample.AspNetCore/Program.cs and samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj
+- [x] T038 [P] Finalize repository module-boundary guidance in docs/roadmap.md and specs/013-module-pattern-expansion/contracts/module-registration-contract.md
+- [x] T039 [P] Finalize builder-ownership guidance in specs/013-module-pattern-expansion/contracts/builder-integration-contract.md and specs/013-module-pattern-expansion/quickstart.md
+- [x] T040 Run quickstart validation and capture the evidence in specs/013-module-pattern-expansion/quickstart-validation.md
 
 ---
 

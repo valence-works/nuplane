@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Sources.Directory.Hosting.Builder;
 
 namespace Nuplane.Runtime.Tests.Hosting;
 
@@ -43,10 +44,7 @@ public sealed class FeedSelectionRegistrationTests
             var services = new ServiceCollection();
             services.AddNuplane(nuplane =>
             {
-                nuplane.AddFeed("drop-folder", feed =>
-                {
-                    feed.FromDirectory(packagesPath);
-                });
+                nuplane.AddDirectoryFeed("drop-folder", packagesPath);
             });
 
             using var provider = services.BuildServiceProvider();
@@ -82,10 +80,7 @@ public sealed class FeedSelectionRegistrationTests
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 services.AddNuplane(nuplane =>
                 {
-                    nuplane.AddFeed("drop-folder", feed =>
-                    {
-                        feed.FromDirectory(packagesPath);
-                    });
+                    nuplane.AddDirectoryFeed("drop-folder", packagesPath);
 
                     nuplane.AddFeed("DROP-FOLDER", feed =>
                     {
@@ -119,9 +114,8 @@ public sealed class FeedSelectionRegistrationTests
             var services = new ServiceCollection();
             services.AddNuplane(nuplane =>
             {
-                nuplane.AddFeed("drop-folder", feed =>
+                nuplane.AddDirectoryFeed("drop-folder", packagesPath, feed =>
                 {
-                    feed.FromDirectory(packagesPath);
                     feed.IncludeAll();
                 });
 

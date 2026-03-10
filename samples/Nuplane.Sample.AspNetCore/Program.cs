@@ -1,12 +1,14 @@
 using Nuplane;
 using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Sample.AspNetCore;
+using Nuplane.Sources.Directory.Hosting.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 var nuplaneConfiguration = builder.Configuration.GetSection("Nuplane");
 
 builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
 {
+    nuplane.AddDirectoryFeedsFromConfiguration(nuplaneConfiguration);
     nuplane.AutoloadPackages(nuplaneConfiguration.GetSection("Loading"));
     nuplane.OnPackagesChanged<PackageChangeObserver>();
     nuplane.OnPackagesLoaded<PluginDiscoveryObserver>();

@@ -41,6 +41,18 @@ Implementation notes:
 - policy and lock failures are non-mutating and must preserve LKG active pointers
 - diagnostics include correlation-linked policy, lock, and cleanup outcomes for operator triage
 
+## Module Pattern Expansion (013)
+
+Normalizes optional-module ownership across Nuplane so that directory-source and loading capabilities expose module-owned direct registration surfaces, keep module-specific options and hosted services out of core, and move module-specific fluent APIs into module-owned builder integration packages.
+
+- Each optional module (loading, directory-source) gains a direct `IServiceCollection` registration surface in its implementation package.
+- Module-specific fluent builder APIs move from `Nuplane` into dedicated builder integration packages (`Nuplane.Loading.Hosting`, `Nuplane.Sources.Directory.Hosting`).
+- Core `Nuplane` no longer owns module-specific options, hosted services, or registration helpers.
+- Duplicate registration follows last-registration-wins semantics with deterministic service-graph deduplication.
+- Superseded core wrappers for module-specific registration are removed once module-owned replacements are in place.
+
+> **Migration note**: Consumers previously using `NuplaneFeedBuilder.FromDirectory(...)` from core should switch to the module-owned builder extensions in `Nuplane.Sources.Directory.Hosting`. Consumers using `AddNuplaneDirectorySource(...)` or `AutoloadPackages(...)` are unaffected.
+
 ---
 
 ## Naming & Packages
@@ -52,9 +64,11 @@ Implementation notes:
 - `Nuplane.NuGet` — NuGet.Protocol integration (feeds, resolve, download)
 - `Nuplane.Hosting` — `IHostBuilder`/DI extensions and options wiring
 - `Nuplane.Sources.Directory` — desired-state source from `.nupkg` drop folder
+- `Nuplane.Sources.Directory.Hosting` — module-owned builder extensions for directory-source feeds
 
 **Optional (Phase 3+):**
 - `Nuplane.Loading` — optional assembly loading/unload attempts (ALC-based)
+- `Nuplane.Loading.Hosting` — module-owned builder extensions for assembly loading
 
 ### Module Pattern
 

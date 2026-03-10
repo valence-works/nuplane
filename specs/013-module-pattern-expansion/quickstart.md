@@ -15,7 +15,7 @@ Run from repository root:
 
 ```bash
 dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
-	--filter "FullyQualifiedName~ConfigurationDrivenRegistrationTests|FullyQualifiedName~CoreRuntimeRegistrationIsolationTests|FullyQualifiedName~ModuleOwnershipBoundaryTests"
+	--filter "FullyQualifiedName~ConfigurationDrivenRegistrationTests|FullyQualifiedName~CoreRuntimeRegistrationIsolationTests|FullyQualifiedName~ModuleOwnershipBoundaryTests|FullyQualifiedName~DirectoryBuilderIntegrationTests|FullyQualifiedName~FeedSelectionRegistrationTests"
 dotnet test test/Nuplane.Sources.Directory.Tests/Nuplane.Sources.Directory.Tests.csproj \
 	--filter "FullyQualifiedName~DirectoryObservationContractTests|FullyQualifiedName~DirectorySourceRegistrationDeterminismTests"
 dotnet test test/Nuplane.Loading.Tests/Nuplane.Loading.Tests.csproj \
@@ -41,9 +41,10 @@ dotnet test nuplane.sln
 
 ## 3) Verify builder integration delegation
 1. Register loading through `AutoloadPackages(...)`.
-2. Register directory-source through its module-owned builder integration package.
-3. Confirm the builder APIs delegate to the same registration services used by direct registration.
-4. Confirm no module-specific orchestration logic remains in `src/Nuplane`.
+2. Register directory-source through `AddDirectoryFeed(name, path, configure?)` from `Nuplane.Sources.Directory.Hosting`.
+3. Register config-driven directory feeds through `AddDirectoryFeedsFromConfiguration(configuration)`.
+4. Confirm the builder APIs delegate to the same registration services used by direct registration.
+5. Confirm no module-specific orchestration logic remains in `src/Nuplane`.
 
 ## 4) Verify duplicate-registration determinism
 1. Register the same module through both direct and builder paths with different option values.
