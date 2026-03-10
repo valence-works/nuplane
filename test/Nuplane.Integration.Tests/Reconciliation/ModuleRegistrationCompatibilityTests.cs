@@ -101,7 +101,7 @@ public sealed class ModuleRegistrationCompatibilityTests
 
         // Both modules' services must be present
         Assert.Contains(services, d => d.ServiceType == typeof(IPackageLoader));
-        Assert.Contains(services, d => d.ServiceType == typeof(Abstractions.IDesiredPackageSource));
+        Assert.Contains(services, d => d.ServiceType == typeof(IDesiredPackageSource));
     }
 
     [Fact]
