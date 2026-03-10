@@ -42,7 +42,6 @@ C# on .NET 8 (LTS): Follow standard conventions
 
 ## Recent Changes
 - 013-module-pattern-expansion: Added C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0` + `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Configuration.Binder`, `Microsoft.Extensions.Logging`, xUnit, NSubstitute
-- 013-module-pattern-expansion: Added C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0` + `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Configuration.Binder`, `Microsoft.Extensions.Logging`, xUnit, NSubstitute
 - 012-default-state-path: Added C# / .NET 8.0, 9.0, 10.0 (multi-target) + Microsoft.Extensions.{Options, Logging, DependencyInjection, Configuration} v10.0.3
 
 
