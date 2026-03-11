@@ -3,10 +3,19 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Options.Validation;
+using Nuplane.Reconciliation.Validation;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Feeds.Configuration;
+using Nuplane.Runtime.Reconciliation.Configuration;
+using Nuplane.Runtime.Reconciliation.Convergence;
+using Nuplane.Runtime.Reconciliation.LockFile;
+using Nuplane.Runtime.Trust.Feeds;
+using Nuplane.Runtime.Trust.Source;
 using Nuplane.Setup;
+using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
+using Nuplane.Store.Validation;
+using Nuplane.Trust.Validation;
 
 namespace Nuplane.Registration;
 

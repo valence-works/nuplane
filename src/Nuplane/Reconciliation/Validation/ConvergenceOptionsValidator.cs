@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
-using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Reconciliation.Convergence;
 
-namespace Nuplane.Options.Validation;
+namespace Nuplane.Reconciliation.Validation;
 
 internal sealed class ConvergenceOptionsValidator : IValidateOptions<ConvergenceOptions>
 {

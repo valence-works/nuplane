@@ -1,6 +1,6 @@
 using Nuplane.Abstractions;
 
-namespace Nuplane.Builder;
+namespace Nuplane.Feeds.Builder;
 
 /// <summary>
 /// Builder for configuring an individual Nuplane feed, including its source location,

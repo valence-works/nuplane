@@ -1,4 +1,4 @@
-namespace Nuplane.Store.State;
+namespace Nuplane.Store.Cleanup;
 
 /// <summary>
 /// Specifies when cleanup operations are executed.

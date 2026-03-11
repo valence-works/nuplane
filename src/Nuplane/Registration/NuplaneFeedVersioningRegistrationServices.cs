@@ -9,6 +9,7 @@ using Nuplane.Runtime.Feeds.Configuration;
 using Nuplane.Runtime.Feeds.Policy;
 using Nuplane.Runtime.Feeds.Versioning;
 using Nuplane.Runtime.Observability;
+using Nuplane.Runtime.Trust.Feeds;
 
 namespace Nuplane.Registration;
 

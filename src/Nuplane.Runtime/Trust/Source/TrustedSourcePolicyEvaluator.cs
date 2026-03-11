@@ -1,6 +1,6 @@
 using Nuplane.Abstractions;
 
-namespace Nuplane.Runtime.Configuration;
+namespace Nuplane.Runtime.Trust.Source;
 
 /// <summary>
 /// Evaluates whether a desired-state source is allowed to contribute requests based on

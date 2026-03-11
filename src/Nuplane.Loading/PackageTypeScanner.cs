@@ -110,7 +110,7 @@ public sealed class PackageTypeScanner : IPackageTypeScanner
     {
         try
         {
-            return !type.IsAbstract && !type.IsInterface;
+            return type is { IsAbstract: false, IsInterface: false };
         }
         catch (Exception ex) when (IsSkippableTypeInspectionException(ex))
         {

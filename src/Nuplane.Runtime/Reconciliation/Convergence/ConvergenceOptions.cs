@@ -1,4 +1,6 @@
-namespace Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Configuration;
+
+namespace Nuplane.Runtime.Reconciliation.Convergence;
 
 /// <summary>
 /// Root configuration object for convergent runtime loading behaviors,

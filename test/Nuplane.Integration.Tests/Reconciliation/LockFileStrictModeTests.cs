@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.LockFile;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 

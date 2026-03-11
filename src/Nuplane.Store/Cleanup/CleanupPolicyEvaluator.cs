@@ -1,4 +1,6 @@
-namespace Nuplane.Store.State;
+using Nuplane.Store.State;
+
+namespace Nuplane.Store.Cleanup;
 
 /// <summary>
 /// Evaluates cleanup policy rules for individual package versions, determining whether

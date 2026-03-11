@@ -1,4 +1,4 @@
-namespace Nuplane.Setup;
+namespace Nuplane.Feeds.Setup;
 
 /// <summary>
 /// Declarative configuration for a directory-backed Nuplane feed.

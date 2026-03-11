@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Nuplane.Builder;
+using Nuplane.Feeds.Setup;
 using Nuplane.Setup;
 using Nuplane.Sources.Directory.Builder;
 

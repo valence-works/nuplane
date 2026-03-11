@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
-using Nuplane.Store.State;
+using Nuplane.Store.Cleanup;
 
-namespace Nuplane.Options.Validation;
+namespace Nuplane.Store.Validation;
 
 internal sealed class CleanupPolicyOptionsValidator : IValidateOptions<CleanupPolicyOptions>
 {
@@ -9,12 +9,12 @@ internal sealed class CleanupPolicyOptionsValidator : IValidateOptions<CleanupPo
     {
         var errors = new List<string>();
 
-        if (options.RetainLastNVersions.HasValue && options.RetainLastNVersions.Value < 0)
+        if (options.RetainLastNVersions is < 0)
         {
             errors.Add("Cleanup RetainLastNVersions must be greater than or equal to zero.");
         }
 
-        if (options.RetainYoungerThanDays.HasValue && options.RetainYoungerThanDays.Value < 0)
+        if (options.RetainYoungerThanDays is < 0)
         {
             errors.Add("Cleanup RetainYoungerThanDays must be greater than or equal to zero.");
         }

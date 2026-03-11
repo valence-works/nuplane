@@ -1,4 +1,4 @@
-namespace Nuplane.Runtime.Configuration;
+namespace Nuplane.Runtime.Reconciliation.Configuration;
 
 /// <summary>
 /// Configuration options controlling reconciliation cycle behavior, including poll interval,

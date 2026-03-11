@@ -1,4 +1,4 @@
-namespace Nuplane.Runtime.Configuration;
+namespace Nuplane.Runtime.Reconciliation.Convergence;
 
 /// <summary>
 /// Configuration options for the optional loader boundary.

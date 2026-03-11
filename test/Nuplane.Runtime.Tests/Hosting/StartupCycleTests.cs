@@ -8,6 +8,8 @@ using Nuplane.Hosting;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Reconciliation.Configuration;
+using Nuplane.Runtime.Reconciliation.Convergence;
 
 namespace Nuplane.Runtime.Tests.Hosting;
 

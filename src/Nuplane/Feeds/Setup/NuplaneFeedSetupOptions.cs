@@ -1,6 +1,6 @@
 using Nuplane.Abstractions;
 
-namespace Nuplane.Setup;
+namespace Nuplane.Feeds.Setup;
 
 /// <summary>
 /// Declarative translation model for a single feed in the <c>Nuplane:Setup</c> section.

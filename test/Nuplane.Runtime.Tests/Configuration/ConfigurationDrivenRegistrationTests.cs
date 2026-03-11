@@ -8,6 +8,7 @@ using Nuplane.Hosting;
 using Nuplane.Loading;
 using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Trust.Source;
 using Nuplane.Setup;
 using Nuplane.Sources.Directory;
 using Nuplane.Sources.Directory.Builder;

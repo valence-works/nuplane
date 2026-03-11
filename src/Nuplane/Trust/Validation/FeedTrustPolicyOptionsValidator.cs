@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Feeds.Configuration;
+using Nuplane.Runtime.Trust.Feeds;
 
-namespace Nuplane.Options.Validation;
+namespace Nuplane.Trust.Validation;
 
 internal sealed class FeedTrustPolicyOptionsValidator : IValidateOptions<FeedTrustPolicyOptions>
 {

@@ -1,4 +1,4 @@
-namespace Nuplane.Runtime.Configuration;
+namespace Nuplane.Runtime.Trust.Source;
 
 /// <summary>
 /// Represents the result of a trusted source policy evaluation.

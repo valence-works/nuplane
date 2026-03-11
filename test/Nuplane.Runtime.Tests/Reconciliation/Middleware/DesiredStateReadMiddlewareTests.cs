@@ -6,6 +6,8 @@ using Nuplane.Runtime.Reconciliation;
 using Nuplane.Runtime.Reconciliation.Middleware;
 using Nuplane.Runtime.Sources;
 using Nuplane.Runtime.Trust;
+using Nuplane.Runtime.Trust.Feeds;
+using Nuplane.Runtime.Trust.Source;
 using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Reconciliation.Middleware;

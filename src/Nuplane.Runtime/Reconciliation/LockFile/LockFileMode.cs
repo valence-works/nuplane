@@ -1,4 +1,4 @@
-namespace Nuplane.Runtime.Configuration;
+namespace Nuplane.Runtime.Reconciliation.LockFile;
 
 /// <summary>
 /// Specifies how the lock file is used during reconciliation.

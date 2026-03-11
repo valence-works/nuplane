@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Trust.Source;
 using Nuplane.Sources.Directory.Builder;
 
 namespace Nuplane.Runtime.Tests.Configuration;

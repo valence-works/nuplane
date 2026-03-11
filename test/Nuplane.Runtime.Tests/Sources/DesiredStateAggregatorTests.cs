@@ -1,6 +1,7 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Sources;
+using Nuplane.Runtime.Trust.Source;
 
 namespace Nuplane.Runtime.Tests.Sources;
 

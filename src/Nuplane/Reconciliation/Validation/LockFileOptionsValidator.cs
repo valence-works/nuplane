@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
-using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Reconciliation.LockFile;
 
-namespace Nuplane.Options.Validation;
+namespace Nuplane.Reconciliation.Validation;
 
 internal sealed class LockFileOptionsValidator : IValidateOptions<LockFileOptions>
 {

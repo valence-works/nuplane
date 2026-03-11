@@ -1,7 +1,6 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Feeds.Configuration;
 
-namespace Nuplane.Runtime.Feeds.Policy;
+namespace Nuplane.Runtime.Trust.Feeds;
 
 /// <summary>
 /// Evaluates the trust policy for a package against its source feed, determining

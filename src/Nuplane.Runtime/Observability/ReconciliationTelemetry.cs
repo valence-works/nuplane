@@ -176,9 +176,9 @@ public sealed class ReconciliationTelemetry : IDisposable
         LoaderBoundarySkippedCounter = _meter.CreateCounter<long>("nuplane.convergence.loader.skipped");
         TriggerCounter = _meter.CreateCounter<long>("nuplane.convergence.trigger");
         TransactionDurationMilliseconds = _meter.CreateHistogram<double>("nuplane.reconciliation.transaction.duration.ms");
-        ActivePackagesGauge = _meter.CreateObservableGauge<long>("nuplane.reconciliation.active", () => _activePackages);
-        UnloadPendingPackagesGauge = _meter.CreateObservableGauge<long>("nuplane.loading.unload.pending.active", () => _unloadPendingPackages);
-        IdleModeGauge = _meter.CreateObservableGauge<int>("nuplane.runtime.idle", () => _idleMode);
+        ActivePackagesGauge = _meter.CreateObservableGauge("nuplane.reconciliation.active", () => _activePackages);
+        UnloadPendingPackagesGauge = _meter.CreateObservableGauge("nuplane.loading.unload.pending.active", () => _unloadPendingPackages);
+        IdleModeGauge = _meter.CreateObservableGauge("nuplane.runtime.idle", () => _idleMode);
     }
 
     /// <summary>

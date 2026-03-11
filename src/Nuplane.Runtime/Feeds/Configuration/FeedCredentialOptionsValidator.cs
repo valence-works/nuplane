@@ -1,5 +1,7 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Trust.Feeds;
+using Nuplane.Runtime.Trust.Source;
 
 namespace Nuplane.Runtime.Feeds.Configuration;
 
@@ -105,8 +107,7 @@ public sealed class FeedCredentialOptionsValidator
         }
 
         if (feedResolution.Feeds.Count > 0 &&
-            feedResolution.PolicyMode == FeedResolutionPolicyMode.Strict &&
-            !feedResolution.StopOnFirstSuccessfulFeed &&
+            feedResolution is { PolicyMode: FeedResolutionPolicyMode.Strict, StopOnFirstSuccessfulFeed: false } &&
             feedResolution.Feeds.All(x => x.TrustLevel == FeedTrustLevel.Untrusted))
         {
             errors.Add("Strict mode requires at least one non-untrusted feed to avoid fail-open configuration.");

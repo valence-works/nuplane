@@ -4,6 +4,7 @@ using Nuplane.Hosting;
 using Nuplane.Runtime.Feeds.Policy;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation;
+using Nuplane.Runtime.Trust.Feeds;
 
 namespace Nuplane.Runtime.Tests.Operational;
 

@@ -14,7 +14,7 @@ internal sealed class FeedResolutionOptionsValidator(
     {
         var errors = new List<string>();
 
-        if (options.Feeds.Count > 0 && options.ValidateDeterministicOrdering && !options.DeterministicFeedOrder)
+        if (options.Feeds.Count > 0 && options is { ValidateDeterministicOrdering: true, DeterministicFeedOrder: false })
         {
             errors.Add("Deterministic feed ordering validation is enabled, but DeterministicFeedOrder is false.");
         }

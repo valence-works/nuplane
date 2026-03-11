@@ -1,6 +1,6 @@
 using Nuplane.Abstractions;
 
-namespace Nuplane.Runtime.Configuration;
+namespace Nuplane.Runtime.Trust.Source;
 
 /// <summary>
 /// Configuration options for source and package allowlisting, controlling which desired-state

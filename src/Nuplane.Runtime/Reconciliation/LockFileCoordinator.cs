@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
+using Nuplane.Runtime.Reconciliation.LockFile;
 using Nuplane.Runtime.Reconciliation.Models;
 
 namespace Nuplane.Runtime.Reconciliation;
@@ -30,7 +31,7 @@ public sealed class LockFileCoordinator(LockFileStore store, IOptions<LockFileOp
 
         if (entry is null)
         {
-            if (_options.Mode == LockFileMode.Strict && _options.RequireEntryInStrictMode)
+            if (_options is { Mode: LockFileMode.Strict, RequireEntryInStrictMode: true })
             {
                 return new(false, "strict-missing-entry", null, null);
             }

@@ -1,4 +1,4 @@
-namespace Nuplane.Store.State;
+namespace Nuplane.Store.Cleanup;
 
 /// <summary>
 /// Represents a package version entry used as input for cleanup evaluation.

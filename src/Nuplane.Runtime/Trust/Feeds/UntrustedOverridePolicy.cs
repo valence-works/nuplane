@@ -1,7 +1,6 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Feeds.Configuration;
 
-namespace Nuplane.Runtime.Feeds.Policy;
+namespace Nuplane.Runtime.Trust.Feeds;
 
 /// <summary>
 /// Finds matching untrusted feed overrides for a package request based on package-scoped

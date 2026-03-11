@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 
-namespace Nuplane.Options.Validation;
+namespace Nuplane.Trust.Validation;
 
 internal sealed class TrustedSourcePolicyOptionsValidator : IValidateOptions<TrustedSourcePolicyOptions>
 {
@@ -9,7 +9,7 @@ internal sealed class TrustedSourcePolicyOptionsValidator : IValidateOptions<Tru
     {
         var errors = new List<string>();
 
-        if (options.Enabled && options.TrustedSourceNames.Count == 0)
+        if (options is { Enabled: true, TrustedSourceNames.Count: 0 })
         {
             errors.Add("TrustedSourcePolicy is enabled but no trusted source names are configured. All sources will be rejected.");
         }

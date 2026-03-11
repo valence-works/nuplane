@@ -1,4 +1,4 @@
-namespace Nuplane.Runtime.Configuration;
+namespace Nuplane.Runtime.Reconciliation.LockFile;
 
 /// <summary>
 /// Configuration options for the package lock file, controlling its mode, path, and hash enforcement.

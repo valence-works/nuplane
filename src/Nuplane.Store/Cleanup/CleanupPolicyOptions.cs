@@ -1,4 +1,4 @@
-namespace Nuplane.Store.State;
+namespace Nuplane.Store.Cleanup;
 
 /// <summary>
 /// Configuration options for the package version cleanup policy, controlling retention

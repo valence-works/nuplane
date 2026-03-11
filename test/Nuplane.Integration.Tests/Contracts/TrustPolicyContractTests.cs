@@ -1,6 +1,7 @@
 using Nuplane.Abstractions;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Feeds.Configuration;
+using Nuplane.Runtime.Trust.Feeds;
 
 namespace Nuplane.Integration.Tests.Contracts;
 

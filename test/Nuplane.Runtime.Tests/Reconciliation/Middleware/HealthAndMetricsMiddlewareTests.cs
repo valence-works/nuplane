@@ -4,6 +4,7 @@ using Nuplane.Runtime.Feeds.Policy;
 using Nuplane.Runtime.Health;
 using Nuplane.Runtime.Observability;
 using Nuplane.Runtime.Reconciliation.Middleware;
+using Nuplane.Runtime.Trust.Feeds;
 
 namespace Nuplane.Runtime.Tests.Reconciliation.Middleware;
 

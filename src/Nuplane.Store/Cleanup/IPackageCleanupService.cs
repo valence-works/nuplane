@@ -1,4 +1,6 @@
-namespace Nuplane.Store.State;
+using Nuplane.Store.State;
+
+namespace Nuplane.Store.Cleanup;
 
 /// <summary>
 /// Defines the contract for executing automatic package version cleanup.

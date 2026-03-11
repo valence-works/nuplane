@@ -1,3 +1,4 @@
+using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
 
 namespace Nuplane.Store.Tests.State;
@@ -26,7 +27,7 @@ public sealed class CleanupLkgProtectionRegressionTests
             triggerOnSuccessfulReconciliation: true,
             CancellationToken.None);
 
-        var lkg = Assert.Single(results, x => x.PackageId == "pkg" && x.Version == "1.0.0");
+        var lkg = Assert.Single(results, x => x is { PackageId: "pkg", Version: "1.0.0" });
         Assert.Equal(CleanupAction.Kept, lkg.Action);
         Assert.Equal("protected-lkg", lkg.Reason);
     }

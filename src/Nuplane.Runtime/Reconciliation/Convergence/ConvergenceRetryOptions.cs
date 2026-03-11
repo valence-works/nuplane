@@ -1,4 +1,4 @@
-namespace Nuplane.Runtime.Configuration;
+namespace Nuplane.Runtime.Reconciliation.Convergence;
 
 /// <summary>
 /// Bounded retry/backoff configuration for convergence operations.

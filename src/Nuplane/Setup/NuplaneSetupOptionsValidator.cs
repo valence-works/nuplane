@@ -7,8 +7,7 @@ internal sealed class NuplaneSetupOptionsValidator : IValidateOptions<NuplaneSet
     public ValidateOptionsResult Validate(string? name, NuplaneSetupOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-
-
+        
         var errors = new List<string>();
 
         if (options.AutomaticReconciliation && options.PollInterval <= TimeSpan.Zero)

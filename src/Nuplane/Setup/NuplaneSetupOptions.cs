@@ -1,3 +1,5 @@
+using Nuplane.Feeds.Setup;
+
 namespace Nuplane.Setup;
 
 /// <summary>
