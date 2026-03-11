@@ -8,7 +8,7 @@ using Nuplane.Loading.Registration;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Reconciliation;
 using Nuplane.Sources.Directory;
-using Nuplane.Sources.Directory.Hosting.Builder;
+using Nuplane.Sources.Directory.Builder;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 

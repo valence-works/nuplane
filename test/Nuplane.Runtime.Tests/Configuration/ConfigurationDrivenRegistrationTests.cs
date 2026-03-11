@@ -10,8 +10,8 @@ using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Setup;
 using Nuplane.Sources.Directory;
-using Nuplane.Sources.Directory.Hosting.Builder;
-using Nuplane.Sources.Directory.Hosting.Configuration;
+using Nuplane.Sources.Directory.Builder;
+using Nuplane.Sources.Directory.Configuration;
 using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Configuration;

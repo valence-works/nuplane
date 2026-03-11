@@ -1,11 +1,7 @@
-using Microsoft.Extensions.DependencyInjection;
-using Nuplane.Abstractions;
 using Nuplane.Builder;
-using Nuplane.Feeds.Registration;
-using Nuplane.Sources.Directory.Builder;
 using Nuplane.Sources.Directory.Registration;
 
-namespace Nuplane.Sources.Directory.Hosting.Builder;
+namespace Nuplane.Sources.Directory.Builder;
 
 /// <summary>
 /// Module-owned builder extensions for configuring directory-backed Nuplane feeds
@@ -49,7 +45,7 @@ public static class NuplaneBuilderDirectoryExtensions
             config.TrustLevel,
             config.Credentials);
 
-        NuplaneFeedRegistrationServices.AddRegistrationMarkerFromModule(
+        DirectorySourceRegistrationServices.AddRegistrationMarkerFromModule(
             builder.Services,
             name,
             config.IncludePatterns,

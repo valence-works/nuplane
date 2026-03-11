@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nuplane.Abstractions;
+using Nuplane.Feeds.Registration;
 using Nuplane.Runtime.Configuration;
 using Nuplane.Runtime.Feeds.Configuration;
 using Nuplane.Runtime.Reconciliation;
@@ -87,6 +88,19 @@ public static class DirectorySourceRegistrationServices
 
         services.AddSingleton(marker);
     }
+    
+    /// <summary>
+    /// Adds a registration marker for a feed defined outside of the builder API, such as through configuration. This allows the module to track feeds that were registered through other means and ensure their patterns are included in the source trust configuration.
+    /// </summary>
+    public static void AddRegistrationMarkerFromModule(
+        IServiceCollection services,
+        string feedName,
+        IEnumerable<string> includePatterns,
+        bool hasExplicitUnrestrictedPackageSelection) =>
+        services.AddSingleton(new NuplaneFeedRegistration(
+            feedName,
+            DistinctNonBlank(includePatterns).ToArray(),
+            hasExplicitUnrestrictedPackageSelection));
 
     private static void RemovePriorFeedRegistration(IServiceCollection services, string feedName)
     {

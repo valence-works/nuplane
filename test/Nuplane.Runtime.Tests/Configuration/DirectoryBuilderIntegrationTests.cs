@@ -2,9 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
-using Nuplane.Hosting;
 using Nuplane.Runtime.Configuration;
-using Nuplane.Sources.Directory.Hosting.Builder;
+using Nuplane.Sources.Directory.Builder;
 
 namespace Nuplane.Runtime.Tests.Configuration;
 
@@ -207,6 +206,10 @@ public sealed class DirectoryBuilderIntegrationTests
 
     private static void Cleanup(string path)
     {
-        try { Directory.Delete(path, recursive: true); } catch { }
+        try { Directory.Delete(path, recursive: true); }
+        catch
+        {
+            // ignored
+        }
     }
 }

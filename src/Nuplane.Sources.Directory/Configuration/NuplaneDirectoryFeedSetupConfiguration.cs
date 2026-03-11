@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Nuplane.Builder;
 using Nuplane.Setup;
-using Nuplane.Sources.Directory.Hosting.Builder;
+using Nuplane.Sources.Directory.Builder;
 
-namespace Nuplane.Sources.Directory.Hosting.Configuration;
+namespace Nuplane.Sources.Directory.Configuration;
 
 /// <summary>
 /// Translates directory-specific feed configuration from <c>Setup:Feeds</c> sections

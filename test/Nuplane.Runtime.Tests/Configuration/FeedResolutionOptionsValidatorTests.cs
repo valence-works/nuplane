@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Options;
 using NSubstitute;
 using Nuplane.Feeds.Registration;
 using Nuplane.Options.Validation;

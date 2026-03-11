@@ -1,6 +1,6 @@
 using Nuplane.Abstractions;
 
-namespace Nuplane.Sources.Directory.Hosting.Builder;
+namespace Nuplane.Sources.Directory.Builder;
 
 /// <summary>
 /// Configuration for a directory-backed feed registered through the module-owned builder API.

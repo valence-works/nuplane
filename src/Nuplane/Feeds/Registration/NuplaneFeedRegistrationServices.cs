@@ -7,31 +7,36 @@ using Nuplane.Runtime.Sources;
 
 namespace Nuplane.Feeds.Registration;
 
-internal static class NuplaneFeedRegistrationServices
+/// <summary>
+/// Provides services for registering Nuplane feeds and their associated metadata in the service collection.
+/// </summary>
+public static class NuplaneFeedRegistrationServices
 {
-    internal static bool HasRegisteredFeed(IServiceCollection services, string name) =>
+    /// <summary>
+    /// Determines whether a feed with the specified name has already been registered in the service collection.
+    /// </summary>
+    /// <param name="services">The service collection where feeds are registered.</param>
+    /// <param name="name">The name of the feed to check for registration.</param>
+    /// <returns>True if the feed is registered; otherwise, false.</returns>
+    public static bool HasRegisteredFeed(IServiceCollection services, string name) =>
         services.Any(descriptor =>
             descriptor.ServiceType == typeof(NuplaneFeedRegistration)
             && descriptor.ImplementationInstance is NuplaneFeedRegistration registration
             && string.Equals(registration.Name, name, StringComparison.OrdinalIgnoreCase));
 
-    internal static void AddRegistrationMarker(IServiceCollection services, NuplaneFeedBuilder feed) =>
+    /// <summary>
+    /// Adds a registration marker for the specified feed to the service collection. This marker is used to track registered feeds
+    /// </summary>
+    public static void AddRegistrationMarker(IServiceCollection services, NuplaneFeedBuilder feed) =>
         services.AddSingleton(new NuplaneFeedRegistration(
             feed.Name,
             DistinctNonBlank(feed.IncludePatterns).ToArray(),
             HasExplicitUnrestrictedPackageSelection(feed)));
 
-    internal static void AddRegistrationMarkerFromModule(
-        IServiceCollection services,
-        string feedName,
-        IEnumerable<string> includePatterns,
-        bool hasExplicitUnrestrictedPackageSelection) =>
-        services.AddSingleton(new NuplaneFeedRegistration(
-            feedName,
-            DistinctNonBlank(includePatterns).ToArray(),
-            hasExplicitUnrestrictedPackageSelection));
-
-    internal static void Register(IServiceCollection services, NuplaneFeedBuilder feed)
+    /// <summary>
+    /// Registers the feed defined by the <see cref="NuplaneFeedBuilder"/> in the service collection, including its resolution options and desired package source if applicable.
+    /// </summary>
+    public static void Register(IServiceCollection services, NuplaneFeedBuilder feed)
     {
         if (feed.ServiceIndex is { } serviceIndex)
         {
@@ -53,7 +58,10 @@ internal static class NuplaneFeedRegistrationServices
         }
     }
 
-    internal static void ConfigureSourceTrustOptions(IServiceCollection services)
+    /// <summary>
+    /// Configures the <see cref="SourceTrustOptions"/> based on the registered feeds and their package selection patterns. If any feed has an explicit unrestricted package selection (i.e., includes "*"), all package ID restrictions are cleared and all sources are allowed. Otherwise, the allowed package ID patterns from all feeds are aggregated into the options.
+    /// </summary>
+    public static void ConfigureSourceTrustOptions(IServiceCollection services)
     {
         var registrations = services
             .Where(static descriptor => descriptor.ServiceType == typeof(NuplaneFeedRegistration))
