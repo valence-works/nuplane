@@ -1,4 +1,5 @@
 using Nuplane;
+using Nuplane.Admin;
 using Nuplane.Admin.Api;
 using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Sample.AspNetCore;
@@ -14,6 +15,7 @@ builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
     nuplane.OnPackagesChanged<PackageChangeObserver>();
     nuplane.OnPackagesLoaded<PluginDiscoveryObserver>();
 });
+builder.Services.AddNuplaneAdmin();
 
 var app = builder.Build();
 

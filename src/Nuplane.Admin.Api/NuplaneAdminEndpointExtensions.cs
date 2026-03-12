@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Nuplane.Reconciliation;
 
@@ -30,7 +31,7 @@ public static class NuplaneAdminEndpointExtensions
         ArgumentNullException.ThrowIfNull(endpoints);
 
         endpoints.MapGet($"{prefix}/snapshot", async (
-            INuplaneAdminOperations operations,
+            [FromServices] INuplaneAdminOperations operations,
             CancellationToken cancellationToken) =>
         {
             var snapshot = await operations.GetSnapshotAsync(cancellationToken);
@@ -39,7 +40,7 @@ public static class NuplaneAdminEndpointExtensions
           .WithTags("NuplaneAdmin");
 
         endpoints.MapPost($"{prefix}/reconcile", async (
-            INuplaneAdminOperations operations,
+            [FromServices] INuplaneAdminOperations operations,
             CancellationToken cancellationToken) =>
         {
             var outcome = await operations.TriggerReconcileAsync(cancellationToken);
