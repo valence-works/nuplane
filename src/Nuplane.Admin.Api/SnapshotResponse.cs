@@ -1,4 +1,4 @@
-using Nuplane.Runtime.Operational;
+using Nuplane.Operational;
 
 namespace Nuplane.Admin.Api;
 

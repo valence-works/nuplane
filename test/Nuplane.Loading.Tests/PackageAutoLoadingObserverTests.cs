@@ -2,8 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Loading.Events;
-using Nuplane.Loading.Hosting;
-using Nuplane.Runtime.Observability;
+using Nuplane.Observability;
 using Nuplane.Store.State;
 
 namespace Nuplane.Loading.Tests;

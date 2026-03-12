@@ -1,4 +1,6 @@
 using Nuplane.Abstractions;
+using Nuplane.Events;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Integration.Tests.Contracts;
 
@@ -15,7 +17,7 @@ public sealed class ObserverContractTests
             {
                 AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" }
             },
-            observerEventDispatcher: new Nuplane.Runtime.Events.ObserverEventDispatcher([observer]));
+            observerEventDispatcher: new ObserverEventDispatcher([observer]));
 
         var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 

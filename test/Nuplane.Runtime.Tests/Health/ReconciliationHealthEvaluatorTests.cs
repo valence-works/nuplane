@@ -1,4 +1,4 @@
-using Nuplane.Runtime.Health;
+using Nuplane.Health;
 
 namespace Nuplane.Runtime.Tests.Health;
 
@@ -14,8 +14,7 @@ public sealed class ReconciliationHealthEvaluatorTests
             AllSourcesFresh: true,
             TrustFailures: 0,
             LockFailures: 0,
-            CleanupFailures: 0,
-            UnloadPendingCount: 0);
+            CleanupFailures: 0);
 
         var result = _sut.Evaluate(input);
 
@@ -31,8 +30,7 @@ public sealed class ReconciliationHealthEvaluatorTests
             AllSourcesFresh: false,
             TrustFailures: 0,
             LockFailures: 0,
-            CleanupFailures: 0,
-            UnloadPendingCount: 0);
+            CleanupFailures: 0);
 
         var result = _sut.Evaluate(input);
 
@@ -49,7 +47,6 @@ public sealed class ReconciliationHealthEvaluatorTests
             TrustFailures: 0,
             LockFailures: 0,
             CleanupFailures: 0,
-            UnloadPendingCount: 0,
             ManifestFailures: 2);
 
         var result = _sut.Evaluate(input);
@@ -67,7 +64,6 @@ public sealed class ReconciliationHealthEvaluatorTests
             TrustFailures: 0,
             LockFailures: 0,
             CleanupFailures: 0,
-            UnloadPendingCount: 0,
             SourceOutages: 1);
 
         var result = _sut.Evaluate(input);
@@ -85,31 +81,12 @@ public sealed class ReconciliationHealthEvaluatorTests
             TrustFailures: 0,
             LockFailures: 0,
             CleanupFailures: 0,
-            UnloadPendingCount: 0,
             AcquisitionFailures: 3);
 
         var result = _sut.Evaluate(input);
 
         Assert.True(result);
         Assert.Equal(3, _sut.LastAcquisitionFailureCount);
-    }
-
-    [Fact]
-    public void Evaluate_LoaderFailures_Degraded()
-    {
-        var input = new ReconciliationHealthInput(
-            HadAnyFailures: false,
-            AllSourcesFresh: true,
-            TrustFailures: 0,
-            LockFailures: 0,
-            CleanupFailures: 0,
-            UnloadPendingCount: 0,
-            LoaderFailures: 1);
-
-        var result = _sut.Evaluate(input);
-
-        Assert.True(result);
-        Assert.Equal(1, _sut.LastLoaderFailureCount);
     }
 
     [Fact]
@@ -121,7 +98,6 @@ public sealed class ReconciliationHealthEvaluatorTests
             TrustFailures: 0,
             LockFailures: 0,
             CleanupFailures: 0,
-            UnloadPendingCount: 0,
             AdminRejections: 2);
 
         var result = _sut.Evaluate(input);
@@ -139,11 +115,9 @@ public sealed class ReconciliationHealthEvaluatorTests
             TrustFailures: -1,
             LockFailures: -1,
             CleanupFailures: -1,
-            UnloadPendingCount: -1,
             ManifestFailures: -1,
             SourceOutages: -1,
             AcquisitionFailures: -1,
-            LoaderFailures: -1,
             AdminRejections: -1);
 
         _sut.Evaluate(input);
@@ -151,11 +125,9 @@ public sealed class ReconciliationHealthEvaluatorTests
         Assert.Equal(0, _sut.LastTrustFailureCount);
         Assert.Equal(0, _sut.LastLockFailureCount);
         Assert.Equal(0, _sut.LastCleanupFailureCount);
-        Assert.Equal(0, _sut.LastUnloadPendingCount);
         Assert.Equal(0, _sut.LastManifestFailureCount);
         Assert.Equal(0, _sut.LastSourceOutageCount);
         Assert.Equal(0, _sut.LastAcquisitionFailureCount);
-        Assert.Equal(0, _sut.LastLoaderFailureCount);
         Assert.Equal(0, _sut.LastAdminRejectionCount);
     }
 
@@ -168,11 +140,9 @@ public sealed class ReconciliationHealthEvaluatorTests
             TrustFailures: 1,
             LockFailures: 2,
             CleanupFailures: 3,
-            UnloadPendingCount: 4,
             ManifestFailures: 5,
             SourceOutages: 6,
             AcquisitionFailures: 7,
-            LoaderFailures: 8,
             AdminRejections: 9);
 
         _sut.Evaluate(input);
@@ -181,11 +151,9 @@ public sealed class ReconciliationHealthEvaluatorTests
         Assert.Equal(1, _sut.LastTrustFailureCount);
         Assert.Equal(2, _sut.LastLockFailureCount);
         Assert.Equal(3, _sut.LastCleanupFailureCount);
-        Assert.Equal(4, _sut.LastUnloadPendingCount);
         Assert.Equal(5, _sut.LastManifestFailureCount);
         Assert.Equal(6, _sut.LastSourceOutageCount);
         Assert.Equal(7, _sut.LastAcquisitionFailureCount);
-        Assert.Equal(8, _sut.LastLoaderFailureCount);
         Assert.Equal(9, _sut.LastAdminRejectionCount);
     }
 
@@ -198,8 +166,7 @@ public sealed class ReconciliationHealthEvaluatorTests
             AllSourcesFresh: true,
             TrustFailures: 0,
             LockFailures: 0,
-            CleanupFailures: 0,
-            UnloadPendingCount: 0);
+            CleanupFailures: 0);
 
         var result = _sut.Evaluate(input);
 
@@ -207,7 +174,6 @@ public sealed class ReconciliationHealthEvaluatorTests
         Assert.Equal(0, _sut.LastManifestFailureCount);
         Assert.Equal(0, _sut.LastSourceOutageCount);
         Assert.Equal(0, _sut.LastAcquisitionFailureCount);
-        Assert.Equal(0, _sut.LastLoaderFailureCount);
         Assert.Equal(0, _sut.LastAdminRejectionCount);
     }
 

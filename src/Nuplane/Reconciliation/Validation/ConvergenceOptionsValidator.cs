@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Options;
-using Nuplane.Runtime.Reconciliation.Convergence;
+using Nuplane.Reconciliation.Convergence;
 
 namespace Nuplane.Reconciliation.Validation;
 

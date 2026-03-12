@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Options;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Configuration;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Configuration;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 

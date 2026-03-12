@@ -74,9 +74,9 @@ public static class NuplaneServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configure);
 
-        NuplaneOptionsRegistrationServices.RegisterValidators(services);
-        NuplaneOptionsRegistrationServices.RegisterOptions(services);
-        NuplaneCoreRuntimeRegistrationServices.RegisterCoreServices(services);
+        services.RegisterValidators();
+        services.RegisterOptions();
+        services.RegisterRuntime();
 
         var builder = new NuplaneBuilder(services);
         configure(builder);

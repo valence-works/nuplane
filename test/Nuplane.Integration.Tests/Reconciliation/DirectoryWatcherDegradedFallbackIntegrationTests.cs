@@ -1,10 +1,11 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Events;
-using Nuplane.Runtime.Observability;
-using Nuplane.Runtime.Operational;
-using Nuplane.Runtime.Trust.Feeds;
+using Nuplane.Events;
+using Nuplane.Health;
+using Nuplane.Observability;
+using Nuplane.Operational;
+using Nuplane.Reconciliation.Models;
 using Nuplane.Store.State;
+using Nuplane.Trust.Feeds;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -27,7 +28,6 @@ public sealed class DirectoryWatcherDegradedFallbackIntegrationTests
             TrustFailures: 0,
             LockFailures: 0,
             CleanupFailures: 0,
-            UnloadPendingCount: 0,
             SourceOutages: 1));
 
         var projector = new OperationalSnapshotProjector(

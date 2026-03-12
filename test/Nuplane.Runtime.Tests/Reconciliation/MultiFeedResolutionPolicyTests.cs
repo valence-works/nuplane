@@ -1,8 +1,7 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Feeds;
-using Nuplane.Runtime.Feeds.Configuration;
-using Nuplane.Runtime.Feeds.Policy;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Feeds.Policy;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 

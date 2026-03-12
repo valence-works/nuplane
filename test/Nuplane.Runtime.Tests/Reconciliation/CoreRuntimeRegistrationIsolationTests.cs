@@ -1,7 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Loading;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Sources;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Models;
+using Nuplane.Sources;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 

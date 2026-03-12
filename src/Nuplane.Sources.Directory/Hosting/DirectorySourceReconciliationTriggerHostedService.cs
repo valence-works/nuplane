@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Models;
+using Nuplane.Health;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Sources.Directory.Hosting;
 
@@ -13,7 +13,7 @@ public sealed class DirectorySourceReconciliationTriggerHostedService(
     DirectorySourceOptions options,
     IReconciliationTriggerIngress triggerSink,
     ILogger<DirectorySourceReconciliationTriggerHostedService> logger,
-    ObservationDegradationTracker? observationDegradationTracker = null)
+    ObservationDegradationTracker observationDegradationTracker)
     : BackgroundService
 {
     private readonly DirectorySourceOptions _options = options ?? throw new ArgumentNullException(nameof(options));

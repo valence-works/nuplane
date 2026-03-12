@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Logging;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Observability;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Observability;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 

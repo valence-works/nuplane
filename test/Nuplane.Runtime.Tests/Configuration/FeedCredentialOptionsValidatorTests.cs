@@ -1,8 +1,7 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Feeds.Configuration;
-using Nuplane.Runtime.Trust.Feeds;
-using Nuplane.Runtime.Trust.Source;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Trust.Feeds;
+using Nuplane.Trust.Source;
 
 namespace Nuplane.Runtime.Tests.Configuration;
 

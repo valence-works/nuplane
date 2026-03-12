@@ -1,7 +1,5 @@
 using Nuplane.Abstractions;
-using Nuplane.Options.Validation;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Trust.Source;
+using Nuplane.Trust.Source;
 using Nuplane.Trust.Validation;
 
 namespace Nuplane.Runtime.Tests.Configuration;

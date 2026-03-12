@@ -1,21 +1,19 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Events;
+using Nuplane.Feeds;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Health;
 using Nuplane.Loading;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Events;
-using Nuplane.Runtime.Feeds;
-using Nuplane.Runtime.Feeds.Configuration;
-using Nuplane.Runtime.Feeds.Policy;
-using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Observability;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Configuration;
-using Nuplane.Runtime.Reconciliation.LockFile;
-using Nuplane.Runtime.Sources;
-using Nuplane.Runtime.Trust.Feeds;
-using Nuplane.Runtime.Trust.Source;
+using Nuplane.Observability;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Configuration;
+using Nuplane.Reconciliation.LockFile;
+using Nuplane.Sources;
 using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
+using Nuplane.Trust.Feeds;
+using Nuplane.Trust.Source;
 
 namespace Nuplane.Integration.Tests;
 
@@ -79,10 +77,6 @@ internal static class ReconciliationServiceFactory
             feedTrustPolicyEvaluator ?? new FeedTrustPolicyEvaluator(),
             packageCleanupService ?? new PackageCleanupService(new()),
             failureRecorder ?? new FailureRecorder(store),
-            loadingOptions is null ? null : new OptionsWrapper<LoadingOptions>(loadingOptions),
-            packageLoader,
-            packageUnloadCoordinator,
-            observationDegradationTracker,
-            loadingFailureTracker);
+            observationDegradationTracker ?? new ObservationDegradationTracker());
     }
 }

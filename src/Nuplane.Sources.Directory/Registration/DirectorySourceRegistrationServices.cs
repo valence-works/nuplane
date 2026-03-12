@@ -2,11 +2,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nuplane.Abstractions;
+using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Registration;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Feeds.Configuration;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Sources;
+using Nuplane.Health;
+using Nuplane.Reconciliation;
 using Nuplane.Sources.Directory.Builder;
 using Nuplane.Sources.Directory.Hosting;
 
@@ -81,7 +80,7 @@ public static class DirectorySourceRegistrationServices
                     directorySourceOptions,
                     sp.GetRequiredService<IReconciliationTriggerIngress>(),
                     sp.GetRequiredService<ILogger<DirectorySourceReconciliationTriggerHostedService>>(),
-                    sp.GetService<global::Nuplane.Runtime.Health.ObservationDegradationTracker>()));
+                    sp.GetRequiredService<ObservationDegradationTracker>()));
             services.Add(hostedDescriptor);
             marker.Descriptors.Add(hostedDescriptor);
         }

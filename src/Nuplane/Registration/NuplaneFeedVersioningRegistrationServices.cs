@@ -1,21 +1,17 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
-using Nuplane.NuGet;
-using Nuplane.Runtime.Feeds;
-using Nuplane.Runtime.Feeds.Configuration;
-using Nuplane.Runtime.Feeds.Policy;
-using Nuplane.Runtime.Feeds.Versioning;
-using Nuplane.Runtime.Observability;
-using Nuplane.Runtime.Trust.Feeds;
+using Nuplane.Feeds;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Feeds.Policy;
+using Nuplane.Feeds.Versioning;
+using Nuplane.Trust.Feeds;
 
 namespace Nuplane.Registration;
 
 internal static class NuplaneFeedVersioningRegistrationServices
 {
-    internal static void RegisterPolicyAndVersioning(IServiceCollection services)
+    internal static void RegisterPolicyAndVersioning(this IServiceCollection services)
     {
         services.AddSingleton<FeedResolutionPolicy>();
         services.AddSingleton<NuGetFeedVersionEnumerator>();
@@ -30,18 +26,9 @@ internal static class NuplaneFeedVersioningRegistrationServices
         services.AddSingleton<UntrustedOverridePolicy>();
     }
 
-    internal static void RegisterPackageResolution(IServiceCollection services)
+    internal static void RegisterPackageResolution(this IServiceCollection services)
     {
-        services.AddSingleton<IRemotePackageAcquirer>(sp =>
-            new NuGetRemotePackageAcquirer(sp.GetRequiredService<IOptions<FeedResolutionOptions>>()));
-        services.AddSingleton<IPackageResolver>(sp =>
-            new MultiFeedPackageResolver(
-                sp.GetRequiredService<IOptions<FeedResolutionOptions>>(),
-                sp.GetRequiredService<FeedResolutionPolicy>(),
-                sp.GetRequiredService<IRemotePackageAcquirer>(),
-                sp.GetRequiredService<IFeedVersionEnumerator>(),
-                sp.GetRequiredService<IVersionRangeEvaluator>(),
-                sp.GetService<ILogger<MultiFeedPackageResolver>>() ?? NullLogger<MultiFeedPackageResolver>.Instance,
-                sp.GetRequiredService<ReconciliationMetrics>()));
+        services.AddSingleton<IRemotePackageAcquirer, NuGetRemotePackageAcquirer>();
+        services.AddSingleton<IPackageResolver, MultiFeedPackageResolver>();
     }
 }

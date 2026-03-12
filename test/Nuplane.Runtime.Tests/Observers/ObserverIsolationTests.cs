@@ -1,5 +1,6 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Events;
+using Nuplane.Events;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Runtime.Tests.Observers;
 

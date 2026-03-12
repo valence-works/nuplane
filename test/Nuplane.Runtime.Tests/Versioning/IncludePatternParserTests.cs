@@ -1,4 +1,4 @@
-using Nuplane.Runtime.Versioning;
+using Nuplane.Versioning;
 
 namespace Nuplane.Runtime.Tests.Versioning;
 

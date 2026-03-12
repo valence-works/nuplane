@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Feeds.Configuration;
-using Nuplane.Runtime.Feeds.Versioning;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Feeds.Versioning;
 
 namespace Nuplane.Runtime.Tests.Versioning;
 

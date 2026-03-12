@@ -1,10 +1,11 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Observability;
-using Nuplane.Runtime.Operational;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Trust.Feeds;
+using Nuplane.Health;
+using Nuplane.Observability;
+using Nuplane.Operational;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Models;
 using Nuplane.Store.State;
+using Nuplane.Trust.Feeds;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -45,7 +46,7 @@ public sealed class ManualReconcileObservabilityIntegrationTests
         var storeRegistry = CreateInMemoryStoreRegistry([]);
         var healthEvaluator = new ReconciliationHealthEvaluator();
         healthEvaluator.Evaluate(new(
-            true, false, 1, 0, 0, 0, ManifestFailures: 1));
+            true, false, 1, 0, 0, 1));
         var projector = new OperationalSnapshotProjector(storeRegistry, healthEvaluator);
 
         var runResult = new ReconciliationRunResult(false, EmptyChangeSet(), ["pkg-x"], true);

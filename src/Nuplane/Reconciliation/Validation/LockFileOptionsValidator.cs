@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Options;
-using Nuplane.Runtime.Reconciliation.LockFile;
+using Nuplane.Reconciliation.LockFile;
 
 namespace Nuplane.Reconciliation.Validation;
 

@@ -1,10 +1,10 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Nuplane.Abstractions;
 using Nuplane.Hosting;
-using Nuplane.Runtime.Feeds.Policy;
-using Nuplane.Runtime.Observability;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Trust.Feeds;
+using Nuplane.Observability;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Models;
+using Nuplane.Trust.Feeds;
 
 namespace Nuplane.Runtime.Tests.Operational;
 

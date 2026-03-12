@@ -1,8 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Nuplane.Store\Nuplane.Store.csproj" />
+    <ProjectReference Include="..\..\src\Nuplane\Nuplane.csproj" />
   </ItemGroup>
-
 </Project>
 

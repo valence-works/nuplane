@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Sources;
+using Nuplane.Sources;
 
 namespace Nuplane.Runtime.Tests.Sources;
 

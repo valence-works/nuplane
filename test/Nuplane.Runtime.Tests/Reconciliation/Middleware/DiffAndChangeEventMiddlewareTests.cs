@@ -1,7 +1,8 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Events;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Middleware;
+using Nuplane.Events;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Middleware;
+using Nuplane.Reconciliation.Models;
 using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Reconciliation.Middleware;

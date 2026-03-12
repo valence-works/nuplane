@@ -1,9 +1,10 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Feeds;
-using Nuplane.Runtime.Feeds.Configuration;
-using Nuplane.Runtime.Feeds.Versioning;
+using Nuplane.Feeds;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Feeds.Policy;
+using Nuplane.Feeds.Versioning;
 
 namespace Nuplane.Integration.Tests.Contracts;
 

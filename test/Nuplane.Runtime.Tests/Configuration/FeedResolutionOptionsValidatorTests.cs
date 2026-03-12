@@ -1,8 +1,7 @@
 using NSubstitute;
+using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Registration;
-using Nuplane.Options.Validation;
-using Nuplane.Runtime.Feeds.Configuration;
-using Nuplane.Runtime.Feeds.Versioning;
+using Nuplane.Feeds.Versioning;
 
 namespace Nuplane.Runtime.Tests.Configuration;
 

@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Nuplane.Runtime.Observability;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Observability;
+using Nuplane.Reconciliation;
 
 namespace Nuplane.Hosting;
 

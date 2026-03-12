@@ -1,6 +1,6 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Feeds.Configuration;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 

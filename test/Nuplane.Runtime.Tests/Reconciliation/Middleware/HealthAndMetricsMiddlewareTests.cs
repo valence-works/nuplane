@@ -1,10 +1,10 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Events;
-using Nuplane.Runtime.Feeds.Policy;
-using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Observability;
-using Nuplane.Runtime.Reconciliation.Middleware;
-using Nuplane.Runtime.Trust.Feeds;
+using Nuplane.Events;
+using Nuplane.Health;
+using Nuplane.Observability;
+using Nuplane.Reconciliation.Middleware;
+using Nuplane.Reconciliation.Models;
+using Nuplane.Trust.Feeds;
 
 namespace Nuplane.Runtime.Tests.Reconciliation.Middleware;
 
@@ -69,6 +69,7 @@ public sealed class HealthAndMetricsMiddlewareTests
             dispatcher ?? new NullDispatcher(),
             new NullLogger(),
             new(new()),
+            new(), 
             new());
 
     private static ReconciliationCycleContext Ctx(PackageChangeSet changeSet)

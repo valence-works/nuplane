@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Reconciliation;
 using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
 
@@ -9,7 +9,7 @@ namespace Nuplane.Registration;
 
 internal static class NuplaneStorePersistenceRegistrationServices
 {
-    internal static void RegisterLockingAndCleanup(IServiceCollection services)
+    internal static void RegisterLockingAndCleanup(this IServiceCollection services)
     {
         services.AddSingleton<LockFileStore>();
         services.AddSingleton<LockFileCoordinator>();
@@ -19,13 +19,11 @@ internal static class NuplaneStorePersistenceRegistrationServices
         services.AddSingleton<IPackageCleanupService>(sp => sp.GetRequiredService<PackageCleanupService>());
     }
 
-    internal static void RegisterStorePersistence(IServiceCollection services)
+    internal static void RegisterStorePersistence(this IServiceCollection services)
     {
         services.AddSingleton<StoreStateSerializer>();
         services.AddSingleton<IStoreStateSerializer>(sp => sp.GetRequiredService<StoreStateSerializer>());
-        services.AddSingleton<EffectiveStorePersistenceSettings>(sp =>
-            EffectiveStorePersistenceSettings.Resolve(
-                sp.GetRequiredService<IOptions<StoreRegistryOptions>>().Value));
+        services.AddSingleton<EffectiveStorePersistenceSettings>(sp => EffectiveStorePersistenceSettings.Resolve(sp.GetRequiredService<IOptions<StoreRegistryOptions>>().Value));
         services.AddSingleton<StoreRegistry>(sp =>
             new(
                 sp.GetRequiredService<IStoreStateSerializer>(),

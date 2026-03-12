@@ -2,19 +2,17 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
-using Nuplane.Options.Validation;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Reconciliation.Configuration;
+using Nuplane.Reconciliation.Convergence;
+using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Validation;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Feeds.Configuration;
-using Nuplane.Runtime.Reconciliation.Configuration;
-using Nuplane.Runtime.Reconciliation.Convergence;
-using Nuplane.Runtime.Reconciliation.LockFile;
-using Nuplane.Runtime.Trust.Feeds;
-using Nuplane.Runtime.Trust.Source;
 using Nuplane.Setup;
 using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
 using Nuplane.Store.Validation;
+using Nuplane.Trust.Feeds;
+using Nuplane.Trust.Source;
 using Nuplane.Trust.Validation;
 
 namespace Nuplane.Registration;
@@ -46,7 +44,7 @@ internal static class NuplaneOptionsRegistrationServices
         static (services, configuration) => ConfigureBoundOptions<StoreRegistryOptions>(services, configuration, StoreRegistrySectionName)
     ];
 
-    internal static void RegisterValidators(IServiceCollection services)
+    internal static void RegisterValidators(this IServiceCollection services)
     {
         services.AddSingleton<IValidateOptions<NuplaneSetupOptions>, NuplaneSetupOptionsValidator>();
         services.AddSingleton<IValidateOptions<ReconciliationOptions>, ReconciliationOptionsValidator>();
@@ -55,13 +53,12 @@ internal static class NuplaneOptionsRegistrationServices
         services.AddSingleton<IValidateOptions<LockFileOptions>, LockFileOptionsValidator>();
         services.AddSingleton<IValidateOptions<CleanupPolicyOptions>, CleanupPolicyOptionsValidator>();
         services.AddSingleton<FeedCredentialOptionsValidator>();
-        services.AddSingleton<IValidateOptions<FeedResolutionOptions>, FeedCredentialCompositeValidator>();
         services.AddSingleton<IValidateOptions<ConvergenceOptions>, ConvergenceOptionsValidator>();
         services.AddSingleton<IValidateOptions<TrustedSourcePolicyOptions>, TrustedSourcePolicyOptionsValidator>();
         services.AddSingleton<IValidateOptions<StoreRegistryOptions>, StoreRegistryOptionsValidator>();
     }
 
-    internal static void RegisterOptions(IServiceCollection services)
+    internal static void RegisterOptions(this IServiceCollection services)
     {
         services.AddOptions<NuplaneSetupOptions>().ValidateOnStart();
         services.AddOptions<SourceTrustOptions>().ValidateOnStart();

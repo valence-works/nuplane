@@ -1,9 +1,8 @@
 using NSubstitute;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Feeds;
-using Nuplane.Runtime.Feeds.Policy;
-using Nuplane.Runtime.Observability;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Feeds;
+using Nuplane.Observability;
+using Nuplane.Reconciliation;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 

@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Trust.Feeds;
+using Nuplane.Trust.Feeds;
 
 namespace Nuplane.Trust.Validation;
 

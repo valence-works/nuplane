@@ -1,6 +1,7 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Feeds;
+using Nuplane.Health;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Integration.Tests.Observability;
 
