@@ -1,7 +1,7 @@
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Models;
+using Nuplane.Health;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Models;
 using Nuplane.Sources.Directory.Hosting;
 using Nuplane.Sources.Directory.Tests.TestSupport;
 
@@ -26,7 +26,7 @@ public sealed class DirectoryObservationContractTests
         };
 
         var service = new DirectorySourceReconciliationTriggerHostedService(
-            options, spy, NullLogger<DirectorySourceReconciliationTriggerHostedService>.Instance);
+            options, spy, NullLogger<DirectorySourceReconciliationTriggerHostedService>.Instance, new ObservationDegradationTracker());
 
         using var cts = new CancellationTokenSource();
         var serviceTask = service.StartAsync(cts.Token);
@@ -68,8 +68,7 @@ public sealed class DirectoryObservationContractTests
             TriggerReconciliationOnChange = true
         };
 
-        var service = new DirectorySourceReconciliationTriggerHostedService(
-            options, spy, NullLogger<DirectorySourceReconciliationTriggerHostedService>.Instance);
+        var service = new DirectorySourceReconciliationTriggerHostedService(options, spy, NullLogger<DirectorySourceReconciliationTriggerHostedService>.Instance, new());
 
         using var cts = new CancellationTokenSource();
         var serviceTask = service.StartAsync(cts.Token);
@@ -108,22 +107,20 @@ public sealed class DirectoryObservationContractTests
             TriggerReconciliationOnChange = true
         };
 
-        var service = new DirectorySourceReconciliationTriggerHostedService(
-            options, spy, NullLogger<DirectorySourceReconciliationTriggerHostedService>.Instance);
-
+        var service = new DirectorySourceReconciliationTriggerHostedService(options, spy, NullLogger<DirectorySourceReconciliationTriggerHostedService>.Instance, new());
         using var cts = new CancellationTokenSource();
         var serviceTask = service.StartAsync(cts.Token);
 
-        await Task.Delay(150);
+        await Task.Delay(150, cts.Token);
 
-        File.WriteAllText(Path.Combine(tempDir.Path, "readme.txt"), "hello");
-        File.WriteAllText(Path.Combine(tempDir.Path, "data.json"), "{}");
+        await File.WriteAllTextAsync(Path.Combine(tempDir.Path, "readme.txt"), "hello", cts.Token);
+        await File.WriteAllTextAsync(Path.Combine(tempDir.Path, "data.json"), "{}", cts.Token);
 
-        await Task.Delay(TimeSpan.FromMilliseconds(400));
+        await Task.Delay(TimeSpan.FromMilliseconds(400), cts.Token);
 
         Assert.Equal(0, spy.TriggerCount);
 
-        cts.Cancel();
+        await cts.CancelAsync();
         try { await serviceTask; } catch (OperationCanceledException) { }
     }
 

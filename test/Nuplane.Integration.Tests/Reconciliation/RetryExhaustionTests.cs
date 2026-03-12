@@ -1,7 +1,7 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Configuration;
+using Nuplane.Feeds;
+using Nuplane.Reconciliation.Configuration;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -20,7 +20,6 @@ public sealed class RetryExhaustionTests
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
             packageResolver: new NuGetPackageResolver(),
             reconciliationOptions: options);
 

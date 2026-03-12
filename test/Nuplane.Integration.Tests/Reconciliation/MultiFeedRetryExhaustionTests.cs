@@ -2,10 +2,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Feeds;
-using Nuplane.Runtime.Feeds.Configuration;
-using Nuplane.Runtime.Feeds.Versioning;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Feeds;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Feeds.Versioning;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -25,7 +25,7 @@ public sealed class MultiFeedRetryExhaustionTests
             StopOnFirstSuccessfulFeed = true
         };
 
-        feedOptions.Feeds.Add(new("feed-down", new("https://down.example/v3/index.json"), FeedTrustLevel.Trusted));
+        feedOptions.Feeds.Add(new("feed-down", new("https://down.example/v3/index.json")));
         feedOptions.UnavailableFeeds.Add("feed-down");
 
         var resolver = new MultiFeedPackageResolver(
@@ -38,7 +38,6 @@ public sealed class MultiFeedRetryExhaustionTests
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg" } },
             packageResolver: resolver,
             reconciliationOptions: new()
             {

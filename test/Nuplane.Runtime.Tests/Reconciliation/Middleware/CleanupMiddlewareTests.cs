@@ -1,6 +1,6 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Middleware;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Middleware;
 using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
 
@@ -69,10 +69,10 @@ public sealed class CleanupMiddlewareTests
         {
             CorrelationId = "test",
             CycleStartedAt = DateTimeOffset.UtcNow,
-            CancellationToken = CancellationToken.None
+            CancellationToken = CancellationToken.None,
+            ApplyResult = new(packages, []),
+            MergedActive = packages.ToDictionary(p => p.Id, p => p.Version, StringComparer.OrdinalIgnoreCase)
         };
-        ctx.ApplyResult = new(packages, []);
-        ctx.MergedActive = packages.ToDictionary(p => p.Id, p => p.Version, StringComparer.OrdinalIgnoreCase);
         return ctx;
     }
 

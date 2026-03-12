@@ -1,6 +1,7 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Feeds;
+using Nuplane.Health;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Integration.Tests.Observability;
 
@@ -13,7 +14,6 @@ public sealed class HealthRecoveryTests
         var evaluator = new ReconciliationHealthEvaluator();
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
             healthEvaluator: evaluator,
             packageResolver: new NuGetPackageResolver(),
             reconciliationOptions: new() { MaxRetryAttempts = 0 });

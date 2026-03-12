@@ -1,10 +1,9 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Feeds.Policy;
-using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Events;
-using Nuplane.Runtime.Observability;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Trust.Feeds;
+using Nuplane.Events;
+using Nuplane.Health;
+using Nuplane.Observability;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 
@@ -93,7 +92,6 @@ public sealed class ReconciliationTriggerAttributionContractTests
     {
         return ReconciliationServiceFactory.Create(
             sources: sources ?? [],
-            sourceTrustOptions: new(),
             packageResolver: new NoOpResolver(),
             reconciliationOptions: new() { EnableSingleFlight = enableSingleFlight },
             observerEventDispatcher: new ObserverEventDispatcher([]),
@@ -132,7 +130,6 @@ public sealed class ReconciliationTriggerAttributionContractTests
         public void LogCycleCompleted(string correlationId, bool degraded, int failedCount) { }
         public void LogObserverError(string correlationId, string callbackName, string message) { }
         public void LogFeedDecision(FeedResolutionDecision decision) { }
-        public void LogTrustPolicyOutcome(string correlationId, string packageId, FeedTrustPolicyOutcome outcome) { }
         public void LogLockOutcome(string correlationId, string packageId, LockFileEvaluationResult outcome) { }
         public void LogLoadOutcome(string correlationId, string packageId, bool succeeded, string? reason) { }
         public void LogUnloadOutcome(string correlationId, string packageId, string outcome, string? reason) { }

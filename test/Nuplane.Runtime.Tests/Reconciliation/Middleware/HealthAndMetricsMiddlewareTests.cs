@@ -1,10 +1,9 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Events;
-using Nuplane.Runtime.Feeds.Policy;
-using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Observability;
-using Nuplane.Runtime.Reconciliation.Middleware;
-using Nuplane.Runtime.Trust.Feeds;
+using Nuplane.Events;
+using Nuplane.Health;
+using Nuplane.Observability;
+using Nuplane.Reconciliation.Middleware;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Runtime.Tests.Reconciliation.Middleware;
 
@@ -69,6 +68,7 @@ public sealed class HealthAndMetricsMiddlewareTests
             dispatcher ?? new NullDispatcher(),
             new NullLogger(),
             new(new()),
+            new(), 
             new());
 
     private static ReconciliationCycleContext Ctx(PackageChangeSet changeSet)
@@ -77,13 +77,13 @@ public sealed class HealthAndMetricsMiddlewareTests
         {
             CorrelationId = "test",
             CycleStartedAt = DateTimeOffset.UtcNow,
-            CancellationToken = CancellationToken.None
+            CancellationToken = CancellationToken.None,
+            ChangeSet = changeSet,
+            ReadResult = new([], UsedFallback: false, AllSourcesFresh: true),
+            ApplyResult = new([], []),
+            ActiveVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            MergedActive = new(StringComparer.OrdinalIgnoreCase)
         };
-        ctx.ChangeSet = changeSet;
-        ctx.ReadResult = new([], UsedFallback: false, AllSourcesFresh: true);
-        ctx.ApplyResult = new([], []);
-        ctx.ActiveVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        ctx.MergedActive = new(StringComparer.OrdinalIgnoreCase);
         return ctx;
     }
 
@@ -93,7 +93,6 @@ public sealed class HealthAndMetricsMiddlewareTests
     private sealed class FakeHealthEvaluator(bool isDegraded) : IReconciliationHealthEvaluator
     {
         public bool IsDegraded => isDegraded;
-        public int LastTrustFailureCount => 0;
         public int LastLockFailureCount => 0;
         public int LastCleanupFailureCount => 0;
         public int LastUnloadPendingCount => 0;
@@ -139,7 +138,6 @@ public sealed class HealthAndMetricsMiddlewareTests
         public void LogCycleCompleted(string correlationId, bool degraded, int failedCount) { }
         public void LogObserverError(string correlationId, string callbackName, string message) { }
         public void LogFeedDecision(FeedResolutionDecision decision) { }
-        public void LogTrustPolicyOutcome(string correlationId, string packageId, FeedTrustPolicyOutcome outcome) { }
         public void LogLockOutcome(string correlationId, string packageId, LockFileEvaluationResult outcome) { }
         public void LogLoadOutcome(string correlationId, string packageId, bool succeeded, string? reason) { }
         public void LogUnloadOutcome(string correlationId, string packageId, string outcome, string? reason) { }

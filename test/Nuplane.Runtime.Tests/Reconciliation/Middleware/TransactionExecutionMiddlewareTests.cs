@@ -1,7 +1,8 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Events;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Middleware;
+using Nuplane.Events;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Middleware;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Runtime.Tests.Reconciliation.Middleware;
 
@@ -75,10 +76,10 @@ public sealed class TransactionExecutionMiddlewareTests
         {
             CorrelationId = "test",
             CycleStartedAt = DateTimeOffset.UtcNow,
-            CancellationToken = CancellationToken.None
+            CancellationToken = CancellationToken.None,
+            ResolutionResult = new(packages, [], []),
+            ActiveVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         };
-        ctx.ResolutionResult = new(packages, [], []);
-        ctx.ActiveVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         return ctx;
     }
 

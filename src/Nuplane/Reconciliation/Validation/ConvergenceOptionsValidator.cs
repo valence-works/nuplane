@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Options;
-using Nuplane.Runtime.Reconciliation.Convergence;
+using Nuplane.Reconciliation.Convergence;
 
 namespace Nuplane.Reconciliation.Validation;
 
@@ -12,21 +12,6 @@ internal sealed class ConvergenceOptionsValidator : IValidateOptions<Convergence
         if (options.PollInterval <= TimeSpan.Zero)
         {
             errors.Add("Convergence PollInterval must be greater than zero.");
-        }
-
-        if (options.Retry.MaxAttempts < 0)
-        {
-            errors.Add("Convergence Retry.MaxAttempts must be greater than or equal to zero.");
-        }
-
-        if (options.Retry.InitialBackoff <= TimeSpan.Zero)
-        {
-            errors.Add("Convergence Retry.InitialBackoff must be greater than zero.");
-        }
-
-        if (options.Retry.MaxBackoff < options.Retry.InitialBackoff)
-        {
-            errors.Add("Convergence Retry.MaxBackoff must be greater than or equal to Retry.InitialBackoff.");
         }
 
         if (options.Manifest.Enabled && string.IsNullOrWhiteSpace(options.Manifest.Path))

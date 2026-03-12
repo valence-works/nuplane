@@ -7,8 +7,6 @@ using Nuplane.Abstractions;
 using Nuplane.Hosting;
 using Nuplane.Loading;
 using Nuplane.Loading.Hosting.Builder;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Trust.Source;
 using Nuplane.Setup;
 using Nuplane.Sources.Directory;
 using Nuplane.Sources.Directory.Builder;
@@ -95,13 +93,6 @@ public sealed class ConfigurationDrivenRegistrationTests
             {
                 nuplane.AddDirectoryFeedsFromConfiguration(configuration.GetSection("Nuplane"));
             });
-
-            using var provider = services.BuildServiceProvider();
-
-            var sourceTrust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
-
-            Assert.Empty(sourceTrust.AllowedPackageIds);
-            Assert.Contains("drop-folder", sourceTrust.AllowedSourceNames);
         }
         finally
         {
@@ -143,13 +134,6 @@ public sealed class ConfigurationDrivenRegistrationTests
             {
                 nuplane.AddDirectoryFeedsFromConfiguration(configuration.GetSection("Nuplane"));
             });
-
-            using var provider = services.BuildServiceProvider();
-
-            var sourceTrust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
-
-            Assert.Single(sourceTrust.AllowedPackageIds);
-            Assert.Contains("*", sourceTrust.AllowedPackageIds);
         }
         finally
         {
@@ -743,16 +727,14 @@ public sealed class ConfigurationDrivenRegistrationTests
                     feed.Include("Plugin.*");
                 });
             });
-
-            using var provider = services.BuildServiceProvider();
-            var trust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
-
-            Assert.Contains("dir-feed", trust.AllowedSourceNames);
-            Assert.Contains("Plugin.*", trust.AllowedPackageIds);
         }
         finally
         {
-            try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(root, recursive: true); }
+            catch
+            {
+                // ignored
+            }
         }
     }
 

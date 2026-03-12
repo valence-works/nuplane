@@ -1,5 +1,6 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Feeds;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -16,10 +17,6 @@ public sealed class PartialFailureIsolationTests
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new()
-            {
-                AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-good", "pkg-bad" }
-            },
             packageResolver: new FailOneResolver("pkg-bad"),
             reconciliationOptions: new() { MaxRetryAttempts = 0 });
 

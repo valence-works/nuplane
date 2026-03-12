@@ -1,12 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Sources;
+using Nuplane.Reconciliation;
+using Nuplane.Sources;
 
 namespace Nuplane.Registration;
 
 internal static class NuplaneDesiredStatePlanningRegistrationServices
 {
-    internal static void RegisterDesiredStateAggregationAndDryRunPlanning(IServiceCollection services)
+    internal static void RegisterDesiredStateAggregationAndDryRunPlanning(this IServiceCollection services)
     {
         services.AddSingleton<DesiredManifestReader>();
         services.AddSingleton<DesiredStateAggregator>();

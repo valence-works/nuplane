@@ -1,5 +1,3 @@
-using Nuplane.Abstractions;
-
 namespace Nuplane.Feeds.Setup;
 
 /// <summary>
@@ -26,11 +24,6 @@ public sealed class NuplaneFeedSetupOptions
     /// Mutually exclusive with <see cref="ServiceIndex"/>.
     /// </summary>
     public string? DirectoryPath { get; set; }
-
-    /// <summary>
-    /// Gets or sets the trust level for the feed.
-    /// </summary>
-    public FeedTrustLevel TrustLevel { get; set; } = FeedTrustLevel.Trusted;
 
     /// <summary>
     /// Gets or sets the optional credential reference for authenticated feeds.

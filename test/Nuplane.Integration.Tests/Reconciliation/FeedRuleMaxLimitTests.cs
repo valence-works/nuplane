@@ -1,5 +1,6 @@
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Sources;
+using Nuplane.Feeds;
+using Nuplane.Reconciliation.Models;
+using Nuplane.Sources;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -16,7 +17,6 @@ public sealed class FeedRuleMaxLimitTests
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { RejectUnallowlistedPackages = false },
             packageResolver: new NuGetPackageResolver(),
             reconciliationOptions: new() { MaxRetryAttempts = 0 });
 

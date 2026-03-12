@@ -4,14 +4,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Events;
-using Nuplane.Runtime.Feeds;
-using Nuplane.Runtime.Feeds.Configuration;
-using Nuplane.Runtime.Feeds.Versioning;
-using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Sources;
+using Nuplane.Events;
+using Nuplane.Feeds;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Feeds.Versioning;
+using Nuplane.Health;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Models;
+using Nuplane.Sources;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
@@ -38,7 +38,7 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
         BuildNupkgTo(_tempDir, "MyPlugin", "1.0.0");
 
         var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
-        var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
+        var localFeed = new FeedDefinition("local-drop", feedUri);
         var feedOpts = new FeedResolutionOptions();
         feedOpts.Feeds.Add(localFeed);
 
@@ -48,7 +48,6 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "MyPlugin" } },
             desiredStateAggregator: new DesiredStateAggregator(),
             desiredActualDiffEngine: new DesiredActualDiffEngine(),
             packageResolver: new MultiFeedPackageResolver(
@@ -79,7 +78,7 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
         Directory.CreateDirectory(_tempDir);
 
         var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
-        var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
+        var localFeed = new FeedDefinition("local-drop", feedUri);
         var feedOpts = new FeedResolutionOptions();
         feedOpts.Feeds.Add(localFeed);
 
@@ -87,7 +86,6 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new(),
             desiredStateAggregator: new DesiredStateAggregator(),
             desiredActualDiffEngine: new DesiredActualDiffEngine(),
             packageResolver: new MultiFeedPackageResolver(
@@ -117,7 +115,7 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
         BuildNupkgTo(_tempDir, "PluginA", "1.0.0");
 
         var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
-        var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
+        var localFeed = new FeedDefinition("local-drop", feedUri);
         var feedOpts = new FeedResolutionOptions();
         feedOpts.Feeds.Add(localFeed);
 
@@ -127,7 +125,6 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "PluginA" } },
             desiredStateAggregator: new DesiredStateAggregator(),
             desiredActualDiffEngine: new DesiredActualDiffEngine(),
             packageResolver: new MultiFeedPackageResolver(

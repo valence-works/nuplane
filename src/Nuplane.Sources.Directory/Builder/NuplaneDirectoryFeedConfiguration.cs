@@ -1,5 +1,3 @@
-using Nuplane.Abstractions;
-
 namespace Nuplane.Sources.Directory.Builder;
 
 /// <summary>
@@ -20,12 +18,6 @@ public sealed class NuplaneDirectoryFeedConfiguration
     /// Defaults to 1 second.
     /// </summary>
     public TimeSpan DebounceWindow { get; set; } = TimeSpan.FromSeconds(1);
-
-    /// <summary>
-    /// Gets or sets the trust level for this feed.
-    /// Defaults to <see cref="FeedTrustLevel.Trusted"/>.
-    /// </summary>
-    public FeedTrustLevel TrustLevel { get; set; } = FeedTrustLevel.Trusted;
 
     /// <summary>
     /// Gets or sets optional secret reference for authenticated feed access.

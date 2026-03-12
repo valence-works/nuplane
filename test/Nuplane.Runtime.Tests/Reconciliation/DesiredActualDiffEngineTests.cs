@@ -1,5 +1,5 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Reconciliation;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 

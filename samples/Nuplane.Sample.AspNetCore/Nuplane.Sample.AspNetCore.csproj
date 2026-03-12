@@ -2,10 +2,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Nuplane.Abstractions\Nuplane.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Nuplane.Admin.Api\Nuplane.Admin.Api.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Sources.Directory\Nuplane.Sources.Directory.csproj" />
     <ProjectReference Include="..\..\src\Nuplane\Nuplane.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Loading\Nuplane.Loading.csproj" />
-    <ProjectReference Include="..\..\src\Nuplane.Loading.Hosting\Nuplane.Loading.Hosting.csproj" />
     <ProjectReference Include="..\Nuplane.Sample.Abstractions\Nuplane.Sample.Abstractions.csproj" />
   </ItemGroup>
 

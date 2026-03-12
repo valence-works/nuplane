@@ -1,9 +1,8 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.LockFile;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.LockFile;
 
 namespace Nuplane.Runtime.Tests.LockFile;
 

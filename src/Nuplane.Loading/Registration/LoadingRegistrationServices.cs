@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Nuplane.Abstractions;
 using Nuplane.Loading.Extensions;
 
 namespace Nuplane.Loading.Registration;
@@ -31,6 +32,7 @@ public static class LoadingRegistrationServices
 
         // ── Core loading services ─────────────────────────────────────────────────
         ReplaceSingleton<ILoadingFailureTracker, LoadingFailureTracker>(services);
+        services.TryAddSingleton<ICycleFailureContributor>(sp => sp.GetRequiredService<ILoadingFailureTracker>());
         ReplaceSingleton<ILoadingEventDispatcher, LoadingEventDispatcher>(services);
         services.TryAddSingleton<SharedAssemblyPolicyMatcher>();
         services.TryAddSingleton<PackageLoader>();

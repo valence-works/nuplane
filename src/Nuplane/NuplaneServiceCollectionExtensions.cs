@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Builder;
-using Nuplane.Feeds.Registration;
 using Nuplane.Registration;
 
 namespace Nuplane;
@@ -74,14 +73,13 @@ public static class NuplaneServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configure);
 
-        NuplaneOptionsRegistrationServices.RegisterValidators(services);
-        NuplaneOptionsRegistrationServices.RegisterOptions(services);
-        NuplaneCoreRuntimeRegistrationServices.RegisterCoreServices(services);
+        services.RegisterValidators();
+        services.RegisterOptions();
+        services.RegisterRuntime();
 
         var builder = new NuplaneBuilder(services);
         configure(builder);
 
-        NuplaneFeedRegistrationServices.ConfigureSourceTrustOptions(services);
         return services;
     }
 }

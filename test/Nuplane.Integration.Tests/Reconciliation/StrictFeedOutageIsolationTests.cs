@@ -2,11 +2,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Feeds;
-using Nuplane.Runtime.Feeds.Configuration;
-using Nuplane.Runtime.Feeds.Versioning;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Feeds;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Feeds.Versioning;
+using Nuplane.Reconciliation.Models;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
@@ -23,16 +22,12 @@ public sealed class StrictFeedOutageIsolationTests
         ]);
 
         var feedOptions = new FeedResolutionOptions { PolicyMode = FeedResolutionPolicyMode.Strict };
-        feedOptions.Feeds.Add(new("feed-down", new("https://down.example/v3/index.json"), FeedTrustLevel.Trusted));
-        feedOptions.Feeds.Add(new("feed-up", new("https://up.example/v3/index.json"), FeedTrustLevel.Trusted));
+        feedOptions.Feeds.Add(new("feed-down", new("https://down.example/v3/index.json")));
+        feedOptions.Feeds.Add(new("feed-up", new("https://up.example/v3/index.json")));
         feedOptions.UnavailableFeeds.Add("feed-down");
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new()
-            {
-                AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-impacted", "pkg-ok" }
-            },
             packageResolver: new MultiFeedPackageResolver(
                 new OptionsWrapper<FeedResolutionOptions>(feedOptions),
                 new(new OptionsWrapper<FeedResolutionOptions>(feedOptions)),

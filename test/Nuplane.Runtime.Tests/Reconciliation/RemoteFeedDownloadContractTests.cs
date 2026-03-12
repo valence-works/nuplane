@@ -2,10 +2,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Feeds;
-using Nuplane.Runtime.Feeds.Configuration;
-using Nuplane.Runtime.Feeds.Policy;
-using Nuplane.Runtime.Feeds.Versioning;
+using Nuplane.Feeds;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Feeds.Policy;
+using Nuplane.Feeds.Versioning;
 using Nuplane.Runtime.Tests.TestSupport;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
@@ -37,7 +37,7 @@ public sealed class RemoteFeedDownloadContractTests : IAsyncLifetime
         await using var server = new TestNuGetFeedServer("MyPlugin", "1.0.0", packageBytes);
 
         var options = new FeedResolutionOptions { PackageInstallRoot = Path.Combine(_tempDir, "installed") };
-        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri, FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri));
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
         var resolver = new MultiFeedPackageResolver(
             new OptionsWrapper<FeedResolutionOptions>(options), policy,
@@ -63,7 +63,7 @@ public sealed class RemoteFeedDownloadContractTests : IAsyncLifetime
         await using var server = new TestNuGetFeedServer("MyPlugin", "1.0.0", packageBytes);
 
         var options = new FeedResolutionOptions { PackageInstallRoot = Path.Combine(_tempDir, "installed") };
-        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri, FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri));
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
         var resolver = new MultiFeedPackageResolver(
             new OptionsWrapper<FeedResolutionOptions>(options), policy,

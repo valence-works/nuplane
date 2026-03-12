@@ -1,9 +1,10 @@
 using System.Text.Json;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Sources;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Convergence;
+using Nuplane.Feeds;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Convergence;
+using Nuplane.Reconciliation.Models;
+using Nuplane.Sources;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -32,7 +33,6 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
     {
         return ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { RejectUnallowlistedPackages = false },
             packageResolver: new NuGetPackageResolver());
     }
 

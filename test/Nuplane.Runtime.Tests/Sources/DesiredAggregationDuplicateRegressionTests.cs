@@ -1,7 +1,5 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Sources;
-using Nuplane.Runtime.Trust.Source;
+using Nuplane.Sources;
 
 namespace Nuplane.Runtime.Tests.Sources;
 
@@ -13,7 +11,6 @@ namespace Nuplane.Runtime.Tests.Sources;
 public sealed class DesiredAggregationDuplicateRegressionTests
 {
     private readonly DesiredStateAggregator _sut = new();
-    private readonly SourceTrustOptions _permissive = new() { RejectUnallowlistedPackages = false };
 
     [Fact]
     public async Task IdenticalInputPermutations_ProduceSameWinner()
@@ -36,7 +33,7 @@ public sealed class DesiredAggregationDuplicateRegressionTests
         var results = new List<string>();
         foreach (var perm in permutations)
         {
-            var result = await _sut.AggregateAsync(perm, _permissive, CancellationToken.None);
+            var result = await _sut.AggregateAsync(perm, CancellationToken.None);
             results.Add($"{result.Requests[0].VersionRange}|{result.Requests[0].SourceName}");
         }
 
@@ -56,7 +53,7 @@ public sealed class DesiredAggregationDuplicateRegressionTests
             Req("pkg", "2.0.0", "src")
         ]);
 
-        var result = await _sut.AggregateAsync([src], _permissive, CancellationToken.None);
+        var result = await _sut.AggregateAsync([src], CancellationToken.None);
 
         Assert.Single(result.Requests);
         Assert.Equal("1.0.0", result.Requests[0].VersionRange);
@@ -72,7 +69,7 @@ public sealed class DesiredAggregationDuplicateRegressionTests
             Req("MYPACKAGE", "3.0.0", "src")
         ]);
 
-        var result = await _sut.AggregateAsync([src], _permissive, CancellationToken.None);
+        var result = await _sut.AggregateAsync([src], CancellationToken.None);
 
         Assert.Single(result.Requests);
     }
@@ -89,7 +86,7 @@ public sealed class DesiredAggregationDuplicateRegressionTests
             ]))
             .ToArray();
 
-        var result = await _sut.AggregateAsync(sources, _permissive, CancellationToken.None);
+        var result = await _sut.AggregateAsync(sources, CancellationToken.None);
 
         Assert.Equal(3, result.Requests.Count);
         // source-01 wins (alphabetically first)
@@ -104,11 +101,11 @@ public sealed class DesiredAggregationDuplicateRegressionTests
         var srcB = new FakeSource("alpha", [Req("pkg", "1.0.0", "alpha")]);
         var srcC = new FakeSource("gamma", [Req("pkg", "3.0.0", "gamma")]);
 
-        var firstResult = await _sut.AggregateAsync([srcA, srcB, srcC], _permissive, CancellationToken.None);
+        var firstResult = await _sut.AggregateAsync([srcA, srcB, srcC], CancellationToken.None);
 
         for (var i = 0; i < 10; i++)
         {
-            var result = await _sut.AggregateAsync([srcA, srcB, srcC], _permissive, CancellationToken.None);
+            var result = await _sut.AggregateAsync([srcA, srcB, srcC], CancellationToken.None);
             Assert.Equal(firstResult.Requests[0].VersionRange, result.Requests[0].VersionRange);
             Assert.Equal(firstResult.Requests[0].SourceName, result.Requests[0].SourceName);
         }
@@ -119,7 +116,7 @@ public sealed class DesiredAggregationDuplicateRegressionTests
     {
         var src = new FakeSource("src", []);
 
-        var result = await _sut.AggregateAsync([src], _permissive, CancellationToken.None);
+        var result = await _sut.AggregateAsync([src], CancellationToken.None);
 
         Assert.Empty(result.Requests);
     }

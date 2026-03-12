@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Configuration;
-using Nuplane.Abstractions;
 using Nuplane.Builder;
 using Nuplane.Setup;
 
@@ -20,16 +19,8 @@ internal static class NuplaneFeedSetupConfiguration
 
             builder.AddFeed(feedSection[nameof(NuplaneFeedSetupOptions.Name)]!, configuredFeed =>
             {
-                var trustLevel = feedSection.GetValue<FeedTrustLevel?>(nameof(NuplaneFeedSetupOptions.TrustLevel))
-                    ?? FeedTrustLevel.Trusted;
                 var credentials = feedSection[nameof(NuplaneFeedSetupOptions.Credentials)];
-
-                configuredFeed.FromUri(
-                    new(feedSection[nameof(NuplaneFeedSetupOptions.ServiceIndex)]!, UriKind.Absolute),
-                    trustLevel,
-                    credentials);
-
-                configuredFeed.Trust(trustLevel);
+                configuredFeed.FromUri(new(feedSection[nameof(NuplaneFeedSetupOptions.ServiceIndex)]!, UriKind.Absolute), credentials);
 
                 if (feedSection.GetValue<bool?>(nameof(NuplaneFeedSetupOptions.IncludeAll)) is true)
                 {

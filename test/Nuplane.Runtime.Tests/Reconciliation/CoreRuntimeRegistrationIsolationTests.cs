@@ -1,7 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Loading;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Sources;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Configuration;
+using Nuplane.Reconciliation.Models;
+using Nuplane.Sources;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 
@@ -64,5 +66,39 @@ public sealed class CoreRuntimeRegistrationIsolationTests
         services.AddNuplane(_ => { });
 
         Assert.DoesNotContain(services, d => d.ServiceType == typeof(LoadingOptionsValidator));
+    }
+
+    [Fact]
+    public async Task AddNuplane_ResolvesRetryPolicyFromNamedPipeline()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(_ => { });
+        services.Configure<ReconciliationOptions>(options =>
+        {
+            options.MaxRetryAttempts = 1;
+            options.InitialRetryBackoff = TimeSpan.FromMilliseconds(1);
+            options.MaxRetryBackoff = TimeSpan.FromMilliseconds(2);
+        });
+
+        await using var provider = services.BuildServiceProvider();
+        var policy = provider.GetRequiredService<IReconciliationRetryPolicy>();
+
+        var attempts = 0;
+        var result = await policy.ExecuteAsync(
+            _ =>
+            {
+                attempts++;
+                if (attempts == 1)
+                {
+                    throw new InvalidOperationException("transient");
+                }
+
+                return Task.FromResult("ok");
+            },
+            CancellationToken.None);
+
+        Assert.Equal("ok", result);
+        Assert.Equal(2, attempts);
     }
 }

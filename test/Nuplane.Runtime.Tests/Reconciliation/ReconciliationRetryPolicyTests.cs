@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Options;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Configuration;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Configuration;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 
@@ -34,6 +33,31 @@ public sealed class ReconciliationRetryPolicyTests
 
         Assert.Equal("ok", result);
         Assert.Equal(3, attempts);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DoesNotRetryOperationCanceledException()
+    {
+        var policy = new ReconciliationRetryPolicy(
+            new OptionsWrapper<ReconciliationOptions>(new()
+            {
+                MaxRetryAttempts = 3,
+                InitialRetryBackoff = TimeSpan.FromMilliseconds(1),
+                MaxRetryBackoff = TimeSpan.FromMilliseconds(4)
+            }));
+
+        var attempts = 0;
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            policy.ExecuteAsync<int>(
+                _ =>
+                {
+                    attempts++;
+                    throw new OperationCanceledException();
+                },
+                CancellationToken.None));
+
+        Assert.Equal(1, attempts);
     }
 
     [Fact]

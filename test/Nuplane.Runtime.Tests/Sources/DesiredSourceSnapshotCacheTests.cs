@@ -1,5 +1,5 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Sources;
+using Nuplane.Sources;
 using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Sources;

@@ -1,15 +1,15 @@
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Feeds.Configuration;
-using Nuplane.Runtime.Feeds.Versioning;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Feeds.Versioning;
 
 namespace Nuplane.Runtime.Tests.Versioning;
 
 public sealed class CachedFeedVersionEnumeratorTests
 {
     private static readonly FeedDefinition TestFeed =
-        new("test-feed", new Uri("https://api.nuget.org/v3/index.json"), FeedTrustLevel.Trusted);
+        new("test-feed", new Uri("https://api.nuget.org/v3/index.json"));
 
     private static IOptions<FeedResolutionOptions> CreateOptions(TimeSpan ttl) =>
         Microsoft.Extensions.Options.Options.Create(new FeedResolutionOptions { VersionCacheTtl = ttl });

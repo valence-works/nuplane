@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Nuplane" />
-    <InternalsVisibleTo Include="Nuplane.Sources.Directory.Hosting" />
     <InternalsVisibleTo Include="Nuplane.Sources.Directory.Tests" />
   </ItemGroup>
 
@@ -17,8 +16,6 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    <ProjectReference Include="..\Nuplane.Abstractions\Nuplane.Abstractions.csproj" />
-    <ProjectReference Include="..\Nuplane.Runtime\Nuplane.Runtime.csproj" />
     <ProjectReference Include="..\Nuplane\Nuplane.csproj" />
   </ItemGroup>
 

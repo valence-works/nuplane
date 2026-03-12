@@ -1,4 +1,5 @@
-using Nuplane.Runtime.Health;
+using Nuplane.Health;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Runtime.Tests.Health;
 

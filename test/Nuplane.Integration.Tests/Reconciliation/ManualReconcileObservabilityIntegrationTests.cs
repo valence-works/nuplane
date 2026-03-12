@@ -1,9 +1,9 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Observability;
-using Nuplane.Runtime.Operational;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Trust.Feeds;
+using Nuplane.Health;
+using Nuplane.Observability;
+using Nuplane.Operational;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Models;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
@@ -45,7 +45,7 @@ public sealed class ManualReconcileObservabilityIntegrationTests
         var storeRegistry = CreateInMemoryStoreRegistry([]);
         var healthEvaluator = new ReconciliationHealthEvaluator();
         healthEvaluator.Evaluate(new(
-            true, false, 1, 0, 0, 0, ManifestFailures: 1));
+            true, false, 1, 0, 0, 1));
         var projector = new OperationalSnapshotProjector(storeRegistry, healthEvaluator);
 
         var runResult = new ReconciliationRunResult(false, EmptyChangeSet(), ["pkg-x"], true);
@@ -55,7 +55,8 @@ public sealed class ManualReconcileObservabilityIntegrationTests
 
         Assert.Equal(HealthState.Degraded, snapshot.Health);
         Assert.True(snapshot.DegradedReasons.Count > 0);
-        Assert.Contains("manifest-failures:1", snapshot.DegradedReasons);
+        Assert.Contains("lock-failures:1", snapshot.DegradedReasons);
+        Assert.Contains("source-outages:1", snapshot.DegradedReasons);
     }
 
     [Fact]
@@ -153,7 +154,6 @@ public sealed class ManualReconcileObservabilityIntegrationTests
         public void LogCycleCompleted(string correlationId, bool degraded, int failedCount) { }
         public void LogObserverError(string correlationId, string callbackName, string message) { }
         public void LogFeedDecision(FeedResolutionDecision decision) { }
-        public void LogTrustPolicyOutcome(string correlationId, string packageId, FeedTrustPolicyOutcome outcome) { }
         public void LogLockOutcome(string correlationId, string packageId, LockFileEvaluationResult outcome) { }
         public void LogLoadOutcome(string correlationId, string packageId, bool succeeded, string? reason) { }
         public void LogUnloadOutcome(string correlationId, string packageId, string outcome, string? reason) { }

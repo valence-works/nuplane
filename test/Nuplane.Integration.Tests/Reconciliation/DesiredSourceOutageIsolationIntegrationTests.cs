@@ -1,5 +1,7 @@
 using Nuplane.Abstractions;
-using Nuplane.Runtime.Reconciliation;
+using Nuplane.Feeds;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -98,7 +100,6 @@ public sealed class DesiredSourceOutageIsolationIntegrationTests
     {
         return ReconciliationServiceFactory.Create(
             sources: sources,
-            sourceTrustOptions: new() { RejectUnallowlistedPackages = false },
             packageResolver: new NuGetPackageResolver());
     }
 

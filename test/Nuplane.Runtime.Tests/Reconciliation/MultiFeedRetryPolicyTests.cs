@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Options;
-using Nuplane.Runtime.Configuration;
-using Nuplane.Runtime.Reconciliation;
-using Nuplane.Runtime.Reconciliation.Configuration;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Configuration;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 
@@ -30,6 +29,31 @@ public sealed class MultiFeedRetryPolicyTests
                 CancellationToken.None));
 
         Assert.Equal(3, attempts);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithZeroRetries_AttemptsOperationOnce()
+    {
+        var options = new ReconciliationOptions
+        {
+            MaxRetryAttempts = 0,
+            InitialRetryBackoff = TimeSpan.FromMilliseconds(1),
+            MaxRetryBackoff = TimeSpan.FromMilliseconds(2)
+        };
+
+        var policy = new ReconciliationRetryPolicy(new OptionsWrapper<ReconciliationOptions>(options));
+        var attempts = 0;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            policy.ExecuteAsync<int>(
+                _ =>
+                {
+                    attempts++;
+                    throw new InvalidOperationException("feed unavailable");
+                },
+                CancellationToken.None));
+
+        Assert.Equal(1, attempts);
     }
 
     [Fact]

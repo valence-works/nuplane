@@ -1,5 +1,6 @@
-using Nuplane.Runtime.Health;
-using Nuplane.Runtime.Operational;
+using Nuplane.Health;
+using Nuplane.Operational;
+using Nuplane.Reconciliation.Models;
 using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Operational;
@@ -61,8 +62,8 @@ public sealed class OperationalSnapshotProjectionTests
         var snapshot = await projector.ProjectAsync("corr-1", CancellationToken.None);
 
         Assert.Equal(HealthState.Degraded, snapshot.Health);
-        Assert.Contains("trust-failures:2", snapshot.DegradedReasons);
-        Assert.Contains("lock-failures:1", snapshot.DegradedReasons);
+        Assert.Contains("lock-failures:2", snapshot.DegradedReasons);
+        Assert.Contains("cleanup-failures:1", snapshot.DegradedReasons);
     }
 
     [Fact]
