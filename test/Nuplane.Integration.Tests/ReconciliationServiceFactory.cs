@@ -68,6 +68,7 @@ internal static class ReconciliationServiceFactory
             dryRunPlanner ?? new DryRunPlanner(diffEngine),
             packageCleanupService ?? new PackageCleanupService(new()),
             failureRecorder ?? new FailureRecorder(store),
-            observationDegradationTracker ?? new ObservationDegradationTracker());
+            observationDegradationTracker ?? new ObservationDegradationTracker(),
+            loadingFailureTracker);
     }
 }

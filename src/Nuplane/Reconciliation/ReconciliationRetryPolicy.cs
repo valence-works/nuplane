@@ -3,6 +3,7 @@ using Nuplane.Reconciliation.Configuration;
 
 namespace Nuplane.Reconciliation;
 
+// TODO: Use Polly / Microsoft.Resilience for a more robust retry implementation with jitter and better error handling.
 /// <summary>
 /// Implements an exponential backoff retry policy for reconciliation operations.
 /// </summary>

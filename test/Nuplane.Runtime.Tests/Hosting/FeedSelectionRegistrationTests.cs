@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Feeds.Configuration;
-using Nuplane.Sources;
 using Nuplane.Sources.Directory.Builder;
 
 namespace Nuplane.Runtime.Tests.Hosting;

@@ -1,10 +1,8 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Builder;
-using Nuplane.Loading.Extensions;
 using Nuplane.Loading.Registration;
 
 namespace Nuplane.Loading.Hosting.Builder;

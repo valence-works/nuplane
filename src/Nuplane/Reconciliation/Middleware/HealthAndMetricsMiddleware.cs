@@ -1,3 +1,4 @@
+using Nuplane.Abstractions;
 using Nuplane.Events;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Health;
@@ -11,7 +12,8 @@ internal sealed class HealthAndMetricsMiddleware(
     IReconciliationLogger logger,
     ReconciliationMetrics metrics,
     FeedResolutionOptions feedResolutionOptions,
-    ObservationDegradationTracker observationDegradationTracker) : IReconciliationMiddleware
+    ObservationDegradationTracker observationDegradationTracker,
+    ICycleFailureContributor? cycleFailureContributor = null) : IReconciliationMiddleware
 {
     private bool _previouslyIdle;
 
@@ -53,7 +55,9 @@ internal sealed class HealthAndMetricsMiddleware(
             await observerEventDispatcher.PublishReconciledAsync(changeSet, applyResult.AppliedPackages, context.CancellationToken);
         }
         
-        var hadFailures = context.ReadResult!.UsedFallback || applyResult.FailedPackageIds.Count > 0;
+        var loaderFailedIds = cycleFailureContributor?.TakeFailedPackageIds(context.CorrelationId) ?? [];
+        var hadFailures = context.ReadResult!.UsedFallback || applyResult.FailedPackageIds.Count > 0
+            || loaderFailedIds.Count > 0;
         var isDegraded = healthEvaluator.Evaluate(new(
             hadFailures,
             context.ReadResult.AllSourcesFresh,
@@ -61,15 +65,17 @@ internal sealed class HealthAndMetricsMiddleware(
             context.CleanupFailureCount,
             SourceOutages: context.SourceOutageCount + (observationDegradationTracker?.DegradedCount ?? 0)));
         var cycleDuration = DateTimeOffset.UtcNow - context.CycleStartedAt;
-        metrics.RecordCycle(changeSet, applyResult.FailedPackageIds.Count, cycleDuration, context.MergedActive!.Count);
+        var totalFailureCount = applyResult.FailedPackageIds.Count + loaderFailedIds.Count;
+        metrics.RecordCycle(changeSet, totalFailureCount, cycleDuration, context.MergedActive!.Count);
         metrics.RecordConvergenceCycle(isDegraded);
         if (applyResult.FailedPackageIds.Count > 0)
         {
             metrics.RecordAcquisitionFailed(applyResult.FailedPackageIds.Count);
         }
-        logger.LogCycleCompleted(context.CorrelationId, isDegraded, applyResult.FailedPackageIds.Count);
+        logger.LogCycleCompleted(context.CorrelationId, isDegraded, totalFailureCount);
 
         var failedPackages = applyResult.FailedPackageIds
+            .Concat(loaderFailedIds)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
             .ToArray();

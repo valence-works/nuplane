@@ -1,5 +1,4 @@
 using NuGet.Versioning;
-using Nuplane.Abstractions;
 using Nuplane.Feeds.Versioning;
 
 namespace Nuplane.NuGet.Tests;

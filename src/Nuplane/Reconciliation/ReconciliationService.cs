@@ -47,6 +47,7 @@ public sealed class ReconciliationService : IReconciliationService
     /// <param name="packageCleanupService">The package cleanup service.</param>
     /// <param name="failureRecorder">The failure recorder.</param>
     /// <param name="observationDegradationTracker">The observation degradation tracker.</param>
+    /// <param name="cycleFailureContributor">Optional contributor of per-cycle failure information from external modules.</param>
     public ReconciliationService(
         IEnumerable<IDesiredPackageSource> sources,
         IDesiredStateAggregator desiredStateAggregator,
@@ -65,7 +66,8 @@ public sealed class ReconciliationService : IReconciliationService
         IDryRunPlanner dryRunPlanner,
         IPackageCleanupService packageCleanupService,
         IFailureRecorder failureRecorder,
-        ObservationDegradationTracker observationDegradationTracker)
+        ObservationDegradationTracker observationDegradationTracker,
+        ICycleFailureContributor? cycleFailureContributor = null)
     {
         var sourcesList = (sources ?? throw new ArgumentNullException(nameof(sources))).ToArray();
         var reconciliationOpts = (reconciliationOptions ?? throw new ArgumentNullException(nameof(reconciliationOptions))).Value;
@@ -102,7 +104,7 @@ public sealed class ReconciliationService : IReconciliationService
         _pipeline.Use(new DiffAndChangeEventMiddleware(diffEngine, dryRun, retry, storeReg, eventDispatcher, metricsInstance));
         _pipeline.Use(new TransactionExecutionMiddleware(applyExecutor, diffEngine, eventDispatcher));
         _pipeline.Use(new CleanupMiddleware(diffEngine, storeReg, cleanupService, cleanupOpts, metricsInstance));
-        _pipeline.Use(new HealthAndMetricsMiddleware(healthEval, eventDispatcher, loggerInstance, metricsInstance, feedResOpts, observationDegradationTracker));
+        _pipeline.Use(new HealthAndMetricsMiddleware(healthEval, eventDispatcher, loggerInstance, metricsInstance, feedResOpts, observationDegradationTracker, cycleFailureContributor));
     }
 
     /// <inheritdoc />
