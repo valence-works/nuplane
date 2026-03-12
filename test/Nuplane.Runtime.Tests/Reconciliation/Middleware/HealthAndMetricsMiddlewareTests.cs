@@ -77,13 +77,13 @@ public sealed class HealthAndMetricsMiddlewareTests
         {
             CorrelationId = "test",
             CycleStartedAt = DateTimeOffset.UtcNow,
-            CancellationToken = CancellationToken.None
+            CancellationToken = CancellationToken.None,
+            ChangeSet = changeSet,
+            ReadResult = new([], UsedFallback: false, AllSourcesFresh: true),
+            ApplyResult = new([], []),
+            ActiveVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            MergedActive = new(StringComparer.OrdinalIgnoreCase)
         };
-        ctx.ChangeSet = changeSet;
-        ctx.ReadResult = new([], UsedFallback: false, AllSourcesFresh: true);
-        ctx.ApplyResult = new([], []);
-        ctx.ActiveVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        ctx.MergedActive = new(StringComparer.OrdinalIgnoreCase);
         return ctx;
     }
 

@@ -36,6 +36,31 @@ public sealed class ReconciliationRetryPolicyTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_DoesNotRetryOperationCanceledException()
+    {
+        var policy = new ReconciliationRetryPolicy(
+            new OptionsWrapper<ReconciliationOptions>(new()
+            {
+                MaxRetryAttempts = 3,
+                InitialRetryBackoff = TimeSpan.FromMilliseconds(1),
+                MaxRetryBackoff = TimeSpan.FromMilliseconds(4)
+            }));
+
+        var attempts = 0;
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            policy.ExecuteAsync<int>(
+                _ =>
+                {
+                    attempts++;
+                    throw new OperationCanceledException();
+                },
+                CancellationToken.None));
+
+        Assert.Equal(1, attempts);
+    }
+
+    [Fact]
     public void GetBackoffForRetry_UsesExponentialProgression_ClampedToMax()
     {
         var options = new ReconciliationOptions

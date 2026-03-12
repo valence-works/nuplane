@@ -76,10 +76,10 @@ public sealed class TransactionExecutionMiddlewareTests
         {
             CorrelationId = "test",
             CycleStartedAt = DateTimeOffset.UtcNow,
-            CancellationToken = CancellationToken.None
+            CancellationToken = CancellationToken.None,
+            ResolutionResult = new(packages, [], []),
+            ActiveVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         };
-        ctx.ResolutionResult = new(packages, [], []);
-        ctx.ActiveVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         return ctx;
     }
 

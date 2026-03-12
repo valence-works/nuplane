@@ -91,10 +91,10 @@ public sealed class TrustAndLockGateMiddlewareTests
         {
             CorrelationId = "test",
             CycleStartedAt = DateTimeOffset.UtcNow,
-            CancellationToken = CancellationToken.None
+            CancellationToken = CancellationToken.None,
+            DesiredRequests = resolved.Select(r => new PackageRequest(r.Id, r.Version, r.FeedName, PackageUpdatePolicy.Exact, r.SourceName ?? "src")).ToArray(),
+            ResolutionResult = new(resolved, [], [])
         };
-        ctx.DesiredRequests = resolved.Select(r => new PackageRequest(r.Id, r.Version, r.FeedName, PackageUpdatePolicy.Exact, r.SourceName ?? "src")).ToArray();
-        ctx.ResolutionResult = new(resolved, [], []);
         return ctx;
     }
 

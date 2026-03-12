@@ -32,6 +32,31 @@ public sealed class MultiFeedRetryPolicyTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WithZeroRetries_AttemptsOperationOnce()
+    {
+        var options = new ReconciliationOptions
+        {
+            MaxRetryAttempts = 0,
+            InitialRetryBackoff = TimeSpan.FromMilliseconds(1),
+            MaxRetryBackoff = TimeSpan.FromMilliseconds(2)
+        };
+
+        var policy = new ReconciliationRetryPolicy(new OptionsWrapper<ReconciliationOptions>(options));
+        var attempts = 0;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            policy.ExecuteAsync<int>(
+                _ =>
+                {
+                    attempts++;
+                    throw new InvalidOperationException("feed unavailable");
+                },
+                CancellationToken.None));
+
+        Assert.Equal(1, attempts);
+    }
+
+    [Fact]
     public void GetBackoffForRetry_ProgressesExponentiallyWithinBounds()
     {
         var options = new ReconciliationOptions

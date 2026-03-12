@@ -94,9 +94,9 @@ public sealed class DiffAndChangeEventMiddlewareTests
         {
             CorrelationId = "test",
             CycleStartedAt = DateTimeOffset.UtcNow,
-            CancellationToken = CancellationToken.None
+            CancellationToken = CancellationToken.None,
+            ResolutionResult = new(packages, [], [])
         };
-        ctx.ResolutionResult = new(packages, [], []);
         return ctx;
     }
 
