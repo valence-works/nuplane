@@ -1,0 +1,169 @@
+name: Publish packages
+
+on:
+  push:
+    branches:
+      - main
+  release:
+    types:
+      - published
+      - prereleased
+
+concurrency:
+  group: publish-packages-${{ github.event_name }}-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  BASE_VERSION: 1.0.0
+
+jobs:
+  build-and-pack:
+    runs-on: ubuntu-latest
+    outputs:
+      package_version: ${{ steps.version.outputs.package_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Determine package version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
+            tag_name="${{ github.event.release.tag_name }}"
+            version="${tag_name#v}"
+
+            if [[ -z "${version}" ]]; then
+              echo "Release tag '${tag_name}' does not contain a valid version."
+              exit 1
+            fi
+
+            if [[ "${{ github.event.action }}" == "prereleased" && "${version}" != *-* ]]; then
+              echo "Prerelease event requires a prerelease SemVer tag (for example: v1.2.3-rc.1)."
+              exit 1
+            fi
+          else
+            version="${BASE_VERSION}-preview.${GITHUB_RUN_NUMBER}"
+          fi
+
+          echo "package_version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "Packaging version: ${version}"
+
+      - name: Restore
+        run: dotnet restore nuplane.sln
+
+      - name: Build
+        run: dotnet build nuplane.sln --configuration Release --no-restore
+
+      - name: Pack source projects
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.package_version }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/packages
+
+          while IFS= read -r project; do
+            dotnet pack "${project}" \
+              --configuration Release \
+              --no-build \
+              --output artifacts/packages \
+              /p:ContinuousIntegrationBuild=true \
+              /p:Version="${PACKAGE_VERSION}"
+          done < <(find src -name "*.csproj" -type f | sort)
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: |
+            artifacts/packages/*.nupkg
+            artifacts/packages/*.snupkg
+          if-no-files-found: error
+
+  publish-preview:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs:
+      - build-and-pack
+    steps:
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: artifacts/packages
+
+      - name: Push preview packages to feedz.io
+        shell: bash
+        env:
+          FEEDZ_PREVIEW_SOURCE_URL: ${{ secrets.FEEDZ_PREVIEW_SOURCE_URL }}
+          FEEDZ_PREVIEW_API_KEY: ${{ secrets.FEEDZ_PREVIEW_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${FEEDZ_PREVIEW_SOURCE_URL}" || -z "${FEEDZ_PREVIEW_API_KEY}" ]]; then
+            echo "Missing FEEDZ_PREVIEW_SOURCE_URL or FEEDZ_PREVIEW_API_KEY secret."
+            exit 1
+          fi
+
+          dotnet nuget push "artifacts/packages/*.nupkg" \
+            --source "${FEEDZ_PREVIEW_SOURCE_URL}" \
+            --api-key "${FEEDZ_PREVIEW_API_KEY}" \
+            --skip-duplicate
+
+  publish-nuget:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+    needs:
+      - build-and-pack
+    steps:
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: artifacts/packages
+
+      - name: NuGet login (OIDC -> temporary API key)
+        id: nuget_login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_ORG_USERNAME }}
+
+      - name: Push package binaries to nuget.org
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet nuget push "artifacts/packages/*.nupkg" \
+            --source "https://api.nuget.org/v3/index.json" \
+            --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
+            --skip-duplicate
+
+      - name: Push symbol packages to nuget.org
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet nuget push "artifacts/packages/*.snupkg" \
+            --source "https://api.nuget.org/v3/index.json" \
+            --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
+            --skip-duplicate
+
