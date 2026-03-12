@@ -19,8 +19,8 @@ public sealed class FeedResolutionContractTests
             StopOnFirstSuccessfulFeed = false
         });
 
-        options.Value.Feeds.Add(new("feed-a", new("https://a.example/v3/index.json"), FeedTrustLevel.Trusted));
-        options.Value.Feeds.Add(new("feed-b", new("https://b.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Value.Feeds.Add(new("feed-a", new("https://a.example/v3/index.json")));
+        options.Value.Feeds.Add(new("feed-b", new("https://b.example/v3/index.json")));
         options.Value.UnavailableFeeds.Add("feed-a");
 
         var resolver = new MultiFeedPackageResolver(options, new(options),
@@ -44,8 +44,8 @@ public sealed class FeedResolutionContractTests
             StopOnFirstSuccessfulFeed = false
         });
 
-        options.Value.Feeds.Add(new("feed-a", new("https://a.example/v3/index.json"), FeedTrustLevel.Trusted));
-        options.Value.Feeds.Add(new("feed-b", new("https://b.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Value.Feeds.Add(new("feed-a", new("https://a.example/v3/index.json")));
+        options.Value.Feeds.Add(new("feed-b", new("https://b.example/v3/index.json")));
         options.Value.SetPriority("feed-a", 10);
         options.Value.SetPriority("feed-b", 20);
         options.Value.UnavailableFeeds.Add("feed-a");

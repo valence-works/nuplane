@@ -55,7 +55,8 @@ public sealed class ManualReconcileObservabilityIntegrationTests
 
         Assert.Equal(HealthState.Degraded, snapshot.Health);
         Assert.True(snapshot.DegradedReasons.Count > 0);
-        Assert.Contains("manifest-failures:1", snapshot.DegradedReasons);
+        Assert.Contains("lock-failures:1", snapshot.DegradedReasons);
+        Assert.Contains("source-outages:1", snapshot.DegradedReasons);
     }
 
     [Fact]

@@ -59,9 +59,7 @@ public sealed class FeedCredentialOptionsValidator
             }
         }
 
-        if (feedResolution.Feeds.Count > 0 &&
-            feedResolution is { PolicyMode: FeedResolutionPolicyMode.Strict, StopOnFirstSuccessfulFeed: false } &&
-            feedResolution.Feeds.All(x => x.TrustLevel == FeedTrustLevel.Untrusted))
+        if (feedResolution.Feeds.Count > 0 && feedResolution is { PolicyMode: FeedResolutionPolicyMode.Strict, StopOnFirstSuccessfulFeed: false })
         {
             errors.Add("Strict mode requires at least one non-untrusted feed to avoid fail-open configuration.");
         }

@@ -37,7 +37,7 @@ public sealed class RemoteFeedDownloadContractTests : IAsyncLifetime
         await using var server = new TestNuGetFeedServer("MyPlugin", "1.0.0", packageBytes);
 
         var options = new FeedResolutionOptions { PackageInstallRoot = Path.Combine(_tempDir, "installed") };
-        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri, FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri));
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
         var resolver = new MultiFeedPackageResolver(
             new OptionsWrapper<FeedResolutionOptions>(options), policy,
@@ -63,7 +63,7 @@ public sealed class RemoteFeedDownloadContractTests : IAsyncLifetime
         await using var server = new TestNuGetFeedServer("MyPlugin", "1.0.0", packageBytes);
 
         var options = new FeedResolutionOptions { PackageInstallRoot = Path.Combine(_tempDir, "installed") };
-        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri, FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri));
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
         var resolver = new MultiFeedPackageResolver(
             new OptionsWrapper<FeedResolutionOptions>(options), policy,

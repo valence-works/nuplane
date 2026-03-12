@@ -25,7 +25,7 @@ public sealed class MultiFeedRetryExhaustionTests
             StopOnFirstSuccessfulFeed = true
         };
 
-        feedOptions.Feeds.Add(new("feed-down", new("https://down.example/v3/index.json"), FeedTrustLevel.Trusted));
+        feedOptions.Feeds.Add(new("feed-down", new("https://down.example/v3/index.json")));
         feedOptions.UnavailableFeeds.Add("feed-down");
 
         var resolver = new MultiFeedPackageResolver(

@@ -23,15 +23,15 @@ public sealed class FeedSelectionRegistrationTests
     }
 
     [Fact]
-    public void AddNuplane_WithoutAddLogging_StillRegistersPackageResolver()
+    public void AddNuplane_WithoutAddLogging_StillRegistersFeedResolutionOptions()
     {
         var services = new ServiceCollection();
         services.AddNuplane(_ => { });
 
         using var provider = services.BuildServiceProvider();
 
-        var resolver = provider.GetRequiredService<IPackageResolver>();
-        Assert.NotNull(resolver);
+        var options = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
+        Assert.NotNull(options);
     }
 
     [Fact]

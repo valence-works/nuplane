@@ -22,8 +22,8 @@ public sealed class StrictFeedOutageIsolationTests
         ]);
 
         var feedOptions = new FeedResolutionOptions { PolicyMode = FeedResolutionPolicyMode.Strict };
-        feedOptions.Feeds.Add(new("feed-down", new("https://down.example/v3/index.json"), FeedTrustLevel.Trusted));
-        feedOptions.Feeds.Add(new("feed-up", new("https://up.example/v3/index.json"), FeedTrustLevel.Trusted));
+        feedOptions.Feeds.Add(new("feed-down", new("https://down.example/v3/index.json")));
+        feedOptions.Feeds.Add(new("feed-up", new("https://up.example/v3/index.json")));
         feedOptions.UnavailableFeeds.Add("feed-down");
 
         var service = ReconciliationServiceFactory.Create(

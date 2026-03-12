@@ -15,7 +15,7 @@ public sealed class MultiFeedPackageResolverTests
     public async Task ResolveAsync_RemoteFeed_SelectsHighestStableVersion()
     {
         var options = new FeedResolutionOptions();
-        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
         var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
         var policy = new FeedResolutionPolicy(wrappedOptions);
 
@@ -47,7 +47,7 @@ public sealed class MultiFeedPackageResolverTests
     public async Task ResolveAsync_RemoteFeed_PopulatesDecisionWithEnumerationMetadata()
     {
         var options = new FeedResolutionOptions();
-        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
         var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
         var policy = new FeedResolutionPolicy(wrappedOptions);
 
@@ -79,7 +79,7 @@ public sealed class MultiFeedPackageResolverTests
     public async Task ResolveAsync_RemoteFeed_NoMatchingVersion_ThrowsNoEligibleFeedException()
     {
         var options = new FeedResolutionOptions();
-        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
         var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
         var policy = new FeedResolutionPolicy(wrappedOptions);
 
@@ -107,7 +107,7 @@ public sealed class MultiFeedPackageResolverTests
     public async Task ResolveAsync_BoundedRange_SelectsBestMatchWithinRange()
     {
         var options = new FeedResolutionOptions();
-        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
         var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
         var policy = new FeedResolutionPolicy(wrappedOptions);
 
@@ -137,7 +137,7 @@ public sealed class MultiFeedPackageResolverTests
     public async Task ResolveAsync_ExactVersion_ResolvesExactMatch()
     {
         var options = new FeedResolutionOptions();
-        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
         var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
         var policy = new FeedResolutionPolicy(wrappedOptions);
 
@@ -167,7 +167,7 @@ public sealed class MultiFeedPackageResolverTests
     public async Task ResolveAsync_BareVersion_ResolvesThroughEvaluator()
     {
         var options = new FeedResolutionOptions();
-        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
         var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
         var policy = new FeedResolutionPolicy(wrappedOptions);
 
@@ -197,7 +197,7 @@ public sealed class MultiFeedPackageResolverTests
     public async Task ResolveAsync_NoMatch_DecisionContainsDiagnostic()
     {
         var options = new FeedResolutionOptions();
-        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
         var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
         var policy = new FeedResolutionPolicy(wrappedOptions);
 
@@ -231,7 +231,7 @@ public sealed class MultiFeedPackageResolverTests
     public async Task ResolveAsync_RemoteFeed_UsesCacheHitMetadataInDecision()
     {
         var options = new FeedResolutionOptions();
-        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
         var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
         var policy = new FeedResolutionPolicy(wrappedOptions);
 
@@ -262,7 +262,7 @@ public sealed class MultiFeedPackageResolverTests
     public async Task ResolveAsync_RemoteFeed_EnumerationException_RecordsFailureDecision()
     {
         var options = new FeedResolutionOptions();
-        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
         var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
         var policy = new FeedResolutionPolicy(wrappedOptions);
 
@@ -295,7 +295,7 @@ public sealed class MultiFeedPackageResolverTests
     public async Task ResolveAsync_LocalFeed_WithoutExplicitVersion_ThrowsClearError()
     {
         var options = new FeedResolutionOptions();
-        options.Feeds.Add(new("local-drop", new("file:///packages/local"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("local-drop", new("file:///packages/local")));
         var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
         var policy = new FeedResolutionPolicy(wrappedOptions);
 
@@ -322,7 +322,7 @@ public sealed class MultiFeedPackageResolverTests
     public async Task ResolveAsync_Reconciliation_NewerVersionWithinRange_ResolvesToNewer()
     {
         var options = new FeedResolutionOptions();
-        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
         var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
         var policy = new FeedResolutionPolicy(wrappedOptions);
 
@@ -361,7 +361,7 @@ public sealed class MultiFeedPackageResolverTests
     public async Task ResolveAsync_Reconciliation_NewVersionOutsideRange_VersionUnchanged()
     {
         var options = new FeedResolutionOptions();
-        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
         var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
         var policy = new FeedResolutionPolicy(wrappedOptions);
 
@@ -400,7 +400,7 @@ public sealed class MultiFeedPackageResolverTests
     public async Task ResolveAsync_Reconciliation_LatestNoRange_UpdatesToNewer()
     {
         var options = new FeedResolutionOptions();
-        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json"), FeedTrustLevel.Trusted));
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
         var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
         var policy = new FeedResolutionPolicy(wrappedOptions);
 

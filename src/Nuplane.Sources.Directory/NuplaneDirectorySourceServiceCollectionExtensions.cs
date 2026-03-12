@@ -46,7 +46,6 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
             options.FeedName,
             feedOptions,
             includePatterns,
-            FeedTrustLevel.Trusted,
             credentials: null);
 
         return services;

@@ -32,7 +32,7 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
         NupkgTestBuilder.Create("MyPlugin", "1.0.0").BuildTo(_tempDir);
 
         var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
-        var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
+        var localFeed = new FeedDefinition("local-drop", feedUri);
         var opts = new FeedResolutionOptions();
         opts.Feeds.Add(localFeed);
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(opts));
@@ -57,7 +57,7 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
         NupkgTestBuilder.Create("MyPlugin", "1.0.0").BuildTo(_tempDir);
 
         var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
-        var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
+        var localFeed = new FeedDefinition("local-drop", feedUri);
         var opts = new FeedResolutionOptions();
         opts.Feeds.Add(localFeed);
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(opts));
@@ -98,7 +98,7 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
     [Fact]
     public void OrderCandidates_LocalFileUriFeed_IncludedInCandidates()
     {
-        var localFeed = new FeedDefinition("local-drop", new("file:///packages/local"), FeedTrustLevel.Trusted);
+        var localFeed = new FeedDefinition("local-drop", new("file:///packages/local"));
         var opts = new FeedResolutionOptions();
         opts.Feeds.Add(localFeed);
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(opts));

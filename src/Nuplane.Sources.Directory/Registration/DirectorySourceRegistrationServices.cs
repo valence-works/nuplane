@@ -26,7 +26,6 @@ public static class DirectorySourceRegistrationServices
         string feedName,
         NuplaneDirectoryFeedOptions options,
         IEnumerable<string> includePatterns,
-        FeedTrustLevel trustLevel,
         string? credentials)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -43,7 +42,7 @@ public static class DirectorySourceRegistrationServices
         services.PostConfigure<FeedResolutionOptions>(opts =>
         {
             opts.Feeds.RemoveAll(f => string.Equals(f.Name, feedName, StringComparison.OrdinalIgnoreCase));
-            opts.Feeds.Add(new(feedName, feedUri, trustLevel, credentials));
+            opts.Feeds.Add(new(feedName, feedUri, credentials));
         });
 
         var marker = new DirectoryFeedRegistrationMarker(feedName);

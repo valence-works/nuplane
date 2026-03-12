@@ -41,7 +41,7 @@ public sealed class DesiredStateReconciliationTests
     }
 
     [Fact]
-    public async Task ManualTrigger_WhenFeedConfiguredUntrusted_FailsClosedByDefault()
+    public async Task ManualTrigger_WhenFeedConfiguredUntrusted_StillAppliesPackage()
     {
         var source = new StaticSource([
             new("pkg-a", "1.2.3", "feed-untrusted", PackageUpdatePolicy.Exact, "source-a")
@@ -50,15 +50,15 @@ public sealed class DesiredStateReconciliationTests
         var feedResolutionOptions = new FeedResolutionOptions();
         feedResolutionOptions.Feeds.Add(new(
             "feed-untrusted",
-            new("https://feed-untrusted.example/v3/index.json"),
-            FeedTrustLevel.Untrusted));
+            new("https://feed-untrusted.example/v3/index.json")));
 
         var service = ReconciliationServiceFactory.Create(sources: [source], feedResolutionOptions: feedResolutionOptions);
         var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.False(result.Skipped);
-        Assert.Contains("pkg-a", result.FailedPackages);
-        Assert.Empty(result.ChangeSet.Added);
+        Assert.Empty(result.FailedPackages);
+        Assert.Single(result.ChangeSet.Added);
+        Assert.Equal("pkg-a", result.ChangeSet.Added[0].Id);
         Assert.Empty(result.ChangeSet.Updated);
         Assert.Empty(result.ChangeSet.Removed);
     }

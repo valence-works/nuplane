@@ -10,7 +10,6 @@ public sealed class NuplaneFeedBuilder
 {
     internal string Name { get; }
     internal Uri? ServiceIndex { get; private set; }
-    internal FeedTrustLevel TrustLevel { get; private set; } = FeedTrustLevel.Trusted;
     internal string? Credentials { get; private set; }
     internal List<string> IncludePatterns { get; } = [];
     internal List<string> ExcludePatterns { get; } = [];
@@ -24,14 +23,12 @@ public sealed class NuplaneFeedBuilder
     /// Configures this feed to resolve packages from a remote NuGet V3 service index.
     /// </summary>
     /// <param name="serviceIndex">The absolute HTTPS URI of the NuGet V3 service index.</param>
-    /// <param name="trustLevel">The trust level to assign to this feed. Defaults to <see cref="FeedTrustLevel.Trusted"/>.</param>
     /// <param name="credentials">Optional secret reference for authenticated feed access (e.g., <c>secrets://...</c>).</param>
-    public NuplaneFeedBuilder FromUri(Uri serviceIndex, FeedTrustLevel trustLevel = FeedTrustLevel.Trusted, string? credentials = null)
+    public NuplaneFeedBuilder FromUri(Uri serviceIndex, string? credentials = null)
     {
         ArgumentNullException.ThrowIfNull(serviceIndex);
 
         ServiceIndex = serviceIndex;
-        TrustLevel = trustLevel;
         Credentials = credentials;
         return this;
     }
@@ -62,16 +59,6 @@ public sealed class NuplaneFeedBuilder
             IncludePatterns.Add("*");
         }
 
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the trust level for this feed.
-    /// </summary>
-    /// <param name="level">The trust level to assign.</param>
-    public NuplaneFeedBuilder Trust(FeedTrustLevel level)
-    {
-        TrustLevel = level;
         return this;
     }
 }

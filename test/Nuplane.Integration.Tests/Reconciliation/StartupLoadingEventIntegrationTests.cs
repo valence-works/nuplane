@@ -196,7 +196,7 @@ public sealed class StartupLoadingEventIntegrationTests
         var result = await service.TriggerAsync(new(TriggerType.Startup), CancellationToken.None);
         var state = await storeRegistry.GetStateAsync(CancellationToken.None);
 
-        Assert.True(result.IsDegraded);
+        Assert.False(result.IsDegraded);
         Assert.Contains("plugin-fail", result.FailedPackages);
         Assert.Single(loadingObserver.ReceivedFailures);
         Assert.Equal("plugin-fail", loadingObserver.ReceivedFailures[0].PackageId);

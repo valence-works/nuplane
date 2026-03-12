@@ -42,7 +42,6 @@ public static class NuplaneBuilderDirectoryExtensions
             name,
             dirOptions,
             config.IncludePatterns,
-            config.TrustLevel,
             config.Credentials);
 
         DirectorySourceRegistrationServices.AddRegistrationMarkerFromModule(

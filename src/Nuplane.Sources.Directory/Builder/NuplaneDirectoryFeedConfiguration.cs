@@ -22,12 +22,6 @@ public sealed class NuplaneDirectoryFeedConfiguration
     public TimeSpan DebounceWindow { get; set; } = TimeSpan.FromSeconds(1);
 
     /// <summary>
-    /// Gets or sets the trust level for this feed.
-    /// Defaults to <see cref="FeedTrustLevel.Trusted"/>.
-    /// </summary>
-    public FeedTrustLevel TrustLevel { get; set; } = FeedTrustLevel.Trusted;
-
-    /// <summary>
     /// Gets or sets optional secret reference for authenticated feed access.
     /// </summary>
     public string? Credentials { get; set; }

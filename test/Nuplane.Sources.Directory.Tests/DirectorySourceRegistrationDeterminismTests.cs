@@ -22,9 +22,9 @@ public sealed class DirectorySourceRegistrationDeterminismTests
         var options = CreateOptions();
 
         DirectorySourceRegistrationServices.RegisterFeed(
-            services, "test-feed", options, [], FeedTrustLevel.Trusted, null);
+            services, "test-feed", options, [], null);
         DirectorySourceRegistrationServices.RegisterFeed(
-            services, "test-feed", options, [], FeedTrustLevel.Trusted, null);
+            services, "test-feed", options, [], null);
 
         var sourceCount = services.Count(d =>
             d.ServiceType == typeof(IDesiredPackageSource));
@@ -39,9 +39,9 @@ public sealed class DirectorySourceRegistrationDeterminismTests
         var options = CreateOptions(watch: true);
 
         DirectorySourceRegistrationServices.RegisterFeed(
-            services, "test-feed", options, [], FeedTrustLevel.Trusted, null);
+            services, "test-feed", options, [], null);
         DirectorySourceRegistrationServices.RegisterFeed(
-            services, "test-feed", options, [], FeedTrustLevel.Trusted, null);
+            services, "test-feed", options, [], null);
 
         var hostedCount = services.Count(d =>
             d.ServiceType == typeof(IHostedService));
@@ -56,9 +56,9 @@ public sealed class DirectorySourceRegistrationDeterminismTests
         var options = CreateOptions();
 
         DirectorySourceRegistrationServices.RegisterFeed(
-            services, "feed-a", options, [], FeedTrustLevel.Trusted, null);
+            services, "feed-a", options, [], null);
         DirectorySourceRegistrationServices.RegisterFeed(
-            services, "feed-b", options, [], FeedTrustLevel.Trusted, null);
+            services, "feed-b", options, [], null);
 
         var sourceCount = services.Count(d =>
             d.ServiceType == typeof(IDesiredPackageSource));

@@ -17,7 +17,7 @@ public sealed class FeedCredentialOptionsValidatorTests
     [Fact]
     public void FileUri_WithoutCredentials_IsValid()
     {
-        var feed = new FeedDefinition("local-drop", new("file:///var/nuplane/drop/"), FeedTrustLevel.Trusted);
+        var feed = new FeedDefinition("local-drop", new("file:///var/nuplane/drop/"));
         var errors = _validator.Validate(FeedOptions(feed));
         Assert.Empty(errors);
     }
@@ -25,7 +25,7 @@ public sealed class FeedCredentialOptionsValidatorTests
     [Fact]
     public void FileUri_WithCredentials_IsRejected()
     {
-        var feed = new FeedDefinition("local-drop", new("file:///var/nuplane/drop/"), FeedTrustLevel.Trusted, "secrets://some-secret");
+        var feed = new FeedDefinition("local-drop", new("file:///var/nuplane/drop/"), "secrets://some-secret");
         var errors = _validator.Validate(FeedOptions(feed));
         Assert.Single(errors);
         Assert.Contains("file://", errors[0]);
@@ -35,7 +35,7 @@ public sealed class FeedCredentialOptionsValidatorTests
     [Fact]
     public void HttpsFeed_IsStillValid()
     {
-        var feed = new FeedDefinition("nuget-org", new("https://api.nuget.org/v3/index.json"), FeedTrustLevel.Trusted);
+        var feed = new FeedDefinition("nuget-org", new("https://api.nuget.org/v3/index.json"));
         var errors = _validator.Validate(FeedOptions(feed));
         Assert.Empty(errors);
     }
@@ -43,7 +43,7 @@ public sealed class FeedCredentialOptionsValidatorTests
     [Fact]
     public void HttpFeed_IsRejected()
     {
-        var feed = new FeedDefinition("insecure", new("http://example.com/v3/index.json"), FeedTrustLevel.Trusted);
+        var feed = new FeedDefinition("insecure", new("http://example.com/v3/index.json"));
         var errors = _validator.Validate(FeedOptions(feed));
         Assert.Single(errors);
         Assert.Contains("HTTPS", errors[0]);
@@ -52,7 +52,7 @@ public sealed class FeedCredentialOptionsValidatorTests
     [Fact]
     public void FileUri_DoesNotRequireHttps()
     {
-        var feed = new FeedDefinition("local", new("file:///tmp/packages/"), FeedTrustLevel.Trusted);
+        var feed = new FeedDefinition("local", new("file:///tmp/packages/"));
         var errors = _validator.Validate(FeedOptions(feed));
         Assert.DoesNotContain(errors, e => e.Contains("HTTPS"));
     }
@@ -60,8 +60,8 @@ public sealed class FeedCredentialOptionsValidatorTests
     [Fact]
     public void MixedFeeds_ValidatesEachCorrectly()
     {
-        var localFeed = new FeedDefinition("local", new("file:///tmp/packages/"), FeedTrustLevel.Trusted);
-        var remoteFeed = new FeedDefinition("remote", new("https://api.nuget.org/v3/index.json"), FeedTrustLevel.Trusted);
+        var localFeed = new FeedDefinition("local", new("file:///tmp/packages/"));
+        var remoteFeed = new FeedDefinition("remote", new("https://api.nuget.org/v3/index.json"));
         var errors = _validator.Validate(FeedOptions(localFeed, remoteFeed));
         Assert.Empty(errors);
     }
@@ -69,8 +69,8 @@ public sealed class FeedCredentialOptionsValidatorTests
     [Fact]
     public void DuplicateFeedNames_AreRejected()
     {
-        var f1 = new FeedDefinition("dupe", new("file:///a/"), FeedTrustLevel.Trusted);
-        var f2 = new FeedDefinition("dupe", new("file:///b/"), FeedTrustLevel.Trusted);
+        var f1 = new FeedDefinition("dupe", new("file:///a/"));
+        var f2 = new FeedDefinition("dupe", new("file:///b/"));
         var errors = _validator.Validate(FeedOptions(f1, f2));
         Assert.Contains(errors, e => e.Contains("Duplicate"));
     }
@@ -78,7 +78,7 @@ public sealed class FeedCredentialOptionsValidatorTests
     [Fact]
     public void EmptyFeedName_IsRejected()
     {
-        var feed = new FeedDefinition("", new("file:///a/"), FeedTrustLevel.Trusted);
+        var feed = new FeedDefinition("", new("file:///a/"));
         var errors = _validator.Validate(FeedOptions(feed));
         Assert.Contains(errors, e => e.Contains("required"));
     }

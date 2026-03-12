@@ -38,7 +38,7 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
         BuildNupkgTo(_tempDir, "MyPlugin", "1.0.0");
 
         var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
-        var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
+        var localFeed = new FeedDefinition("local-drop", feedUri);
         var feedOpts = new FeedResolutionOptions();
         feedOpts.Feeds.Add(localFeed);
 
@@ -78,7 +78,7 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
         Directory.CreateDirectory(_tempDir);
 
         var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
-        var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
+        var localFeed = new FeedDefinition("local-drop", feedUri);
         var feedOpts = new FeedResolutionOptions();
         feedOpts.Feeds.Add(localFeed);
 
@@ -115,7 +115,7 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
         BuildNupkgTo(_tempDir, "PluginA", "1.0.0");
 
         var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
-        var localFeed = new FeedDefinition("local-drop", feedUri, FeedTrustLevel.Trusted);
+        var localFeed = new FeedDefinition("local-drop", feedUri);
         var feedOpts = new FeedResolutionOptions();
         feedOpts.Feeds.Add(localFeed);
 
