@@ -13,10 +13,6 @@ public sealed class ObserverContractTests
 
         var service = ReconciliationServiceFactory.Create(
             sources: [new StaticSource([new("pkg-a", "1.0.0", "feed-1", PackageUpdatePolicy.Exact, "source-a")])],
-            sourceTrustOptions: new()
-            {
-                AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" }
-            },
             observerEventDispatcher: new ObserverEventDispatcher([observer]));
 
         var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);

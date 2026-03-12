@@ -33,7 +33,6 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
     {
         return ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { RejectUnallowlistedPackages = false },
             packageResolver: new NuGetPackageResolver());
     }
 

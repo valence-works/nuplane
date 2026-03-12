@@ -13,10 +13,7 @@ public sealed class DesiredStateReconciliationTests
             new("pkg-a", "1.2.3", "feed-1", PackageUpdatePolicy.Exact, "source-a")
         ]);
 
-        var service = ReconciliationServiceFactory.Create(
-            sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } });
-
+        var service = ReconciliationServiceFactory.Create(sources: [source]);
         var first = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
         var second = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
@@ -34,10 +31,7 @@ public sealed class DesiredStateReconciliationTests
             new("pkg-a", "1.2.3", "feed-missing", PackageUpdatePolicy.Exact, "source-a")
         ]);
 
-        var service = ReconciliationServiceFactory.Create(
-            sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } });
-
+        var service = ReconciliationServiceFactory.Create(sources: [source]);
         var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.False(result.Skipped);
@@ -59,16 +53,7 @@ public sealed class DesiredStateReconciliationTests
             new("https://feed-untrusted.example/v3/index.json"),
             FeedTrustLevel.Untrusted));
 
-        var service = ReconciliationServiceFactory.Create(
-            sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
-            feedResolutionOptions: feedResolutionOptions,
-            feedTrustPolicyOptions: new()
-            {
-                AllowUntrustedWithScopedOverride = false,
-                RequireOverrideReason = true
-            });
-
+        var service = ReconciliationServiceFactory.Create(sources: [source], feedResolutionOptions: feedResolutionOptions);
         var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 
         Assert.False(result.Skipped);

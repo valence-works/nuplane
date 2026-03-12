@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Nuplane.Reconciliation.Models;
-using Nuplane.Trust.Feeds;
 
 namespace Nuplane.Observability;
 
@@ -65,25 +64,7 @@ public sealed partial class ReconciliationLogger : IReconciliationLogger
             decision.FailureReason,
             string.Join(",", decision.CandidateFeeds));
     }
-
-    /// <inheritdoc />
-    public void LogTrustPolicyOutcome(string correlationId, string packageId, FeedTrustPolicyOutcome outcome)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
-        ArgumentNullException.ThrowIfNull(outcome);
-
-        TrustPolicyOutcome(
-            _logger,
-            correlationId,
-            packageId,
-            outcome.TrustLevel.ToString(),
-            outcome.Allowed,
-            outcome.OverrideScope.ToString(),
-            outcome.OverrideReason,
-            outcome.ReasonCode);
-    }
-
+    
     /// <inheritdoc />
     public void LogLockOutcome(string correlationId, string packageId, LockFileEvaluationResult outcome)
     {
@@ -100,22 +81,6 @@ public sealed partial class ReconciliationLogger : IReconciliationLogger
             outcome.EffectivePackage?.Version,
             outcome.EffectivePackage?.FeedName,
             outcome.ReasonCode);
-    }
-
-    /// <inheritdoc />
-    public void LogLoadOutcome(string correlationId, string packageId, bool succeeded, string? reason)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
-
-        if (succeeded)
-        {
-            LoadOutcomeSucceeded(_logger, correlationId, packageId, reason);
-        }
-        else
-        {
-            LoadOutcomeFailed(_logger, correlationId, packageId, reason);
-        }
     }
 
     /// <inheritdoc />

@@ -38,7 +38,6 @@ public sealed class MultiFeedRetryExhaustionTests
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg" } },
             packageResolver: resolver,
             reconciliationOptions: new()
             {

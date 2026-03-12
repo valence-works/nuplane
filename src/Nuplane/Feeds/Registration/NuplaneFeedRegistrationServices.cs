@@ -3,7 +3,6 @@ using Nuplane.Abstractions;
 using Nuplane.Feeds.Builder;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Sources;
-using Nuplane.Trust.Source;
 
 namespace Nuplane.Feeds.Registration;
 
@@ -58,47 +57,6 @@ public static class NuplaneFeedRegistrationServices
         }
     }
 
-    /// <summary>
-    /// Configures the <see cref="SourceTrustOptions"/> based on the registered feeds and their package selection patterns. If any feed has an explicit unrestricted package selection (i.e., includes "*"), all package ID restrictions are cleared and all sources are allowed. Otherwise, the allowed package ID patterns from all feeds are aggregated into the options.
-    /// </summary>
-    public static void ConfigureSourceTrustOptions(IServiceCollection services)
-    {
-        var registrations = services
-            .Where(static descriptor => descriptor.ServiceType == typeof(NuplaneFeedRegistration))
-            .Select(static descriptor => descriptor.ImplementationInstance)
-            .OfType<NuplaneFeedRegistration>()
-            .ToArray();
-
-        if (registrations.Length == 0)
-        {
-            return;
-        }
-
-        var hasExplicitUnrestrictedFeed = registrations.Any(static registration => registration.HasExplicitUnrestrictedPackageSelection);
-        var allIncludePatterns = registrations
-            .SelectMany(static registration => registration.IncludePatterns)
-            .ToArray();
-
-        services.Configure<SourceTrustOptions>(opts =>
-        {
-            foreach (var registration in registrations)
-            {
-                opts.AllowedSourceNames.Add(registration.Name);
-            }
-
-            if (hasExplicitUnrestrictedFeed)
-            {
-                opts.AllowedPackageIds.Clear();
-                opts.AllowedPackageIds.Add("*");
-                return;
-            }
-
-            foreach (var pattern in allIncludePatterns)
-            {
-                opts.AllowedPackageIds.Add(pattern);
-            }
-        });
-    }
 
     private static bool HasExplicitUnrestrictedPackageSelection(NuplaneFeedBuilder feed) =>
         feed.IncludePatterns.Any(static pattern => string.Equals(pattern, "*", StringComparison.Ordinal));

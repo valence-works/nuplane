@@ -15,7 +15,6 @@ public sealed class SingleFlightOverlapTests
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
             packageResolver: new SlowResolver(TimeSpan.FromMilliseconds(200)),
             reconciliationOptions: new() { EnableSingleFlight = true });
 

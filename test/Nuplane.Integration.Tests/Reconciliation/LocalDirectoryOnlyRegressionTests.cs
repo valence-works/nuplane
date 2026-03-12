@@ -48,7 +48,6 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "MyPlugin" } },
             desiredStateAggregator: new DesiredStateAggregator(),
             desiredActualDiffEngine: new DesiredActualDiffEngine(),
             packageResolver: new MultiFeedPackageResolver(
@@ -87,7 +86,6 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new(),
             desiredStateAggregator: new DesiredStateAggregator(),
             desiredActualDiffEngine: new DesiredActualDiffEngine(),
             packageResolver: new MultiFeedPackageResolver(
@@ -127,7 +125,6 @@ public sealed class LocalDirectoryOnlyRegressionTests : IDisposable
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "PluginA" } },
             desiredStateAggregator: new DesiredStateAggregator(),
             desiredActualDiffEngine: new DesiredActualDiffEngine(),
             packageResolver: new MultiFeedPackageResolver(

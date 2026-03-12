@@ -4,7 +4,6 @@ using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Middleware;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Store.State;
-using Nuplane.Trust.Feeds;
 
 namespace Nuplane.Runtime.Tests.Reconciliation.Middleware;
 
@@ -22,24 +21,23 @@ public sealed class TrustAndLockGateMiddlewareTests
 
         Assert.True(nextCalled);
         Assert.Equal(2, ctx.TrustAndLockPassed.Count);
-        Assert.Equal(0, ctx.TrustFailureCount);
         Assert.Equal(0, ctx.LockFailureCount);
     }
 
     [Fact]
-    public async Task InvokeAsync_OnePackageBlockedByTrust_ExcludedAndFailureRecorded()
+    public async Task InvokeAsync_OnePackageBlockedByLock_ExcludedAndFailureRecorded()
     {
         var recorder = new FakeFailureRecorder();
         var resolved = new[] { Pkg("alpha"), Pkg("blocked") };
-        var trustEvaluator = new FakeTrustEvaluator(blockedIds: ["blocked"]);
-        var middleware = Build(resolvedPackages: resolved, trustEvaluator: trustEvaluator, failureRecorder: recorder);
+        var lockCoordinator = new FakeLockCoordinator(blockedIds: ["blocked"]);
+        var middleware = Build(resolvedPackages: resolved, lockCoordinator: lockCoordinator, failureRecorder: recorder);
 
         var ctx = Ctx(resolved);
         await middleware.InvokeAsync(ctx, () => Task.CompletedTask);
 
         Assert.Single(ctx.TrustAndLockPassed);
         Assert.Equal("alpha", ctx.TrustAndLockPassed[0].Id);
-        Assert.True(ctx.TrustFailureCount > 0);
+        Assert.Equal(1, ctx.LockFailureCount);
         Assert.True(recorder.RecordedCount > 0);
     }
 
@@ -62,32 +60,26 @@ public sealed class TrustAndLockGateMiddlewareTests
     }
 
     [Fact]
-    public async Task InvokeAsync_CombinedTrustAndLockFailures_BothCountsIncremented()
+    public async Task InvokeAsync_MultipleLockFailures_CountIncrementedAndOnlyAllowedPackagesRemain()
     {
-        var resolved = new[] { Pkg("trust-blocked"), Pkg("lock-blocked"), Pkg("ok") };
-        var trustEvaluator = new FakeTrustEvaluator(blockedIds: ["trust-blocked"]);
-        var lockCoordinator = new FakeLockCoordinator(blockedIds: ["lock-blocked"]);
+        var resolved = new[] { Pkg("blocked-a"), Pkg("blocked-b"), Pkg("ok") };
+        var lockCoordinator = new FakeLockCoordinator(blockedIds: ["blocked-a", "blocked-b"]);
         var middleware = Build(resolvedPackages: resolved,
-            trustEvaluator: trustEvaluator,
             lockCoordinator: lockCoordinator);
 
         var ctx = Ctx(resolved);
         await middleware.InvokeAsync(ctx, () => Task.CompletedTask);
 
         Assert.Single(ctx.TrustAndLockPassed);
-        Assert.True(ctx.TrustFailureCount > 0);
-        Assert.True(ctx.LockFailureCount > 0);
+        Assert.Equal("ok", ctx.TrustAndLockPassed[0].Id);
+        Assert.Equal(2, ctx.LockFailureCount);
     }
 
     private static TrustAndLockGateMiddleware Build(
         ResolvedPackage[]? resolvedPackages = null,
-        FakeTrustEvaluator? trustEvaluator = null,
         FakeLockCoordinator? lockCoordinator = null,
         IFailureRecorder? failureRecorder = null) =>
         new(
-            new(),
-            new(),
-            trustEvaluator ?? new FakeTrustEvaluator([]),
             lockCoordinator ?? new FakeLockCoordinator([]),
             new PassthroughRetryPolicy(),
             failureRecorder ?? new FakeFailureRecorder(),
@@ -101,27 +93,13 @@ public sealed class TrustAndLockGateMiddlewareTests
             CycleStartedAt = DateTimeOffset.UtcNow,
             CancellationToken = CancellationToken.None
         };
-        ctx.AllowlistedRequests = resolved.Select(r => new PackageRequest(r.Id, r.Version, r.FeedName, PackageUpdatePolicy.Exact, r.SourceName ?? "src")).ToArray();
+        ctx.DesiredRequests = resolved.Select(r => new PackageRequest(r.Id, r.Version, r.FeedName, PackageUpdatePolicy.Exact, r.SourceName ?? "src")).ToArray();
         ctx.ResolutionResult = new(resolved, [], []);
         return ctx;
     }
 
     private static ResolvedPackage Pkg(string id) =>
         new(id, "1.0.0", "feed-a", $"/store/{id}", DateTimeOffset.UtcNow, id);
-
-    private sealed class FakeTrustEvaluator(IReadOnlyCollection<string> blockedIds) : IFeedTrustPolicyEvaluator
-    {
-        public FeedTrustPolicyOutcome Evaluate(
-            PackageRequest request,
-            FeedDefinition feed,
-            FeedTrustPolicyOptions options,
-            bool validatorPassed)
-        {
-            if (blockedIds.Contains(request.Id, StringComparer.OrdinalIgnoreCase))
-                return new(false, FeedTrustLevel.Untrusted, FeedOverrideScope.None, null, "trust-blocked");
-            return new(true, FeedTrustLevel.Trusted, FeedOverrideScope.None, null, "ok");
-        }
-    }
 
     private sealed class FakeLockCoordinator(IReadOnlyCollection<string> blockedIds) : ILockFileCoordinator
     {
@@ -155,7 +133,6 @@ public sealed class TrustAndLockGateMiddlewareTests
         public void LogCycleCompleted(string correlationId, bool degraded, int failedCount) { }
         public void LogObserverError(string correlationId, string callbackName, string message) { }
         public void LogFeedDecision(FeedResolutionDecision decision) { }
-        public void LogTrustPolicyOutcome(string correlationId, string packageId, FeedTrustPolicyOutcome outcome) { }
         public void LogLockOutcome(string correlationId, string packageId, LockFileEvaluationResult outcome) { }
         public void LogLoadOutcome(string correlationId, string packageId, bool succeeded, string? reason) { }
         public void LogUnloadOutcome(string correlationId, string packageId, string outcome, string? reason) { }

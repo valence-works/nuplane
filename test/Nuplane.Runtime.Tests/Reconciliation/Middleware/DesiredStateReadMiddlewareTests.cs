@@ -5,9 +5,6 @@ using Nuplane.Reconciliation.Middleware;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Sources;
 using Nuplane.Store.State;
-using Nuplane.Trust;
-using Nuplane.Trust.Feeds;
-using Nuplane.Trust.Source;
 
 namespace Nuplane.Runtime.Tests.Reconciliation.Middleware;
 
@@ -26,9 +23,9 @@ public sealed class DesiredStateReadMiddlewareTests
         await middleware.InvokeAsync(ctx, () => { nextCalled = true; return Task.CompletedTask; });
 
         Assert.True(nextCalled);
-        Assert.NotEmpty(ctx.AllowlistedRequests);
-        Assert.Contains(ctx.AllowlistedRequests, r => r.Id == "alpha");
-        Assert.Contains(ctx.AllowlistedRequests, r => r.Id == "beta");
+        Assert.NotEmpty(ctx.DesiredRequests);
+        Assert.Contains(ctx.DesiredRequests, r => r.Id == "alpha");
+        Assert.Contains(ctx.DesiredRequests, r => r.Id == "beta");
         Assert.NotNull(ctx.ReadResult);
     }
 
@@ -44,7 +41,7 @@ public sealed class DesiredStateReadMiddlewareTests
         await middleware.InvokeAsync(ctx, () => { nextCalled = true; return Task.CompletedTask; });
 
         Assert.True(nextCalled);
-        Assert.Empty(ctx.AllowlistedRequests);
+        Assert.Empty(ctx.DesiredRequests);
     }
 
     [Fact]
@@ -93,9 +90,7 @@ public sealed class DesiredStateReadMiddlewareTests
         var snapshotCache = new DesiredSourceSnapshotCache(fakeStore);
         return new(
             sources ?? [],
-            new(),
             new FakeAggregator(aggregatorResult ?? (req => new(req, Empty))),
-            new PassthroughAllowlistGate(),
             new PassthroughRetryPolicy(),
             snapshotCache,
             failureRecorder ?? new FakeFailureRecorder(),
@@ -132,7 +127,6 @@ public sealed class DesiredStateReadMiddlewareTests
     {
         public Task<DesiredAggregateResult> AggregateAsync(
             IEnumerable<IDesiredPackageSource> sources,
-            SourceTrustOptions trustOptions,
             CancellationToken cancellationToken)
         {
             var requests = sources
@@ -140,14 +134,6 @@ public sealed class DesiredStateReadMiddlewareTests
                 .ToArray();
             return Task.FromResult(factory(requests));
         }
-    }
-
-    private sealed class PassthroughAllowlistGate : IAllowlistGate
-    {
-        public IReadOnlyList<PackageRequest> Enforce(
-            IReadOnlyList<PackageRequest> requests, SourceTrustOptions trustOptions) => requests;
-
-        public void EnsureActiveStorePath(string packageId, string activeInstallPath, string rootDirectory) { }
     }
 
     private sealed class PassthroughRetryPolicy : IReconciliationRetryPolicy
@@ -172,7 +158,6 @@ public sealed class DesiredStateReadMiddlewareTests
         public void LogCycleCompleted(string correlationId, bool degraded, int failedCount) { }
         public void LogObserverError(string correlationId, string callbackName, string message) { }
         public void LogFeedDecision(FeedResolutionDecision decision) { }
-        public void LogTrustPolicyOutcome(string correlationId, string packageId, FeedTrustPolicyOutcome outcome) { }
         public void LogLockOutcome(string correlationId, string packageId, LockFileEvaluationResult outcome) { }
         public void LogLoadOutcome(string correlationId, string packageId, bool succeeded, string? reason) { }
         public void LogUnloadOutcome(string correlationId, string packageId, string outcome, string? reason) { }

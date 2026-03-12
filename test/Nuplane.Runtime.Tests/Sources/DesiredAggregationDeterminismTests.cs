@@ -1,6 +1,5 @@
 using Nuplane.Abstractions;
 using Nuplane.Sources;
-using Nuplane.Trust.Source;
 
 namespace Nuplane.Runtime.Tests.Sources;
 
@@ -11,7 +10,6 @@ namespace Nuplane.Runtime.Tests.Sources;
 public sealed class DesiredAggregationDeterminismTests
 {
     private readonly DesiredStateAggregator _sut = new();
-    private readonly SourceTrustOptions _permissive = new() { RejectUnallowlistedPackages = false };
 
     [Fact]
     public async Task DuplicatePackageId_FirstSourceNameAlphabetically_Wins()
@@ -20,7 +18,7 @@ public sealed class DesiredAggregationDeterminismTests
         var srcAlpha = new FakeSource("alpha", [Req("pkg", "1.0.0", "alpha")]);
         var srcBeta = new FakeSource("beta", [Req("pkg", "2.0.0", "beta")]);
 
-        var result = await _sut.AggregateAsync([srcAlpha, srcBeta], _permissive, CancellationToken.None);
+        var result = await _sut.AggregateAsync([srcAlpha, srcBeta], CancellationToken.None);
 
         Assert.Single(result.Requests);
         Assert.Equal("1.0.0", result.Requests[0].VersionRange);
@@ -34,7 +32,7 @@ public sealed class DesiredAggregationDeterminismTests
         var srcAlpha = new FakeSource("alpha", [Req("pkg", "1.0.0", "alpha")]);
         var srcBeta = new FakeSource("beta", [Req("pkg", "2.0.0", "beta")]);
 
-        var result = await _sut.AggregateAsync([srcBeta, srcAlpha], _permissive, CancellationToken.None);
+        var result = await _sut.AggregateAsync([srcBeta, srcAlpha], CancellationToken.None);
 
         Assert.Single(result.Requests);
         Assert.Equal("1.0.0", result.Requests[0].VersionRange);
@@ -50,7 +48,7 @@ public sealed class DesiredAggregationDeterminismTests
             Req("pkg", "1.0.0", "src")
         ]);
 
-        var result = await _sut.AggregateAsync([src], _permissive, CancellationToken.None);
+        var result = await _sut.AggregateAsync([src], CancellationToken.None);
 
         Assert.Single(result.Requests);
         Assert.Equal("1.0.0", result.Requests[0].VersionRange);
@@ -62,7 +60,7 @@ public sealed class DesiredAggregationDeterminismTests
         var srcA = new FakeSource("alpha", [Req("PKG", "1.0.0", "alpha")]);
         var srcB = new FakeSource("beta", [Req("pkg", "2.0.0", "beta")]);
 
-        var result = await _sut.AggregateAsync([srcA, srcB], _permissive, CancellationToken.None);
+        var result = await _sut.AggregateAsync([srcA, srcB], CancellationToken.None);
 
         Assert.Single(result.Requests);
     }
@@ -74,7 +72,7 @@ public sealed class DesiredAggregationDeterminismTests
         var srcA = new FakeSource("alpha", [Req("pkg-a", "1.0.0", "alpha"), Req("pkg-b", "1.0.0", "alpha")]);
         var srcB = new FakeSource("beta", [Req("pkg-a", "2.0.0", "beta"), Req("pkg-b", "2.0.0", "beta")]);
 
-        var result = await _sut.AggregateAsync([srcA, srcB], _permissive, CancellationToken.None);
+        var result = await _sut.AggregateAsync([srcA, srcB], CancellationToken.None);
 
         Assert.Equal(2, result.Requests.Count);
         // Both should come from alpha (alphabetically first)
@@ -87,7 +85,7 @@ public sealed class DesiredAggregationDeterminismTests
         var srcA = new FakeSource("alpha", [Req("pkg-a", "1.0.0", "alpha")]);
         var srcB = new FakeSource("beta", [Req("pkg-b", "2.0.0", "beta")]);
 
-        var result = await _sut.AggregateAsync([srcA, srcB], _permissive, CancellationToken.None);
+        var result = await _sut.AggregateAsync([srcA, srcB], CancellationToken.None);
 
         Assert.Equal(2, result.Requests.Count);
         Assert.Empty(result.SourceErrors);
@@ -100,7 +98,7 @@ public sealed class DesiredAggregationDeterminismTests
         var srcA = new FakeSource("alpha", [Req("pkg", "1.0.0", "alpha")]);
         var srcB = new FakeSource("bravo", [Req("pkg", "2.0.0", "bravo")]);
 
-        var result = await _sut.AggregateAsync([srcC, srcA, srcB], _permissive, CancellationToken.None);
+        var result = await _sut.AggregateAsync([srcC, srcA, srcB], CancellationToken.None);
 
         Assert.Single(result.Requests);
         Assert.Equal("1.0.0", result.Requests[0].VersionRange);
@@ -116,7 +114,7 @@ public sealed class DesiredAggregationDeterminismTests
         var results = new List<string>();
         for (var i = 0; i < 5; i++)
         {
-            var result = await _sut.AggregateAsync([srcA, srcB], _permissive, CancellationToken.None);
+            var result = await _sut.AggregateAsync([srcA, srcB], CancellationToken.None);
             results.Add($"{result.Requests[0].Id}|{result.Requests[0].VersionRange}|{result.Requests[0].SourceName}");
         }
 

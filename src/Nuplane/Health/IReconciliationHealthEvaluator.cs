@@ -10,10 +10,6 @@ public interface IReconciliationHealthEvaluator
     /// </summary>
     bool IsDegraded { get; }
 
-    /// <summary>
-    /// Gets the number of trust policy failures from the last evaluation.
-    /// </summary>
-    int LastTrustFailureCount { get; }
 
     /// <summary>
     /// Gets the number of lock file failures from the last evaluation.

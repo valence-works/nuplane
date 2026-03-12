@@ -9,7 +9,7 @@ internal sealed class PackageResolutionMiddleware(
     public async Task InvokeAsync(ReconciliationCycleContext context, Func<Task> next)
     {
         var resolutionResult = await applyExecutor.ResolveAsync(
-            context.AllowlistedRequests,
+            context.DesiredRequests,
             context.CorrelationId,
             context.CancellationToken);
 

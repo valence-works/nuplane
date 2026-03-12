@@ -5,7 +5,6 @@ namespace Nuplane.Health;
 /// </summary>
 /// <param name="HadAnyFailures">Whether any package failures occurred during the cycle.</param>
 /// <param name="AllSourcesFresh">Whether all desired-state sources were read successfully.</param>
-/// <param name="TrustFailures">The number of packages rejected by trust policy.</param>
 /// <param name="LockFailures">The number of packages rejected by lock file evaluation.</param>
 /// <param name="CleanupFailures">The number of cleanup operations that were blocked.</param>
 /// <param name="ManifestFailures">The number of manifest read failures during the cycle.</param>
@@ -15,7 +14,6 @@ namespace Nuplane.Health;
 public sealed record ReconciliationHealthInput(
     bool HadAnyFailures,
     bool AllSourcesFresh,
-    int TrustFailures,
     int LockFailures,
     int CleanupFailures,
     int ManifestFailures = 0,

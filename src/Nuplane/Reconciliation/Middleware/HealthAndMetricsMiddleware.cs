@@ -57,7 +57,6 @@ internal sealed class HealthAndMetricsMiddleware(
         var isDegraded = healthEvaluator.Evaluate(new(
             hadFailures,
             context.ReadResult.AllSourcesFresh,
-            context.TrustFailureCount,
             context.LockFailureCount,
             context.CleanupFailureCount,
             SourceOutages: context.SourceOutageCount + (observationDegradationTracker?.DegradedCount ?? 0)));

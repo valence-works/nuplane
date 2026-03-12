@@ -41,7 +41,6 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
     {
         return ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { RejectUnallowlistedPackages = false },
             packageResolver: new NuGetPackageResolver());
     }
 
@@ -128,7 +127,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
         var manifestPath = Path.Combine(_tempDir, "removal.json");
         var options = new ConvergenceOptions { Manifest = { Enabled = true, Path = manifestPath } };
 
-        File.WriteAllText(manifestPath, JsonSerializer.Serialize(new
+        await File.WriteAllTextAsync(manifestPath, JsonSerializer.Serialize(new
         {
             SchemaVersion = "1.0",
             GeneratedAtUtc = DateTimeOffset.UtcNow,

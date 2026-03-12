@@ -20,7 +20,6 @@ public sealed class RetryExhaustionTests
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
             packageResolver: new NuGetPackageResolver(),
             reconciliationOptions: options);
 

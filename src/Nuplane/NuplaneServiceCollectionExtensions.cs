@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Builder;
-using Nuplane.Feeds.Registration;
 using Nuplane.Registration;
 
 namespace Nuplane;
@@ -81,7 +80,6 @@ public static class NuplaneServiceCollectionExtensions
         var builder = new NuplaneBuilder(services);
         configure(builder);
 
-        NuplaneFeedRegistrationServices.ConfigureSourceTrustOptions(services);
         return services;
     }
 }

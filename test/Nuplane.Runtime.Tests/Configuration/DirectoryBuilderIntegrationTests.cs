@@ -3,7 +3,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Sources.Directory.Builder;
-using Nuplane.Trust.Source;
 
 namespace Nuplane.Runtime.Tests.Configuration;
 
@@ -38,36 +37,7 @@ public sealed class DirectoryBuilderIntegrationTests
             Cleanup(root);
         }
     }
-
-    [Fact]
-    public void AddDirectoryFeed_RegistersSourceTrustForFeed()
-    {
-        var root = CreateTempDir("builder-trust");
-
-        try
-        {
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddNuplane(nuplane =>
-            {
-                nuplane.AddDirectoryFeed("trusted-dir", root, feed =>
-                {
-                    feed.Include("Acme.*");
-                });
-            });
-
-            using var provider = services.BuildServiceProvider();
-            var trust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
-
-            Assert.Contains("trusted-dir", trust.AllowedSourceNames);
-            Assert.Contains("Acme.*", trust.AllowedPackageIds);
-        }
-        finally
-        {
-            Cleanup(root);
-        }
-    }
-
+    
     [Fact]
     public void AddDirectoryFeed_WithWatch_RegistersHostedService()
     {
@@ -127,35 +97,6 @@ public sealed class DirectoryBuilderIntegrationTests
     }
 
     [Fact]
-    public void AddDirectoryFeed_IncludeAll_CollapsesPackageAllowlistToWildcard()
-    {
-        var root = CreateTempDir("builder-include-all");
-
-        try
-        {
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddNuplane(nuplane =>
-            {
-                nuplane.AddDirectoryFeed("wildcard-feed", root, feed =>
-                {
-                    feed.IncludeAll();
-                });
-            });
-
-            using var provider = services.BuildServiceProvider();
-            var trust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
-
-            Assert.Single(trust.AllowedPackageIds);
-            Assert.Contains("*", trust.AllowedPackageIds);
-        }
-        finally
-        {
-            Cleanup(root);
-        }
-    }
-
-    [Fact]
     public void AddDirectoryFeed_ReRegistration_ReplacesEarlierFeed()
     {
         var root = CreateTempDir("builder-re-register");
@@ -185,11 +126,6 @@ public sealed class DirectoryBuilderIntegrationTests
                 .Where(d => d.ServiceType == typeof(IDesiredPackageSource))
                 .ToList();
             Assert.Single(sourceDescriptors);
-
-            using var provider = services.BuildServiceProvider();
-            var trust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
-
-            Assert.Contains("New.*", trust.AllowedPackageIds);
         }
         finally
         {

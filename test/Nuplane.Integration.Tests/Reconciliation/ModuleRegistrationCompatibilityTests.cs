@@ -1,13 +1,13 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Feeds.Configuration;
 using Nuplane.Loading;
 using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Loading.Registration;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Sources.Directory;
 using Nuplane.Sources.Directory.Builder;
-using Nuplane.Trust.Source;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -104,7 +104,7 @@ public sealed class ModuleRegistrationCompatibilityTests
     }
 
     [Fact]
-    public void DirectoryModuleBuilderExtension_RegistersFeedWithSourceTrust()
+    public void DirectoryModuleBuilderExtension_RegistersFeedAndDesiredSource()
     {
         var root = Path.Combine(Path.GetTempPath(), "nuplane-integration-builder", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -122,10 +122,11 @@ public sealed class ModuleRegistrationCompatibilityTests
             });
 
             using var provider = services.BuildServiceProvider();
-            var trust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
+            var feedResolution = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
+            var desiredSources = provider.GetServices<IDesiredPackageSource>().ToArray();
 
-            Assert.Contains("builder-feed", trust.AllowedSourceNames);
-            Assert.Contains("Test.*", trust.AllowedPackageIds);
+            Assert.Contains(feedResolution.Feeds, feed => string.Equals(feed.Name, "builder-feed", StringComparison.OrdinalIgnoreCase));
+            Assert.Single(desiredSources);
         }
         finally
         {

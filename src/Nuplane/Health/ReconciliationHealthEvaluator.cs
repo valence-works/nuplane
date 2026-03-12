@@ -1,15 +1,12 @@
 namespace Nuplane.Health;
 
 /// <summary>
-/// Evaluates reconciliation health by tracking trust, lock, cleanup, and unload failures.
+/// Evaluates reconciliation health by tracking lock, cleanup, manifest, source, acquisition, and admin failures.
 /// </summary>
 public sealed class ReconciliationHealthEvaluator : IReconciliationHealthEvaluator
 {
     /// <inheritdoc />
     public bool IsDegraded { get; private set; }
-
-    /// <inheritdoc />
-    public int LastTrustFailureCount { get; private set; }
 
     /// <inheritdoc />
     public int LastLockFailureCount { get; private set; }
@@ -34,7 +31,6 @@ public sealed class ReconciliationHealthEvaluator : IReconciliationHealthEvaluat
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        LastTrustFailureCount = Math.Max(0, input.TrustFailures);
         LastLockFailureCount = Math.Max(0, input.LockFailures);
         LastCleanupFailureCount = Math.Max(0, input.CleanupFailures);
         LastManifestFailureCount = Math.Max(0, input.ManifestFailures);
@@ -43,7 +39,6 @@ public sealed class ReconciliationHealthEvaluator : IReconciliationHealthEvaluat
         LastAdminRejectionCount = Math.Max(0, input.AdminRejections);
 
         var hadFailures = input.HadAnyFailures
-            || input.TrustFailures > 0
             || input.LockFailures > 0
             || input.CleanupFailures > 0
             || input.ManifestFailures > 0

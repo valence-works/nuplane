@@ -5,7 +5,6 @@ using Nuplane.Operational;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Store.State;
-using Nuplane.Trust.Feeds;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -154,7 +153,6 @@ public sealed class ManualReconcileObservabilityIntegrationTests
         public void LogCycleCompleted(string correlationId, bool degraded, int failedCount) { }
         public void LogObserverError(string correlationId, string callbackName, string message) { }
         public void LogFeedDecision(FeedResolutionDecision decision) { }
-        public void LogTrustPolicyOutcome(string correlationId, string packageId, FeedTrustPolicyOutcome outcome) { }
         public void LogLockOutcome(string correlationId, string packageId, LockFileEvaluationResult outcome) { }
         public void LogLoadOutcome(string correlationId, string packageId, bool succeeded, string? reason) { }
         public void LogUnloadOutcome(string correlationId, string packageId, string outcome, string? reason) { }

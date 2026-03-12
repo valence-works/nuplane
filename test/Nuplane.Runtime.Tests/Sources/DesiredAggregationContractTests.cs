@@ -1,6 +1,5 @@
 using Nuplane.Abstractions;
 using Nuplane.Sources;
-using Nuplane.Trust.Source;
 
 namespace Nuplane.Runtime.Tests.Sources;
 
@@ -11,8 +10,6 @@ namespace Nuplane.Runtime.Tests.Sources;
 /// </summary>
 public sealed class DesiredAggregationContractTests
 {
-    private readonly SourceTrustOptions _permissive = new() { RejectUnallowlistedPackages = false };
-
     [Fact]
     public async Task OutputOrdering_IsDeterministicByIdThenSourceThenFeed()
     {
@@ -23,7 +20,7 @@ public sealed class DesiredAggregationContractTests
             new("mango", "1.0.0", "feed-c", PackageUpdatePolicy.Exact, "src")
         ]);
 
-        var result = await sut.AggregateAsync([src], _permissive, CancellationToken.None);
+        var result = await sut.AggregateAsync([src], CancellationToken.None);
 
         Assert.Equal("alpha", result.Requests[0].Id);
         Assert.Equal("mango", result.Requests[1].Id);
@@ -44,8 +41,8 @@ public sealed class DesiredAggregationContractTests
         var agg1 = new DesiredStateAggregator();
         var agg2 = new DesiredStateAggregator();
 
-        var result1 = await agg1.AggregateAsync([srcA, srcB], _permissive, CancellationToken.None);
-        var result2 = await agg2.AggregateAsync([srcA, srcB], _permissive, CancellationToken.None);
+        var result1 = await agg1.AggregateAsync([srcA, srcB], CancellationToken.None);
+        var result2 = await agg2.AggregateAsync([srcA, srcB], CancellationToken.None);
 
         Assert.Equal(result1.Requests.Count, result2.Requests.Count);
         for (var i = 0; i < result1.Requests.Count; i++)
@@ -65,7 +62,7 @@ public sealed class DesiredAggregationContractTests
         ]);
         var faulting = new FaultingSource("beta", new InvalidOperationException("offline"));
 
-        var result = await sut.AggregateAsync([healthy, faulting], _permissive, CancellationToken.None);
+        var result = await sut.AggregateAsync([healthy, faulting], CancellationToken.None);
 
         Assert.Single(result.Requests);
         Assert.Equal("pkg-a", result.Requests[0].Id);
@@ -78,7 +75,7 @@ public sealed class DesiredAggregationContractTests
         var sut = new DesiredStateAggregator();
         var faulting = new FaultingSource("faulting-source", new InvalidOperationException("feed unreachable"));
 
-        var result = await sut.AggregateAsync([faulting], _permissive, CancellationToken.None);
+        var result = await sut.AggregateAsync([faulting], CancellationToken.None);
 
         Assert.Single(result.SourceErrors);
         var key = result.SourceErrors.Keys.Single();
@@ -94,28 +91,10 @@ public sealed class DesiredAggregationContractTests
         // the last error keyed by fully-qualified type name.
         var fault1 = new FaultingSource("f1", new InvalidOperationException("down-1"));
 
-        var result = await sut.AggregateAsync([fault1], _permissive, CancellationToken.None);
+        var result = await sut.AggregateAsync([fault1], CancellationToken.None);
 
         Assert.Empty(result.Requests);
         Assert.Single(result.SourceErrors);
-    }
-
-    [Fact]
-    public async Task AllowlistEnforcement_RejectsUnallowed()
-    {
-        var sut = new DesiredStateAggregator();
-        var src = new FakeSource("src", [
-            new("allowed-pkg", "1.0.0", "feed", PackageUpdatePolicy.Exact, "src"),
-            new("disallowed-pkg", "1.0.0", "feed", PackageUpdatePolicy.Exact, "src")
-        ]);
-        var opts = new SourceTrustOptions
-        {
-            RejectUnallowlistedPackages = true,
-            AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "allowed-pkg" }
-        };
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            sut.AggregateAsync([src], opts, CancellationToken.None));
     }
 
     [Fact]
@@ -128,7 +107,7 @@ public sealed class DesiredAggregationContractTests
             new("  ", "1.0.0", "feed", PackageUpdatePolicy.Exact, "src")
         ]);
 
-        var result = await sut.AggregateAsync([src], _permissive, CancellationToken.None);
+        var result = await sut.AggregateAsync([src], CancellationToken.None);
 
         Assert.Single(result.Requests);
         Assert.Equal("valid", result.Requests[0].Id);

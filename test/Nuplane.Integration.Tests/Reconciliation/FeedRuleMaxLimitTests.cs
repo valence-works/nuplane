@@ -17,7 +17,6 @@ public sealed class FeedRuleMaxLimitTests
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { RejectUnallowlistedPackages = false },
             packageResolver: new NuGetPackageResolver(),
             reconciliationOptions: new() { MaxRetryAttempts = 0 });
 

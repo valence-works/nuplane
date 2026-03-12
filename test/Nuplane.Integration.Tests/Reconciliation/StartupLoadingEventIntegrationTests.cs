@@ -37,7 +37,6 @@ public sealed class StartupLoadingEventIntegrationTests
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "plugin-a" } },
             packageResolver: new NuGetPackageResolver(),
             storeRegistry: new StoreRegistry(new StoreStateSerializer(), stateFilePath: null),
             observerEventDispatcher: observerDispatcher);
@@ -189,7 +188,6 @@ public sealed class StartupLoadingEventIntegrationTests
         var serviceObserverDispatcher = new ObserverEventDispatcher([autoLoadingObserver, coreObserver]);
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "plugin-fail" } },
             packageResolver: new NuGetPackageResolver(),
             storeRegistry: storeRegistry,
             observerEventDispatcher: serviceObserverDispatcher,
@@ -227,7 +225,6 @@ public sealed class StartupLoadingEventIntegrationTests
 
         return ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { source.PackageId } },
             packageResolver: new NuGetPackageResolver(),
             storeRegistry: storeRegistry,
             observerEventDispatcher: observerDispatcher,

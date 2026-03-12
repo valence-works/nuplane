@@ -28,7 +28,6 @@ public sealed class SourceOutageFallbackTests
     {
         return ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new() { AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-a" } },
             packageResolver: new NuGetPackageResolver(),
             reconciliationOptions: options);
     }

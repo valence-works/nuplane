@@ -5,7 +5,6 @@ using Nuplane.Feeds;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Policy;
 using Nuplane.Feeds.Versioning;
-using Nuplane.Trust.Feeds;
 
 namespace Nuplane.Registration;
 
@@ -20,10 +19,6 @@ internal static class NuplaneFeedVersioningRegistrationServices
                 sp.GetRequiredService<NuGetFeedVersionEnumerator>(),
                 sp.GetRequiredService<IOptions<FeedResolutionOptions>>()));
         services.AddSingleton<IVersionRangeEvaluator, NuGetVersionRangeEvaluator>();
-        services.AddSingleton<FeedTrustPolicyEvaluator>();
-        services.AddSingleton<IFeedTrustPolicyEvaluator>(sp => sp.GetRequiredService<FeedTrustPolicyEvaluator>());
-        services.AddSingleton<RestrictedFeedValidatorPipeline>();
-        services.AddSingleton<UntrustedOverridePolicy>();
     }
 
     internal static void RegisterPackageResolution(this IServiceCollection services)

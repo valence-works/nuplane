@@ -15,7 +15,6 @@ internal sealed class ReconciliationCycleContext
 
     // Desired state
     public IReadOnlyList<PackageRequest> DesiredRequests { get; set; } = [];
-    public IReadOnlyList<PackageRequest> AllowlistedRequests { get; set; } = [];
 
     // Read result
     public DesiredReadResult? ReadResult { get; set; }
@@ -25,7 +24,6 @@ internal sealed class ReconciliationCycleContext
     public List<ResolvedPackage> TrustAndLockPassed { get; set; } = [];
 
     // Failure counts
-    public int TrustFailureCount { get; set; }
     public int LockFailureCount { get; set; }
     public int CleanupFailureCount { get; set; }
     public int SourceOutageCount { get; set; }

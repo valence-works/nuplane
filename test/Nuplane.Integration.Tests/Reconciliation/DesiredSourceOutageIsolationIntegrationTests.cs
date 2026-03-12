@@ -100,7 +100,6 @@ public sealed class DesiredSourceOutageIsolationIntegrationTests
     {
         return ReconciliationServiceFactory.Create(
             sources: sources,
-            sourceTrustOptions: new() { RejectUnallowlistedPackages = false },
             packageResolver: new NuGetPackageResolver());
     }
 

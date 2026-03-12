@@ -2,16 +2,12 @@ using Nuplane.Abstractions;
 using Nuplane.Observability;
 using Nuplane.Sources;
 using Nuplane.Store.State;
-using Nuplane.Trust;
-using Nuplane.Trust.Source;
 
 namespace Nuplane.Reconciliation.Middleware;
 
 internal sealed class DesiredStateReadMiddleware(
     IReadOnlyList<IDesiredPackageSource> sources,
-    SourceTrustOptions sourceTrustOptions,
     IDesiredStateAggregator desiredStateAggregator,
-    IAllowlistGate allowlistGate,
     IReconciliationRetryPolicy retryPolicy,
     DesiredSourceSnapshotCache snapshotCache,
     IFailureRecorder failureRecorder,
@@ -26,7 +22,6 @@ internal sealed class DesiredStateReadMiddleware(
 
         var aggregateResult = await desiredStateAggregator.AggregateAsync(
             [new StaticDesiredSource(readResult.Requests)],
-            sourceTrustOptions,
             context.CancellationToken);
         context.DesiredRequests = aggregateResult.Requests;
 
@@ -42,11 +37,8 @@ internal sealed class DesiredStateReadMiddleware(
         {
             logger.LogAggregationOutcome(context.CorrelationId, aggregateResult.Requests.Count, context.SourceOutageCount);
         }
-
-        var allowlistedRequests = allowlistGate.Enforce(aggregateResult.Requests, sourceTrustOptions);
-        context.AllowlistedRequests = allowlistedRequests;
-
-        logger.LogCycleStarted(context.CorrelationId, allowlistedRequests.Count);
+        
+        logger.LogCycleStarted(context.CorrelationId, aggregateResult.Requests.Count);
 
         await next();
     }

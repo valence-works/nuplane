@@ -79,8 +79,6 @@ public sealed class OperationalSnapshotProjector
     {
         var reasons = new List<string>();
 
-        if (_healthEvaluator.LastTrustFailureCount > 0)
-            reasons.Add($"trust-failures:{_healthEvaluator.LastTrustFailureCount}");
         if (_healthEvaluator.LastLockFailureCount > 0)
             reasons.Add($"lock-failures:{_healthEvaluator.LastLockFailureCount}");
         if (_healthEvaluator.LastCleanupFailureCount > 0)

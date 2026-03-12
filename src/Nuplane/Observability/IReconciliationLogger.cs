@@ -1,5 +1,4 @@
 using Nuplane.Reconciliation.Models;
-using Nuplane.Trust.Feeds;
 
 namespace Nuplane.Observability;
 
@@ -38,38 +37,12 @@ public interface IReconciliationLogger
     void LogFeedDecision(FeedResolutionDecision decision);
 
     /// <summary>
-    /// Logs the outcome of a trust policy evaluation for a package.
-    /// </summary>
-    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
-    /// <param name="packageId">The package identifier.</param>
-    /// <param name="outcome">The trust policy evaluation outcome.</param>
-    void LogTrustPolicyOutcome(string correlationId, string packageId, FeedTrustPolicyOutcome outcome);
-
-    /// <summary>
     /// Logs the outcome of a lock file evaluation for a package.
     /// </summary>
     /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
     /// <param name="packageId">The package identifier.</param>
     /// <param name="outcome">The lock file evaluation result.</param>
     void LogLockOutcome(string correlationId, string packageId, LockFileEvaluationResult outcome);
-
-    /// <summary>
-    /// Logs the outcome of a package assembly load operation.
-    /// </summary>
-    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
-    /// <param name="packageId">The package identifier.</param>
-    /// <param name="succeeded">Whether the load operation succeeded.</param>
-    /// <param name="reason">The reason for failure, if applicable.</param>
-    void LogLoadOutcome(string correlationId, string packageId, bool succeeded, string? reason);
-
-    /// <summary>
-    /// Logs the outcome of a package assembly unload operation.
-    /// </summary>
-    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
-    /// <param name="packageId">The package identifier.</param>
-    /// <param name="outcome">The unload outcome description.</param>
-    /// <param name="reason">Additional context about the unload result.</param>
-    void LogUnloadOutcome(string correlationId, string packageId, string outcome, string? reason);
 
     /// <summary>
     /// Logs the outcome of a manifest read operation.

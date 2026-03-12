@@ -1,24 +1,25 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Sources;
 using Nuplane.Sources.Directory.Builder;
-using Nuplane.Trust.Source;
 
 namespace Nuplane.Runtime.Tests.Hosting;
 
 public sealed class FeedSelectionRegistrationTests
 {
     [Fact]
-    public void AddNuplane_WithoutFeeds_DoesNotAllowlistAnyPackages()
+    public void AddNuplane_WithoutFeeds_DoesNotRegisterAnyFeeds()
     {
         var services = new ServiceCollection();
         services.AddNuplane(_ => { });
 
         using var provider = services.BuildServiceProvider();
 
-        var sourceTrust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
+        var feedResolution = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
 
-        Assert.Empty(sourceTrust.AllowedPackageIds);
+        Assert.Empty(feedResolution.Feeds);
     }
 
     [Fact]
@@ -34,7 +35,7 @@ public sealed class FeedSelectionRegistrationTests
     }
 
     [Fact]
-    public void AddNuplane_DirectoryFeedWithoutIncludeFilter_DoesNotAllowlistAnyPackages()
+    public void AddNuplane_DirectoryFeedWithoutIncludeFilter_RegistersDirectoryFeedOnly()
     {
         var packagesPath = Path.Combine(Path.GetTempPath(), "nuplane-empty-filter-builder", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(packagesPath);
@@ -49,10 +50,11 @@ public sealed class FeedSelectionRegistrationTests
 
             using var provider = services.BuildServiceProvider();
 
-            var sourceTrust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
+            var feedResolution = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
+            var desiredSources = provider.GetServices<IDesiredPackageSource>().ToArray();
 
-            Assert.Empty(sourceTrust.AllowedPackageIds);
-            Assert.Contains("drop-folder", sourceTrust.AllowedSourceNames);
+            Assert.Contains(feedResolution.Feeds, feed => string.Equals(feed.Name, "drop-folder", StringComparison.OrdinalIgnoreCase));
+            Assert.Single(desiredSources);
         }
         finally
         {
@@ -104,7 +106,7 @@ public sealed class FeedSelectionRegistrationTests
     }
 
     [Fact]
-    public void AddNuplane_BuilderIncludeAll_CollapsesAllowlistToWildcard()
+    public void AddNuplane_BuilderIncludeAll_RegistersFeedsAndDesiredSources()
     {
         var packagesPath = Path.Combine(Path.GetTempPath(), "nuplane-include-all-builder", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(packagesPath);
@@ -128,12 +130,12 @@ public sealed class FeedSelectionRegistrationTests
 
             using var provider = services.BuildServiceProvider();
 
-            var sourceTrust = provider.GetRequiredService<IOptions<SourceTrustOptions>>().Value;
+            var feedResolution = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
+            var desiredSources = provider.GetServices<IDesiredPackageSource>().ToArray();
 
-            Assert.Single(sourceTrust.AllowedPackageIds);
-            Assert.Contains("*", sourceTrust.AllowedPackageIds);
-            Assert.Contains("drop-folder", sourceTrust.AllowedSourceNames);
-            Assert.Contains("nuget.org", sourceTrust.AllowedSourceNames);
+            Assert.Contains(feedResolution.Feeds, feed => string.Equals(feed.Name, "drop-folder", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(feedResolution.Feeds, feed => string.Equals(feed.Name, "nuget.org", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(2, desiredSources.Length);
         }
         finally
         {

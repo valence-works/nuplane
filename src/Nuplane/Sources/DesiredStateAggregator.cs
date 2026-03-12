@@ -1,5 +1,4 @@
 using Nuplane.Abstractions;
-using Nuplane.Trust.Source;
 
 namespace Nuplane.Sources;
 
@@ -15,12 +14,8 @@ public sealed class DesiredStateAggregator : IDesiredStateAggregator
     /// <inheritdoc />
     public async Task<DesiredAggregateResult> AggregateAsync(
         IEnumerable<IDesiredPackageSource> sources,
-        SourceTrustOptions trustOptions,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(sources);
-        ArgumentNullException.ThrowIfNull(trustOptions);
-
         var collected = new List<PackageRequest>();
         var sourceErrors = new Dictionary<string, Exception>(StringComparer.Ordinal);
 
@@ -48,20 +43,7 @@ public sealed class DesiredStateAggregator : IDesiredStateAggregator
                 continue;
             }
 
-            foreach (var request in sourceRequests)
-            {
-                if (string.IsNullOrWhiteSpace(request.Id))
-                {
-                    continue;
-                }
-
-                if (trustOptions.RejectUnallowlistedPackages && !trustOptions.IsPackageAllowed(request.Id))
-                {
-                    throw new InvalidOperationException($"Package '{request.Id}' is not allowlisted.");
-                }
-
-                collected.Add(request);
-            }
+            collected.AddRange(sourceRequests.Where(request => !string.IsNullOrWhiteSpace(request.Id)));
         }
 
         // Deterministic duplicate tie-break:

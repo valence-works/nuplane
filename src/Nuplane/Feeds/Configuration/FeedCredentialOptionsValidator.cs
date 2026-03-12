@@ -1,6 +1,4 @@
 using Nuplane.Abstractions;
-using Nuplane.Trust.Feeds;
-using Nuplane.Trust.Source;
 
 namespace Nuplane.Feeds.Configuration;
 
@@ -14,18 +12,9 @@ public sealed class FeedCredentialOptionsValidator
     /// Validates the combined feed configuration and returns a list of validation errors.
     /// </summary>
     /// <param name="feedResolution">The feed resolution options to validate.</param>
-    /// <param name="trustPolicy">The feed trust policy options to validate.</param>
-    /// <param name="sourceTrust">The source trust options to validate.</param>
     /// <returns>An empty list if the configuration is valid; otherwise a list of error descriptions.</returns>
-    public IReadOnlyList<string> Validate(
-        FeedResolutionOptions feedResolution,
-        FeedTrustPolicyOptions trustPolicy,
-        SourceTrustOptions sourceTrust)
+    public IReadOnlyList<string> Validate(FeedResolutionOptions feedResolution)
     {
-        ArgumentNullException.ThrowIfNull(feedResolution);
-        ArgumentNullException.ThrowIfNull(trustPolicy);
-        ArgumentNullException.ThrowIfNull(sourceTrust);
-
         var errors = new List<string>();
         var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -43,14 +32,7 @@ public sealed class FeedCredentialOptionsValidator
             }
 
             // Local directory feeds use file:// URIs; they must not have credentials.
-            if (feed.ServiceIndex is null)
-            {
-                errors.Add($"Feed '{feed.Name}' has no service index URI configured.");
-                continue;
-            }
-
-            var isLocalFeed = feed.ServiceIndex.IsAbsoluteUri
-                && string.Equals(feed.ServiceIndex.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase);
+            var isLocalFeed = feed.ServiceIndex.IsAbsoluteUri && string.Equals(feed.ServiceIndex.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase);
 
             if (isLocalFeed)
             {
@@ -69,39 +51,11 @@ public sealed class FeedCredentialOptionsValidator
 
                 if (!string.IsNullOrWhiteSpace(feed.Credentials))
                 {
-                    if (!sourceTrust.AllowRuntimeCredentialResolution)
-                    {
-                        errors.Add($"Feed '{feed.Name}' configures credentials but runtime credential resolution is disabled.");
-                    }
-
                     if (!feed.Credentials.StartsWith("secrets://", StringComparison.OrdinalIgnoreCase))
                     {
                         errors.Add($"Feed '{feed.Name}' credentials must use a secret reference (secrets://...).");
                     }
                 }
-            }
-
-            if (feed.TrustLevel == FeedTrustLevel.Untrusted && !trustPolicy.AllowUntrustedWithScopedOverride)
-            {
-                errors.Add($"Feed '{feed.Name}' is untrusted but untrusted scoped overrides are disabled.");
-            }
-        }
-
-        foreach (var item in trustPolicy.Overrides)
-        {
-            if (item.Scope == FeedOverrideScope.None)
-            {
-                continue;
-            }
-
-            if (string.IsNullOrWhiteSpace(item.Target))
-            {
-                errors.Add("Override target is required when scope is package or feed-rule.");
-            }
-
-            if (trustPolicy.RequireOverrideReason && string.IsNullOrWhiteSpace(item.Reason))
-            {
-                errors.Add($"Override reason is required for override target '{item.Target}'.");
             }
         }
 

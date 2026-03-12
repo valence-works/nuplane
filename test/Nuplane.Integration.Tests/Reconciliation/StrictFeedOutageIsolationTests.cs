@@ -28,10 +28,6 @@ public sealed class StrictFeedOutageIsolationTests
 
         var service = ReconciliationServiceFactory.Create(
             sources: [source],
-            sourceTrustOptions: new()
-            {
-                AllowedPackageIds = new(StringComparer.OrdinalIgnoreCase) { "pkg-impacted", "pkg-ok" }
-            },
             packageResolver: new MultiFeedPackageResolver(
                 new OptionsWrapper<FeedResolutionOptions>(feedOptions),
                 new(new OptionsWrapper<FeedResolutionOptions>(feedOptions)),

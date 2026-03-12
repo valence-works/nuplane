@@ -4,7 +4,6 @@ using Nuplane.Health;
 using Nuplane.Observability;
 using Nuplane.Reconciliation.Middleware;
 using Nuplane.Reconciliation.Models;
-using Nuplane.Trust.Feeds;
 
 namespace Nuplane.Runtime.Tests.Reconciliation.Middleware;
 
@@ -94,7 +93,6 @@ public sealed class HealthAndMetricsMiddlewareTests
     private sealed class FakeHealthEvaluator(bool isDegraded) : IReconciliationHealthEvaluator
     {
         public bool IsDegraded => isDegraded;
-        public int LastTrustFailureCount => 0;
         public int LastLockFailureCount => 0;
         public int LastCleanupFailureCount => 0;
         public int LastUnloadPendingCount => 0;
@@ -140,7 +138,6 @@ public sealed class HealthAndMetricsMiddlewareTests
         public void LogCycleCompleted(string correlationId, bool degraded, int failedCount) { }
         public void LogObserverError(string correlationId, string callbackName, string message) { }
         public void LogFeedDecision(FeedResolutionDecision decision) { }
-        public void LogTrustPolicyOutcome(string correlationId, string packageId, FeedTrustPolicyOutcome outcome) { }
         public void LogLockOutcome(string correlationId, string packageId, LockFileEvaluationResult outcome) { }
         public void LogLoadOutcome(string correlationId, string packageId, bool succeeded, string? reason) { }
         public void LogUnloadOutcome(string correlationId, string packageId, string outcome, string? reason) { }

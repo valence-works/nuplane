@@ -12,7 +12,6 @@ public sealed class ReconciliationHealthEvaluatorTests
         var input = new ReconciliationHealthInput(
             HadAnyFailures: false,
             AllSourcesFresh: true,
-            TrustFailures: 0,
             LockFailures: 0,
             CleanupFailures: 0);
 
@@ -28,7 +27,6 @@ public sealed class ReconciliationHealthEvaluatorTests
         var input = new ReconciliationHealthInput(
             HadAnyFailures: false,
             AllSourcesFresh: false,
-            TrustFailures: 0,
             LockFailures: 0,
             CleanupFailures: 0);
 
@@ -44,7 +42,6 @@ public sealed class ReconciliationHealthEvaluatorTests
         var input = new ReconciliationHealthInput(
             HadAnyFailures: false,
             AllSourcesFresh: true,
-            TrustFailures: 0,
             LockFailures: 0,
             CleanupFailures: 0,
             ManifestFailures: 2);
@@ -61,7 +58,6 @@ public sealed class ReconciliationHealthEvaluatorTests
         var input = new ReconciliationHealthInput(
             HadAnyFailures: false,
             AllSourcesFresh: true,
-            TrustFailures: 0,
             LockFailures: 0,
             CleanupFailures: 0,
             SourceOutages: 1);
@@ -78,7 +74,6 @@ public sealed class ReconciliationHealthEvaluatorTests
         var input = new ReconciliationHealthInput(
             HadAnyFailures: false,
             AllSourcesFresh: true,
-            TrustFailures: 0,
             LockFailures: 0,
             CleanupFailures: 0,
             AcquisitionFailures: 3);
@@ -95,7 +90,6 @@ public sealed class ReconciliationHealthEvaluatorTests
         var input = new ReconciliationHealthInput(
             HadAnyFailures: false,
             AllSourcesFresh: true,
-            TrustFailures: 0,
             LockFailures: 0,
             CleanupFailures: 0,
             AdminRejections: 2);
@@ -112,7 +106,6 @@ public sealed class ReconciliationHealthEvaluatorTests
         var input = new ReconciliationHealthInput(
             HadAnyFailures: false,
             AllSourcesFresh: true,
-            TrustFailures: -1,
             LockFailures: -1,
             CleanupFailures: -1,
             ManifestFailures: -1,
@@ -122,7 +115,6 @@ public sealed class ReconciliationHealthEvaluatorTests
 
         _sut.Evaluate(input);
 
-        Assert.Equal(0, _sut.LastTrustFailureCount);
         Assert.Equal(0, _sut.LastLockFailureCount);
         Assert.Equal(0, _sut.LastCleanupFailureCount);
         Assert.Equal(0, _sut.LastManifestFailureCount);
@@ -137,7 +129,6 @@ public sealed class ReconciliationHealthEvaluatorTests
         var input = new ReconciliationHealthInput(
             HadAnyFailures: true,
             AllSourcesFresh: false,
-            TrustFailures: 1,
             LockFailures: 2,
             CleanupFailures: 3,
             ManifestFailures: 5,
@@ -148,7 +139,6 @@ public sealed class ReconciliationHealthEvaluatorTests
         _sut.Evaluate(input);
 
         Assert.True(_sut.IsDegraded);
-        Assert.Equal(1, _sut.LastTrustFailureCount);
         Assert.Equal(2, _sut.LastLockFailureCount);
         Assert.Equal(3, _sut.LastCleanupFailureCount);
         Assert.Equal(5, _sut.LastManifestFailureCount);
@@ -164,7 +154,6 @@ public sealed class ReconciliationHealthEvaluatorTests
         var input = new ReconciliationHealthInput(
             HadAnyFailures: false,
             AllSourcesFresh: true,
-            TrustFailures: 0,
             LockFailures: 0,
             CleanupFailures: 0);
 
