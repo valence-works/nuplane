@@ -2,16 +2,36 @@ using Microsoft.Extensions.Options;
 using Nuplane.Reconciliation.Configuration;
 using Polly;
 using Polly.Retry;
+using Polly.Registry;
 
 namespace Nuplane.Reconciliation;
 
 /// <summary>
 /// Implements a resilience-pipeline-backed retry policy for reconciliation operations.
 /// </summary>
-public sealed class ReconciliationRetryPolicy(IOptions<ReconciliationOptions> options) : IReconciliationRetryPolicy
+public sealed class ReconciliationRetryPolicy : IReconciliationRetryPolicy
 {
-    private readonly ReconciliationOptions _options = (options ?? throw new ArgumentNullException(nameof(options))).Value;
-    private readonly ResiliencePipeline _pipeline = CreatePipeline((options ?? throw new ArgumentNullException(nameof(options))).Value);
+    internal const string PipelineName = "nuplane.reconciliation.retry";
+
+    private readonly ResiliencePipeline _pipeline;
+
+    /// <summary>
+    /// Initializes a retry policy that resolves its strategy from a named resilience pipeline registered in DI.
+    /// </summary>
+    /// <param name="options">The reconciliation retry options.</param>
+    /// <param name="pipelineProvider">The provider used to resolve the named retry pipeline.</param>
+    public ReconciliationRetryPolicy(IOptions<ReconciliationOptions> options, ResiliencePipelineProvider<string> pipelineProvider)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        _pipeline = ResolvePipeline(pipelineProvider);
+    }
+
+    // Used by tests and direct construction paths where DI is not involved.
+    internal ReconciliationRetryPolicy(IOptions<ReconciliationOptions> options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        _pipeline = CreatePipeline(options.Value);
+    }
 
     /// <inheritdoc />
     public async Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
@@ -22,6 +42,12 @@ public sealed class ReconciliationRetryPolicy(IOptions<ReconciliationOptions> op
             static async (callback, token) => await callback(token).ConfigureAwait(false),
             operation,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private static ResiliencePipeline ResolvePipeline(ResiliencePipelineProvider<string> pipelineProvider)
+    {
+        ArgumentNullException.ThrowIfNull(pipelineProvider);
+        return pipelineProvider.GetPipeline(PipelineName);
     }
 
     internal static ResiliencePipeline CreatePipeline(ReconciliationOptions options)

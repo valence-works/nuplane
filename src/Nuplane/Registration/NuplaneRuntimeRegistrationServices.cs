@@ -5,7 +5,9 @@ using Nuplane.Feeds.Configuration;
 using Nuplane.Health;
 using Nuplane.Hosting;
 using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Configuration;
 using Nuplane.Store.State;
+using Polly;
 
 namespace Nuplane.Registration;
 
@@ -35,6 +37,16 @@ public static class NuplaneRuntimeRegistrationServices
         services.AddSingleton<IValidateOptions<FeedResolutionOptions>, FeedCredentialCompositeValidator>();
         services.AddSingleton<FailureRecorder>();
         services.AddSingleton<IFailureRecorder>(sp => sp.GetRequiredService<FailureRecorder>());
+        services.AddResiliencePipeline(ReconciliationRetryPolicy.PipelineName, static (builder, context) =>
+        {
+            var options = context.ServiceProvider.GetRequiredService<IOptions<ReconciliationOptions>>().Value;
+            if (options.MaxRetryAttempts == 0)
+            {
+                return;
+            }
+
+            builder.AddRetry(ReconciliationRetryPolicy.CreateRetryOptions(options));
+        });
         services.AddSingleton<ReconciliationRetryPolicy>();
         services.AddSingleton<IReconciliationRetryPolicy>(sp => sp.GetRequiredService<ReconciliationRetryPolicy>());
         services.TryAddSingleton<ObservationDegradationTracker>();
