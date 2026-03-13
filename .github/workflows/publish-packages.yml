@@ -88,11 +88,34 @@ jobs:
             artifacts/packages/*.snupkg
           if-no-files-found: error
 
+  run-tests:
+    runs-on: ubuntu-latest
+    needs:
+      - build-and-pack
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore nuplane.sln
+
+      - name: Build
+        run: dotnet build nuplane.sln --configuration Release --no-restore
+
+      - name: Run tests
+        run: dotnet test nuplane.sln --configuration Release --no-build
+
   publish-preview:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs:
       - build-and-pack
+      - run-tests
     steps:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
@@ -131,6 +154,7 @@ jobs:
       actions: read
     needs:
       - build-and-pack
+      - run-tests
     steps:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
