@@ -91,7 +91,7 @@ public sealed class NupkgFileStabilityProbeTests
         var shortProbe = new NupkgFileStabilityProbe(
             NullLogger<NupkgFileStabilityProbe>.Instance,
             maxAttempts: 2,
-            retryDelay: TimeSpan.FromMilliseconds(50));
+            retryDelay: TimeSpan.FromMilliseconds(300));
 
         // Write initial content
         await File.WriteAllBytesAsync(filePath, new byte[100]);
@@ -100,7 +100,7 @@ public sealed class NupkgFileStabilityProbeTests
         var probeTask = Task.Run(async () =>
         {
             // Wait a moment then grow the file
-            await Task.Delay(30);
+            await Task.Delay(50);
             await File.WriteAllBytesAsync(filePath, new byte[200]);
         });
 

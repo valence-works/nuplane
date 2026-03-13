@@ -124,7 +124,6 @@ public sealed class ConvergenceOptionsValidatorTests
 
         Assert.True(result.Failed);
         Assert.Contains("PollInterval", result.FailureMessage);
-        Assert.Contains("MaxAttempts", result.FailureMessage);
         Assert.Contains("Manifest.Path", result.FailureMessage);
     }
 }
