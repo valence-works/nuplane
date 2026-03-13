@@ -12,7 +12,7 @@ public sealed class CachedFeedVersionEnumeratorTests
         new("test-feed", new Uri("https://api.nuget.org/v3/index.json"));
 
     private static IOptions<FeedResolutionOptions> CreateOptions(TimeSpan ttl) =>
-        Microsoft.Extensions.Options.Options.Create(new FeedResolutionOptions { VersionCacheTtl = ttl });
+        Options.Create(new FeedResolutionOptions { VersionCacheTtl = ttl });
 
     [Fact]
     public async Task CacheHit_WithinTtl_ReturnsCachedResult()
@@ -36,22 +36,24 @@ public sealed class CachedFeedVersionEnumeratorTests
     [Fact]
     public async Task CacheMiss_AfterTtlExpiry_RefreshesCache()
     {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-03-13T10:00:00+00:00"));
         var inner = Substitute.For<IFeedVersionEnumerator>();
-        var list1 = new PackageVersionList("Pkg", "test-feed", ["1.0.0"], DateTimeOffset.UtcNow.AddMinutes(-10));
-        var list2 = new PackageVersionList("Pkg", "test-feed", ["1.0.0", "2.0.0"], DateTimeOffset.UtcNow);
+        var list1 = new PackageVersionList("Pkg", "test-feed", ["1.0.0"], timeProvider.GetUtcNow().AddMinutes(-10));
+        var list2 = new PackageVersionList("Pkg", "test-feed", ["1.0.0", "2.0.0"], timeProvider.GetUtcNow());
 
         var callCount = 0;
         inner.EnumerateVersionsAsync(TestFeed, "Pkg", Arg.Any<CancellationToken>())
             .Returns(_ => callCount++ == 0 ? list1 : list2);
 
-        // Use a very short TTL so it expires between calls
-        var cached = new CachedFeedVersionEnumerator(inner, CreateOptions(TimeSpan.FromMilliseconds(50)));
+        var cached = new CachedFeedVersionEnumerator(
+            inner,
+            CreateOptions(TimeSpan.FromMilliseconds(50)),
+            timeProvider);
 
         var result1 = await cached.EnumerateVersionsAsync(TestFeed, "Pkg", CancellationToken.None);
         Assert.Equal(list1, result1);
 
-        // Wait for TTL to expire
-        await Task.Delay(100);
+        timeProvider.Advance(TimeSpan.FromMilliseconds(100));
 
         var result2 = await cached.EnumerateVersionsAsync(TestFeed, "Pkg", CancellationToken.None);
         Assert.Equal(list2, result2);
@@ -80,10 +82,13 @@ public sealed class CachedFeedVersionEnumeratorTests
     {
         var inner = Substitute.For<IFeedVersionEnumerator>();
         var versionList = new PackageVersionList("Pkg", "test-feed", ["1.0.0"], DateTimeOffset.UtcNow);
+        var enumerationStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowEnumerationToComplete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         inner.EnumerateVersionsAsync(TestFeed, "Pkg", Arg.Any<CancellationToken>())
-            .Returns(async _ =>
+            .Returns(async callInfo =>
             {
-                await Task.Delay(50);
+                enumerationStarted.TrySetResult();
+                await allowEnumerationToComplete.Task.WaitAsync(callInfo.Arg<CancellationToken>());
                 return versionList;
             });
 
@@ -93,6 +98,9 @@ public sealed class CachedFeedVersionEnumeratorTests
         var tasks = Enumerable.Range(0, 10)
             .Select(_ => cached.EnumerateVersionsAsync(TestFeed, "Pkg", CancellationToken.None))
             .ToArray();
+
+        await enumerationStarted.Task;
+        allowEnumerationToComplete.TrySetResult();
 
         var results = await Task.WhenAll(tasks);
 
@@ -105,17 +113,21 @@ public sealed class CachedFeedVersionEnumeratorTests
     {
         var inner = Substitute.For<IFeedVersionEnumerator>();
         using var cts = new CancellationTokenSource();
+        var enumerationStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var neverCompletes = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         inner.EnumerateVersionsAsync(TestFeed, "Pkg", Arg.Any<CancellationToken>())
             .Returns(async callInfo =>
             {
-                await Task.Delay(TimeSpan.FromSeconds(5), callInfo.Arg<CancellationToken>());
+                enumerationStarted.TrySetResult();
+                await neverCompletes.Task.WaitAsync(callInfo.Arg<CancellationToken>());
                 return new PackageVersionList("Pkg", "test-feed", ["1.0.0"], DateTimeOffset.UtcNow);
             });
 
         var cached = new CachedFeedVersionEnumerator(inner, CreateOptions(TimeSpan.FromMinutes(5)));
         var enumerationTask = cached.EnumerateVersionsAsync(TestFeed, "Pkg", cts.Token);
 
-        cts.CancelAfter(TimeSpan.FromMilliseconds(50));
+        await enumerationStarted.Task;
+        await cts.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => enumerationTask);
         await inner.Received(1).EnumerateVersionsAsync(TestFeed, "Pkg", Arg.Any<CancellationToken>());
@@ -139,8 +151,9 @@ public sealed class CachedFeedVersionEnumeratorTests
     [Fact]
     public async Task Error_Propagates_NoStaleData()
     {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-03-13T10:00:00+00:00"));
         var inner = Substitute.For<IFeedVersionEnumerator>();
-        var versionList = new PackageVersionList("Pkg", "test-feed", ["1.0.0"], DateTimeOffset.UtcNow.AddMinutes(-10));
+        var versionList = new PackageVersionList("Pkg", "test-feed", ["1.0.0"], timeProvider.GetUtcNow().AddMinutes(-10));
 
         var callCount = 0;
         inner.EnumerateVersionsAsync(TestFeed, "Pkg", Arg.Any<CancellationToken>())
@@ -151,16 +164,32 @@ public sealed class CachedFeedVersionEnumeratorTests
                 throw new InvalidOperationException("Feed error");
             });
 
-        var cached = new CachedFeedVersionEnumerator(inner, CreateOptions(TimeSpan.FromMilliseconds(50)));
+        var cached = new CachedFeedVersionEnumerator(
+            inner,
+            CreateOptions(TimeSpan.FromMilliseconds(50)),
+            timeProvider);
 
         // First call succeeds
         await cached.EnumerateVersionsAsync(TestFeed, "Pkg", CancellationToken.None);
 
-        // Wait for TTL to expire
-        await Task.Delay(100);
+        timeProvider.Advance(TimeSpan.FromMilliseconds(100));
 
         // Second call should propagate the error, not return stale data
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => cached.EnumerateVersionsAsync(TestFeed, "Pkg", CancellationToken.None));
+    }
+
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _utcNow;
+
+        public ManualTimeProvider(DateTimeOffset initialUtcNow)
+        {
+            _utcNow = initialUtcNow;
+        }
+
+        public override DateTimeOffset GetUtcNow() => _utcNow;
+
+        public void Advance(TimeSpan delta) => _utcNow += delta;
     }
 }

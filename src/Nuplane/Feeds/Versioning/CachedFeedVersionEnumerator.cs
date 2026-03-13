@@ -13,15 +13,20 @@ internal sealed class CachedFeedVersionEnumerator : IFeedVersionEnumerator
 {
     private readonly IFeedVersionEnumerator _inner;
     private readonly TimeSpan _ttl;
+    private readonly TimeProvider _timeProvider;
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Lazy<Task<PackageVersionList>>> _inflight = new(StringComparer.OrdinalIgnoreCase);
 
-    public CachedFeedVersionEnumerator(IFeedVersionEnumerator inner, IOptions<FeedResolutionOptions> options)
+    public CachedFeedVersionEnumerator(
+        IFeedVersionEnumerator inner,
+        IOptions<FeedResolutionOptions> options,
+        TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(inner);
         ArgumentNullException.ThrowIfNull(options);
         _inner = inner;
         _ttl = options.Value.VersionCacheTtl;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <inheritdoc />
@@ -57,7 +62,7 @@ internal sealed class CachedFeedVersionEnumerator : IFeedVersionEnumerator
         {
             var result = await _inner.EnumerateVersionsAsync(feed, packageId, cancellationToken);
             result = result with { CacheHit = false };
-            _cache[key] = new(result, DateTimeOffset.UtcNow);
+            _cache[key] = new(result, _timeProvider.GetUtcNow(), _timeProvider);
             return result;
         }
         finally
@@ -66,8 +71,8 @@ internal sealed class CachedFeedVersionEnumerator : IFeedVersionEnumerator
         }
     }
 
-    private sealed record CacheEntry(PackageVersionList Value, DateTimeOffset CachedAt)
+    private sealed record CacheEntry(PackageVersionList Value, DateTimeOffset CachedAt, TimeProvider TimeProvider)
     {
-        public bool IsExpired(TimeSpan ttl) => DateTimeOffset.UtcNow - CachedAt >= ttl;
+        public bool IsExpired(TimeSpan ttl) => TimeProvider.GetUtcNow() - CachedAt >= ttl;
     }
 }

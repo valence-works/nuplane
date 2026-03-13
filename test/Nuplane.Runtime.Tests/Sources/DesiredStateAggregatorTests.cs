@@ -56,11 +56,14 @@ public sealed class DesiredStateAggregatorTests
     public async Task AggregateAsync_CancellationRequested_ThrowsOperationCanceledException()
     {
         var cts = new CancellationTokenSource();
+        var source = new CancellationPropagatingSource("src-a");
+        var aggregateTask = _sut.AggregateAsync([source], cts.Token);
+
+        await source.WaitUntilStartedAsync();
         await cts.CancelAsync();
-        var source = new CancellationPropagatingSource("src-a", cts.Token);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            _sut.AggregateAsync([source], cts.Token));
+            aggregateTask);
     }
 
     private static PackageRequest Req(string id) =>
@@ -80,13 +83,19 @@ public sealed class DesiredStateAggregatorTests
             Task.FromException<IReadOnlyList<PackageRequest>>(exception);
     }
 
-    private sealed class CancellationPropagatingSource(string name, CancellationToken token) : IDesiredPackageSource
+    private sealed class CancellationPropagatingSource(string name) : IDesiredPackageSource
     {
+        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _never = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public override string ToString() => name;
+
+        public Task WaitUntilStartedAsync() => _started.Task;
+
         public async Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
         {
-            token.ThrowIfCancellationRequested();
-            await Task.Delay(1, ct);
+            _started.TrySetResult();
+            await _never.Task.WaitAsync(ct);
             return [];
         }
     }

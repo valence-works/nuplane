@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -49,8 +48,7 @@ public sealed class StartupCycleTests
     [Fact]
     public async Task StartupCycle_FiresBeforePeriodicTick()
     {
-        var triggers = new ConcurrentQueue<TriggerType>();
-        var service = new TrackingReconciliationService(triggers);
+        var service = new TrackingReconciliationService();
         var (dispatcher, scheduler) = CreateHostedServices(service);
 
         await dispatcher.StartAsync(CancellationToken.None);
@@ -58,10 +56,7 @@ public sealed class StartupCycleTests
 
         try
         {
-            await WaitForConditionAsync(() => triggers.Count >= 1, TimeSpan.FromSeconds(5));
-
-            Assert.NotEmpty(triggers);
-            Assert.True(triggers.TryPeek(out var first));
+            var first = await service.WaitForFirstTriggerAsync().WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal(TriggerType.Startup, first);
         }
         finally
@@ -87,7 +82,7 @@ public sealed class StartupCycleTests
 
         try
         {
-            await WaitForConditionAsync(() => service.CallCount >= 2, TimeSpan.FromSeconds(5));
+            await service.WaitForSecondCallAsync().WaitAsync(TimeSpan.FromSeconds(5));
             Assert.True(service.CallCount >= 2);
         }
         finally
@@ -105,9 +100,10 @@ public sealed class StartupCycleTests
         await dispatcher.StartAsync(CancellationToken.None);
         await scheduler.StartAsync(CancellationToken.None);
 
-        await WaitForConditionAsync(() => service.StartedCount >= 1, TimeSpan.FromSeconds(5));
+        await service.WaitUntilStartedAsync().WaitAsync(TimeSpan.FromSeconds(5));
         await StopHostedServicesAsync(scheduler, dispatcher);
 
+        await service.WaitForCancellationObservedAsync().WaitAsync(TimeSpan.FromSeconds(5));
         Assert.True(service.CancellationObserved);
     }
 
@@ -172,20 +168,6 @@ public sealed class StartupCycleTests
         await dispatcher.StopAsync(CancellationToken.None);
     }
 
-    private static async Task WaitForConditionAsync(Func<bool> condition, TimeSpan timeout)
-    {
-        var deadline = DateTime.UtcNow + timeout;
-        while (!condition() && DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(25);
-        }
-
-        if (!condition())
-        {
-            throw new TimeoutException($"Condition not met within {timeout}.");
-        }
-    }
-
     private static void TryDeleteDirectory(string path)
     {
         try
@@ -200,11 +182,15 @@ public sealed class StartupCycleTests
         }
     }
 
-    private sealed class TrackingReconciliationService(ConcurrentQueue<TriggerType> triggers) : IReconciliationService
+    private sealed class TrackingReconciliationService : IReconciliationService
     {
+        private readonly TaskCompletionSource<TriggerType> _firstTrigger = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<TriggerType> WaitForFirstTriggerAsync() => _firstTrigger.Task;
+
         public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken)
         {
-            triggers.Enqueue(trigger.Type);
+            _firstTrigger.TrySetResult(trigger.Type);
             return Task.FromResult(new ReconciliationRunResult(false, EmptyChangeSet, [], false));
         }
     }
@@ -213,21 +199,29 @@ public sealed class StartupCycleTests
     {
         private int _startedCount;
         private int _cancellationObserved;
+        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _cancellationObservedSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _never = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public int StartedCount => Volatile.Read(ref _startedCount);
         public bool CancellationObserved => Volatile.Read(ref _cancellationObserved) == 1;
+
+        public Task WaitUntilStartedAsync() => _started.Task;
+
+        public Task WaitForCancellationObservedAsync() => _cancellationObservedSource.Task;
 
         public async Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _startedCount);
+            _started.TrySetResult();
 
             try
             {
-                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                await _never.Task.WaitAsync(cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 Interlocked.Exchange(ref _cancellationObserved, 1);
+                _cancellationObservedSource.TrySetResult();
                 throw;
             }
 
@@ -238,12 +232,20 @@ public sealed class StartupCycleTests
     private sealed class FailsFirstReconciliationService : IReconciliationService
     {
         private int _callCount;
+        private readonly TaskCompletionSource _secondCall = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public int CallCount => Volatile.Read(ref _callCount);
+
+        public Task WaitForSecondCallAsync() => _secondCall.Task;
 
         public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken)
         {
             var count = Interlocked.Increment(ref _callCount);
+            if (count == 2)
+            {
+                _secondCall.TrySetResult();
+            }
+
             if (count == 1)
             {
                 throw new InvalidOperationException("Startup boom");
