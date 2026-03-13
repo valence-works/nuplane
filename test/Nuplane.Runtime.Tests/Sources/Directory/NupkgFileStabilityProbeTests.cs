@@ -86,27 +86,36 @@ public sealed class NupkgFileStabilityProbeTests
     {
         using var tempDir = new TempDirectory();
         var filePath = Path.Combine(tempDir.Path, "growing.nupkg");
+        var firstAttemptObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var continueAfterMutation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        // Create a probe with very short retry delay but only 2 attempts
+        // Coordinate the exact boundary between attempt 1 and attempt 2.
         var shortProbe = new NupkgFileStabilityProbe(
             NullLogger<NupkgFileStabilityProbe>.Instance,
             maxAttempts: 2,
-            retryDelay: TimeSpan.FromMilliseconds(300));
+            retryDelay: TimeSpan.FromMilliseconds(300),
+            onBeforeRetryAsync: (attempt, cancellationToken) =>
+            {
+                if (attempt == 1)
+                {
+                    firstAttemptObserved.TrySetResult();
+                    return continueAfterMutation.Task.WaitAsync(cancellationToken);
+                }
+
+                return Task.CompletedTask;
+            });
 
         // Write initial content
         await File.WriteAllBytesAsync(filePath, new byte[100]);
 
-        // Start probe, but grow file between attempts
-        var probeTask = Task.Run(async () =>
-        {
-            // Wait a moment then grow the file
-            await Task.Delay(50);
-            await File.WriteAllBytesAsync(filePath, new byte[200]);
-        });
+        var probeTask = shortProbe.IsStableAsync(filePath);
+        await firstAttemptObserved.Task;
 
-        var result = await shortProbe.IsStableAsync(filePath);
+        // Grow the file after attempt 1 but before attempt 2.
+        await File.WriteAllBytesAsync(filePath, new byte[200]);
+        continueAfterMutation.TrySetResult();
 
-        await probeTask; // ensure our mutation task completes
+        var result = await probeTask;
 
         // The file was mutated during probing. The probe should handle this
         // gracefully without throwing, returning false because the size changed.

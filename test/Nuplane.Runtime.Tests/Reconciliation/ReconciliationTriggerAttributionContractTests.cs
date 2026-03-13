@@ -60,7 +60,7 @@ public sealed class ReconciliationTriggerAttributionContractTests
     public async Task SingleFlight_Skip_DoesNotPropagateTrigger()
     {
         var spyLogger = new SpyReconciliationLogger();
-        var slowSource = new SlowDesiredSource(TimeSpan.FromMilliseconds(300));
+        var slowSource = new CoordinatedDesiredSource();
         var service = CreateService(spyLogger, enableSingleFlight: true, sources: [slowSource]);
 
         var trigger1 = ReconciliationTrigger.Scheduled();
@@ -69,14 +69,15 @@ public sealed class ReconciliationTriggerAttributionContractTests
         // Start first trigger (will be slow due to slow desired source)
         var task1 = service.TriggerAsync(trigger1, CancellationToken.None);
 
-        // Small delay to ensure task1 is in-flight
-        await Task.Delay(50);
+        // Wait until the first reconciliation run is inside desired-source enumeration.
+        await slowSource.WaitUntilStartedAsync();
 
         // Second trigger should be skipped
         var result2 = await service.TriggerAsync(trigger2, CancellationToken.None);
 
         Assert.True(result2.Skipped);
 
+        slowSource.Release();
         var result1 = await task1;
         Assert.False(result1.Skipped);
 
@@ -110,11 +111,19 @@ public sealed class ReconciliationTriggerAttributionContractTests
     /// A desired source that delays in GetDesiredAsync so the pipeline stays in-flight
     /// long enough for single-flight protection to kick in.
     /// </summary>
-    private sealed class SlowDesiredSource(TimeSpan delay) : IDesiredPackageSource
+    private sealed class CoordinatedDesiredSource : IDesiredPackageSource
     {
+        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task WaitUntilStartedAsync() => _started.Task;
+
+        public void Release() => _release.TrySetResult();
+
         public async Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
         {
-            await Task.Delay(delay, ct);
+            _started.TrySetResult();
+            await _release.Task.WaitAsync(ct);
             return [];
         }
     }

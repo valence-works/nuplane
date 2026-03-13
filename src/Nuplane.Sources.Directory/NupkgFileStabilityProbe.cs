@@ -21,6 +21,7 @@ public sealed class NupkgFileStabilityProbe
     private readonly int _maxAttempts;
     private readonly TimeSpan _retryDelay;
     private readonly ILogger<NupkgFileStabilityProbe> _logger;
+    private readonly Func<int, CancellationToken, Task>? _onBeforeRetryAsync;
 
     /// <summary>
     /// Initializes a new instance of <see cref="NupkgFileStabilityProbe"/>.
@@ -28,16 +29,22 @@ public sealed class NupkgFileStabilityProbe
     /// <param name="logger">A logger for diagnostic output.</param>
     /// <param name="maxAttempts">Maximum retry attempts (default: 5).</param>
     /// <param name="retryDelay">Delay between retries (default: 200ms).</param>
+    /// <param name="onBeforeRetryAsync">
+    /// Optional callback invoked before each retry delay with the current attempt number.
+    /// Primarily useful for deterministic coordination in tests.
+    /// </param>
     public NupkgFileStabilityProbe(
         ILogger<NupkgFileStabilityProbe> logger,
         int maxAttempts = DefaultMaxAttempts,
-        TimeSpan? retryDelay = null)
+        TimeSpan? retryDelay = null,
+        Func<int, CancellationToken, Task>? onBeforeRetryAsync = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _maxAttempts = maxAttempts > 0
             ? maxAttempts
             : throw new ArgumentOutOfRangeException(nameof(maxAttempts), "Max attempts must be positive.");
         _retryDelay = retryDelay ?? DefaultRetryDelay;
+        _onBeforeRetryAsync = onBeforeRetryAsync;
     }
 
     /// <summary>
@@ -96,6 +103,11 @@ public sealed class NupkgFileStabilityProbe
 
             if (attempt < _maxAttempts)
             {
+                if (_onBeforeRetryAsync is not null)
+                {
+                    await _onBeforeRetryAsync(attempt, cancellationToken);
+                }
+
                 await Task.Delay(_retryDelay, cancellationToken);
             }
         }
