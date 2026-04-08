@@ -66,6 +66,8 @@ specs/014-query-package-catalog/
 src/
 ├── Nuplane.Abstractions/
 ├── Nuplane/
+│   ├── Health/
+│   ├── Observability/
 │   ├── Operational/
 │   ├── Reconciliation/
 │   ├── Registration/
