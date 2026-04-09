@@ -27,12 +27,7 @@ app.MapGet("/catalog/packages", async (IActivePackageCatalog catalog, Cancellati
     Results.Ok(await catalog.GetSnapshotAsync(cancellationToken)));
 app.MapGet("/catalog/loading", async (IServiceProvider services, CancellationToken cancellationToken) =>
 {
-    var loadingCatalog = services.GetService<ILoadingCatalog>();
-    if (loadingCatalog is null)
-    {
-        return Results.Ok(new { isAvailable = false, reason = "loading-module-not-installed" });
-    }
-
+    var loadingCatalog = services.GetRequiredService<ILoadingCatalog>();
     return Results.Ok(await loadingCatalog.GetSnapshotAsync(cancellationToken));
 });
 app.MapNuplaneAdmin();
