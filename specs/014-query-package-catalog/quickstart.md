@@ -66,8 +66,8 @@ dotnet test test/Nuplane.Loading.Tests/Nuplane.Loading.Tests.csproj --filter "Fu
 ## 6) Validate scan-candidate driven discovery in the sample
 1. Start `samples/Nuplane.Sample.AspNetCore` with optional loading enabled.
 2. Pack and drop `Nuplane.Sample.Plugin` into the configured directory feed.
-3. Query `/catalog/packages` for the authoritative active package inventory and `/catalog/loading` for active assembly scan candidates.
-4. Pass the returned candidates into host-owned discovery/scanning logic (for the sample, `IPackageTypeScanner` over the active package/version pair) and confirm at least one expected `IPlugin` implementation is discovered.
+3. Query `/catalog/packages` for the authoritative active package inventory, `/catalog/loading` for active assembly scan candidates, and `/catalog/plugins` for the sample's explicit host-owned `IPlugin` discovery output.
+4. Confirm `/catalog/plugins` only returns plugin types from active loaded packages with scan candidates and that each entry identifies the package, version, discovered plugin type, and candidate assemblies used for scanning.
 5. Confirm `PackageChangeObserver` is used only for logging/invalidation, while `PluginDiscoveryObserver` re-queries the loading catalog instead of relying on discovered-type payloads from Nuplane.
 
 ## 7) Validate loading observability

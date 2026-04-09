@@ -1,53 +1,46 @@
 using Nuplane.Loading;
 using Nuplane.Loading.Events;
-using Nuplane.Sample.Abstractions;
 
 namespace Nuplane.Sample.AspNetCore;
 
 internal sealed class PluginDiscoveryObserver(
-    IPackageTypeScanner packageTypeScanner,
-    ILoadingCatalog loadingCatalog,
+    PluginCatalog pluginCatalog,
     ILogger<PluginDiscoveryObserver> logger)
     : IPackageLoadingObserver
 {
+    private readonly PluginCatalog _pluginCatalog = pluginCatalog ?? throw new ArgumentNullException(nameof(pluginCatalog));
 
     /// <summary>
-    /// Called after packages are loaded into Assembly Load Contexts. Performs type scanning
-    /// to discover <see cref="IPlugin"/> implementations from loaded packages.
+    /// Called after packages are loaded into Assembly Load Contexts. Triggers an explicit
+    /// query-first discovery refresh so the sample can enumerate all plugin types from the
+    /// current active package set.
     /// </summary>
     public async Task OnPackagesLoadedAsync(PackageLoadedEvent evt, CancellationToken cancellationToken)
     {
         logger.LogInformation(
-            "Packages loaded invalidation received. Count={Count}, CorrelationId={CorrelationId}",
+            "Packages loaded invalidation received. Count={Count}, CorrelationId={CorrelationId}. Refreshing explicit plugin discovery from the active loading catalog.",
             evt.LoadedPackages.Count, evt.CorrelationId);
 
-        var snapshot = await loadingCatalog.GetSnapshotAsync(cancellationToken);
-        foreach (var package in snapshot.Packages.Where(x => x.Status == LoadingStatus.Loaded))
+        var discoveredPlugins = await _pluginCatalog.DiscoverAsync(cancellationToken);
+        if (discoveredPlugins.Count == 0)
         {
-            if (package.ScanCandidates.Count == 0)
-            {
-                logger.LogWarning("No scan candidates were published for {PackageId}@{Version}; skipping host-owned discovery.", package.PackageId, package.Version);
-                continue;
-            }
+            logger.LogInformation("No IPlugin implementations are currently discoverable from active loaded packages.");
+            return;
+        }
 
+        logger.LogInformation(
+            "Explicit plugin discovery found {PluginCount} plugin type(s) across active packages.",
+            discoveredPlugins.Count);
+
+        foreach (var plugin in discoveredPlugins)
+        {
             logger.LogInformation(
-                "Querying loading catalog for {PackageId}@{Version}. ScanCandidates={CandidateCount}. Candidates={Candidates}",
-                package.PackageId,
-                package.Version,
-                package.ScanCandidates.Count,
-                string.Join(",", package.ScanCandidates.Select(candidate => candidate.AssemblyFileName)));
-
-            var pluginTypes = packageTypeScanner.FindTypes<IPlugin>(package.PackageId, package.Version);
-            if (pluginTypes.Count == 0)
-            {
-                logger.LogInformation("No IPlugin types discovered in {PackageId}@{Version}.", package.PackageId, package.Version);
-                continue;
-            }
-
-            foreach (var pluginType in pluginTypes)
-            {
-                logger.LogInformation("Discovered plugin type {PluginType} in {PackageId}@{Version}.", pluginType.FullName, package.PackageId, package.Version);
-            }
+                "Discovered plugin type {PluginType} in {PackageId}@{Version} from assembly {AssemblyName}. ScanCandidates={Candidates}",
+                plugin.PluginType,
+                plugin.PackageId,
+                plugin.Version,
+                plugin.AssemblyName,
+                string.Join(",", plugin.ScanCandidateAssemblyFileNames));
         }
     }
 

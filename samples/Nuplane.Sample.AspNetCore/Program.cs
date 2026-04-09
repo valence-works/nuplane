@@ -19,10 +19,11 @@ builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
     nuplane.OnPackagesLoaded<PluginDiscoveryObserver>();
 });
 builder.Services.AddNuplaneAdmin();
+builder.Services.AddSingleton<PluginCatalog>();
 
 var app = builder.Build();
 
-app.MapGet("/", () => "Drop a .nupkg into the configured local directory feed to trigger reconcile. Query /catalog/packages for authoritative active packages, /catalog/loading for scan guidance, /nuplane/admin/packages or /nuplane/admin/state for core admin reads, and /nuplane/admin/loading for the loading-owned route.");
+app.MapGet("/", () => "Drop a .nupkg into the configured local directory feed to trigger reconcile. Query /catalog/packages for authoritative active packages, /catalog/loading for scan guidance, /catalog/plugins for explicit IPlugin discovery from active packages, /nuplane/admin/packages or /nuplane/admin/state for core admin reads, and /nuplane/admin/loading for the loading-owned route.");
 app.MapGet("/catalog/packages", async (IActivePackageCatalog catalog, CancellationToken cancellationToken) =>
     Results.Ok(await catalog.GetSnapshotAsync(cancellationToken)));
 app.MapGet("/catalog/loading", async (IServiceProvider services, CancellationToken cancellationToken) =>
@@ -30,6 +31,8 @@ app.MapGet("/catalog/loading", async (IServiceProvider services, CancellationTok
     var loadingCatalog = services.GetRequiredService<ILoadingCatalog>();
     return Results.Ok(await loadingCatalog.GetSnapshotAsync(cancellationToken));
 });
+app.MapGet("/catalog/plugins", async (PluginCatalog pluginCatalog, CancellationToken cancellationToken) =>
+    Results.Ok(await pluginCatalog.DiscoverAsync(cancellationToken)));
 app.MapNuplaneAdmin();
 app.MapNuplaneLoading();
 

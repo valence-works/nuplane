@@ -16,9 +16,9 @@
 | 6 | Loading-owned observability emits stale/divergence logs and metrics | PASS | `LoadingCatalogObservabilityTests` verifies `ReasonCode=loading-stale` and `ReasonCode=loading-divergence` structured logs plus loading/degraded metric tags. |
 | 7 | Admin composition keeps package, loading, and state reads separate | PASS | `AdminPackageCatalogCompositionTests`, `AdminLoadingCatalogCompositionTests`, `AdminOperationalStateCompositionTests`, `AdminCompositionCleanBreakTests`, `AdminReadEndpointContractTests`, `AdminEndpointOwnershipContractTests`, and `OperationalStateSnapshotTests` verify separate in-process reads, clean-break endpoint ownership, and the state-only operational model. |
 | 8 | Operational-state contributors enrich the core state surface without re-coupling admin | PASS | `OperationalStateContributorIntegrationTests` verifies the loading contributor is discovered through DI and surfaces `loading-stale:*` degraded reasons through the core operational snapshot. |
-| 9 | Sample query-first assets still build | PASS | `dotnet pack samples/Nuplane.Sample.Plugin/Nuplane.Sample.Plugin.csproj -c Debug` and `dotnet build samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj -c Debug` both succeeded after the sample observer guidance refresh. |
+| 9 | Sample query-first assets, including explicit `/catalog/plugins` discovery, still build | PASS | `dotnet pack samples/Nuplane.Sample.Plugin/Nuplane.Sample.Plugin.csproj -c Debug` and `dotnet build samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj -c Debug` both succeeded after the sample plugin-discovery endpoint refresh. |
 | 10 | Existing runtime, loading, integration, and store behavior remains intact | PASS | `dotnet test nuplane.sln` completed successfully after the feature changes. |
-| 10 | Secret scan remains clean | PASS | `./build/validate-secrets.sh` reported no committed credentials. |
+| 11 | Secret scan remains clean | PASS | `./build/validate-secrets.sh` reported no committed credentials. |
 
 ## Focused Test Commands
 

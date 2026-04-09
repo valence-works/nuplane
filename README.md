@@ -204,6 +204,7 @@ Observers are supplemental invalidation and logging signals. For authoritative r
 ```csharp
 using Nuplane.Abstractions;
 using Nuplane.Loading;
+using Nuplane.Sample.AspNetCore;
 
 app.MapGet("/catalog/packages", async (IActivePackageCatalog catalog, CancellationToken ct) =>
     Results.Ok(await catalog.GetSnapshotAsync(ct)));
@@ -215,16 +216,21 @@ app.MapGet("/catalog/loading", async (IServiceProvider services, CancellationTok
         ? Results.Ok(new { isAvailable = false, reason = "loading-module-not-installed" })
         : Results.Ok(await loadingCatalog.GetSnapshotAsync(ct));
 });
+
+app.MapGet("/catalog/plugins", async (PluginCatalog pluginCatalog, CancellationToken ct) =>
+    Results.Ok(await pluginCatalog.DiscoverAsync(ct)));
 ```
 
 - Use `IActivePackageCatalog` when you only need the authoritative active package inventory.
 - Use `ILoadingCatalog` only when the optional loading module is installed and you need current-process loading state or assembly scan guidance.
+- Use a host-owned query service such as the sample `PluginCatalog` when you want to explicitly discover all `IPlugin` implementations from the current active loaded package set.
 - Use the admin API (`/nuplane/admin/packages`, `/nuplane/admin/loading`, `/nuplane/admin/state`) when you want HTTP access to the same composed read surfaces.
 
 #### Clean-break notes for query surfaces
 
 - `GET /nuplane/admin/loading` is owned by `Nuplane.Loading.Api`, not by the core admin packages.
 - `GET /nuplane/admin/snapshot` is intentionally removed; package inventory and operational state are now separate reads.
+- The sample's `/catalog/plugins` endpoint demonstrates explicit host-owned plugin discovery layered on top of `ILoadingCatalog` and `IPackageTypeScanner`.
 - The sample observers demonstrate cache invalidation and logging only; they are not the authoritative package/loading inventory source.
 - These surface changes are intentional breaking changes for hosts that previously depended on merged snapshot or core-admin loading compatibility payloads.
 
