@@ -248,19 +248,63 @@ public sealed partial class ReconciliationLogger : IReconciliationLogger
     private static partial void AdminTriggerOutcomeLog(ILogger logger, string correlationId, string outcomeCode, string? reasonCode);
 
     /// <inheritdoc />
-    public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState)
+    public void LogActivePackageCatalogRead(string correlationId, int packageCount, int issueCount)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+
+        ActivePackageCatalogReadLog(_logger, correlationId, packageCount, issueCount);
+    }
+
+    /// <inheritdoc />
+    public void LogLoadingCatalogRead(string correlationId, string availability, int packageCount, string? reasonCode)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(availability);
+
+        LoadingCatalogReadLog(_logger, correlationId, availability, packageCount, reasonCode);
+    }
+
+    /// <inheritdoc />
+    public void LogOperationalStateRead(string correlationId, string healthState, int degradedReasonCount)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(healthState);
 
-        AdminSnapshotReadLog(_logger, correlationId, activePackageCount, healthState);
+        OperationalStateReadLog(_logger, correlationId, healthState, degradedReasonCount);
+    }
+
+    /// <inheritdoc />
+    public void LogOperationalStateContribution(string correlationId, string contributor, int degradedReasonCount)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(contributor);
+
+        OperationalStateContributionLog(_logger, correlationId, contributor, degradedReasonCount);
     }
 
     [LoggerMessage(
-        EventId = 1014,
+        EventId = 1018,
         Level = LogLevel.Information,
-        Message = "Admin snapshot read [CorrelationId={CorrelationId}, ActivePackageCount={ActivePackageCount}, HealthState={HealthState}]")]
-    private static partial void AdminSnapshotReadLog(ILogger logger, string correlationId, int activePackageCount, string healthState);
+        Message = "Active package catalog read [CorrelationId={CorrelationId}, PackageCount={PackageCount}, IssueCount={IssueCount}]")]
+    private static partial void ActivePackageCatalogReadLog(ILogger logger, string correlationId, int packageCount, int issueCount);
+
+    [LoggerMessage(
+        EventId = 1019,
+        Level = LogLevel.Information,
+        Message = "Loading catalog read [CorrelationId={CorrelationId}, Availability={Availability}, PackageCount={PackageCount}, ReasonCode={ReasonCode}]")]
+    private static partial void LoadingCatalogReadLog(ILogger logger, string correlationId, string availability, int packageCount, string? reasonCode);
+
+    [LoggerMessage(
+        EventId = 1020,
+        Level = LogLevel.Information,
+        Message = "Operational state read [CorrelationId={CorrelationId}, HealthState={HealthState}, DegradedReasonCount={DegradedReasonCount}]")]
+    private static partial void OperationalStateReadLog(ILogger logger, string correlationId, string healthState, int degradedReasonCount);
+
+    [LoggerMessage(
+        EventId = 1021,
+        Level = LogLevel.Information,
+        Message = "Operational state contribution [CorrelationId={CorrelationId}, Contributor={Contributor}, DegradedReasonCount={DegradedReasonCount}]")]
+    private static partial void OperationalStateContributionLog(ILogger logger, string correlationId, string contributor, int degradedReasonCount);
 
     /// <inheritdoc />
     public void LogTrigger(string correlationId, string triggerType, string? triggerSource)

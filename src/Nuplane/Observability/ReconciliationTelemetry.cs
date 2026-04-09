@@ -97,6 +97,24 @@ public sealed class ReconciliationTelemetry : IDisposable
     /// <summary>Counter for admin trigger rejections.</summary>
     public Counter<long> AdminRejectedCounter { get; }
 
+    /// <summary>Counter for active package catalog reads.</summary>
+    public Counter<long> PackageCatalogReadCounter { get; }
+
+    /// <summary>Counter for loading catalog reads.</summary>
+    public Counter<long> LoadingCatalogReadCounter { get; }
+
+    /// <summary>Counter for operational state reads.</summary>
+    public Counter<long> OperationalStateReadCounter { get; }
+
+    /// <summary>Counter for generic operational-state contributions emitted by module contributors.</summary>
+    public Counter<long> OperationalStateContributionCounter { get; }
+
+    /// <summary>Counter for degraded operational-state contributions emitted by module contributors.</summary>
+    public Counter<long> OperationalStateContributionDegradedCounter { get; }
+
+    /// <summary>Counter for catalog/state reads that observed a degraded condition.</summary>
+    public Counter<long> CatalogDegradedReadCounter { get; }
+
     /// <summary>Counter for rollback operations performed.</summary>
     public Counter<long> RollbackPerformedCounter { get; }
 
@@ -164,6 +182,12 @@ public sealed class ReconciliationTelemetry : IDisposable
         ConvergenceDegradedCounter = _meter.CreateCounter<long>("nuplane.convergence.cycle.degraded");
         AdminTriggerCounter = _meter.CreateCounter<long>("nuplane.convergence.admin.trigger");
         AdminRejectedCounter = _meter.CreateCounter<long>("nuplane.convergence.admin.rejected");
+        PackageCatalogReadCounter = _meter.CreateCounter<long>("nuplane.catalog.packages.read");
+        LoadingCatalogReadCounter = _meter.CreateCounter<long>("nuplane.catalog.loading.read");
+        OperationalStateReadCounter = _meter.CreateCounter<long>("nuplane.catalog.state.read");
+        OperationalStateContributionCounter = _meter.CreateCounter<long>("nuplane.operational.contribution.read");
+        OperationalStateContributionDegradedCounter = _meter.CreateCounter<long>("nuplane.operational.contribution.degraded");
+        CatalogDegradedReadCounter = _meter.CreateCounter<long>("nuplane.catalog.degraded.read");
         RollbackPerformedCounter = _meter.CreateCounter<long>("nuplane.convergence.rollback.performed");
         VersionResolutionCounter = _meter.CreateCounter<long>("nuplane.resolution.version.total");
         VersionResolutionDurationMilliseconds = _meter.CreateHistogram<double>("nuplane.resolution.version.duration.ms");

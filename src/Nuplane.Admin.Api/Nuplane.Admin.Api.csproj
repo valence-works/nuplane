@@ -14,7 +14,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Nuplane.Abstractions\Nuplane.Abstractions.csproj" />
     <ProjectReference Include="..\Nuplane.Admin\Nuplane.Admin.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="LoadingCatalogResponse.cs" />
+    <Compile Remove="SnapshotResponse.cs" />
   </ItemGroup>
 
 </Project>

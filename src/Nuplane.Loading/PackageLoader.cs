@@ -29,6 +29,35 @@ public sealed class PackageLoader : IPackageLoader
     /// </summary>
     public IReadOnlyDictionary<string, PackageLoadSession> Sessions => _sessions;
 
+    /// <summary>
+    /// Builds deterministic assembly scan candidates for the specified active package install path.
+    /// </summary>
+    public IReadOnlyList<AssemblyScanCandidate> BuildScanCandidates(string packageId, string installPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+
+        var mainAssemblyPath = ResolveMainAssemblyPath(installPath, packageId);
+        var targetFrameworkMoniker = TryResolveTargetFrameworkMoniker(mainAssemblyPath, installPath);
+        var assemblyPaths = Directory
+            .EnumerateFiles(installPath, "*.dll", SearchOption.AllDirectories)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return assemblyPaths
+            .Select(path => new AssemblyScanCandidate(
+                path,
+                Path.GetFileName(path),
+                targetFrameworkMoniker,
+                string.Equals(path, mainAssemblyPath, StringComparison.OrdinalIgnoreCase)
+                    ? "PrimaryLoadAssembly"
+                    : "AdditionalManagedAssembly",
+                string.Equals(path, mainAssemblyPath, StringComparison.OrdinalIgnoreCase)
+                    ? "selected-by-loader"
+                    : "co-located-managed-assembly"))
+            .ToArray();
+    }
+
     /// <inheritdoc />
     public Task<PackageLoadResult> EnsureLoadedAsync(
         IReadOnlyList<ResolvedPackage> packages,
@@ -121,6 +150,18 @@ public sealed class PackageLoader : IPackageLoader
     }
 
     private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";
+
+    private static string? TryResolveTargetFrameworkMoniker(string assemblyPath, string installPath)
+    {
+        var relativePath = Path.GetRelativePath(installPath, assemblyPath);
+        var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (segments.Length >= 3 && string.Equals(segments[0], "lib", StringComparison.OrdinalIgnoreCase))
+        {
+            return segments[1];
+        }
+
+        return null;
+    }
 
     private static string ResolveMainAssemblyPath(string installPath, string packageId) =>
         ResolveMainAssemblyPath(installPath, packageId, hostTargetFrameworkOverride: null);

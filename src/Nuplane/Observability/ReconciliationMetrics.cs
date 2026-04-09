@@ -98,6 +98,85 @@ public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
         }
     }
 
+    /// <summary>Records an active package catalog read.</summary>
+    public void RecordActivePackageCatalogRead(int packageCount, bool degraded)
+    {
+        _telemetry.PackageCatalogReadCounter.Add(
+            1,
+            [new KeyValuePair<string, object?>("package_count", packageCount)]);
+        if (degraded)
+        {
+            _telemetry.CatalogDegradedReadCounter.Add(
+                1,
+                [new KeyValuePair<string, object?>("surface", "packages")]);
+        }
+    }
+
+    /// <summary>Records a loading catalog read.</summary>
+    public void RecordLoadingCatalogRead(string availability, int packageCount, bool degraded, string? reasonCode = null)
+    {
+        var readTags = new List<KeyValuePair<string, object?>>
+        {
+            new("availability", availability),
+            new("package_count", packageCount)
+        };
+
+        if (!string.IsNullOrWhiteSpace(reasonCode))
+        {
+            readTags.Add(new("reason_code", reasonCode));
+        }
+
+        _telemetry.LoadingCatalogReadCounter.Add(1, readTags.ToArray());
+        if (degraded)
+        {
+            var degradedTags = new List<KeyValuePair<string, object?>>()
+            {
+                new("surface", "loading")
+            };
+
+            if (!string.IsNullOrWhiteSpace(reasonCode))
+            {
+                degradedTags.Add(new("reason_code", reasonCode));
+            }
+
+            _telemetry.CatalogDegradedReadCounter.Add(1, degradedTags.ToArray());
+        }
+    }
+
+    /// <summary>Records an operational state read.</summary>
+    public void RecordOperationalStateRead(string healthState, bool degraded)
+    {
+        _telemetry.OperationalStateReadCounter.Add(
+            1,
+            [new KeyValuePair<string, object?>("health_state", healthState)]);
+        if (degraded)
+        {
+            _telemetry.CatalogDegradedReadCounter.Add(
+                1,
+                [new KeyValuePair<string, object?>("surface", "state")]);
+        }
+    }
+
+    /// <summary>Records a generic operational-state contribution.</summary>
+    public void RecordOperationalStateContribution(string contributor, int degradedReasonCount, bool degraded)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(contributor);
+
+        _telemetry.OperationalStateContributionCounter.Add(
+            1,
+            [
+                new KeyValuePair<string, object?>("contributor", contributor),
+                new KeyValuePair<string, object?>("degraded_reason_count", degradedReasonCount)
+            ]);
+
+        if (degraded)
+        {
+            _telemetry.OperationalStateContributionDegradedCounter.Add(
+                1,
+                [new KeyValuePair<string, object?>("contributor", contributor)]);
+        }
+    }
+
     /// <summary>Records a rollback operation.</summary>
     public void RecordRollbackPerformed() => _telemetry.RollbackPerformedCounter.Add(1);
 

@@ -84,7 +84,7 @@ As a Nuplane maintainer, I want the package inventory, loading inventory, and op
 - The active package catalog is a core host-facing runtime service; admin and remote operator surfaces are secondary compositions over that same underlying package inventory.
 - The loading catalog is owned by the optional loading module as a direct host-facing service when loading is installed; admin and remote operator surfaces compose it secondarily rather than defining its primary access path.
 - The loading catalog provides assembly-level guidance only; hosts remain responsible for running discovery/scanning logic and interpreting discovered types.
-- When the optional loading module is not installed, no standalone loading catalog service exists in core runtime composition; loading-aware admin or remote surfaces must report loading as unavailable.
+- When the optional loading module is not installed, no standalone loading catalog service exists in core runtime composition; core admin surfaces do not synthesize loading placeholders, and any loading-aware remote surface exists only when a loading-owned composition package is installed.
 
 ## Requirements *(mandatory)*
 
@@ -99,15 +99,16 @@ As a Nuplane maintainer, I want the package inventory, loading inventory, and op
 - **FR-006**: Nuplane MUST expose a standalone loading catalog service from the optional loading module, separate from the active package catalog, that reports per-active-package loading status, loading diagnostics, and recommended assembly scan candidates for hosts using optional loading.
 - **FR-006A**: Operator-facing in-process and remote/admin read surfaces MUST compose the standalone loading catalog when the loading module is installed rather than being the only supported path for hosts to access loading information.
 - **FR-007**: The loading catalog MUST explicitly communicate disabled, stale, failed, and available states so that hosts can distinguish "loading not enabled" from "no packages available" and from "loading has not yet been refreshed for this process."
-- **FR-007A**: When the optional loading module is not installed, no core no-op loading catalog service is exposed; instead, loading-aware admin or remote read surfaces MUST report loading as unavailable.
+- **FR-007A**: When the optional loading module is not installed, no core no-op loading catalog service or core-admin loading route is exposed; loading information is absent until a loading-owned composition package is installed.
 - **FR-008**: The loading catalog MUST identify the assemblies Nuplane considers appropriate scan candidates for host discovery scenarios so that hosts do not need to crawl store folders or infer target-specific asset selection rules independently.
 - **FR-008A**: The loading catalog MUST NOT expose discovered plugin, module, or application type identities; type discovery remains a host-owned concern performed against the scan candidates or other host-managed scanning flows.
-- **FR-009**: Restart behavior MUST restore the active package catalog immediately from persisted state while representing loading information as stale or unavailable until the current process has refreshed loading state.
+- **FR-009**: Restart behavior MUST restore the active package catalog immediately from persisted state while representing loading information as `Stale` when the loading module is installed but not yet refreshed for the current process, or as absent when loading composition is not installed.
 - **FR-010**: Host notification mechanisms for reconciliation and loading MUST become supplemental invalidation signals; a host MUST be able to derive correct package and loading state from query surfaces alone.
 - **FR-011**: Package removal, rollback retention, downgrade, and load-failure scenarios MUST keep the active package catalog and loading catalog logically consistent with one another without redefining what is active versus merely retained.
 - **FR-012**: The feature MUST support staged delivery in which the active package catalog can ship independently before loading-catalog and operator-facing extensions, and each delivered stage MUST leave a coherent and stable public model for subsequent stages.
 - **FR-013**: Documentation for host integrations MUST describe the query-first model, including separate guidance for metadata-only consumers and for loading-enabled scanners such as CShells.
 - **FR-014**: The repository MUST include or update a sample host application that demonstrates querying the loading catalog for active assembly scan candidates and using those candidates for host-owned type discovery.
+- **FR-015**: The clean-break design MUST retire legacy combined-snapshot contracts and routes, including `/nuplane/admin/snapshot`, `SnapshotResponse`, and any admin/loading compatibility wrapper types, in favor of separate package, operational-state, and loading surfaces owned by their respective packages.
 
 ### Operational & Safety Requirements *(mandatory)*
 
@@ -116,6 +117,7 @@ As a Nuplane maintainer, I want the package inventory, loading inventory, and op
 - **OSR-003**: Package descriptors and loading descriptors MUST retain trusted source provenance and MUST NOT weaken existing source-integrity boundaries, validation behavior, or secret-handling rules.
 - **OSR-004**: The feature MUST add observable signals for package-catalog state, loading-catalog state, restart-stale loading state, and package-versus-loading failures through structured logs, metrics, and health/degraded reporting.
 - **OSR-005**: The feature MUST include automated unit, boundary, and restart-oriented coverage for persisted package inventory, active-versus-retained distinctions, disabled-loading behavior, loading-failure behavior, and any operator-facing read contracts introduced by the feature.
+- **OSR-006**: Because this feature intentionally introduces breaking contract changes, delivery artifacts MUST include migration notes and an explicit semantic version impact statement covering removed snapshot/admin-loading compatibility paths and the new loading-owned HTTP composition package.
 
 ### Key Entities *(include if feature involves data)*
 

@@ -11,5 +11,9 @@
     <ProjectReference Include="..\Nuplane\Nuplane.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="AdminLoadingCatalogReadResult.cs" />
+  </ItemGroup>
+
 </Project>
 

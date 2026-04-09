@@ -38,6 +38,7 @@ public sealed record ActivePackageDescriptor(
 - Retained rollback copies, failed candidates, and removed versions never appear as active entries.
 - Reads succeed immediately after host restart from persisted state without requiring a new reconciliation cycle first.
 - The persisted descriptor set is written atomically with the active version update so readers never observe a partially updated catalog.
+- Reads are query-first: hosts and samples must not need observer replay to rebuild the active package inventory.
 
 ## Provenance contract
 - `FeedName` and `SourceName` come from already trusted reconciliation inputs.
@@ -57,4 +58,5 @@ public sealed record ActivePackageDescriptor(
 ## Validation and test obligations
 - Store and runtime tests must prove atomic persistence, deterministic ordering, restart recovery, and active-versus-retained separation.
 - Integration tests must prove queries do not surface partially updated active sets during reconcile boundaries.
+- Documentation and sample guidance must frame observers as supplemental invalidation/logging hooks rather than the primary package inventory source.
 

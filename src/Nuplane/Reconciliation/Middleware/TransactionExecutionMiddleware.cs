@@ -33,6 +33,12 @@ internal sealed class TransactionExecutionMiddleware(
         // Merge applied packages into existing active state: preserve active versions for packages that failed
         var appliedVersions = desiredActualDiffEngine.BuildNextActiveVersions(applyResult.AppliedPackages);
         var mergedActive = new Dictionary<string, string>(context.ActiveVersions!, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var removedPackageId in context.ChangeSet?.Removed ?? [])
+        {
+            mergedActive.Remove(removedPackageId);
+        }
+
         foreach (var (id, version) in appliedVersions)
         {
             mergedActive[id] = version;

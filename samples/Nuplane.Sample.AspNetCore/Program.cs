@@ -1,6 +1,9 @@
 using Nuplane;
+using Nuplane.Abstractions;
 using Nuplane.Admin;
 using Nuplane.Admin.Api;
+using Nuplane.Loading;
+using Nuplane.Loading.Api;
 using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Sample.AspNetCore;
 using Nuplane.Sources.Directory.Configuration;
@@ -19,7 +22,20 @@ builder.Services.AddNuplaneAdmin();
 
 var app = builder.Build();
 
-app.MapGet("/", () => "Drop a .nupkg into the configured local directory feed to trigger reconcile, load assemblies, and discover IPlugin types.");
+app.MapGet("/", () => "Drop a .nupkg into the configured local directory feed to trigger reconcile. Query /catalog/packages for authoritative active packages, /catalog/loading for scan guidance, /nuplane/admin/packages or /nuplane/admin/state for core admin reads, and /nuplane/admin/loading for the loading-owned route.");
+app.MapGet("/catalog/packages", async (IActivePackageCatalog catalog, CancellationToken cancellationToken) =>
+    Results.Ok(await catalog.GetSnapshotAsync(cancellationToken)));
+app.MapGet("/catalog/loading", async (IServiceProvider services, CancellationToken cancellationToken) =>
+{
+    var loadingCatalog = services.GetService<ILoadingCatalog>();
+    if (loadingCatalog is null)
+    {
+        return Results.Ok(new { isAvailable = false, reason = "loading-module-not-installed" });
+    }
+
+    return Results.Ok(await loadingCatalog.GetSnapshotAsync(cancellationToken));
+});
 app.MapNuplaneAdmin();
+app.MapNuplaneLoading();
 
 app.Run();

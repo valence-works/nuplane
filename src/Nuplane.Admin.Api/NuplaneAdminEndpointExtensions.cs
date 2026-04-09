@@ -17,7 +17,8 @@ public static class NuplaneAdminEndpointExtensions
     /// to be registered on the service collection first.
     /// Provides:
     /// <list type="bullet">
-    ///   <item><c>GET {prefix}/snapshot</c> — Returns a consistent operational snapshot.</item>
+    ///   <item><c>GET {prefix}/packages</c> — Returns the active package catalog.</item>
+    ///   <item><c>GET {prefix}/state</c> — Returns the operational state snapshot.</item>
     ///   <item><c>POST {prefix}/reconcile</c> — Triggers a manual reconciliation cycle.</item>
     /// </list>
     /// </summary>
@@ -30,13 +31,22 @@ public static class NuplaneAdminEndpointExtensions
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        endpoints.MapGet($"{prefix}/snapshot", async (
+        endpoints.MapGet($"{prefix}/packages", async (
             [FromServices] INuplaneAdminOperations operations,
             CancellationToken cancellationToken) =>
         {
-            var snapshot = await operations.GetSnapshotAsync(cancellationToken);
-            return Results.Ok(new SnapshotResponse(snapshot));
-        }).WithName("NuplaneGetSnapshot")
+            var snapshot = await operations.GetPackagesAsync(cancellationToken);
+            return Results.Ok(new PackageCatalogResponse(snapshot));
+        }).WithName("NuplaneGetPackages")
+          .WithTags("NuplaneAdmin");
+
+        endpoints.MapGet($"{prefix}/state", async (
+            [FromServices] INuplaneAdminOperations operations,
+            CancellationToken cancellationToken) =>
+        {
+            var snapshot = await operations.GetStateAsync(cancellationToken);
+            return Results.Ok(new OperationalStateResponse(snapshot));
+        }).WithName("NuplaneGetState")
           .WithTags("NuplaneAdmin");
 
         endpoints.MapPost($"{prefix}/reconcile", async (

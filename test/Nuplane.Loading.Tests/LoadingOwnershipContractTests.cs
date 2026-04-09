@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using Nuplane.Loading.Api;
+using Nuplane.Operational;
 using Nuplane.Loading.Registration;
 
 namespace Nuplane.Loading.Tests;
@@ -48,5 +50,23 @@ public sealed class LoadingOwnershipContractTests
         LoadingRegistrationServices.Register(services);
 
         Assert.Contains(services, d => d.ServiceType == typeof(ILoadingFailureTracker));
+    }
+
+    [Fact]
+    public void Register_RegistersLoadingOperationalStateContributor()
+    {
+        var services = new ServiceCollection();
+
+        LoadingRegistrationServices.Register(services);
+
+        Assert.Contains(services, d => d.ServiceType == typeof(IOperationalStateContributor));
+    }
+
+    [Fact]
+    public void MapNuplaneLoading_ExtensionExistsInLoadingOwnedApiPackage()
+    {
+        var method = typeof(NuplaneLoadingEndpointExtensions).GetMethod(nameof(NuplaneLoadingEndpointExtensions.MapNuplaneLoading));
+
+        Assert.NotNull(method);
     }
 }

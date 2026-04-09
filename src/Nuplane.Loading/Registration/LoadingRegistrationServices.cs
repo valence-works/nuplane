@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Loading.Extensions;
+using Nuplane.Operational;
 
 namespace Nuplane.Loading.Registration;
 
@@ -31,16 +32,22 @@ public static class LoadingRegistrationServices
         services.AddOptions<LoadingOptions>().ValidateOnStart();
 
         // ── Core loading services ─────────────────────────────────────────────────
-        ReplaceSingleton<ILoadingFailureTracker, LoadingFailureTracker>(services);
+        ReplaceSingleton<LoadingFailureTracker, LoadingFailureTracker>(services);
+        ReplaceSingleton<ILoadingFailureTracker, LoadingFailureTracker>(services, sp => sp.GetRequiredService<LoadingFailureTracker>());
         services.TryAddSingleton<ICycleFailureContributor>(sp => sp.GetRequiredService<ILoadingFailureTracker>());
         ReplaceSingleton<ILoadingEventDispatcher, LoadingEventDispatcher>(services);
+        services.TryAddSingleton<LoadingCatalogRefreshTracker>();
         services.TryAddSingleton<SharedAssemblyPolicyMatcher>();
         services.TryAddSingleton<PackageLoader>();
         services.TryAddSingleton<IPackageLoader>(sp => sp.GetRequiredService<PackageLoader>());
+        services.TryAddSingleton<AssemblyScanCandidateProjector>();
         services.TryAddSingleton<PackageTypeScanner>();
         services.TryAddSingleton<IPackageTypeScanner>(sp => sp.GetRequiredService<PackageTypeScanner>());
         services.TryAddSingleton<PackageUnloadCoordinator>();
         services.TryAddSingleton<IPackageUnloadCoordinator>(sp => sp.GetRequiredService<PackageUnloadCoordinator>());
+        services.TryAddSingleton<LoadingCatalog>();
+        services.TryAddSingleton<ILoadingCatalog>(sp => sp.GetRequiredService<LoadingCatalog>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, LoadingOperationalStateContributor>());
     }
 
     /// <summary>
@@ -56,7 +63,7 @@ public static class LoadingRegistrationServices
         services.Configure(configure);
     }
 
-    private static void ReplaceSingleton<TService, TImplementation>(IServiceCollection services)
+    private static void ReplaceSingleton<TService, TImplementation>(IServiceCollection services, Func<IServiceProvider, TService>? implementationFactory = null)
         where TService : class
         where TImplementation : class, TService
     {
@@ -68,6 +75,13 @@ public static class LoadingRegistrationServices
             }
         }
 
-        services.AddSingleton<TService, TImplementation>();
+        if (implementationFactory is null)
+        {
+            services.AddSingleton<TService, TImplementation>();
+        }
+        else
+        {
+            services.AddSingleton(implementationFactory);
+        }
     }
 }

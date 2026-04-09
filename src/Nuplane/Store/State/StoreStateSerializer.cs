@@ -25,7 +25,7 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
 
         await using var stream = File.OpenRead(stateFilePath);
         var state = await JsonSerializer.DeserializeAsync<StoreStateRecord>(stream, JsonOptions, cancellationToken);
-        return state ?? StoreStateRecord.Empty();
+        return Normalize(state ?? StoreStateRecord.Empty());
     }
 
     /// <inheritdoc />
@@ -38,6 +38,12 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
         }
 
         await using var stream = File.Create(stateFilePath);
-        await JsonSerializer.SerializeAsync(stream, state, JsonOptions, cancellationToken);
+        await JsonSerializer.SerializeAsync(stream, Normalize(state), JsonOptions, cancellationToken);
     }
+
+    private static StoreStateRecord Normalize(StoreStateRecord state) =>
+        state with
+        {
+            ActivePackageDescriptorsById = new(state.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase)
+        };
 }

@@ -1,3 +1,4 @@
+using Nuplane.Abstractions;
 using Nuplane.Store.State;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -205,5 +206,83 @@ public sealed class StoreRegistryTests
         var state = await registry2.GetStateAsync(CancellationToken.None);
 
         Assert.Empty(state.ActiveVersionById);
+    }
+
+    [Fact]
+    public async Task PersistActiveVersions_PersistsActivePackageDescriptors()
+    {
+        var serializer = Substitute.For<IStoreStateSerializer>();
+        serializer.LoadAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(StoreStateRecord.Empty());
+
+        StoreStateRecord? savedState = null;
+        serializer
+            .When(x => x.SaveAsync(Arg.Any<string>(), Arg.Any<StoreStateRecord>(), Arg.Any<CancellationToken>()))
+            .Do(callInfo => savedState = callInfo.ArgAt<StoreStateRecord>(1));
+
+        var registry = new StoreRegistry(serializer, "/tmp/state.json");
+        var descriptors = new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["pkg-a"] = new(
+                "pkg-a",
+                "1.2.3",
+                "trusted-feed",
+                "manifest-a",
+                "/packages/pkg-a/1.2.3",
+                DateTimeOffset.Parse("2026-04-08T12:00:00Z"),
+                "corr-active")
+        };
+
+        await registry.PersistActiveVersionsAsync(
+            new Dictionary<string, string> { ["pkg-a"] = "1.2.3" },
+            new Dictionary<string, string> { ["pkg-a"] = "1.2.3" },
+            "corr-active",
+            CancellationToken.None,
+            descriptors);
+
+        Assert.NotNull(savedState);
+        Assert.True(savedState!.ActivePackageDescriptorsByIdNormalized.ContainsKey("pkg-a"));
+        Assert.Equal("trusted-feed", savedState.ActivePackageDescriptorsByIdNormalized["pkg-a"].FeedName);
+        Assert.Equal("manifest-a", savedState.ActivePackageDescriptorsByIdNormalized["pkg-a"].SourceName);
+    }
+
+    [Fact]
+    public async Task DefaultPath_SaveThenLoad_RestoresActivePackageDescriptors()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "nuplane-descriptor-roundtrip", Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var stateFilePath = Path.Combine(tempRoot, ".nuplane", "store-state.json");
+            var serializer = new StoreStateSerializer();
+            var registry = new StoreRegistry(serializer, stateFilePath);
+
+            await registry.PersistActiveVersionsAsync(
+                new Dictionary<string, string> { ["pkg-a"] = "2.0.0" },
+                new Dictionary<string, string> { ["pkg-a"] = "2.0.0" },
+                "corr-roundtrip",
+                CancellationToken.None,
+                new Dictionary<string, ActivePackageDescriptor>
+                {
+                    ["pkg-a"] = new(
+                        "pkg-a",
+                        "2.0.0",
+                        "feed-a",
+                        "source-a",
+                        "/packages/pkg-a/2.0.0",
+                        DateTimeOffset.Parse("2026-04-08T14:30:00Z"),
+                        "corr-roundtrip")
+                });
+
+            var restored = await new StoreRegistry(serializer, stateFilePath).GetStateAsync(CancellationToken.None);
+
+            Assert.Equal("2.0.0", restored.ActivePackageDescriptorsByIdNormalized["pkg-a"].Version);
+            Assert.Equal("feed-a", restored.ActivePackageDescriptorsByIdNormalized["pkg-a"].FeedName);
+            Assert.Equal("source-a", restored.ActivePackageDescriptorsByIdNormalized["pkg-a"].SourceName);
+        }
+        finally
+        {
+            try { Directory.Delete(tempRoot, recursive: true); } catch { }
+        }
     }
 }

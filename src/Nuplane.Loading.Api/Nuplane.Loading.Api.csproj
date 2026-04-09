@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Title>Nuplane Loading API</Title>
+    <Description>ASP.NET Core endpoint extensions for exposing Nuplane loading catalog APIs.</Description>
+    <PackageTags>$(NuplanePackageTags);aspnetcore;minimal-api;loading;operations</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Nuplane.Loading.Abstractions\Nuplane.Loading.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>
+

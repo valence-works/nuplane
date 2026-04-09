@@ -18,13 +18,13 @@
   - Place catalog interfaces only in `src/Nuplane` and `src/Nuplane.Loading` (rejected: forces hosts to reference implementation packages just to consume contracts).
   - Put both active and loading contracts into `src/Nuplane.Abstractions` (rejected: would pull optional loading concepts into the core abstraction boundary).
 
-## D-003 — Split operational state from package inventory instead of overloading the current snapshot
+## D-003 — Split operational state from package inventory and keep loading-owned composition out of core admin
 
-- **Decision**: Refactor the current operational read model so operational state becomes its own state-only snapshot, while active package inventory and loading inventory become separate query surfaces. Admin and remote/operator APIs should expose distinct reads for packages, loading, and state, and any compatibility alias must remain secondary.
-- **Rationale**: The current `OperationalSnapshot` mixes active packages with health and reconcile status. The feature spec explicitly requires package truth, loading truth, and operational truth to remain separate so later delivery stages do not redefine what “active” means.
+- **Decision**: Refactor the current operational read model so operational state becomes its own state-only snapshot, while active package inventory and loading inventory become separate query surfaces owned by their respective packages. Core admin and core admin HTTP APIs expose only package/state/reconcile reads; loading-specific operator routes live in a loading-owned HTTP package that can choose the same route prefix without requiring core admin packages to reference loading abstractions.
+- **Rationale**: The current `OperationalSnapshot` mixes active packages with health and reconcile status, and the first implementation pass also let core admin packages absorb loading route and contract ownership. The feature spec requires package truth, loading truth, and operational truth to remain separate; keeping loading-owned composition outside core admin preserves that separation structurally instead of only at payload level.
 - **Alternatives considered**:
   - Add more fields to the existing operational snapshot (rejected: keeps unrelated concerns coupled and makes admin consumers parse package inventory when they only need health/state).
-  - Make admin endpoints the only new contract (rejected: violates the requirement for standalone host-facing services).
+  - Make core admin endpoints the only new contract for loading (rejected: violates the requirement for standalone module-owned services and forces core admin packages to depend on loading abstractions).
 
 ## D-004 — Build the loading catalog from active packages plus current-process loader state
 
@@ -50,11 +50,12 @@
   - Keep the current observer-only sample and document the query model separately (rejected: leaves the most visible integration path behind the new architecture).
   - Replace observers entirely (rejected: the spec keeps them as supplemental invalidation signals).
 
-## D-007 — Add catalog-specific observability and verification at the same boundaries as the new read models
+## D-007 — Add catalog-specific observability and verification at the same boundaries as the owning packages
 
-- **Decision**: Add structured logs, metrics, and health/degraded signals for active catalog persistence/reads, loading catalog availability (`Disabled`, `Stale`, `Available`, `Unavailable`), and package-versus-loading divergence. Cover the feature with runtime, store, loading, admin/API, restart, and sample validation tests.
-- **Rationale**: The constitution requires operability and regression coverage for boundary changes. Query surfaces become part of the operational contract, so they need first-class evidence just like reconcile and store flows already do.
+- **Decision**: Add structured logs, metrics, and health/degraded signals at the same ownership boundaries as the read models themselves: core packages own active-package and operational-state observability, while loading packages own loading-catalog reads and loading-specific divergence/staleness signals. Core runtime exposes generic contributor seams so modules can feed degraded-state information without introducing loading-specific members into core health, admin, or observability contracts. Cover the feature with runtime, store, loading, admin/API, restart, and sample validation tests.
+- **Rationale**: The constitution requires operability and regression coverage for boundary changes. Query surfaces become part of the operational contract, but letting core telemetry types grow one member per optional module would recreate the same coupling problem as the admin layer. Ownership-aligned observability preserves modularity while keeping the signals first-class.
 - **Alternatives considered**:
-  - Rely on existing reconcile telemetry only (rejected: it would not tell operators whether catalog reads are stale, unavailable, or inconsistent).
+  - Rely on existing reconcile telemetry only (rejected: it would not tell operators whether catalog reads are stale, missing, or inconsistent).
+  - Centralize all loading observability in core runtime types (rejected: reintroduces lower-layer loading awareness and makes optional-module evolution expensive).
   - Validate only through sample/manual checks (rejected: insufficient for public contract changes and restart edge cases).
 

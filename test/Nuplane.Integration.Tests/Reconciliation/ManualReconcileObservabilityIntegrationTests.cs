@@ -4,7 +4,6 @@ using Nuplane.Observability;
 using Nuplane.Operational;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Models;
-using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -18,12 +17,11 @@ public sealed class ManualReconcileObservabilityIntegrationTests
     [Fact]
     public async Task ManualTrigger_CompletedCycle_SnapshotReflectsOutcome()
     {
-        var storeRegistry = CreateInMemoryStoreRegistry(new()
-        {
-            ["pkg-a"] = "1.0.0"
-        });
         var healthEvaluator = new ReconciliationHealthEvaluator();
-        var projector = new OperationalSnapshotProjector(storeRegistry, healthEvaluator);
+        var projector = new OperationalSnapshotProjector(
+            healthEvaluator,
+            new ReconciliationLogger(),
+            new ReconciliationMetrics(new ReconciliationTelemetry()));
 
         // Record a completed reconcile outcome
         var runResult = new ReconciliationRunResult(false, EmptyChangeSet(), [], false);
@@ -35,18 +33,18 @@ public sealed class ManualReconcileObservabilityIntegrationTests
         Assert.NotNull(snapshot.LastReconcile);
         Assert.False(snapshot.LastReconcile.WasSkipped);
         Assert.False(snapshot.LastReconcile.IsDegraded);
-        Assert.Single(snapshot.ActivePackages);
-        Assert.Equal("pkg-a", snapshot.ActivePackages[0].PackageId);
     }
 
     [Fact]
     public async Task ManualTrigger_DegradedCycle_SnapshotShowsDegradedReasons()
     {
-        var storeRegistry = CreateInMemoryStoreRegistry([]);
         var healthEvaluator = new ReconciliationHealthEvaluator();
         healthEvaluator.Evaluate(new(
             true, false, 1, 0, 0, 1));
-        var projector = new OperationalSnapshotProjector(storeRegistry, healthEvaluator);
+        var projector = new OperationalSnapshotProjector(
+            healthEvaluator,
+            new ReconciliationLogger(),
+            new ReconciliationMetrics(new ReconciliationTelemetry()));
 
         var runResult = new ReconciliationRunResult(false, EmptyChangeSet(), ["pkg-x"], true);
         projector.RecordReconcileOutcome(runResult, "cycle-2");
@@ -102,26 +100,6 @@ public sealed class ManualReconcileObservabilityIntegrationTests
     private static PackageChangeSet EmptyChangeSet() =>
         new([], [], [], string.Empty, DateTimeOffset.UtcNow);
 
-    private static IStoreRegistry CreateInMemoryStoreRegistry(Dictionary<string, string> activeVersions) =>
-        new InMemoryStoreRegistry(activeVersions);
-
-    private sealed class InMemoryStoreRegistry(Dictionary<string, string> activeVersions) : IStoreRegistry
-    {
-        public Task<IReadOnlyDictionary<string, string>> GetActiveVersionsAsync(CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>>(activeVersions);
-
-        public Task<StoreStateRecord> GetStateAsync(CancellationToken ct) =>
-            Task.FromResult(StoreStateRecord.Empty());
-
-        public Task PersistActiveVersionsAsync(IReadOnlyDictionary<string, string> av, IReadOnlyDictionary<string, string> sa, string cid, CancellationToken ct) =>
-            Task.CompletedTask;
-
-        public Task PersistFailureAsync(string pkgId, string stage, string msg, string cid, CancellationToken ct) =>
-            Task.CompletedTask;
-
-        public Task PersistSourceSnapshotAsync(string sourceName, SourceSnapshotRef snapshot, CancellationToken ct) =>
-            Task.CompletedTask;
-    }
 
     private sealed class FakeTriggerIngress(Task<ReconciliationRunResult> resultTask) : IReconciliationTriggerIngress
     {
@@ -162,6 +140,7 @@ public sealed class ManualReconcileObservabilityIntegrationTests
         public void LogAggregationOutcome(string correlationId, int packageCount, int failedSourceCount) { }
         public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode) { }
         public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState) { }
+        public void LogOperationalStateContribution(string correlationId, string contributor, int degradedReasonCount) { }
         public void LogTrigger(string correlationId, string triggerType, string? triggerSource) { }
         public void LogIdleModeEntered() { }
         public void LogIdleModeExited() { }
