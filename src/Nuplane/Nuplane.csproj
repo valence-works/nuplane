@@ -23,4 +23,8 @@
     <ProjectReference Include="..\Nuplane.Abstractions\Nuplane.Abstractions.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="Operational\OperationalSnapshot.cs" />
+  </ItemGroup>
+
 </Project>

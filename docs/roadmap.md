@@ -53,6 +53,20 @@ Normalizes optional-module ownership across Nuplane so that directory-source and
 
 > **Migration note**: Consumers previously using `NuplaneFeedBuilder.FromDirectory(...)` from core should switch to the module-owned builder extensions in `Nuplane.Sources.Directory.Hosting`. Consumers using `AddNuplaneDirectorySource(...)` or `AutoloadPackages(...)` are unaffected.
 
+## Queryable Package Catalog (014)
+
+Nuplane now stages query-first delivery across three distinct read surfaces so hosts and operators do not need to reconstruct state from observer history:
+
+- **Active package catalog** (`IActivePackageCatalog`) is the authoritative, restart-safe list of active reconciled packages persisted with store state.
+- **Loading catalog** (`ILoadingCatalog`) is optional and reports current-process loading state, diagnostics, and scan guidance for the active package set without exposing discovered type identities.
+- **Operational state** remains a separate health/state read that reports degraded reasons without redefining package availability.
+
+Staged-delivery notes:
+
+- Metadata-only consumers can adopt the active package catalog immediately without depending on the loading module or admin APIs.
+- Loading-enabled hosts can add direct loading catalog queries when they need deterministic scan candidates or failure diagnostics.
+- Admin and HTTP reads compose the same standalone services rather than introducing a separate snapshot model.
+
 ---
 
 ## Naming & Packages

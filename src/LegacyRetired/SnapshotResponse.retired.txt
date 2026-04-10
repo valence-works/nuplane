@@ -1,0 +1,2 @@
+Retired in feature 014 clean-break architecture.
+Core admin now exposes separate package and operational-state read models only.

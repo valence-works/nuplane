@@ -12,5 +12,8 @@ public interface ILoadingFailureTracker : ICycleFailureContributor
     /// <summary>
     /// Records a single package loading failure for the specified reconciliation correlation.
     /// </summary>
-    void RecordFailure(string correlationId, string packageId);
+    /// <param name="correlationId">The reconciliation correlation identifier.</param>
+    /// <param name="packageId">The failed package identifier.</param>
+    /// <param name="reason">An optional secret-safe diagnostic message.</param>
+    void RecordFailure(string correlationId, string packageId, string? reason = null);
 }

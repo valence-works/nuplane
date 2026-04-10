@@ -1,5 +1,6 @@
 namespace Nuplane.Health;
 
+
 /// <summary>
 /// Input data for reconciliation health evaluation, capturing failure and staleness signals.
 /// </summary>
@@ -11,6 +12,7 @@ namespace Nuplane.Health;
 /// <param name="SourceOutages">The number of source outage events during the cycle.</param>
 /// <param name="AcquisitionFailures">The number of package acquisition failures during the cycle.</param>
 /// <param name="AdminRejections">The number of admin trigger rejections during the cycle.</param>
+/// <param name="OperationalStateContributions">Additional module-owned operational-state contributions.</param>
 public sealed record ReconciliationHealthInput(
     bool HadAnyFailures,
     bool AllSourcesFresh,
@@ -19,5 +21,6 @@ public sealed record ReconciliationHealthInput(
     int ManifestFailures = 0,
     int SourceOutages = 0,
     int AcquisitionFailures = 0,
-    int AdminRejections = 0);
+    int AdminRejections = 0,
+    IReadOnlyList<Nuplane.Operational.OperationalStateContribution>? OperationalStateContributions = null);
 

@@ -11,6 +11,8 @@ public static class NuplaneLoadingServiceCollectionExtensions
     /// <summary>
     /// Registers the Nuplane assembly loading module with default options.
     /// Call <c>AddNuplane(...)</c> separately to install the core runtime services.
+    /// Once registered, hosts can query <see cref="IPackageAssemblyCatalog"/> as the default host-facing assembly access surface,
+    /// or <see cref="ILoadingCatalog"/> directly when they need detailed loading state and scan guidance.
     /// </summary>
     /// <param name="services">The service collection to add to.</param>
     /// <returns>The same service collection for chaining.</returns>
@@ -26,6 +28,8 @@ public static class NuplaneLoadingServiceCollectionExtensions
     /// <summary>
     /// Registers the Nuplane assembly loading module and configures loading options.
     /// Call <c>AddNuplane(...)</c> separately to install the core runtime services.
+    /// Once registered, hosts can query <see cref="IPackageAssemblyCatalog"/> as the default host-facing assembly access surface,
+    /// or <see cref="ILoadingCatalog"/> directly when they need detailed loading state and scan guidance.
     /// </summary>
     /// <param name="services">The service collection to add to.</param>
     /// <param name="configure">A callback that configures loading options.</param>

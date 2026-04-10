@@ -18,18 +18,7 @@ Identify inconsistencies, duplications, ambiguities, and underspecified items ac
 
 **STRICTLY READ-ONLY**: Do **not** modify any files. Output a structured analysis report. Offer an optional remediation plan (user must explicitly approve before any follow-up editing commands would be invoked manually).
 
-**Constitution Authority**: The project constitution (`.specify/memory/constitution.md`) is
-**non-negotiable** within this analysis scope. Constitution conflicts are automatically CRITICAL and
-require adjustment of the spec, plan, or tasks—not dilution, reinterpretation, or silent ignoring
-of the principle. If a principle itself needs to change, that must occur in a separate, explicit
-constitution update outside `/speckit.analyze`.
-
-For alignment checks, treat these principle gates as mandatory:
-- I. Deterministic Reconciliation
-- II. Transactional Store Safety
-- III. Source & Supply Chain Integrity
-- IV. Observability & Operability
-- V. Test & Contract Discipline
+**Constitution Authority**: The project constitution (`.specify/memory/constitution.md`) is **non-negotiable** within this analysis scope. Constitution conflicts are automatically CRITICAL and require adjustment of the spec, plan, or tasks—not dilution, reinterpretation, or silent ignoring of the principle. If a principle itself needs to change, that must occur in a separate, explicit constitution update outside `/speckit.analyze`.
 
 ## Execution Steps
 
@@ -52,7 +41,7 @@ Load only the minimal necessary context from each artifact:
 
 - Overview/Context
 - Functional Requirements
-- Non-Functional Requirements
+- Success Criteria (measurable outcomes — e.g., performance, security, availability, user success, business impact)
 - User Stories
 - Edge Cases (if present)
 
@@ -79,7 +68,7 @@ Load only the minimal necessary context from each artifact:
 
 Create internal representations (do not include raw artifacts in output):
 
-- **Requirements inventory**: Each functional + non-functional requirement with a stable key (derive slug based on imperative phrase; e.g., "User can upload file" → `user-can-upload-file`)
+- **Requirements inventory**: For each Functional Requirement (FR-###) and Success Criterion (SC-###), record a stable key. Use the explicit FR-/SC- identifier as the primary key when present, and optionally also derive an imperative-phrase slug for readability (e.g., "User can upload file" → `user-can-upload-file`). Include only Success Criteria items that require buildable work (e.g., load-testing infrastructure, security audit tooling), and exclude post-launch outcome metrics and business KPIs (e.g., "Reduce support tickets by 50%").
 - **User story/action inventory**: Discrete user actions with acceptance criteria
 - **Task coverage mapping**: Map each task to one or more requirements or stories (inference by keyword / explicit reference patterns like IDs or key phrases)
 - **Constitution rule set**: Extract principle names and MUST/SHOULD normative statements
@@ -106,15 +95,14 @@ Focus on high-signal findings. Limit to 50 findings total; aggregate remainder i
 
 #### D. Constitution Alignment
 
-- Any requirement or plan element conflicting with a MUST principle from the five gates above
-- Missing quality gates in plan/spec/tasks for determinism, transactional safety, trusted source
-	integrity, observability, and test/contract discipline
+- Any requirement or plan element conflicting with a MUST principle
+- Missing mandated sections or quality gates from constitution
 
 #### E. Coverage Gaps
 
 - Requirements with zero associated tasks
 - Tasks with no mapped requirement/story
-- Non-functional requirements not reflected in tasks (e.g., performance, security)
+- Success Criteria requiring buildable work (performance, security, availability) not reflected in tasks
 
 #### F. Inconsistency
 

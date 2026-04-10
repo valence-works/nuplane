@@ -102,5 +102,6 @@ public sealed class NoFeedsIdleModeIntegrationTests
         public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode) { }
         public void LogAdminTriggerOutcome(string correlationId, string outcomeCode, string? reasonCode) { }
         public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState) { }
+        public void LogOperationalStateContribution(string correlationId, string contributor, int degradedReasonCount) { }
     }
 }

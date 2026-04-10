@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Microsoft.Extensions.Logging;
+using Nuplane.Abstractions;
 
 namespace Nuplane.Store.State;
 
@@ -76,7 +77,8 @@ public sealed partial class StoreRegistry : IStoreRegistry
                 new(_currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase),
                 new(_currentState.LastFailureById, StringComparer.OrdinalIgnoreCase),
                 new(_currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
-                _currentState.UpdatedAt);
+                _currentState.UpdatedAt,
+                new(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase));
         }
         finally
         {
@@ -85,11 +87,36 @@ public sealed partial class StoreRegistry : IStoreRegistry
     }
 
     /// <inheritdoc />
-    public async Task PersistActiveVersionsAsync(
+    public async Task<IReadOnlyDictionary<string, ActivePackageDescriptor>> GetActivePackageDescriptorsAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await EnsureLoadedUnderLockAsync(cancellationToken);
+            return new ReadOnlyDictionary<string, ActivePackageDescriptor>(
+                new Dictionary<string, ActivePackageDescriptor>(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public Task PersistActiveVersionsAsync(
         IReadOnlyDictionary<string, string> activeVersions,
         IReadOnlyDictionary<string, string> successfullyApplied,
         string correlationId,
         CancellationToken cancellationToken)
+        => PersistActiveVersionsAsync(activeVersions, successfullyApplied, correlationId, cancellationToken, activePackageDescriptors: null);
+
+    /// <inheritdoc />
+    public async Task PersistActiveVersionsAsync(
+        IReadOnlyDictionary<string, string> activeVersions,
+        IReadOnlyDictionary<string, string> successfullyApplied,
+        string correlationId,
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, ActivePackageDescriptor>? activePackageDescriptors = null)
     {
         ArgumentNullException.ThrowIfNull(activeVersions);
         ArgumentNullException.ThrowIfNull(successfullyApplied);
@@ -103,17 +130,29 @@ public sealed partial class StoreRegistry : IStoreRegistry
             var now = DateTimeOffset.UtcNow;
             var nextActive = new Dictionary<string, string>(activeVersions, StringComparer.OrdinalIgnoreCase);
             var nextLkg = new Dictionary<string, string>(_currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase);
+            var nextDescriptors = activePackageDescriptors is null
+                ? new Dictionary<string, ActivePackageDescriptor>(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, ActivePackageDescriptor>(activePackageDescriptors, StringComparer.OrdinalIgnoreCase);
 
             foreach (var (id, version) in successfullyApplied)
             {
                 nextLkg[id] = version;
             }
 
+            foreach (var packageId in nextDescriptors.Keys.ToArray())
+            {
+                if (!nextActive.ContainsKey(packageId))
+                {
+                    nextDescriptors.Remove(packageId);
+                }
+            }
+
             _currentState = _currentState with
             {
                 ActiveVersionById = nextActive,
                 LastKnownGoodById = nextLkg,
-                UpdatedAt = now
+                UpdatedAt = now,
+                ActivePackageDescriptorsById = nextDescriptors
             };
 
             if (!string.IsNullOrWhiteSpace(_stateFilePath))

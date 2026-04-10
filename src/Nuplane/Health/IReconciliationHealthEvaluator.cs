@@ -1,5 +1,6 @@
 namespace Nuplane.Health;
 
+
 /// <summary>
 /// Evaluates the health status of the reconciliation system based on failure counts and source freshness.
 /// </summary>
@@ -40,6 +41,11 @@ public interface IReconciliationHealthEvaluator
     /// Gets the number of admin trigger rejections from the last evaluation.
     /// </summary>
     int LastAdminRejectionCount { get; }
+
+    /// <summary>
+    /// Gets the module-owned operational-state contributions from the last evaluation.
+    /// </summary>
+    IReadOnlyList<Nuplane.Operational.OperationalStateContribution> LastOperationalStateContributions => [];
 
     /// <summary>
     /// Evaluates the health input and updates the degraded state.

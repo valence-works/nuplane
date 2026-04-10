@@ -1,3 +1,4 @@
+using Nuplane.Abstractions;
 using Nuplane.Observability;
 using Nuplane.Operational;
 using Nuplane.Reconciliation;
@@ -6,25 +7,30 @@ namespace Nuplane.Admin;
 
 /// <summary>
 /// Default implementation of <see cref="INuplaneAdminOperations"/> that delegates
-/// to <see cref="OperationalSnapshotProjector"/> for reads and
+/// to standalone package/state services for reads and
 /// <see cref="ManualReconcileCoordinator"/> for trigger operations.
 /// </summary>
 internal sealed class NuplaneAdminOperations(
+    IActivePackageCatalog activePackageCatalog,
     OperationalSnapshotProjector projector,
-    ManualReconcileCoordinator coordinator,
-    IReconciliationLogger logger) : INuplaneAdminOperations
+    ManualReconcileCoordinator coordinator) : INuplaneAdminOperations
 {
+    private readonly IActivePackageCatalog _activePackageCatalog = activePackageCatalog ?? throw new ArgumentNullException(nameof(activePackageCatalog));
     private readonly OperationalSnapshotProjector _projector = projector ?? throw new ArgumentNullException(nameof(projector));
     private readonly ManualReconcileCoordinator _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
-    private readonly IReconciliationLogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <inheritdoc />
-    public async Task<OperationalSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
+    public Task<ActivePackageCatalogSnapshot> GetPackagesAsync(CancellationToken cancellationToken)
+    {
+        return _activePackageCatalog.GetSnapshotAsync(cancellationToken);
+    }
+
+
+    /// <inheritdoc />
+    public async Task<OperationalStateSnapshot> GetStateAsync(CancellationToken cancellationToken)
     {
         var correlationId = CorrelationContext.CreateNew();
-        var snapshot = await _projector.ProjectAsync(correlationId, cancellationToken);
-        _logger.LogAdminSnapshotRead(correlationId, snapshot.ActivePackages.Count, snapshot.Health.ToString());
-        return snapshot;
+        return await _projector.ProjectAsync(correlationId, cancellationToken);
     }
 
     /// <inheritdoc />

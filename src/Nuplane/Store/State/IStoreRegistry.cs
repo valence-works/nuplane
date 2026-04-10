@@ -1,3 +1,5 @@
+using Nuplane.Abstractions;
+
 namespace Nuplane.Store.State;
 
 /// <summary>
@@ -12,12 +14,28 @@ public interface IStoreRegistry
     /// <summary>Retrieves the complete store state record.</summary>
     Task<StoreStateRecord> GetStateAsync(CancellationToken cancellationToken);
 
+    /// <summary>Retrieves the persisted active package descriptors keyed by package identifier.</summary>
+    async Task<IReadOnlyDictionary<string, ActivePackageDescriptor>> GetActivePackageDescriptorsAsync(CancellationToken cancellationToken)
+    {
+        var state = await GetStateAsync(cancellationToken);
+        return state.ActivePackageDescriptorsByIdNormalized;
+    }
+
     /// <summary>Persists updated active versions and marks successfully applied versions as last-known-good.</summary>
     Task PersistActiveVersionsAsync(
         IReadOnlyDictionary<string, string> activeVersions,
         IReadOnlyDictionary<string, string> successfullyApplied,
         string correlationId,
         CancellationToken cancellationToken);
+
+    /// <summary>Persists updated active versions together with their active package descriptors.</summary>
+    Task PersistActiveVersionsAsync(
+        IReadOnlyDictionary<string, string> activeVersions,
+        IReadOnlyDictionary<string, string> successfullyApplied,
+        string correlationId,
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, ActivePackageDescriptor>? activePackageDescriptors)
+        => PersistActiveVersionsAsync(activeVersions, successfullyApplied, correlationId, cancellationToken);
 
     /// <summary>Persists a failure record for a package.</summary>
     Task PersistFailureAsync(

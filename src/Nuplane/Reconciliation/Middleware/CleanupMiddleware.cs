@@ -1,4 +1,5 @@
 using Nuplane.Observability;
+using Nuplane.Operational;
 using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
 
@@ -14,14 +15,24 @@ internal sealed class CleanupMiddleware(
     public async Task InvokeAsync(ReconciliationCycleContext context, Func<Task> next)
     {
         var appliedVersions = desiredActualDiffEngine.BuildNextActiveVersions(context.ApplyResult!.AppliedPackages);
+        var storeState = await storeRegistry.GetStateAsync(context.CancellationToken);
+        var changeSet = context.ChangeSet ?? new([], [], [], context.CorrelationId, DateTimeOffset.UtcNow);
+        var activePackageDescriptors = ActivePackageCatalogMapper.BuildNextDescriptors(
+            storeState,
+            context.MergedActive!,
+            context.ApplyResult.AppliedPackages,
+            changeSet,
+            context.CorrelationId,
+            DateTimeOffset.UtcNow);
 
         await storeRegistry.PersistActiveVersionsAsync(
             context.MergedActive!,
             appliedVersions,
             context.CorrelationId,
-            context.CancellationToken);
+            context.CancellationToken,
+            activePackageDescriptors);
 
-        var storeState = await storeRegistry.GetStateAsync(context.CancellationToken);
+        storeState = await storeRegistry.GetStateAsync(context.CancellationToken);
         var cleanupInputs = context.MergedActive!
             .Select(x => new PackageVersionEntry(
                 x.Key,

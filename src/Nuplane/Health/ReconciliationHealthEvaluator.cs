@@ -5,6 +5,10 @@ namespace Nuplane.Health;
 /// </summary>
 public sealed class ReconciliationHealthEvaluator : IReconciliationHealthEvaluator
 {
+    private bool _lastHadFailures;
+    private bool _lastAllSourcesFresh = true;
+    private IReadOnlyList<Nuplane.Operational.OperationalStateContribution> _lastOperationalStateContributions = [];
+
     /// <inheritdoc />
     public bool IsDegraded { get; private set; }
 
@@ -27,26 +31,49 @@ public sealed class ReconciliationHealthEvaluator : IReconciliationHealthEvaluat
     public int LastAdminRejectionCount { get; private set; }
 
     /// <inheritdoc />
+    public IReadOnlyList<Nuplane.Operational.OperationalStateContribution> LastOperationalStateContributions => _lastOperationalStateContributions;
+
+    /// <inheritdoc />
     public bool Evaluate(ReconciliationHealthInput input)
     {
         ArgumentNullException.ThrowIfNull(input);
 
+        _lastHadFailures = input.HadAnyFailures;
+        _lastAllSourcesFresh = input.AllSourcesFresh;
         LastLockFailureCount = Math.Max(0, input.LockFailures);
         LastCleanupFailureCount = Math.Max(0, input.CleanupFailures);
         LastManifestFailureCount = Math.Max(0, input.ManifestFailures);
         LastSourceOutageCount = Math.Max(0, input.SourceOutages);
         LastAcquisitionFailureCount = Math.Max(0, input.AcquisitionFailures);
         LastAdminRejectionCount = Math.Max(0, input.AdminRejections);
+        _lastOperationalStateContributions = (input.OperationalStateContributions ?? []).ToArray();
 
-        var hadFailures = input.HadAnyFailures
-            || input.LockFailures > 0
-            || input.CleanupFailures > 0
-            || input.ManifestFailures > 0
-            || input.SourceOutages > 0
-            || input.AcquisitionFailures > 0
-            || input.AdminRejections > 0;
-
-        IsDegraded = hadFailures || !input.AllSourcesFresh;
+        Recompute();
         return IsDegraded;
+    }
+
+    /// <summary>
+    /// Updates the current module-owned operational-state contributions without overwriting core failure counts.
+    /// </summary>
+    public void UpdateOperationalStateContributions(IReadOnlyList<Nuplane.Operational.OperationalStateContribution> contributions)
+    {
+        ArgumentNullException.ThrowIfNull(contributions);
+
+        _lastOperationalStateContributions = contributions.ToArray();
+        Recompute();
+    }
+
+    private void Recompute()
+    {
+        var hadFailures = _lastHadFailures
+            || LastLockFailureCount > 0
+            || LastCleanupFailureCount > 0
+            || LastManifestFailureCount > 0
+            || LastSourceOutageCount > 0
+            || LastAcquisitionFailureCount > 0
+            || LastAdminRejectionCount > 0
+            || _lastOperationalStateContributions.Any(static contribution => contribution.IsDegraded);
+
+        IsDegraded = hadFailures || !_lastAllSourcesFresh;
     }
 }

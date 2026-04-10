@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Runtime.Loader;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -7,22 +6,41 @@ namespace Nuplane.Loading;
 
 /// <summary>
 /// Default implementation of <see cref="IPackageTypeScanner"/> that inspects assemblies
-/// loaded into package-specific assembly load contexts.
+/// loaded into package-specific assembly load contexts as a convenience layer over package assembly access.
 /// </summary>
 public sealed class PackageTypeScanner : IPackageTypeScanner
 {
-    private readonly IPackageLoader _packageLoader;
+    private readonly IPackageAssemblyCatalog _packageAssemblyCatalog;
+    private readonly IPackageAssemblyProvider _packageAssemblyProvider;
     private readonly ILogger<PackageTypeScanner> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="PackageTypeScanner"/>.
     /// </summary>
-    /// <param name="packageLoader">The package loader used to resolve active load contexts.</param>
+    /// <param name="packageAssemblyCatalog">The package assembly catalog used to resolve the active loaded package version.</param>
+    /// <param name="packageAssemblyProvider">The package assembly provider used to materialize assemblies for exact package-version scans.</param>
     /// <param name="logger">The logger used to report best-effort scan skips.</param>
-    public PackageTypeScanner(IPackageLoader packageLoader, ILogger<PackageTypeScanner>? logger = null)
+    public PackageTypeScanner(IPackageAssemblyCatalog packageAssemblyCatalog, IPackageAssemblyProvider packageAssemblyProvider, ILogger<PackageTypeScanner>? logger = null)
     {
-        _packageLoader = packageLoader ?? throw new ArgumentNullException(nameof(packageLoader));
+        _packageAssemblyCatalog = packageAssemblyCatalog ?? throw new ArgumentNullException(nameof(packageAssemblyCatalog));
+        _packageAssemblyProvider = packageAssemblyProvider ?? throw new ArgumentNullException(nameof(packageAssemblyProvider));
         _logger = logger ?? NullLogger<PackageTypeScanner>.Instance;
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Type>> FindTypesAsync<TInterface>(string packageId, CancellationToken cancellationToken)
+        => FindTypesAsync(typeof(TInterface), packageId, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Type>> FindTypesAsync(Type interfaceType, string packageId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(interfaceType);
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+
+        var package = await _packageAssemblyCatalog.GetAssembliesAsync(packageId, cancellationToken);
+        return package is null
+            ? []
+            : ScanAssemblies(interfaceType, package.Assemblies, package.PackageId, package.Version);
     }
 
     /// <inheritdoc />
@@ -36,15 +54,14 @@ public sealed class PackageTypeScanner : IPackageTypeScanner
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(version);
 
-        if (!_packageLoader.TryGetContext(packageId, version, out var contextHandle) ||
-            contextHandle?.Context is not AssemblyLoadContext loadContext)
-        {
-            return [];
-        }
+        return ScanAssemblies(interfaceType, _packageAssemblyProvider.GetAssemblies(packageId, version), packageId, version);
+    }
 
+    private IReadOnlyList<Type> ScanAssemblies(Type interfaceType, IReadOnlyList<Assembly> assemblies, string packageId, string version)
+    {
         var discovered = new List<Type>();
 
-        foreach (var assembly in loadContext.Assemblies.ToArray())
+        foreach (var assembly in assemblies)
         {
             foreach (var type in GetCandidateTypes(assembly, packageId, version))
             {

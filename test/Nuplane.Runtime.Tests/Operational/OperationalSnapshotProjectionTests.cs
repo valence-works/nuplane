@@ -1,7 +1,7 @@
 using Nuplane.Health;
+using Nuplane.Observability;
 using Nuplane.Operational;
 using Nuplane.Reconciliation.Models;
-using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Operational;
 
@@ -17,35 +17,26 @@ public sealed class OperationalSnapshotProjectionTests
         var (projector, _) = CreateProjector([]);
         var snapshot = await projector.ProjectAsync("corr-1", CancellationToken.None);
 
-        Assert.Empty(snapshot.ActivePackages);
         Assert.Equal(HealthState.Healthy, snapshot.Health);
         Assert.Empty(snapshot.DegradedReasons);
         Assert.Equal("corr-1", snapshot.CorrelationId);
     }
 
     [Fact]
-    public async Task ProjectAsync_WithActivePackages_ReturnsOrderedByPackageId()
+    public async Task ProjectAsync_StateOnlySnapshot_DoesNotRequireStoreInventory()
     {
-        var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["zeta"] = "3.0.0",
-            ["alpha"] = "1.0.0",
-            ["beta"] = "2.0.0"
-        };
-        var (projector, _) = CreateProjector(packages);
+        var (projector, _) = CreateProjector([]);
         var snapshot = await projector.ProjectAsync("corr-1", CancellationToken.None);
 
-        Assert.Equal(3, snapshot.ActivePackages.Count);
-        Assert.Equal("alpha", snapshot.ActivePackages[0].PackageId);
-        Assert.Equal("beta", snapshot.ActivePackages[1].PackageId);
-        Assert.Equal("zeta", snapshot.ActivePackages[2].PackageId);
+        Assert.NotNull(snapshot);
+        Assert.Equal("corr-1", snapshot.CorrelationId);
     }
 
     [Fact]
     public async Task ProjectAsync_HealthyState_NoDegradedReasons()
     {
         var (projector, evaluator) = CreateProjector([]);
-        evaluator.Evaluate(new(false, true, 0, 0, 0, 0));
+        evaluator.Evaluate(new(false, true, 0, 0));
 
         var snapshot = await projector.ProjectAsync("corr-1", CancellationToken.None);
 
@@ -57,13 +48,30 @@ public sealed class OperationalSnapshotProjectionTests
     public async Task ProjectAsync_DegradedState_IncludesDegradedReasons()
     {
         var (projector, evaluator) = CreateProjector([]);
-        evaluator.Evaluate(new(true, false, 2, 1, 0, 0));
+        evaluator.Evaluate(new(true, false, 2, 1));
 
         var snapshot = await projector.ProjectAsync("corr-1", CancellationToken.None);
 
         Assert.Equal(HealthState.Degraded, snapshot.Health);
         Assert.Contains("lock-failures:2", snapshot.DegradedReasons);
         Assert.Contains("cleanup-failures:1", snapshot.DegradedReasons);
+    }
+
+    [Fact]
+    public async Task ProjectAsync_GenericContributorReasons_AppearInOperationalState()
+    {
+        var evaluator = new ReconciliationHealthEvaluator();
+        var projector = new OperationalSnapshotProjector(
+            evaluator,
+            new ReconciliationLogger(),
+            new ReconciliationMetrics(new ReconciliationTelemetry()),
+            [new StubContributor(new OperationalStateContribution("loading", ["loading-stale:2"]))]);
+
+        var snapshot = await projector.ProjectAsync("corr-contrib", CancellationToken.None);
+
+        Assert.Equal(HealthState.Degraded, snapshot.Health);
+        Assert.Contains("loading-stale:2", snapshot.DegradedReasons);
+        Assert.Single(evaluator.LastOperationalStateContributions);
     }
 
     [Fact]
@@ -118,33 +126,21 @@ public sealed class OperationalSnapshotProjectionTests
     private static (OperationalSnapshotProjector, ReconciliationHealthEvaluator) CreateProjector(
         Dictionary<string, string> activeVersions)
     {
-        var storeRegistry = new InMemoryStoreRegistry(activeVersions);
+        _ = activeVersions;
         var evaluator = new ReconciliationHealthEvaluator();
-        var projector = new OperationalSnapshotProjector(storeRegistry, evaluator);
+        var projector = new OperationalSnapshotProjector(
+            evaluator,
+            new ReconciliationLogger(),
+            new ReconciliationMetrics(new ReconciliationTelemetry()));
         return (projector, evaluator);
     }
 
     private static Abstractions.PackageChangeSet EmptyChangeSet() =>
         new([], [], [], string.Empty, DateTimeOffset.UtcNow);
 
-    /// <summary>
-    /// Minimal in-memory store registry for test purposes.
-    /// </summary>
-    private sealed class InMemoryStoreRegistry(Dictionary<string, string> activeVersions) : IStoreRegistry
+    private sealed class StubContributor(OperationalStateContribution contribution) : IOperationalStateContributor
     {
-        public Task<IReadOnlyDictionary<string, string>> GetActiveVersionsAsync(CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>>(activeVersions);
-
-        public Task<StoreStateRecord> GetStateAsync(CancellationToken ct) =>
-            Task.FromResult(StoreStateRecord.Empty());
-
-        public Task PersistActiveVersionsAsync(IReadOnlyDictionary<string, string> av, IReadOnlyDictionary<string, string> sa, string cid, CancellationToken ct) =>
-            Task.CompletedTask;
-
-        public Task PersistFailureAsync(string pkgId, string stage, string msg, string cid, CancellationToken ct) =>
-            Task.CompletedTask;
-
-        public Task PersistSourceSnapshotAsync(string sourceName, SourceSnapshotRef snapshot, CancellationToken ct) =>
-            Task.CompletedTask;
+        public Task<OperationalStateContribution> ContributeAsync(CancellationToken cancellationToken) => Task.FromResult(contribution);
     }
+
 }

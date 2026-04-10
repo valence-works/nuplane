@@ -31,15 +31,6 @@ Execution steps:
 
 2. Load the current spec file. Perform a structured ambiguity & coverage scan using this taxonomy. For each category, mark status: Clear / Partial / Missing. Produce an internal coverage map used for prioritization (do not output raw map unless no questions will be asked).
 
-   Constitution priority overlay (MUST-level):
-   - Deterministic reconciliation expectations
-   - Transactional safety with rollback/LKG semantics where state mutates
-   - Trusted source/integrity and secret-handling constraints
-   - Observability signals (logs/metrics/health)
-   - Test and contract discipline for changed behavior
-
-   Treat unresolved ambiguity in these areas as higher impact than cosmetic or low-risk omissions.
-
    Functional Scope & Behavior:
    - Core user goals & success criteria
    - Explicit out-of-scope declarations
@@ -95,7 +86,7 @@ Execution steps:
    - Information is better deferred to planning phase (note internally)
 
 3. Generate (internally) a prioritized queue of candidate clarification questions (maximum 5). Do NOT output them all at once. Apply these constraints:
-    - Maximum of 10 total questions across the whole session.
+    - Maximum of 5 total questions across the whole session.
     - Each question must be answerable with EITHER:
        - A short multiple‑choice selection (2–5 distinct, mutually exclusive options), OR
        - A one-word / short‑phrase answer (explicitly constrain: "Answer in <=5 words").
@@ -104,8 +95,6 @@ Execution steps:
     - Exclude questions already answered, trivial stylistic preferences, or plan-level execution details (unless blocking correctness).
     - Favor clarifications that reduce downstream rework risk or prevent misaligned acceptance tests.
     - If more than 5 categories remain unresolved, select the top 5 by (Impact * Uncertainty) heuristic.
-      - Prioritize unresolved constitution-principle ambiguities ahead of other categories when both
-         are candidates.
 
 4. Sequential questioning loop (interactive):
     - Present EXACTLY ONE question at a time.
@@ -153,7 +142,7 @@ Execution steps:
        - Functional ambiguity → Update or add a bullet in Functional Requirements.
        - User interaction / actor distinction → Update User Stories or Actors subsection (if present) with clarified role, constraint, or scenario.
        - Data shape / entities → Update Data Model (add fields, types, relationships) preserving ordering; note added constraints succinctly.
-       - Non-functional constraint → Add/modify measurable criteria in Non-Functional / Quality Attributes section (convert vague adjective to metric or explicit target).
+       - Non-functional constraint → Add/modify measurable criteria in Success Criteria > Measurable Outcomes (convert vague adjective to metric or explicit target).
        - Edge case / negative flow → Add a new bullet under Edge Cases / Error Handling (or create such subsection if template provides placeholder for it).
        - Terminology conflict → Normalize term across spec; retain original only if necessary by adding `(formerly referred to as "X")` once.
     - If the clarification invalidates an earlier ambiguous statement, replace that statement instead of duplicating; leave no obsolete contradictory text.

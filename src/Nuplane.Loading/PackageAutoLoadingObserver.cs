@@ -18,7 +18,8 @@ internal sealed class PackageAutoLoadingObserver(
     ILogger<PackageAutoLoadingObserver> logger,
     IFailureRecorder? failureRecorder = null,
     ReconciliationMetrics? metrics = null,
-    ILoadingFailureTracker? loadingFailureTracker = null)
+    ILoadingFailureTracker? loadingFailureTracker = null,
+    LoadingCatalogRefreshTracker? refreshTracker = null)
     : INuplaneObserver
 {
     private readonly IPackageLoader _loader = loader ?? throw new ArgumentNullException(nameof(loader));
@@ -47,6 +48,7 @@ internal sealed class PackageAutoLoadingObserver(
         var packagesToLoad = BuildPackagesToLoad(changeSet, appliedPackages);
         if (packagesToLoad.Count == 0)
         {
+            refreshTracker?.MarkRefreshed(changeSet.CorrelationId);
             return;
         }
 
@@ -74,7 +76,7 @@ internal sealed class PackageAutoLoadingObserver(
         foreach (var (packageId, reason) in loadResult.FailedByPackageId)
         {
             metrics?.RecordLoadFailed();
-            loadingFailureTracker?.RecordFailure(changeSet.CorrelationId, packageId);
+            loadingFailureTracker?.RecordFailure(changeSet.CorrelationId, packageId, reason);
 
             _logger.LogWarning(
                 "Package {PackageId} failed to load: {Reason}. CorrelationId={CorrelationId}",
@@ -92,6 +94,7 @@ internal sealed class PackageAutoLoadingObserver(
         }
 
         metrics?.RecordLoaderBoundaryOutcome(loadResult.Loaded.Count, loadResult.FailedByPackageId.Count, skipped: 0);
+        refreshTracker?.MarkRefreshed(changeSet.CorrelationId);
 
         if (loadResult.Loaded.Count > 0)
         {

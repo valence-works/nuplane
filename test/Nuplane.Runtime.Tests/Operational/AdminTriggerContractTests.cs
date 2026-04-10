@@ -199,6 +199,7 @@ public sealed class AdminTriggerContractTests
         public void LogAggregationOutcome(string correlationId, int packageCount, int failedSourceCount) { }
         public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode) { }
         public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState) { }
+        public void LogOperationalStateContribution(string correlationId, string contributor, int degradedReasonCount) { }
         public void LogTrigger(string correlationId, string triggerType, string? triggerSource) { }
         public void LogIdleModeEntered() { }
         public void LogIdleModeExited() { }

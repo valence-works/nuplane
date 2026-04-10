@@ -88,12 +88,32 @@ public interface IReconciliationLogger
     void LogAdminTriggerOutcome(string correlationId, string outcomeCode, string? reasonCode);
 
     /// <summary>
-    /// Logs an admin snapshot read operation.
+    /// Logs a standalone active package catalog read.
     /// </summary>
-    /// <param name="correlationId">The unique identifier for the admin operation.</param>
-    /// <param name="activePackageCount">The number of active packages in the snapshot.</param>
-    /// <param name="healthState">The health state of the runtime.</param>
-    void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState);
+    void LogActivePackageCatalogRead(string correlationId, int packageCount, int issueCount)
+    {
+    }
+
+    /// <summary>
+    /// Logs a standalone loading catalog read.
+    /// </summary>
+    void LogLoadingCatalogRead(string correlationId, string availability, int packageCount, string? reasonCode)
+    {
+    }
+
+    /// <summary>
+    /// Logs a standalone operational state read.
+    /// </summary>
+    void LogOperationalStateRead(string correlationId, string healthState, int degradedReasonCount)
+    {
+    }
+
+    /// <summary>
+    /// Logs a generic operational-state contribution emitted by an optional module or feature.
+    /// </summary>
+    void LogOperationalStateContribution(string correlationId, string contributor, int degradedReasonCount)
+    {
+    }
 
     /// <summary>
     /// Logs a reconciliation trigger event with its type and optional source.

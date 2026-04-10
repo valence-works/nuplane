@@ -1,0 +1,4 @@
+Retired in feature 014 clean-break architecture.
+The core admin surface no longer composes loading reads.
+
+

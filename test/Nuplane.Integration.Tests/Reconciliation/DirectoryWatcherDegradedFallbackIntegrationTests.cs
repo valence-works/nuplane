@@ -29,8 +29,9 @@ public sealed class DirectoryWatcherDegradedFallbackIntegrationTests
             SourceOutages: 1));
 
         var projector = new OperationalSnapshotProjector(
-            new InMemoryStoreRegistry([]),
-            healthEvaluator);
+            healthEvaluator,
+            new ReconciliationLogger(),
+            new ReconciliationMetrics(new ReconciliationTelemetry()));
 
         var runResult = new ReconciliationRunResult(false, EmptyChangeSet(), [], true);
         projector.RecordReconcileOutcome(runResult, "cycle-1");
@@ -143,6 +144,7 @@ public sealed class DirectoryWatcherDegradedFallbackIntegrationTests
         public void LogLoaderBoundaryOutcome(string correlationId, string packageId, string outcome, string? reasonCode) { }
         public void LogAdminTriggerOutcome(string correlationId, string outcomeCode, string? reasonCode) { }
         public void LogAdminSnapshotRead(string correlationId, int activePackageCount, string healthState) { }
+        public void LogOperationalStateContribution(string correlationId, string contributor, int degradedReasonCount) { }
         public void LogIdleModeEntered() { }
         public void LogIdleModeExited() { }
     }

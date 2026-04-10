@@ -1,9 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Nuplane.Abstractions;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Health;
 using Nuplane.Hosting;
+using Nuplane.Operational;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Store.State;
@@ -50,6 +52,9 @@ public static class NuplaneRuntimeRegistrationServices
         services.AddSingleton<ReconciliationRetryPolicy>();
         services.AddSingleton<IReconciliationRetryPolicy>(sp => sp.GetRequiredService<ReconciliationRetryPolicy>());
         services.TryAddSingleton<ObservationDegradationTracker>();
+        services.AddSingleton<ActivePackageCatalog>();
+        services.AddSingleton<IActivePackageCatalog>(sp => sp.GetRequiredService<ActivePackageCatalog>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, PackageCatalogOperationalStateContributor>());
         services.AddSingleton<ReconciliationService>();
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
     }
