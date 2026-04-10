@@ -103,6 +103,67 @@ public sealed class PackageTypeScannerTests : IDisposable
             entry.Message.Contains(firstLoaderExceptionMessage, StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task FindTypesAsync_WhenActiveLoadedPackageExists_ReturnsMatchingTypes()
+    {
+        var ctx = new TestAssemblyLoadContext();
+        var logger = new CaptureLogger<PackageTypeScanner>();
+
+        try
+        {
+            ctx.LoadFromAssemblyPath(typeof(HealthyFixtureType).Assembly.Location);
+            var sut = CreateScanner("pkg-active", "4.0.0", ctx, logger);
+
+            var discovered = await sut.FindTypesAsync<object>("pkg-active", CancellationToken.None);
+
+            Assert.Contains(discovered, type => type.FullName == typeof(HealthyFixtureType).FullName);
+        }
+        finally
+        {
+            ctx.Unload();
+        }
+    }
+
+    [Fact]
+    public async Task FindTypesAsync_WhenActivePackageMissing_ReturnsEmpty()
+    {
+        var ctx = new TestAssemblyLoadContext();
+        var sut = CreateScanner("pkg-active", "5.0.0", ctx);
+
+        var discovered = await sut.FindTypesAsync<object>("pkg-missing", CancellationToken.None);
+
+        Assert.Empty(discovered);
+    }
+
+    [Fact]
+    public async Task FindTypesAsync_WhenAssemblyInspectionFails_LogsWarningAndContinues()
+    {
+        var brokenAssemblyPath = CopyBrokenCandidateAssembly("async-multi-assembly-package");
+        var healthyAssemblyPath = CopyAssembly(typeof(HealthyFixtureType).Assembly, "async-multi-assembly-package");
+        var ctx = new PackageAssemblyLoadContext(brokenAssemblyPath, [], new SharedAssemblyPolicyMatcher());
+        var logger = new CaptureLogger<PackageTypeScanner>();
+
+        try
+        {
+            ctx.LoadFromAssemblyName(new AssemblyName(BrokenCandidateAssemblyName));
+            ctx.LoadFromAssemblyPath(healthyAssemblyPath);
+
+            var sut = CreateScanner("pkg-async-mixed", "6.0.0", ctx, logger);
+
+            var discovered = await sut.FindTypesAsync(typeof(object), "pkg-async-mixed", CancellationToken.None);
+
+            Assert.Contains(discovered, type => type.FullName == typeof(HealthyFixtureType).FullName);
+            Assert.Contains(logger.Entries, entry =>
+                entry.LogLevel == LogLevel.Warning &&
+                entry.Message.Contains("Skipping assembly", StringComparison.Ordinal) &&
+                entry.Message.Contains("pkg-async-mixed@6.0.0", StringComparison.Ordinal));
+        }
+        finally
+        {
+            ctx.Unload();
+        }
+    }
+
     private PackageTypeScanner CreateScanner(
         string packageId,
         string version,
@@ -110,7 +171,8 @@ public sealed class PackageTypeScannerTests : IDisposable
         ILogger<PackageTypeScanner>? logger = null)
     {
         var provider = new TestPackageAssemblyProvider(packageId, version, () => ctx.Assemblies.ToArray());
-        return new PackageTypeScanner(provider, logger);
+        var catalog = new TestPackageAssemblyCatalog(packageId, version, () => ctx.Assemblies.ToArray());
+        return new PackageTypeScanner(catalog, provider, logger);
     }
 
     private static string GetBuiltFixtureAssemblyPath(string assemblyName) =>
@@ -194,7 +256,32 @@ public sealed class PackageTypeScannerTests : IDisposable
                 : [];
     }
 
-    private sealed class TestAssemblyLoadContext : AssemblyLoadContext;
+    private sealed class TestPackageAssemblyCatalog(
+        string packageId,
+        string version,
+        Func<IReadOnlyList<Assembly>> assembliesFactory)
+        : IPackageAssemblyCatalog
+    {
+        public Task<IReadOnlyList<PackageAssemblyCatalogEntry>> GetAssembliesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<PackageAssemblyCatalogEntry>>([
+                new PackageAssemblyCatalogEntry(packageId, version, assembliesFactory(), [])
+            ]);
+
+        public Task<PackageAssemblyCatalogEntry?> GetAssembliesAsync(string requestedPackageId, CancellationToken cancellationToken) =>
+            Task.FromResult<PackageAssemblyCatalogEntry?>(
+                string.Equals(requestedPackageId, packageId, StringComparison.OrdinalIgnoreCase)
+                    ? new PackageAssemblyCatalogEntry(packageId, version, assembliesFactory(), [])
+                    : null);
+
+        public Task<PackageAssemblyCatalogEntry?> GetAssembliesAsync(string requestedPackageId, string requestedVersion, CancellationToken cancellationToken) =>
+            Task.FromResult<PackageAssemblyCatalogEntry?>(
+                string.Equals(requestedPackageId, packageId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(requestedVersion, version, StringComparison.OrdinalIgnoreCase)
+                    ? new PackageAssemblyCatalogEntry(packageId, version, assembliesFactory(), [])
+                    : null);
+    }
+
+    private sealed class TestAssemblyLoadContext() : AssemblyLoadContext(isCollectible: true);
 
     private sealed class PartialScanAssembly(string assemblyName, ReflectionTypeLoadException exception) : Assembly
     {

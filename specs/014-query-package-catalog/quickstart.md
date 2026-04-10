@@ -71,7 +71,8 @@ dotnet test test/Nuplane.Loading.Tests/Nuplane.Loading.Tests.csproj --filter "Fu
 5. Confirm `/catalog/assemblies/{packageId}` returns the current active loaded version for that package identifier, and returns a not-found response when the package is inactive, stale, disabled, or not loaded.
 6. Confirm `/catalog/assemblies/{packageId}/{version}` returns the matching package when that version is active and loaded, and returns a not-found response when the package is inactive, stale, disabled, or not loaded.
 7. Confirm `/catalog/plugins` only returns plugin types from active loaded packages with scan candidates and that each entry identifies the package, version, discovered plugin type, and candidate assemblies used for scanning.
-8. Confirm `PackageChangeObserver` is used only for logging/invalidation, while `PluginDiscoveryObserver` re-queries the package assembly catalog instead of relying on discovered-type payloads from Nuplane.
+8. Confirm the sample's plugin discovery remains assembly-catalog-first, and treat `IPackageTypeScanner.FindTypesAsync(packageId, ct)` as an optional convenience when a host wants Nuplane to perform assignability filtering for one active package.
+9. Confirm `PackageChangeObserver` is used only for logging/invalidation, while `PluginDiscoveryObserver` re-queries the package assembly catalog instead of relying on discovered-type payloads from Nuplane.
 
 ## 7) Validate loading observability
 1. Query the loading catalog while loading is disabled and confirm a structured read log emits `ReasonCode=loading-disabled`.

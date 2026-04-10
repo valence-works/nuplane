@@ -2,10 +2,11 @@ using System.Reflection;
 using Nuplane.Loading;
 using Nuplane.Sample.Abstractions;
 
-namespace Nuplane.Sample.AspNetCore;
+namespace Nuplane.Sample.AspNetCore.Catalog;
 
 /// <summary>
-/// Sample-only query service that explicitly discovers plugin types from the current active package set.
+/// Sample-only query service that explicitly discovers plugin types from the current active package set,
+/// layered on top of the assembly catalog convenience surface.
 /// </summary>
 internal sealed class PluginCatalog(
     IPackageAssemblyCatalog packageAssemblyCatalog,

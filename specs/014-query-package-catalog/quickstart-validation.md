@@ -12,7 +12,7 @@
 | 2 | Active package catalog reads are deterministic and active-only | PASS | `ActivePackageCatalogTests` verifies deterministic ordering, active-only projection, and descriptor issue detection. |
 | 3 | Package catalog degradation surfaces in operational state | PASS | `PackageCatalogHealthTests` verifies `package-catalog-issues:*` degraded reasons through `OperationalSnapshotProjector`. |
 | 4 | Loading catalog distinguishes disabled, stale, loaded, and failed states | PASS | `LoadingCatalogTests` verifies disabled, stale, loaded, and failed package projections. `PackageLoaderCatalogCandidateTests` verifies deterministic scan candidates. `LoadingCatalogHealthTests` verifies stale-loading degraded reporting. |
-| 5 | Loading-owned assembly queries respect active-package boundaries and hide discovered-type identities | PASS | `LoadingCatalogBoundaryTests` verifies only active packages are projected, scan candidates stay under the active install path, and public loading contracts expose assembly metadata rather than discovered types. `PackageAssemblyCatalogTests` verifies the sane-default assembly catalog only returns active loaded packages, supports active-package-by-id plus exact package/version reads, and returns empty or null results when loading is disabled, stale, inactive, or not loaded. |
+| 5 | Loading-owned assembly queries respect active-package boundaries and hide discovered-type identities | PASS | `LoadingCatalogBoundaryTests` verifies only active packages are projected, scan candidates stay under the active install path, and public loading contracts expose assembly metadata rather than discovered types. `PackageAssemblyCatalogTests` verifies the sane-default assembly catalog only returns active loaded packages, supports active-package-by-id plus exact package/version reads, and returns empty or null results when loading is disabled, stale, inactive, or not loaded. `PackageTypeScannerTests` verifies the scanner's active-package convenience overloads remain layered on top of the same catalog-first semantics. |
 | 6 | Loading-owned observability emits stale/divergence logs and metrics | PASS | `LoadingCatalogObservabilityTests` verifies `ReasonCode=loading-stale` and `ReasonCode=loading-divergence` structured logs plus loading/degraded metric tags. |
 | 7 | Admin composition keeps package, loading, and state reads separate | PASS | `AdminPackageCatalogCompositionTests`, `AdminLoadingCatalogCompositionTests`, `AdminOperationalStateCompositionTests`, `AdminCompositionCleanBreakTests`, `AdminReadEndpointContractTests`, `AdminEndpointOwnershipContractTests`, and `OperationalStateSnapshotTests` verify separate in-process reads, clean-break endpoint ownership, and the state-only operational model. |
 | 8 | Operational-state contributors enrich the core state surface without re-coupling admin | PASS | `OperationalStateContributorIntegrationTests` verifies the loading contributor is discovered through DI and surfaces `loading-stale:*` degraded reasons through the core operational snapshot. |
@@ -38,7 +38,7 @@ dotnet build samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj 
 |---|---|---|---|
 | Nuplane.Store.Tests | `StoreRegistryTests` | 13 | 0 |
 | Nuplane.Runtime.Tests | active catalog + package health + admin composition + operational state | 19 | 0 |
-| Nuplane.Loading.Tests | loading catalog + boundaries + observability + scan candidates + loading health + ownership + assembly catalog | 76 | 0 |
+| Nuplane.Loading.Tests | loading catalog + boundaries + observability + scan candidates + loading health + ownership + assembly catalog + scanner convenience overloads | 79 | 0 |
 | Nuplane.Integration.Tests | active catalog consistency/restart/query-first + loading route/restart + admin route ownership/state contributor + module registration compatibility | 92 | 0 |
 | Sample assets | plugin pack + sample host build | 2 commands | 0 failures |
 | Secret scan | repository credential-pattern scan | 1 command | 0 failures |
@@ -46,8 +46,8 @@ dotnet build samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj 
 ## Full Solution Validation
 
 ```text
-Test summary: total: 468, failed: 0, succeeded: 468, skipped: 0
-Build succeeded in 52,9s
+Test summary: total: 516, failed: 0, succeeded: 516, skipped: 0
+Build succeeded in 62,2s
 ```
 
 ## Secret Validation

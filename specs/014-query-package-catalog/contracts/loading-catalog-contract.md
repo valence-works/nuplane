@@ -24,6 +24,14 @@ public interface IPackageAssemblyCatalog
     Task<PackageAssemblyCatalogEntry?> GetAssembliesAsync(string packageId, string version, CancellationToken cancellationToken);
 }
 
+public interface IPackageTypeScanner
+{
+    Task<IReadOnlyList<Type>> FindTypesAsync<TInterface>(string packageId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Type>> FindTypesAsync(Type interfaceType, string packageId, CancellationToken cancellationToken);
+    IReadOnlyList<Type> FindTypes<TInterface>(string packageId, string version);
+    IReadOnlyList<Type> FindTypes(Type interfaceType, string packageId, string version);
+}
+
 public enum LoadingCatalogAvailability
 {
     Disabled,
@@ -82,6 +90,8 @@ public sealed record PackageAssemblyCatalogEntry(
 - `IPackageAssemblyCatalog` is a convenience, loading-owned query surface: its all-packages read returns only active packages whose loading status is `Loaded`, applies deterministic ordering, and returns an empty result when loading is disabled or stale.
 - The package-id overload returns the one active loaded package version for the requested package identifier, or `null` when the package is not active, not loaded, disabled, or stale.
 - The exact-match overload returns the one matching active loaded package version, or `null` when the package is not active, not loaded, disabled, or stale.
+- `IPackageAssemblyCatalog` is the preferred host-facing starting point for loading-enabled assembly access.
+- `IPackageTypeScanner` is a convenience layer over that catalog-first model for assignability-based filtering; its async package-id overloads follow the same active-package semantics and return empty results when the package is inactive, not loaded, disabled, or stale.
 
 ## Scan-candidate contract
 - Scan candidates are assembly-level recommendations only.

@@ -7,6 +7,10 @@ namespace Nuplane.Loading;
 /// </summary>
 /// <remarks>
 /// <para>
+/// Higher-level host integrations should usually prefer <see cref="IPackageAssemblyCatalog"/>, which applies
+/// active-package and loading-state defaults before materializing assemblies.
+/// </para>
+/// <para>
 /// The <see cref="Assembly"/> instances returned by methods on this interface originate from assemblies
 /// loaded into collectible <see cref="System.Runtime.Loader.AssemblyLoadContext"/> instances.
 /// Holding references to these assemblies (or to derived reflection artifacts such as

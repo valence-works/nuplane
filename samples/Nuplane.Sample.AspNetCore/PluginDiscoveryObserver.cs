@@ -1,5 +1,6 @@
 using Nuplane.Loading;
 using Nuplane.Loading.Events;
+using Nuplane.Sample.AspNetCore.Catalog;
 
 namespace Nuplane.Sample.AspNetCore;
 

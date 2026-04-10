@@ -1,6 +1,6 @@
 using Nuplane.Loading;
 
-namespace Nuplane.Sample.AspNetCore;
+namespace Nuplane.Sample.AspNetCore.Catalog;
 
 internal static class AssemblyCatalogResponses
 {
