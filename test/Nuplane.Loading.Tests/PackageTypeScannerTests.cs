@@ -2,7 +2,6 @@ using System.Reflection;
 using System.Runtime.Loader;
 using System.Text;
 using Microsoft.Extensions.Logging;
-using Nuplane.Abstractions;
 using Nuplane.Loading.Tests.Fixtures;
 
 namespace Nuplane.Loading.Tests;
@@ -81,6 +80,10 @@ public sealed class PackageTypeScannerTests : IDisposable
         var sut = CreateScanner("pkg-partial", "3.0.0", new TestAssemblyLoadContext(), logger);
         var getCandidateTypes = typeof(PackageTypeScanner).GetMethod("GetCandidateTypes", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(getCandidateTypes);
+        if (getCandidateTypes is null)
+        {
+            throw new InvalidOperationException("Expected PackageTypeScanner.GetCandidateTypes to exist for the test.");
+        }
 
         var assembly = new PartialScanAssembly(
             "Nuplane.Tests.PartialScanAssembly",
@@ -88,7 +91,8 @@ public sealed class PackageTypeScannerTests : IDisposable
                 [typeof(HealthyFixtureType), null],
                 [new FileNotFoundException(firstLoaderExceptionMessage)]));
 
-        var discovered = (IReadOnlyList<Type>)getCandidateTypes!.Invoke(sut, [assembly, "pkg-partial", "3.0.0"])!;
+        var invocationResult = getCandidateTypes.Invoke(sut, [assembly, "pkg-partial", "3.0.0"]);
+        var discovered = Assert.IsAssignableFrom<IReadOnlyList<Type>>(invocationResult);
 
         Assert.Single(discovered);
         Assert.Same(typeof(HealthyFixtureType), discovered[0]);
@@ -105,8 +109,8 @@ public sealed class PackageTypeScannerTests : IDisposable
         AssemblyLoadContext ctx,
         ILogger<PackageTypeScanner>? logger = null)
     {
-        var loader = new TestPackageLoader(packageId, version, ctx);
-        return new PackageTypeScanner(loader, logger);
+        var provider = new TestPackageAssemblyProvider(packageId, version, () => ctx.Assemblies.ToArray());
+        return new PackageTypeScanner(provider, logger);
     }
 
     private static string GetBuiltFixtureAssemblyPath(string assemblyName) =>
@@ -178,31 +182,16 @@ public sealed class PackageTypeScannerTests : IDisposable
         File.WriteAllBytes(assemblyPath, assemblyBytes);
     }
 
-    private sealed class TestPackageLoader(string packageId, string version, AssemblyLoadContext context) : IPackageLoader
+    private sealed class TestPackageAssemblyProvider(
+        string packageId,
+        string version,
+        Func<IReadOnlyList<Assembly>> assembliesFactory)
+        : IPackageAssemblyProvider
     {
-        public Task<PackageLoadResult> EnsureLoadedAsync(
-            IReadOnlyList<ResolvedPackage> packages,
-            IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
-
-        public bool TryRemoveContext(string requestedPackageId, string requestedVersion, out PackageLoadContextHandle? handle)
-        {
-            handle = null;
-            return false;
-        }
-
-        public bool TryGetContext(string requestedPackageId, string requestedVersion, out PackageLoadContextHandle? handle)
-        {
-            if (requestedPackageId == packageId && requestedVersion == version)
-            {
-                handle = new PackageLoadContextHandle($"{packageId}@{version}", context);
-                return true;
-            }
-
-            handle = null;
-            return false;
-        }
+        public IReadOnlyList<Assembly> GetAssemblies(string requestedPackageId, string requestedVersion) =>
+            requestedPackageId == packageId && requestedVersion == version
+                ? assembliesFactory()
+                : [];
     }
 
     private sealed class TestAssemblyLoadContext : AssemblyLoadContext;
@@ -260,7 +249,7 @@ public sealed class PackageTypeScannerTests : IDisposable
     {
         public List<(LogLevel LogLevel, string Message)> Entries { get; } = [];
 
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
 
         public bool IsEnabled(LogLevel logLevel) => true;
 

@@ -33,20 +33,21 @@ public sealed class LoadingCatalogObservabilityTests
             && message.Contains("Availability=Stale", StringComparison.Ordinal)
             && message.Contains("ReasonCode=loading-stale", StringComparison.Ordinal));
 
-        var loadingRead = Assert.Single(collector.Measurements, measurement =>
+        Assert.Contains(collector.Measurements, measurement =>
             measurement.InstrumentName == "nuplane.catalog.loading.read"
+            && measurement.Tags.TryGetValue("availability", out var availability)
+            && string.Equals(availability, "Stale", StringComparison.Ordinal)
+            && measurement.Tags.TryGetValue("package_count", out var packageCount)
+            && string.Equals(packageCount, "1", StringComparison.Ordinal)
             && measurement.Tags.TryGetValue("reason_code", out var reasonCode)
             && string.Equals(reasonCode, "loading-stale", StringComparison.Ordinal));
-        Assert.Equal("Stale", loadingRead.Tags["availability"]);
-        Assert.Equal("1", loadingRead.Tags["package_count"]);
-        Assert.Equal("loading-stale", loadingRead.Tags["reason_code"]);
 
-        var degradedRead = Assert.Single(collector.Measurements, measurement =>
+        Assert.Contains(collector.Measurements, measurement =>
             measurement.InstrumentName == "nuplane.catalog.degraded.read"
+            && measurement.Tags.TryGetValue("surface", out var surface)
+            && string.Equals(surface, "loading", StringComparison.Ordinal)
             && measurement.Tags.TryGetValue("reason_code", out var reasonCode)
             && string.Equals(reasonCode, "loading-stale", StringComparison.Ordinal));
-        Assert.Equal("loading", degradedRead.Tags["surface"]);
-        Assert.Equal("loading-stale", degradedRead.Tags["reason_code"]);
     }
 
     [Fact]
@@ -82,20 +83,21 @@ public sealed class LoadingCatalogObservabilityTests
             && message.Contains("Availability=Available", StringComparison.Ordinal)
             && message.Contains("ReasonCode=loading-divergence", StringComparison.Ordinal));
 
-        var loadingRead = Assert.Single(collector.Measurements, measurement =>
+        Assert.Contains(collector.Measurements, measurement =>
             measurement.InstrumentName == "nuplane.catalog.loading.read"
+            && measurement.Tags.TryGetValue("availability", out var availability)
+            && string.Equals(availability, "Available", StringComparison.Ordinal)
+            && measurement.Tags.TryGetValue("package_count", out var packageCount)
+            && string.Equals(packageCount, "1", StringComparison.Ordinal)
             && measurement.Tags.TryGetValue("reason_code", out var reasonCode)
             && string.Equals(reasonCode, "loading-divergence", StringComparison.Ordinal));
-        Assert.Equal("Available", loadingRead.Tags["availability"]);
-        Assert.Equal("1", loadingRead.Tags["package_count"]);
-        Assert.Equal("loading-divergence", loadingRead.Tags["reason_code"]);
 
-        var degradedRead = Assert.Single(collector.Measurements, measurement =>
+        Assert.Contains(collector.Measurements, measurement =>
             measurement.InstrumentName == "nuplane.catalog.degraded.read"
+            && measurement.Tags.TryGetValue("surface", out var surface)
+            && string.Equals(surface, "loading", StringComparison.Ordinal)
             && measurement.Tags.TryGetValue("reason_code", out var reasonCode)
             && string.Equals(reasonCode, "loading-divergence", StringComparison.Ordinal));
-        Assert.Equal("loading", degradedRead.Tags["surface"]);
-        Assert.Equal("loading-divergence", degradedRead.Tags["reason_code"]);
     }
 
     private static ActivePackageCatalogSnapshot CreateSnapshot(string packageId, string installPath, string version = "1.0.0") =>

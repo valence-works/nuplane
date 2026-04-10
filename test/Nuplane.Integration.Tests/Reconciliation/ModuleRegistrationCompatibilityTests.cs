@@ -26,6 +26,8 @@ public sealed class ModuleRegistrationCompatibilityTests
 
         Assert.Contains(services, d => d.ServiceType == typeof(IPackageLoader));
         Assert.Contains(services, d => d.ServiceType == typeof(IPackageUnloadCoordinator));
+        Assert.Contains(services, d => d.ServiceType == typeof(IPackageAssemblyProvider));
+        Assert.Contains(services, d => d.ServiceType == typeof(IPackageAssemblyCatalog));
         Assert.Contains(services, d => d.ServiceType == typeof(IPackageTypeScanner));
         Assert.Contains(services, d => d.ServiceType == typeof(LoadingOptionsValidator));
     }
@@ -130,7 +132,16 @@ public sealed class ModuleRegistrationCompatibilityTests
         }
         finally
         {
-            try { Directory.Delete(root, recursive: true); } catch { }
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
         }
     }
 
@@ -159,7 +170,16 @@ public sealed class ModuleRegistrationCompatibilityTests
         }
         finally
         {
-            try { Directory.Delete(root, recursive: true); } catch { }
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
         }
     }
 }

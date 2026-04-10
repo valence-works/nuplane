@@ -217,12 +217,31 @@ app.MapGet("/catalog/loading", async (IServiceProvider services, CancellationTok
         : Results.Ok(await loadingCatalog.GetSnapshotAsync(ct));
 });
 
+app.MapGet("/catalog/assemblies", async (IPackageAssemblyCatalog packageAssemblyCatalog, CancellationToken ct) =>
+    Results.Ok(await packageAssemblyCatalog.GetAssembliesAsync(ct)));
+
+app.MapGet("/catalog/assemblies/{packageId}", async (
+    string packageId,
+    IPackageAssemblyCatalog packageAssemblyCatalog,
+    CancellationToken ct) =>
+    Results.Ok(await packageAssemblyCatalog.GetAssembliesAsync(packageId, ct)));
+
+app.MapGet("/catalog/assemblies/{packageId}/{version}", async (
+    string packageId,
+    string version,
+    IPackageAssemblyCatalog packageAssemblyCatalog,
+    CancellationToken ct) =>
+    Results.Ok(await packageAssemblyCatalog.GetAssembliesAsync(packageId, version, ct)));
+
 app.MapGet("/catalog/plugins", async (PluginCatalog pluginCatalog, CancellationToken ct) =>
     Results.Ok(await pluginCatalog.DiscoverAsync(ct)));
 ```
 
 - Use `IActivePackageCatalog` when you only need the authoritative active package inventory.
 - Use `ILoadingCatalog` only when the optional loading module is installed and you need current-process loading state or assembly scan guidance.
+- Use `IPackageAssemblyCatalog` when you want sane-default access to loaded `Assembly` instances for the current active package set without manually filtering loading snapshots first.
+- Use `IPackageAssemblyCatalog.GetAssembliesAsync(packageId, ct)` when you want the currently active loaded version for one package identifier.
+- Use `IPackageAssemblyCatalog.GetAssembliesAsync(packageId, version, ct)` when you already know the exact active package version you want to inspect.
 - Use a host-owned query service such as the sample `PluginCatalog` when you want to explicitly discover all `IPlugin` implementations from the current active loaded package set.
 - Use the admin API (`/nuplane/admin/packages`, `/nuplane/admin/loading`, `/nuplane/admin/state`) when you want HTTP access to the same composed read surfaces.
 
@@ -230,7 +249,7 @@ app.MapGet("/catalog/plugins", async (PluginCatalog pluginCatalog, CancellationT
 
 - `GET /nuplane/admin/loading` is owned by `Nuplane.Loading.Api`, not by the core admin packages.
 - `GET /nuplane/admin/snapshot` is intentionally removed; package inventory and operational state are now separate reads.
-- The sample's `/catalog/plugins` endpoint demonstrates explicit host-owned plugin discovery layered on top of `ILoadingCatalog` and `IPackageTypeScanner`.
+- The sample's `/catalog/assemblies` endpoint demonstrates the sane-default all-packages `IPackageAssemblyCatalog` convenience surface, `/catalog/assemblies/{packageId}` demonstrates the active-version-by-id overload, `/catalog/assemblies/{packageId}/{version}` demonstrates the exact-match overload, and `/catalog/plugins` layers host-owned plugin discovery on top of those reads.
 - The sample observers demonstrate cache invalidation and logging only; they are not the authoritative package/loading inventory source.
 - These surface changes are intentional breaking changes for hosts that previously depended on merged snapshot or core-admin loading compatibility payloads.
 

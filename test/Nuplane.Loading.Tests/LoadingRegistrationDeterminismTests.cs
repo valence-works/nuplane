@@ -33,6 +33,28 @@ public sealed class LoadingRegistrationDeterminismTests
     }
 
     [Fact]
+    public void Register_CalledTwice_DoesNotDuplicatePackageAssemblyProvider()
+    {
+        var services = new ServiceCollection();
+
+        LoadingRegistrationServices.Register(services);
+        LoadingRegistrationServices.Register(services);
+
+        Assert.Single(services, d => d.ServiceType == typeof(IPackageAssemblyProvider));
+    }
+
+    [Fact]
+    public void Register_CalledTwice_DoesNotDuplicatePackageAssemblyCatalog()
+    {
+        var services = new ServiceCollection();
+
+        LoadingRegistrationServices.Register(services);
+        LoadingRegistrationServices.Register(services);
+
+        Assert.Single(services, d => d.ServiceType == typeof(IPackageAssemblyCatalog));
+    }
+
+    [Fact]
     public void Register_CalledTwice_DoesNotDuplicateUnloadCoordinator()
     {
         var services = new ServiceCollection();

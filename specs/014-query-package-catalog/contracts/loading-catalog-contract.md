@@ -17,6 +17,13 @@ public interface ILoadingCatalog
     Task<LoadingCatalogSnapshot> GetSnapshotAsync(CancellationToken cancellationToken);
 }
 
+public interface IPackageAssemblyCatalog
+{
+    Task<IReadOnlyList<PackageAssemblyCatalogEntry>> GetAssembliesAsync(CancellationToken cancellationToken);
+    Task<PackageAssemblyCatalogEntry?> GetAssembliesAsync(string packageId, CancellationToken cancellationToken);
+    Task<PackageAssemblyCatalogEntry?> GetAssembliesAsync(string packageId, string version, CancellationToken cancellationToken);
+}
+
 public enum LoadingCatalogAvailability
 {
     Disabled,
@@ -56,6 +63,12 @@ public sealed record AssemblyScanCandidate(
     string? TargetFrameworkMoniker,
     string CandidateKind,
     string SelectionReason);
+
+public sealed record PackageAssemblyCatalogEntry(
+    string PackageId,
+    string Version,
+    IReadOnlyList<Assembly> Assemblies,
+    IReadOnlyList<AssemblyScanCandidate> ScanCandidates);
 ```
 
 ## Required semantics
@@ -66,12 +79,16 @@ public sealed record AssemblyScanCandidate(
 - `Availability = Available` means the snapshot reflects current-process loading state, even when some packages are individually marked `Failed`.
 - `Failed` loading for one package must not remove that package from the active package catalog.
 - Loading-catalog read observability must emit machine-readable reason codes for disabled, stale, and divergence/missing-state conditions.
+- `IPackageAssemblyCatalog` is a convenience, loading-owned query surface: its all-packages read returns only active packages whose loading status is `Loaded`, applies deterministic ordering, and returns an empty result when loading is disabled or stale.
+- The package-id overload returns the one active loaded package version for the requested package identifier, or `null` when the package is not active, not loaded, disabled, or stale.
+- The exact-match overload returns the one matching active loaded package version, or `null` when the package is not active, not loaded, disabled, or stale.
 
 ## Scan-candidate contract
 - Scan candidates are assembly-level recommendations only.
 - Candidate selection reuses Nuplane’s framework-compatible asset-selection rules so hosts do not need to re-implement them.
 - Discovered plugin/module/application types are explicitly out of scope and never appear in this contract.
 - Candidate ordering must be deterministic for identical package contents and host framework inputs.
+- The convenience assembly catalog may return actual `Assembly` instances for loaded packages, but those instances remain unload-sensitive and must not be cached beyond the current reconciliation cycle.
 
 ## Admin/operator composition contract
 - Core admin packages do not wrap loading reads or define loading-specific availability DTOs.
@@ -83,6 +100,6 @@ public sealed record AssemblyScanCandidate(
 - Loading tests must prove disabled, stale, loaded, and failed states.
 - Integration tests must prove restart-stale behavior, package-versus-loading divergence, and deterministic scan-candidate selection.
 - HTTP/operator tests must prove the loading route exists only when the loading-owned API package is installed and mapped.
-- Sample validation must prove a host can enumerate scan candidates and run host-owned type discovery from them.
+- Sample validation must prove a host can enumerate scan candidates, use the convenience assembly catalog, and run host-owned type discovery from them.
 - Loading-owned observability tests must prove structured logs and metrics capture stale and divergence signals without exposing discovered type identities.
 

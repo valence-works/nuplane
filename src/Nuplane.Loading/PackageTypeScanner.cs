@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Runtime.Loader;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -11,17 +10,17 @@ namespace Nuplane.Loading;
 /// </summary>
 public sealed class PackageTypeScanner : IPackageTypeScanner
 {
-    private readonly IPackageLoader _packageLoader;
+    private readonly IPackageAssemblyProvider _packageAssemblyProvider;
     private readonly ILogger<PackageTypeScanner> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="PackageTypeScanner"/>.
     /// </summary>
-    /// <param name="packageLoader">The package loader used to resolve active load contexts.</param>
+    /// <param name="packageAssemblyProvider">The package assembly provider used to materialize active package assemblies.</param>
     /// <param name="logger">The logger used to report best-effort scan skips.</param>
-    public PackageTypeScanner(IPackageLoader packageLoader, ILogger<PackageTypeScanner>? logger = null)
+    public PackageTypeScanner(IPackageAssemblyProvider packageAssemblyProvider, ILogger<PackageTypeScanner>? logger = null)
     {
-        _packageLoader = packageLoader ?? throw new ArgumentNullException(nameof(packageLoader));
+        _packageAssemblyProvider = packageAssemblyProvider ?? throw new ArgumentNullException(nameof(packageAssemblyProvider));
         _logger = logger ?? NullLogger<PackageTypeScanner>.Instance;
     }
 
@@ -36,15 +35,9 @@ public sealed class PackageTypeScanner : IPackageTypeScanner
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(version);
 
-        if (!_packageLoader.TryGetContext(packageId, version, out var contextHandle) ||
-            contextHandle?.Context is not AssemblyLoadContext loadContext)
-        {
-            return [];
-        }
-
         var discovered = new List<Type>();
 
-        foreach (var assembly in loadContext.Assemblies.ToArray())
+        foreach (var assembly in _packageAssemblyProvider.GetAssemblies(packageId, version))
         {
             foreach (var type in GetCandidateTypes(assembly, packageId, version))
             {

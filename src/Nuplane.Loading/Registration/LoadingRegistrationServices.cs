@@ -17,7 +17,7 @@ public static class LoadingRegistrationServices
 {
     /// <summary>
     /// Registers loading module services: options validation with <c>ValidateOnStart()</c>,
-    /// the package loader, type scanner, unload coordinator, shared assembly policy matcher,
+    /// the package loader, package assembly provider, type scanner, unload coordinator, shared assembly policy matcher,
     /// event dispatcher, and failure tracker.
     /// Re-registration replaces earlier module state deterministically.
     /// </summary>
@@ -41,6 +41,10 @@ public static class LoadingRegistrationServices
         services.TryAddSingleton<PackageLoader>();
         services.TryAddSingleton<IPackageLoader>(sp => sp.GetRequiredService<PackageLoader>());
         services.TryAddSingleton<AssemblyScanCandidateProjector>();
+        services.TryAddSingleton<PackageAssemblyProvider>();
+        services.TryAddSingleton<IPackageAssemblyProvider>(sp => sp.GetRequiredService<PackageAssemblyProvider>());
+        services.TryAddSingleton<PackageAssemblyCatalog>();
+        services.TryAddSingleton<IPackageAssemblyCatalog>(sp => sp.GetRequiredService<PackageAssemblyCatalog>());
         services.TryAddSingleton<PackageTypeScanner>();
         services.TryAddSingleton<IPackageTypeScanner>(sp => sp.GetRequiredService<PackageTypeScanner>());
         services.TryAddSingleton<PackageUnloadCoordinator>();

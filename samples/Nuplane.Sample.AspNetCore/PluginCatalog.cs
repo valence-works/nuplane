@@ -1,3 +1,4 @@
+using System.Reflection;
 using Nuplane.Loading;
 using Nuplane.Sample.Abstractions;
 
@@ -7,26 +8,25 @@ namespace Nuplane.Sample.AspNetCore;
 /// Sample-only query service that explicitly discovers plugin types from the current active package set.
 /// </summary>
 internal sealed class PluginCatalog(
-    ILoadingCatalog loadingCatalog,
-    IPackageTypeScanner packageTypeScanner)
+    IPackageAssemblyCatalog packageAssemblyCatalog,
+    ILogger<PluginCatalog> logger)
 {
-    private readonly ILoadingCatalog _loadingCatalog = loadingCatalog ?? throw new ArgumentNullException(nameof(loadingCatalog));
-    private readonly IPackageTypeScanner _packageTypeScanner = packageTypeScanner ?? throw new ArgumentNullException(nameof(packageTypeScanner));
+    private readonly IPackageAssemblyCatalog _packageAssemblyCatalog = packageAssemblyCatalog ?? throw new ArgumentNullException(nameof(packageAssemblyCatalog));
+    private readonly ILogger<PluginCatalog> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <summary>
     /// Discovers all currently scanable <see cref="IPlugin"/> implementations from active loaded packages.
     /// </summary>
     public async Task<IReadOnlyList<DiscoveredPluginDescriptor>> DiscoverAsync(CancellationToken cancellationToken)
     {
-        var snapshot = await _loadingCatalog.GetSnapshotAsync(cancellationToken);
         var discovered = new List<DiscoveredPluginDescriptor>();
 
-        foreach (var package in snapshot.Packages
-                     .Where(static package => package.Status == LoadingStatus.Loaded && package.ScanCandidates.Count > 0)
-                     .OrderBy(static package => package.PackageId, StringComparer.OrdinalIgnoreCase)
-                     .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase))
+        foreach (var package in (await _packageAssemblyCatalog.GetAssembliesAsync(cancellationToken))
+                     .Where(static package => package.ScanCandidates.Count > 0))
         {
-            var pluginTypes = _packageTypeScanner.FindTypes<IPlugin>(package.PackageId, package.Version)
+            var pluginTypes = package.Assemblies
+                .SelectMany(assembly => GetCandidateTypes(assembly, package.PackageId, package.Version))
+                .Where(static pluginType => pluginType is { IsAbstract: false, IsInterface: false } && typeof(IPlugin).IsAssignableFrom(pluginType))
                 .OrderBy(static pluginType => pluginType.FullName, StringComparer.Ordinal)
                 .ToArray();
 
@@ -42,6 +42,37 @@ internal sealed class PluginCatalog(
         }
 
         return discovered;
+    }
+
+    private IReadOnlyList<Type> GetCandidateTypes(Assembly assembly, string packageId, string version)
+    {
+        try
+        {
+            return assembly.GetExportedTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Partially scanned assembly {AssemblyName} for sample plugin discovery from package {PackageId}@{Version}; {LoaderExceptionCount} exported types could not be loaded.",
+                assembly.FullName ?? assembly.GetName().Name ?? "<unknown>",
+                packageId,
+                version,
+                ex.LoaderExceptions.Length);
+
+            return ex.Types.Where(type => type is not null).Cast<Type>().ToArray();
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or FileLoadException or TypeLoadException or BadImageFormatException)
+        {
+            _logger.LogWarning(
+                ex,
+                "Skipping assembly {AssemblyName} during sample plugin discovery for package {PackageId}@{Version} because exported types could not be inspected.",
+                assembly.FullName ?? assembly.GetName().Name ?? "<unknown>",
+                packageId,
+                version);
+
+            return [];
+        }
     }
 }
 

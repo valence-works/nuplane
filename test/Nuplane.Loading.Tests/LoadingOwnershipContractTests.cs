@@ -33,6 +33,26 @@ public sealed class LoadingOwnershipContractTests
     }
 
     [Fact]
+    public void Register_RegistersPackageAssemblyProvider()
+    {
+        var services = new ServiceCollection();
+
+        LoadingRegistrationServices.Register(services);
+
+        Assert.Contains(services, d => d.ServiceType == typeof(IPackageAssemblyProvider));
+    }
+
+    [Fact]
+    public void Register_RegistersPackageAssemblyCatalog()
+    {
+        var services = new ServiceCollection();
+
+        LoadingRegistrationServices.Register(services);
+
+        Assert.Contains(services, d => d.ServiceType == typeof(IPackageAssemblyCatalog));
+    }
+
+    [Fact]
     public void Register_RegistersLoadingEventDispatcher()
     {
         var services = new ServiceCollection();

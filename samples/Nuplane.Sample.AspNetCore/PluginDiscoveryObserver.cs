@@ -12,13 +12,13 @@ internal sealed class PluginDiscoveryObserver(
 
     /// <summary>
     /// Called after packages are loaded into Assembly Load Contexts. Triggers an explicit
-    /// query-first discovery refresh so the sample can enumerate all plugin types from the
-    /// current active package set.
+    /// sample-owned discovery refresh so the sample can enumerate plugin types from the
+    /// current active package assemblies.
     /// </summary>
     public async Task OnPackagesLoadedAsync(PackageLoadedEvent evt, CancellationToken cancellationToken)
     {
         logger.LogInformation(
-            "Packages loaded invalidation received. Count={Count}, CorrelationId={CorrelationId}. Refreshing explicit plugin discovery from the active loading catalog.",
+            "Packages loaded invalidation received. Count={Count}, CorrelationId={CorrelationId}. Refreshing sample-owned plugin discovery from the active package assemblies.",
             evt.LoadedPackages.Count, evt.CorrelationId);
 
         var discoveredPlugins = await _pluginCatalog.DiscoverAsync(cancellationToken);
