@@ -18,7 +18,7 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
     private readonly LoadingOptions _loadingOptions;
     private readonly ILogger<PackageAutoLoadingObserver> _logger;
 
-    internal PackageAutoLoadingObserver(
+    public PackageAutoLoadingObserver(
         PackageLoader loader,
         LoadingEventDispatcher dispatcher,
         IOptions<LoadingOptions> loadingOptions,
@@ -27,16 +27,15 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
         ReconciliationMetrics? metrics = null,
         LoadingFailureTracker? loadingFailureTracker = null,
         LoadingCatalogRefreshTracker? refreshTracker = null)
-        : this(
-            (IPackageLoader)loader,
-            (ILoadingEventDispatcher)dispatcher,
-            loadingOptions,
-            logger,
-            failureRecorder,
-            metrics,
-            loadingFailureTracker,
-            refreshTracker)
     {
+        _loader = loader ?? throw new ArgumentNullException(nameof(loader));
+        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+        _loadingOptions = (loadingOptions ?? throw new ArgumentNullException(nameof(loadingOptions))).Value;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        FailureRecorder = failureRecorder;
+        Metrics = metrics;
+        LoadingFailureTracker = loadingFailureTracker;
+        RefreshTracker = refreshTracker;
     }
 
     internal PackageAutoLoadingObserver(
