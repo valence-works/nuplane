@@ -37,10 +37,9 @@ internal sealed class PackageLoader : IPackageLoader
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
 
-        var mainAssemblyPath = ResolveMainAssemblyPath(installPath, packageId);
-        var targetFrameworkMoniker = TryResolveTargetFrameworkMoniker(mainAssemblyPath, installPath);
+        var selection = ResolveAssemblySelection(installPath, packageId, hostTargetFrameworkOverride: null);
         var assemblyPaths = Directory
-            .EnumerateFiles(installPath, "*.dll", SearchOption.AllDirectories)
+            .EnumerateFiles(selection.CandidateSearchRoot, "*.dll", SearchOption.AllDirectories)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -48,11 +47,11 @@ internal sealed class PackageLoader : IPackageLoader
             .Select(path => new AssemblyScanCandidate(
                 path,
                 Path.GetFileName(path),
-                targetFrameworkMoniker,
-                string.Equals(path, mainAssemblyPath, StringComparison.OrdinalIgnoreCase)
+                TryResolveTargetFrameworkMoniker(path, installPath),
+                string.Equals(path, selection.MainAssemblyPath, StringComparison.OrdinalIgnoreCase)
                     ? "PrimaryLoadAssembly"
                     : "AdditionalManagedAssembly",
-                string.Equals(path, mainAssemblyPath, StringComparison.OrdinalIgnoreCase)
+                string.Equals(path, selection.MainAssemblyPath, StringComparison.OrdinalIgnoreCase)
                     ? "selected-by-loader"
                     : "co-located-managed-assembly"))
             .ToArray();
@@ -155,9 +154,11 @@ internal sealed class PackageLoader : IPackageLoader
     {
         var relativePath = Path.GetRelativePath(installPath, assemblyPath);
         var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (segments.Length >= 3 && string.Equals(segments[0], "lib", StringComparison.OrdinalIgnoreCase))
+        if (segments.Length >= 3
+            && string.Equals(segments[0], "lib", StringComparison.OrdinalIgnoreCase)
+            && TryParseFrameworkTarget(segments[1], out var framework))
         {
-            return segments[1];
+            return framework.DisplayName;
         }
 
         return null;
@@ -167,6 +168,12 @@ internal sealed class PackageLoader : IPackageLoader
         ResolveMainAssemblyPath(installPath, packageId, hostTargetFrameworkOverride: null);
 
     private static string ResolveMainAssemblyPath(string installPath, string packageId, string? hostTargetFrameworkOverride)
+        => ResolveAssemblySelection(installPath, packageId, hostTargetFrameworkOverride).MainAssemblyPath;
+
+    private static AssemblyAssetSelection ResolveAssemblySelection(
+        string installPath,
+        string packageId,
+        string? hostTargetFrameworkOverride)
     {
         if (string.IsNullOrWhiteSpace(installPath) || !Directory.Exists(installPath))
         {
@@ -174,25 +181,27 @@ internal sealed class PackageLoader : IPackageLoader
         }
 
         var libPath = Path.Combine(installPath, "lib");
-        if (Directory.Exists(libPath) && TryResolveFrameworkSpecificAssemblyPath(libPath, installPath, packageId, hostTargetFrameworkOverride, out var frameworkSpecificAssemblyPath))
+        if (Directory.Exists(libPath) && TryResolveFrameworkSpecificAssemblySelection(libPath, installPath, packageId, hostTargetFrameworkOverride, out var frameworkSpecificSelection))
         {
-            return frameworkSpecificAssemblyPath;
+            return frameworkSpecificSelection;
         }
 
         var searchRoot = Directory.Exists(libPath) ? libPath : installPath;
-        return ResolveAssemblyFromCandidates(
+        var mainAssemblyPath = ResolveAssemblyFromCandidates(
             Directory.EnumerateFiles(searchRoot, "*.dll", SearchOption.AllDirectories),
             installPath,
             packageId,
             selectedFramework: null);
+
+        return new AssemblyAssetSelection(mainAssemblyPath, searchRoot);
     }
 
-    private static bool TryResolveFrameworkSpecificAssemblyPath(
+    private static bool TryResolveFrameworkSpecificAssemblySelection(
         string libPath,
         string installPath,
         string packageId,
         string? hostTargetFrameworkOverride,
-        out string assemblyPath)
+        out AssemblyAssetSelection selection)
     {
         var frameworkDirectories = Directory
             .EnumerateDirectories(libPath)
@@ -203,7 +212,7 @@ internal sealed class PackageLoader : IPackageLoader
 
         if (frameworkDirectories.Length == 0)
         {
-            assemblyPath = string.Empty;
+            selection = null!;
             return false;
         }
 
@@ -222,11 +231,13 @@ internal sealed class PackageLoader : IPackageLoader
                 $"No compatible target framework assets were found under '{installPath}' for host framework '{GetFrameworkDisplayName(hostFramework)}'. Available frameworks: {availableFrameworks}.");
         }
 
-        assemblyPath = ResolveAssemblyFromCandidates(
+        var mainAssemblyPath = ResolveAssemblyFromCandidates(
             Directory.EnumerateFiles(selectedDirectory.Path, "*.dll", SearchOption.AllDirectories),
             installPath,
             packageId,
             selectedDirectory.FolderName);
+
+        selection = new AssemblyAssetSelection(mainAssemblyPath, selectedDirectory.Path);
 
         return true;
     }
@@ -351,6 +362,8 @@ internal sealed class PackageLoader : IPackageLoader
     }
 
     private sealed record FrameworkTarget(FrameworkKind Kind, Version Version, string DisplayName);
+
+    private sealed record AssemblyAssetSelection(string MainAssemblyPath, string CandidateSearchRoot);
 
     private sealed record FrameworkDirectory(string Path, string FolderName, FrameworkTarget Target)
     {

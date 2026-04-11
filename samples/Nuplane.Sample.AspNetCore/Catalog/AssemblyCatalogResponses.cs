@@ -16,7 +16,14 @@ internal static class AssemblyCatalogResponses
                 .ThenBy(static assembly => assembly.Name, StringComparer.Ordinal)
                 .ToArray(),
             package.AssemblyReferences
-                .Select(static candidate => candidate.AssemblyFileName)
+                .Select(static candidate => new AssemblyReferenceResponse(
+                    candidate.AssemblyFileName,
+                    candidate.AssemblyPath,
+                    candidate.TargetFrameworkMoniker,
+                    candidate.Kind,
+                    candidate.SelectionReason))
+                .OrderBy(static reference => reference.AssemblyPath, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static reference => reference.AssemblyFileName, StringComparer.Ordinal)
                 .ToArray());
 
     public static AssemblyCatalogNotFoundResponse MissingPackage(string packageId) =>
@@ -30,11 +37,18 @@ internal sealed record AssemblyCatalogPackageResponse(
     string PackageId,
     string Version,
     IReadOnlyList<AssemblyDescriptorResponse> Assemblies,
-    IReadOnlyList<string> AssemblyReferences);
+    IReadOnlyList<AssemblyReferenceResponse> AssemblyReferences);
 
 internal sealed record AssemblyDescriptorResponse(
     string Name,
     string Location);
+
+internal sealed record AssemblyReferenceResponse(
+    string AssemblyFileName,
+    string AssemblyPath,
+    string? TargetFrameworkMoniker,
+    string Kind,
+    string SelectionReason);
 
 internal sealed record AssemblyCatalogNotFoundResponse(
     string PackageId,

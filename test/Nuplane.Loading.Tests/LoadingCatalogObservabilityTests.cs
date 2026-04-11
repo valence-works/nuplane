@@ -133,6 +133,8 @@ public sealed class LoadingCatalogObservabilityTests
     private sealed class MetricCollector : IDisposable
     {
         private readonly MeterListener _listener = new();
+        private readonly object _sync = new();
+        private readonly List<MeasurementRecord> _measurements = [];
 
         public MetricCollector(params string[] instrumentNames)
         {
@@ -145,11 +147,25 @@ public sealed class LoadingCatalogObservabilityTests
                 }
             };
             _listener.SetMeasurementEventCallback<long>((instrument, measurement, tags, state) =>
-                Measurements.Add(new MeasurementRecord(instrument.Name, measurement, ToDictionary(tags))));
+            {
+                lock (_sync)
+                {
+                    _measurements.Add(new MeasurementRecord(instrument.Name, measurement, ToDictionary(tags)));
+                }
+            });
             _listener.Start();
         }
 
-        public List<MeasurementRecord> Measurements { get; } = [];
+        public IReadOnlyList<MeasurementRecord> Measurements
+        {
+            get
+            {
+                lock (_sync)
+                {
+                    return _measurements.ToArray();
+                }
+            }
+        }
 
         public void Dispose() => _listener.Dispose();
 
