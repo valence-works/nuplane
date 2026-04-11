@@ -8,11 +8,11 @@ namespace Nuplane.Loading;
 /// <remarks>
 /// <para>
 /// This catalog applies sane defaults for the common host scenario: it returns only packages that are both
-/// active and currently <see cref="LoadingStatus.Loaded"/> in the current process.
+/// active and currently <see cref="PackageLoadStatus.Loaded"/> in the current process.
 /// </para>
 /// <para>
 /// When loading is disabled, stale, or otherwise unavailable for the current process, this catalog returns
-/// an empty result. Callers that need detailed availability reasoning should query <see cref="ILoadingCatalog"/>
+/// an empty result. Callers that need detailed availability reasoning should query <see cref="IPackageLoadStateCatalog"/>
 /// directly before or alongside this convenience surface.
 /// </para>
 /// <para>
@@ -29,9 +29,9 @@ public interface IPackageAssemblyCatalog
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>
-    /// A deterministic, package-grouped list of loaded assemblies and their corresponding scan candidates.
+    /// A deterministic, package-grouped list of loaded assemblies and their corresponding durable assembly references.
     /// </returns>
-    Task<IReadOnlyList<PackageAssemblyCatalogEntry>> GetAssembliesAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<PackageAssemblies>> GetAssembliesAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Gets assemblies for the current active loaded version of a specific package using loading-owned default filtering.
@@ -42,23 +42,24 @@ public interface IPackageAssemblyCatalog
     /// The active loaded package entry for the specified package identifier when one exists;
     /// otherwise <see langword="null"/>.
     /// </returns>
-    Task<PackageAssemblyCatalogEntry?> GetAssembliesAsync(string packageId, CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Gets assemblies for a specific active loaded package version using loading-owned default filtering.
-    /// </summary>
-    /// <param name="packageId">The package identifier.</param>
-    /// <param name="version">The package version.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>
-    /// The matching package entry when the specified package version is active and currently loaded;
-    /// otherwise <see langword="null"/>.
-    /// </returns>
-    Task<PackageAssemblyCatalogEntry?> GetAssembliesAsync(string packageId, string version, CancellationToken cancellationToken);
+    Task<PackageAssemblies?> GetAssembliesAsync(string packageId, CancellationToken cancellationToken);
 }
 
 /// <summary>
 /// Represents the loaded assemblies Nuplane currently exposes for one active package.
+/// </summary>
+/// <param name="PackageId">The package identifier.</param>
+/// <param name="Version">The active package version.</param>
+/// <param name="Assemblies">The loaded assemblies materialized for the package.</param>
+/// <param name="AssemblyReferences">The deterministic durable assembly references associated with the package.</param>
+public sealed record PackageAssemblies(
+    string PackageId,
+    string Version,
+    IReadOnlyList<Assembly> Assemblies,
+    IReadOnlyList<PackageAssemblyReference> AssemblyReferences);
+
+/// <summary>
+/// Legacy assembly catalog entry retained temporarily while the repo migrates to <see cref="PackageAssemblies"/>.
 /// </summary>
 /// <param name="PackageId">The package identifier.</param>
 /// <param name="Version">The active package version.</param>
@@ -68,4 +69,25 @@ public sealed record PackageAssemblyCatalogEntry(
     string PackageId,
     string Version,
     IReadOnlyList<Assembly> Assemblies,
-    IReadOnlyList<AssemblyScanCandidate> ScanCandidates);
+    IReadOnlyList<AssemblyScanCandidate> ScanCandidates)
+{
+    /// <summary>
+    /// Converts this legacy assembly catalog entry to the canonical <see cref="PackageAssemblies"/> model.
+    /// </summary>
+    public PackageAssemblies ToPackageAssemblies() =>
+        new(
+            PackageId,
+            Version,
+            Assemblies,
+            ScanCandidates.Select(static candidate => PackageAssemblyReference.FromCandidate(candidate)).ToArray());
+
+    /// <summary>
+    /// Creates a legacy assembly catalog entry from the canonical <see cref="PackageAssemblies"/> model.
+    /// </summary>
+    public static PackageAssemblyCatalogEntry FromPackageAssemblies(PackageAssemblies package) =>
+        new(
+            package.PackageId,
+            package.Version,
+            package.Assemblies,
+            package.AssemblyReferences.Select(static reference => reference.ToCandidate()).ToArray());
+}

@@ -10,10 +10,10 @@ internal static class SampleCatalogEndpointExtensions
         ArgumentNullException.ThrowIfNull(endpoints);
 
         endpoints.MapGet("/catalog/packages", async (IActivePackageCatalog catalog, CancellationToken cancellationToken) =>
-            Results.Ok(await catalog.GetSnapshotAsync(cancellationToken)));
+            Results.Ok(await catalog.GetActivePackagesAsync(cancellationToken)));
 
-        endpoints.MapGet("/catalog/loading", async (ILoadingCatalog loadingCatalog, CancellationToken cancellationToken) =>
-            Results.Ok(await loadingCatalog.GetSnapshotAsync(cancellationToken)));
+        endpoints.MapGet("/catalog/load-state", async (IPackageLoadStateCatalog loadStateCatalog, CancellationToken cancellationToken) =>
+            Results.Ok(await loadStateCatalog.GetLoadStateAsync(cancellationToken)));
 
         endpoints.MapGet("/catalog/assemblies", async (IPackageAssemblyCatalog packageAssemblyCatalog, CancellationToken cancellationToken) =>
         {
@@ -29,14 +29,6 @@ internal static class SampleCatalogEndpointExtensions
             var package = await packageAssemblyCatalog.GetAssembliesAsync(packageId, cancellationToken);
             return package is null
                 ? Results.NotFound(AssemblyCatalogResponses.MissingPackage(packageId))
-                : Results.Ok(AssemblyCatalogResponses.FromEntry(package));
-        });
-
-        endpoints.MapGet("/catalog/assemblies/{packageId}/{version}", async (string packageId, string version, IPackageAssemblyCatalog packageAssemblyCatalog, CancellationToken cancellationToken) =>
-        {
-            var package = await packageAssemblyCatalog.GetAssembliesAsync(packageId, version, cancellationToken);
-            return package is null
-                ? Results.NotFound(AssemblyCatalogResponses.MissingPackageVersion(packageId, version))
                 : Results.Ok(AssemblyCatalogResponses.FromEntry(package));
         });
 

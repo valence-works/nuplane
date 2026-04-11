@@ -24,6 +24,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-03
 - File-backed package store and state registry managed by `Nuplane.Store`; no new persistence model introduced by this feature (013-module-pattern-expansion)
 - C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0` + `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Configuration.Binder`, `Microsoft.Extensions.Logging`, ASP.NET Core Minimal APIs in `Nuplane.Admin.Api`, xUnit, NSubstitute (014-query-package-catalog)
 - File-backed package/store state persisted via `IStoreRegistry` at `.nuplane/store-state.json` plus immutable package folders/current pointers; loading read state is current-process projection data owned by the optional loading module (014-query-package-catalog)
+- C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0` + `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Logging`, ASP.NET Core Minimal APIs in `Nuplane.Admin.Api` and `Nuplane.Loading.Api`, xUnit, NSubstitute (015-simplify-loading-api)
+- File-backed runtime/store state via `IStoreRegistry` and `.nuplane/store-state.json` for durable active inventory; load-state and runtime assembly/type access remain current-process projections over the active se (015-simplify-loading-api)
 
 - C# on .NET 8 (LTS) + `NuGet.Protocol`/NuGet Client SDK, `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Logging`, `System.Diagnostics.Metrics` (001-phase1-runtime-baseline)
 
@@ -43,9 +45,9 @@ test/
 C# on .NET 8 (LTS): Follow standard conventions
 
 ## Recent Changes
+- 015-simplify-loading-api: Added C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0` + `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Logging`, ASP.NET Core Minimal APIs in `Nuplane.Admin.Api` and `Nuplane.Loading.Api`, xUnit, NSubstitute
 - 014-query-package-catalog: Added C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0` + `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Configuration.Binder`, `Microsoft.Extensions.Logging`, ASP.NET Core Minimal APIs in `Nuplane.Admin.Api`, xUnit, NSubstitute
 - 013-module-pattern-expansion: Added C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0` + `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Configuration.Binder`, `Microsoft.Extensions.Logging`, xUnit, NSubstitute
-- 012-default-state-path: Added C# / .NET 8.0, 9.0, 10.0 (multi-target) + Microsoft.Extensions.{Options, Logging, DependencyInjection, Configuration} v10.0.3
 
 
 <!-- MANUAL ADDITIONS START -->

@@ -15,7 +15,7 @@ public sealed class LoadingCatalog(
     LoadingCatalogRefreshTracker refreshTracker,
     IOptions<LoadingOptions> options,
     IReconciliationLogger logger,
-    ReconciliationMetrics metrics) : ILoadingCatalog
+    ReconciliationMetrics metrics) : ILoadingCatalog, IPackageLoadStateCatalog
 {
     private readonly IActivePackageCatalog _activePackageCatalog = activePackageCatalog ?? throw new ArgumentNullException(nameof(activePackageCatalog));
     private readonly PackageLoader _packageLoader = packageLoader ?? throw new ArgumentNullException(nameof(packageLoader));
@@ -26,22 +26,22 @@ public sealed class LoadingCatalog(
     private readonly ReconciliationMetrics _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
 
     /// <inheritdoc />
-    public async Task<LoadingCatalogSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
+    public async Task<PackageLoadStateSnapshot> GetLoadStateAsync(CancellationToken cancellationToken)
     {
         var correlationId = CorrelationContext.CreateNew();
-        var activeSnapshot = await _activePackageCatalog.GetSnapshotAsync(cancellationToken);
+        var activeSnapshot = await _activePackageCatalog.GetActivePackagesAsync(cancellationToken);
 
         if (!_options.Enabled)
         {
             var disabledPackages = activeSnapshot.Packages
-                .Select(package => CreateDescriptor(package, LoadingStatus.Disabled, null, ["loading-disabled"], [], null))
+                .Select(package => CreateDescriptor(package, PackageLoadStatus.Disabled, null, ["loading-disabled"], []))
                 .ToArray();
 
             _logger.LogLoadingCatalogRead(correlationId, LoadingCatalogAvailability.Disabled.ToString(), disabledPackages.Length, "loading-disabled");
             _metrics.RecordLoadingCatalogRead(LoadingCatalogAvailability.Disabled.ToString(), disabledPackages.Length, degraded: false, reasonCode: "loading-disabled");
 
-            return new LoadingCatalogSnapshot(
-                LoadingCatalogAvailability.Disabled,
+            return new PackageLoadStateSnapshot(
+                PackageLoadStateAvailability.Disabled,
                 DateTimeOffset.UtcNow,
                 _refreshTracker.RefreshedAtUtc,
                 disabledPackages,
@@ -52,14 +52,14 @@ public sealed class LoadingCatalog(
         if (!_refreshTracker.HasRefreshed)
         {
             var stalePackages = activeSnapshot.Packages
-                .Select(package => CreateDescriptor(package, LoadingStatus.Stale, null, ["loading-not-refreshed-for-current-process"], [], null))
+                .Select(package => CreateDescriptor(package, PackageLoadStatus.Stale, null, ["loading-not-refreshed-for-current-process"], []))
                 .ToArray();
 
             _logger.LogLoadingCatalogRead(correlationId, LoadingCatalogAvailability.Stale.ToString(), stalePackages.Length, "loading-stale");
             _metrics.RecordLoadingCatalogRead(LoadingCatalogAvailability.Stale.ToString(), stalePackages.Length, degraded: stalePackages.Length > 0, reasonCode: "loading-stale");
 
-            return new LoadingCatalogSnapshot(
-                LoadingCatalogAvailability.Stale,
+            return new PackageLoadStateSnapshot(
+                PackageLoadStateAvailability.Stale,
                 DateTimeOffset.UtcNow,
                 null,
                 stalePackages,
@@ -67,7 +67,7 @@ public sealed class LoadingCatalog(
                 correlationId);
         }
 
-        var descriptors = new List<LoadingPackageDescriptor>(activeSnapshot.Packages.Count);
+        var descriptors = new List<PackageLoadState>(activeSnapshot.Packages.Count);
         var issueCount = 0;
         var staleCount = 0;
         var divergenceCount = 0;
@@ -80,18 +80,18 @@ public sealed class LoadingCatalog(
                 if (session.IsLoaded)
                 {
                     var candidates = _candidateProjector.Project(package);
-                    descriptors.Add(CreateDescriptor(package, LoadingStatus.Loaded, session.LoadedAt, [], candidates, session.ContextKey));
+                    descriptors.Add(CreateDescriptor(package, PackageLoadStatus.Loaded, session.LoadedAt, [], candidates));
                     continue;
                 }
 
                 issueCount++;
                 divergenceCount++;
-                descriptors.Add(CreateDescriptor(package, LoadingStatus.Failed, session.LoadedAt, BuildDiagnostics(session.LastError), [], session.ContextKey));
+                descriptors.Add(CreateDescriptor(package, PackageLoadStatus.Failed, session.LoadedAt, BuildDiagnostics(session.LastError), []));
                 continue;
             }
 
             staleCount++;
-            descriptors.Add(CreateDescriptor(package, LoadingStatus.Stale, null, ["loading-state-missing-for-active-package"], [], null));
+            descriptors.Add(CreateDescriptor(package, PackageLoadStatus.Stale, null, ["loading-state-missing-for-active-package"], []));
         }
 
         var degraded = issueCount > 0 || staleCount > 0 || divergenceCount > 0;
@@ -100,8 +100,8 @@ public sealed class LoadingCatalog(
         _logger.LogLoadingCatalogRead(correlationId, LoadingCatalogAvailability.Available.ToString(), descriptors.Count, reasonCode);
         _metrics.RecordLoadingCatalogRead(LoadingCatalogAvailability.Available.ToString(), descriptors.Count, degraded, reasonCode);
 
-        return new LoadingCatalogSnapshot(
-            LoadingCatalogAvailability.Available,
+        return new PackageLoadStateSnapshot(
+            PackageLoadStateAvailability.Available,
             DateTimeOffset.UtcNow,
             _refreshTracker.RefreshedAtUtc,
             descriptors,
@@ -109,13 +109,49 @@ public sealed class LoadingCatalog(
             correlationId);
     }
 
-    private static LoadingPackageDescriptor CreateDescriptor(
-        ActivePackageDescriptor package,
-        LoadingStatus status,
+    /// <summary>
+    /// Reads the current loading snapshot using legacy naming.
+    /// </summary>
+    public async Task<LoadingCatalogSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
+    {
+        var snapshot = await GetLoadStateAsync(cancellationToken).ConfigureAwait(false);
+
+        return new LoadingCatalogSnapshot(
+            snapshot.Availability switch
+            {
+                PackageLoadStateAvailability.Disabled => LoadingCatalogAvailability.Disabled,
+                PackageLoadStateAvailability.Stale => LoadingCatalogAvailability.Stale,
+                PackageLoadStateAvailability.Available => LoadingCatalogAvailability.Available,
+                _ => throw new ArgumentOutOfRangeException(nameof(snapshot))
+            },
+            snapshot.SnapshotAtUtc,
+            snapshot.RefreshedAtUtc,
+            snapshot.Packages.Select(static package => new LoadingPackageDescriptor(
+                package.PackageId,
+                package.Version,
+                package.Status switch
+                {
+                    PackageLoadStatus.Disabled => LoadingStatus.Disabled,
+                    PackageLoadStatus.Stale => LoadingStatus.Stale,
+                    PackageLoadStatus.Loaded => LoadingStatus.Loaded,
+                    PackageLoadStatus.Failed => LoadingStatus.Failed,
+                    _ => throw new ArgumentOutOfRangeException(nameof(package))
+                },
+                package.InstallPath,
+                package.LoadedAtUtc,
+                package.Diagnostics,
+                package.AssemblyReferences.Select(static reference => reference.ToCandidate()).ToArray(),
+                null)).ToArray(),
+            snapshot.Reason,
+            snapshot.CorrelationId);
+    }
+
+    private static PackageLoadState CreateDescriptor(
+        ActivePackage package,
+        PackageLoadStatus status,
         DateTimeOffset? loadedAtUtc,
         IReadOnlyList<string> diagnostics,
-        IReadOnlyList<AssemblyScanCandidate> candidates,
-        string? contextKey) =>
+        IReadOnlyList<PackageAssemblyReference> assemblyReferences) =>
         new(
             package.PackageId,
             package.Version,
@@ -123,8 +159,7 @@ public sealed class LoadingCatalog(
             package.InstallPath,
             loadedAtUtc,
             diagnostics,
-            candidates,
-            contextKey);
+            assemblyReferences.ToArray());
 
     private static IReadOnlyList<string> BuildDiagnostics(string? message)
     {

@@ -12,10 +12,25 @@ public sealed class AssemblyScanCandidateProjector(PackageLoader packageLoader)
     /// <summary>
     /// Projects deterministic scan candidates for the supplied active package descriptor.
     /// </summary>
-    public IReadOnlyList<AssemblyScanCandidate> Project(ActivePackageDescriptor package)
+    public IReadOnlyList<PackageAssemblyReference> Project(ActivePackageDescriptor package)
     {
         ArgumentNullException.ThrowIfNull(package);
-        return _packageLoader.BuildScanCandidates(package.PackageId, package.InstallPath);
+        return _packageLoader
+            .BuildScanCandidates(package.PackageId, package.InstallPath)
+            .Select(static candidate => PackageAssemblyReference.FromCandidate(candidate))
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Projects deterministic assembly references for the supplied canonical active package model.
+    /// </summary>
+    public IReadOnlyList<PackageAssemblyReference> Project(ActivePackage package)
+    {
+        ArgumentNullException.ThrowIfNull(package);
+        return _packageLoader
+            .BuildScanCandidates(package.PackageId, package.InstallPath)
+            .Select(static candidate => PackageAssemblyReference.FromCandidate(candidate))
+            .ToArray();
     }
 }
 

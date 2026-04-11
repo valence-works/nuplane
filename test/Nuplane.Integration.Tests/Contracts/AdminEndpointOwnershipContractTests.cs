@@ -48,8 +48,8 @@ public sealed class AdminEndpointOwnershipContractTests
 
     private sealed class StubAdminOperations : INuplaneAdminOperations
     {
-        public Task<ActivePackageCatalogSnapshot> GetPackagesAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(new ActivePackageCatalogSnapshot(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, [], "corr-packages"));
+        public Task<ActivePackagesSnapshot> GetPackagesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new ActivePackagesSnapshot(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, [], "corr-packages"));
 
         public Task<OperationalStateSnapshot> GetStateAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new OperationalStateSnapshot(DateTimeOffset.UtcNow, null, HealthState.Healthy, [], "corr-state"));

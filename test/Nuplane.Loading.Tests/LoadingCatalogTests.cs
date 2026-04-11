@@ -7,55 +7,55 @@ namespace Nuplane.Loading.Tests;
 public sealed class LoadingCatalogTests
 {
     [Fact]
-    public async Task GetSnapshotAsync_WhenDisabled_ReportsDisabledPackages()
+    public async Task GetLoadStateAsync_WhenDisabled_ReportsDisabledPackages()
     {
         var catalog = CreateCatalog(
             new LoadingOptions { Enabled = false },
-            new ActivePackageCatalogSnapshot(
+            new ActivePackagesSnapshot(
                 DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow,
-                [new ActivePackageDescriptor("pkg-a", "1.0.0", "feed", "source", "/packages/pkg-a", DateTimeOffset.UtcNow, "corr")],
+                [new ActivePackage("pkg-a", "1.0.0", "feed", "source", "/packages/pkg-a", DateTimeOffset.UtcNow, "corr")],
                 "read-1"),
             new PackageLoader(),
             new LoadingCatalogRefreshTracker());
 
-        var snapshot = await catalog.GetSnapshotAsync(CancellationToken.None);
+        var snapshot = await catalog.GetLoadStateAsync(CancellationToken.None);
 
-        Assert.Equal(LoadingCatalogAvailability.Disabled, snapshot.Availability);
-        Assert.Equal(LoadingStatus.Disabled, snapshot.Packages[0].Status);
+        Assert.Equal(PackageLoadStateAvailability.Disabled, snapshot.Availability);
+        Assert.Equal(PackageLoadStatus.Disabled, snapshot.Packages[0].Status);
     }
 
     [Fact]
-    public async Task GetSnapshotAsync_WhenNotRefreshed_ReportsStalePackages()
+    public async Task GetLoadStateAsync_WhenNotRefreshed_ReportsStalePackages()
     {
         var catalog = CreateCatalog(
             new LoadingOptions { Enabled = true },
-            new ActivePackageCatalogSnapshot(
+            new ActivePackagesSnapshot(
                 DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow,
-                [new ActivePackageDescriptor("pkg-a", "1.0.0", "feed", "source", "/packages/pkg-a", DateTimeOffset.UtcNow, "corr")],
+                [new ActivePackage("pkg-a", "1.0.0", "feed", "source", "/packages/pkg-a", DateTimeOffset.UtcNow, "corr")],
                 "read-2"),
             new PackageLoader(),
             new LoadingCatalogRefreshTracker());
 
-        var snapshot = await catalog.GetSnapshotAsync(CancellationToken.None);
+        var snapshot = await catalog.GetLoadStateAsync(CancellationToken.None);
 
-        Assert.Equal(LoadingCatalogAvailability.Stale, snapshot.Availability);
-        Assert.Equal(LoadingStatus.Stale, snapshot.Packages[0].Status);
+        Assert.Equal(PackageLoadStateAvailability.Stale, snapshot.Availability);
+        Assert.Equal(PackageLoadStatus.Stale, snapshot.Packages[0].Status);
     }
 
     [Fact]
-    public async Task GetSnapshotAsync_WhenLoadedAndFailedPackagesExist_ReportsStatusesAndCandidates()
+    public async Task GetLoadStateAsync_WhenLoadedAndFailedPackagesExist_ReportsStatusesAndAssemblyReferences()
     {
         var refreshTracker = new LoadingCatalogRefreshTracker();
         var loader = new PackageLoader();
         var good = CreateResolvedPackage("pkg-good", "1.0.0");
-        var badDescriptor = new ActivePackageDescriptor("pkg-bad", "1.0.0", "feed", "source", "/path/does/not/exist", DateTimeOffset.UtcNow, "corr-bad");
-        var activeSnapshot = new ActivePackageCatalogSnapshot(
+        var badDescriptor = new ActivePackage("pkg-bad", "1.0.0", "feed", "source", "/path/does/not/exist", DateTimeOffset.UtcNow, "corr-bad");
+        var activeSnapshot = new ActivePackagesSnapshot(
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow,
             [
-                new ActivePackageDescriptor(good.Id, good.Version, good.FeedName, good.SourceName, good.InstallPath, DateTimeOffset.UtcNow, "corr-good"),
+                new ActivePackage(good.Id, good.Version, good.FeedName, good.SourceName, good.InstallPath, DateTimeOffset.UtcNow, "corr-good"),
                 badDescriptor
             ],
             "read-3");
@@ -69,14 +69,14 @@ public sealed class LoadingCatalogTests
             loader,
             refreshTracker);
 
-        var snapshot = await catalog.GetSnapshotAsync(CancellationToken.None);
+        var snapshot = await catalog.GetLoadStateAsync(CancellationToken.None);
 
         var loaded = Assert.Single(snapshot.Packages, x => x.PackageId == "pkg-good");
-        Assert.Equal(LoadingStatus.Loaded, loaded.Status);
-        Assert.NotEmpty(loaded.ScanCandidates);
+        Assert.Equal(PackageLoadStatus.Loaded, loaded.Status);
+        Assert.NotEmpty(loaded.AssemblyReferences);
 
         var failed = Assert.Single(snapshot.Packages, x => x.PackageId == "pkg-bad");
-        Assert.Equal(LoadingStatus.Failed, failed.Status);
+        Assert.Equal(PackageLoadStatus.Failed, failed.Status);
         Assert.NotEmpty(failed.Diagnostics);
         var contribution = await new LoadingOperationalStateContributor(
             new StubActivePackageCatalog(activeSnapshot),
@@ -85,13 +85,13 @@ public sealed class LoadingCatalogTests
             Options.Create(new LoadingOptions { Enabled = true }))
             .ContributeAsync(CancellationToken.None);
 
-        Assert.Contains("loading-catalog-issues:1", contribution.DegradedReasons);
-        Assert.Contains("loading-divergence:1", contribution.DegradedReasons);
+        Assert.Contains("load-state-issues:1", contribution.DegradedReasons);
+        Assert.Contains("load-state-divergence:1", contribution.DegradedReasons);
     }
 
     private static LoadingCatalog CreateCatalog(
         LoadingOptions options,
-        ActivePackageCatalogSnapshot snapshot,
+        ActivePackagesSnapshot snapshot,
         PackageLoader loader,
         LoadingCatalogRefreshTracker refreshTracker)
     {
@@ -117,9 +117,9 @@ public sealed class LoadingCatalogTests
         return new ResolvedPackage(id, version, "feed-a", root, DateTimeOffset.UtcNow, "source-a");
     }
 
-    private sealed class StubActivePackageCatalog(ActivePackageCatalogSnapshot snapshot) : IActivePackageCatalog
+    private sealed class StubActivePackageCatalog(ActivePackagesSnapshot snapshot) : IActivePackageCatalog
     {
-        public Task<ActivePackageCatalogSnapshot> GetSnapshotAsync(CancellationToken cancellationToken) => Task.FromResult(snapshot);
+        public Task<ActivePackagesSnapshot> GetActivePackagesAsync(CancellationToken cancellationToken) => Task.FromResult(snapshot);
     }
 }
 

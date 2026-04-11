@@ -262,22 +262,15 @@ public sealed class PackageTypeScannerTests : IDisposable
         Func<IReadOnlyList<Assembly>> assembliesFactory)
         : IPackageAssemblyCatalog
     {
-        public Task<IReadOnlyList<PackageAssemblyCatalogEntry>> GetAssembliesAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<PackageAssemblyCatalogEntry>>([
-                new PackageAssemblyCatalogEntry(packageId, version, assembliesFactory(), [])
+        public Task<IReadOnlyList<PackageAssemblies>> GetAssembliesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<PackageAssemblies>>([
+                new PackageAssemblies(packageId, version, assembliesFactory(), [])
             ]);
 
-        public Task<PackageAssemblyCatalogEntry?> GetAssembliesAsync(string requestedPackageId, CancellationToken cancellationToken) =>
-            Task.FromResult<PackageAssemblyCatalogEntry?>(
+        public Task<PackageAssemblies?> GetAssembliesAsync(string requestedPackageId, CancellationToken cancellationToken) =>
+            Task.FromResult<PackageAssemblies?>(
                 string.Equals(requestedPackageId, packageId, StringComparison.OrdinalIgnoreCase)
-                    ? new PackageAssemblyCatalogEntry(packageId, version, assembliesFactory(), [])
-                    : null);
-
-        public Task<PackageAssemblyCatalogEntry?> GetAssembliesAsync(string requestedPackageId, string requestedVersion, CancellationToken cancellationToken) =>
-            Task.FromResult<PackageAssemblyCatalogEntry?>(
-                string.Equals(requestedPackageId, packageId, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(requestedVersion, version, StringComparison.OrdinalIgnoreCase)
-                    ? new PackageAssemblyCatalogEntry(packageId, version, assembliesFactory(), [])
+                    ? new PackageAssemblies(packageId, version, assembliesFactory(), [])
                     : null);
     }
 

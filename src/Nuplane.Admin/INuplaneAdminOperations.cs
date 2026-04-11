@@ -13,7 +13,7 @@ public interface INuplaneAdminOperations
     /// <summary>
     /// Gets the active package catalog composed by the admin surface.
     /// </summary>
-    Task<ActivePackageCatalogSnapshot> GetPackagesAsync(CancellationToken cancellationToken);
+    Task<ActivePackagesSnapshot> GetPackagesAsync(CancellationToken cancellationToken);
 
 
     /// <summary>

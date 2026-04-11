@@ -20,9 +20,9 @@ internal sealed class NuplaneAdminOperations(
     private readonly ManualReconcileCoordinator _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
 
     /// <inheritdoc />
-    public Task<ActivePackageCatalogSnapshot> GetPackagesAsync(CancellationToken cancellationToken)
+    public Task<ActivePackagesSnapshot> GetPackagesAsync(CancellationToken cancellationToken)
     {
-        return _activePackageCatalog.GetSnapshotAsync(cancellationToken);
+        return _activePackageCatalog.GetActivePackagesAsync(cancellationToken);
     }
 
 

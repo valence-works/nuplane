@@ -45,12 +45,15 @@ public static class LoadingRegistrationServices
         services.TryAddSingleton<IPackageAssemblyProvider>(sp => sp.GetRequiredService<PackageAssemblyProvider>());
         services.TryAddSingleton<PackageAssemblyCatalog>();
         services.TryAddSingleton<IPackageAssemblyCatalog>(sp => sp.GetRequiredService<PackageAssemblyCatalog>());
+        services.TryAddSingleton<PackageTypeFinder>();
+        services.TryAddSingleton<IPackageTypeFinder>(sp => sp.GetRequiredService<PackageTypeFinder>());
         services.TryAddSingleton<PackageTypeScanner>();
         services.TryAddSingleton<IPackageTypeScanner>(sp => sp.GetRequiredService<PackageTypeScanner>());
         services.TryAddSingleton<PackageUnloadCoordinator>();
         services.TryAddSingleton<IPackageUnloadCoordinator>(sp => sp.GetRequiredService<PackageUnloadCoordinator>());
         services.TryAddSingleton<LoadingCatalog>();
         services.TryAddSingleton<ILoadingCatalog>(sp => sp.GetRequiredService<LoadingCatalog>());
+        services.TryAddSingleton<IPackageLoadStateCatalog>(sp => sp.GetRequiredService<LoadingCatalog>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, LoadingOperationalStateContributor>());
     }
 

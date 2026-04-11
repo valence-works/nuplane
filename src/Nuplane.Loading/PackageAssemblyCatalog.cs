@@ -5,14 +5,14 @@ namespace Nuplane.Loading;
 /// package assembly materialization using loading-owned default filtering semantics.
 /// </summary>
 public sealed class PackageAssemblyCatalog(
-    ILoadingCatalog loadingCatalog,
+    IPackageLoadStateCatalog loadStateCatalog,
     IPackageAssemblyProvider packageAssemblyProvider) : IPackageAssemblyCatalog
 {
-    private readonly ILoadingCatalog _loadingCatalog = loadingCatalog ?? throw new ArgumentNullException(nameof(loadingCatalog));
+    private readonly IPackageLoadStateCatalog _loadStateCatalog = loadStateCatalog ?? throw new ArgumentNullException(nameof(loadStateCatalog));
     private readonly IPackageAssemblyProvider _packageAssemblyProvider = packageAssemblyProvider ?? throw new ArgumentNullException(nameof(packageAssemblyProvider));
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<PackageAssemblyCatalogEntry>> GetAssembliesAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PackageAssemblies>> GetAssembliesAsync(CancellationToken cancellationToken)
     {
         var packages = await GetLoadedPackagesAsync(cancellationToken);
 
@@ -22,7 +22,7 @@ public sealed class PackageAssemblyCatalog(
     }
 
     /// <inheritdoc />
-    public async Task<PackageAssemblyCatalogEntry?> GetAssembliesAsync(string packageId, CancellationToken cancellationToken)
+    public async Task<PackageAssemblies?> GetAssembliesAsync(string packageId, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
 
@@ -39,41 +39,25 @@ public sealed class PackageAssemblyCatalog(
         };
     }
 
-    /// <inheritdoc />
-    public async Task<PackageAssemblyCatalogEntry?> GetAssembliesAsync(string packageId, string version, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<PackageLoadState>> GetLoadedPackagesAsync(CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(version);
-
-        var packages = await GetLoadedPackagesAsync(cancellationToken);
-        var package = packages.FirstOrDefault(package =>
-            string.Equals(package.PackageId, packageId, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(package.Version, version, StringComparison.OrdinalIgnoreCase));
-
-        return package is null
-            ? null
-            : CreateEntry(package);
-    }
-
-    private async Task<IReadOnlyList<LoadingPackageDescriptor>> GetLoadedPackagesAsync(CancellationToken cancellationToken)
-    {
-        var snapshot = await _loadingCatalog.GetSnapshotAsync(cancellationToken);
-        if (snapshot.Availability != LoadingCatalogAvailability.Available)
+        var snapshot = await _loadStateCatalog.GetLoadStateAsync(cancellationToken);
+        if (snapshot.Availability != PackageLoadStateAvailability.Available)
         {
             return [];
         }
 
         return snapshot.Packages
-            .Where(static package => package.Status == LoadingStatus.Loaded)
+            .Where(static package => package.Status == PackageLoadStatus.Loaded)
             .OrderBy(static package => package.PackageId, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
-    private PackageAssemblyCatalogEntry CreateEntry(LoadingPackageDescriptor package) =>
+    private PackageAssemblies CreateEntry(PackageLoadState package) =>
         new(
             package.PackageId,
             package.Version,
             _packageAssemblyProvider.GetAssemblies(package.PackageId, package.Version),
-            package.ScanCandidates.ToArray());
+            package.AssemblyReferences.ToArray());
 }

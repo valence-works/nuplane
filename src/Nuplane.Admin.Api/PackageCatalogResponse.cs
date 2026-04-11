@@ -5,10 +5,10 @@ namespace Nuplane.Admin.Api;
 internal sealed record PackageCatalogResponse(
     DateTimeOffset SnapshotAtUtc,
     DateTimeOffset PersistedAtUtc,
-    IReadOnlyList<ActivePackageDescriptor> Packages,
+    IReadOnlyList<ActivePackage> Packages,
     string CorrelationId)
 {
-    public PackageCatalogResponse(ActivePackageCatalogSnapshot snapshot)
+    public PackageCatalogResponse(ActivePackagesSnapshot snapshot)
         : this(snapshot.SnapshotAtUtc, snapshot.PersistedAtUtc, snapshot.Packages, snapshot.CorrelationId)
     {
     }
