@@ -6,6 +6,6 @@ namespace Nuplane.Loading;
 /// </summary>
 /// <param name="ContextKey">The unique key identifying the assembly load context.</param>
 /// <param name="Context">The underlying load context object.</param>
-public sealed record PackageLoadContextHandle(
+internal sealed record PackageLoadContextHandle(
     string ContextKey,
     object Context);

@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Loading.Api;
 using Nuplane.Operational;
 using Nuplane.Loading.Registration;
+using System.Reflection;
 
 namespace Nuplane.Loading.Tests;
 
@@ -13,80 +14,74 @@ namespace Nuplane.Loading.Tests;
 public sealed class LoadingOwnershipContractTests
 {
     [Fact]
-    public void Register_RegistersLoadingOptions()
+    public void PublicLoadingAbstractions_ExposeOnlyCanonicalHostFacingContracts()
+    {
+        var exportedTypeNames = typeof(IPackageAssemblyCatalog).Assembly
+            .GetExportedTypes()
+            .Select(static type => type.Name)
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Contains(nameof(IPackageAssemblyCatalog), exportedTypeNames);
+        Assert.Contains(nameof(IPackageTypeFinder), exportedTypeNames);
+        Assert.Contains(nameof(IPackageLoadStateCatalog), exportedTypeNames);
+        Assert.Contains(nameof(PackageLoadStateSnapshot), exportedTypeNames);
+        Assert.Contains(nameof(PackageLoadState), exportedTypeNames);
+        Assert.Contains(nameof(PackageAssemblyReference), exportedTypeNames);
+        Assert.Contains(nameof(PackageAssemblies), exportedTypeNames);
+
+        Assert.DoesNotContain(nameof(IPackageLoader), exportedTypeNames);
+        Assert.DoesNotContain(nameof(IPackageAssemblyProvider), exportedTypeNames);
+        Assert.DoesNotContain(nameof(IPackageUnloadCoordinator), exportedTypeNames);
+        Assert.DoesNotContain(nameof(ILoadingEventDispatcher), exportedTypeNames);
+        Assert.DoesNotContain(nameof(ILoadingFailureTracker), exportedTypeNames);
+        Assert.DoesNotContain(nameof(IPackageLoadingObserver), exportedTypeNames);
+        Assert.DoesNotContain(nameof(IPackageTypeScanner), exportedTypeNames);
+        Assert.DoesNotContain(nameof(ILoadingCatalog), exportedTypeNames);
+        Assert.DoesNotContain(nameof(LoadingCatalogSnapshot), exportedTypeNames);
+        Assert.DoesNotContain(nameof(LoadingPackageDescriptor), exportedTypeNames);
+        Assert.DoesNotContain(nameof(LoadingCatalogAvailability), exportedTypeNames);
+        Assert.DoesNotContain(nameof(LoadingStatus), exportedTypeNames);
+        Assert.DoesNotContain(nameof(AssemblyScanCandidate), exportedTypeNames);
+        Assert.DoesNotContain(nameof(PackageLoadSession), exportedTypeNames);
+        Assert.DoesNotContain(nameof(PackageLoadContextHandle), exportedTypeNames);
+        Assert.DoesNotContain(nameof(PackageLoadResult), exportedTypeNames);
+        Assert.DoesNotContain(nameof(DeactivationAttempt), exportedTypeNames);
+        Assert.DoesNotContain(nameof(UnloadOutcome), exportedTypeNames);
+        Assert.DoesNotContain(nameof(UnloadOutcomeRecord), exportedTypeNames);
+    }
+
+    [Fact]
+    public void Register_RegistersOnlySurvivingPublicServices_AndModuleOwnedContributor()
     {
         var services = new ServiceCollection();
 
         LoadingRegistrationServices.Register(services);
 
         Assert.Contains(services, d => d.ServiceType == typeof(LoadingOptionsValidator));
-    }
-
-    [Fact]
-    public void Register_RegistersPackageLoader()
-    {
-        var services = new ServiceCollection();
-
-        LoadingRegistrationServices.Register(services);
-
-        Assert.Contains(services, d => d.ServiceType == typeof(IPackageLoader));
-    }
-
-    [Fact]
-    public void Register_RegistersPackageAssemblyProvider()
-    {
-        var services = new ServiceCollection();
-
-        LoadingRegistrationServices.Register(services);
-
-        Assert.Contains(services, d => d.ServiceType == typeof(IPackageAssemblyProvider));
-    }
-
-    [Fact]
-    public void Register_RegistersPackageAssemblyCatalog()
-    {
-        var services = new ServiceCollection();
-
-        LoadingRegistrationServices.Register(services);
-
         Assert.Contains(services, d => d.ServiceType == typeof(IPackageAssemblyCatalog));
-    }
-
-    [Fact]
-    public void Register_RegistersLoadingEventDispatcher()
-    {
-        var services = new ServiceCollection();
-
-        LoadingRegistrationServices.Register(services);
-
-        Assert.Contains(services, d => d.ServiceType == typeof(ILoadingEventDispatcher));
-    }
-
-    [Fact]
-    public void Register_RegistersLoadingFailureTracker()
-    {
-        var services = new ServiceCollection();
-
-        LoadingRegistrationServices.Register(services);
-
-        Assert.Contains(services, d => d.ServiceType == typeof(ILoadingFailureTracker));
-    }
-
-    [Fact]
-    public void Register_RegistersLoadingOperationalStateContributor()
-    {
-        var services = new ServiceCollection();
-
-        LoadingRegistrationServices.Register(services);
-
+        Assert.Contains(services, d => d.ServiceType == typeof(IPackageTypeFinder));
+        Assert.Contains(services, d => d.ServiceType == typeof(IPackageLoadStateCatalog));
         Assert.Contains(services, d => d.ServiceType == typeof(IOperationalStateContributor));
+
+        Assert.DoesNotContain(services, d => d.ServiceType.Name == nameof(IPackageLoader));
+        Assert.DoesNotContain(services, d => d.ServiceType.Name == nameof(IPackageAssemblyProvider));
+        Assert.DoesNotContain(services, d => d.ServiceType.Name == nameof(IPackageUnloadCoordinator));
+        Assert.DoesNotContain(services, d => d.ServiceType.Name == nameof(ILoadingEventDispatcher));
+        Assert.DoesNotContain(services, d => d.ServiceType.Name == nameof(ILoadingFailureTracker));
+        Assert.DoesNotContain(services, d => d.ServiceType.Name == nameof(IPackageTypeScanner));
+        Assert.DoesNotContain(services, d => d.ServiceType.Name == nameof(ILoadingCatalog));
     }
 
     [Fact]
-    public void MapNuplaneLoading_ExtensionExistsInLoadingOwnedApiPackage()
+    public void LoadingOwnedApi_ExposesLoadStateEndpointOnly()
     {
-        var method = typeof(NuplaneLoadingEndpointExtensions).GetMethod(nameof(NuplaneLoadingEndpointExtensions.MapNuplaneLoading));
+        var methods = typeof(NuplaneLoadStateEndpointExtensions)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Select(static method => method.Name)
+            .ToArray();
 
-        Assert.NotNull(method);
+        Assert.Contains("MapNuplaneLoadState", methods);
+        Assert.DoesNotContain("MapNuplaneLoading", methods);
     }
 }

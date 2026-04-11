@@ -8,7 +8,7 @@ namespace Nuplane.Loading;
 /// <param name="TargetFrameworkMoniker">The selected target framework moniker, when known.</param>
 /// <param name="CandidateKind">The candidate role, such as <c>PrimaryLoadAssembly</c>.</param>
 /// <param name="SelectionReason">A deterministic reason explaining why the candidate was selected.</param>
-public sealed record AssemblyScanCandidate(
+internal sealed record AssemblyScanCandidate(
     string AssemblyPath,
     string AssemblyFileName,
     string? TargetFrameworkMoniker,

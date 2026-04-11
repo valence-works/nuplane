@@ -8,7 +8,7 @@ namespace Nuplane.Runtime.Tests.Operational;
 public sealed class ActivePackageCatalogTests
 {
     [Fact]
-    public async Task GetSnapshotAsync_ReturnsOnlyActivePackagesInDeterministicOrder()
+    public async Task GetActivePackagesAsync_ReturnsOnlyActivePackagesInDeterministicOrder()
     {
         var state = new StoreStateRecord(
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -28,7 +28,7 @@ public sealed class ActivePackageCatalogTests
             });
 
         var catalog = CreateCatalog(state);
-        var snapshot = await catalog.GetSnapshotAsync(CancellationToken.None);
+        var snapshot = await catalog.GetActivePackagesAsync(CancellationToken.None);
 
         Assert.Equal(2, snapshot.Packages.Count);
         Assert.Equal("alpha", snapshot.Packages[0].PackageId);
@@ -36,7 +36,7 @@ public sealed class ActivePackageCatalogTests
     }
 
     [Fact]
-    public async Task GetSnapshotAsync_PreservesTrustedProvenance_AndReportsDescriptorIssues()
+    public async Task GetActivePackagesAsync_PreservesTrustedProvenance_AndReportsDescriptorIssues()
     {
         var state = new StoreStateRecord(
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -54,7 +54,7 @@ public sealed class ActivePackageCatalogTests
             });
 
         var catalog = CreateCatalog(state);
-        var snapshot = await catalog.GetSnapshotAsync(CancellationToken.None);
+        var snapshot = await catalog.GetActivePackagesAsync(CancellationToken.None);
 
         Assert.Single(snapshot.Packages);
         Assert.Equal("trusted-feed", snapshot.Packages[0].FeedName);

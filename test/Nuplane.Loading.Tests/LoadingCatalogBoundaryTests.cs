@@ -118,6 +118,9 @@ public sealed class LoadingCatalogBoundaryTests
 
     private sealed class StubActivePackageCatalog(ActivePackageCatalogSnapshot snapshot) : IActivePackageCatalog
     {
+        public Task<ActivePackagesSnapshot> GetActivePackagesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(snapshot.ToActivePackagesSnapshot());
+
         public Task<ActivePackageCatalogSnapshot> GetSnapshotAsync(CancellationToken cancellationToken) => Task.FromResult(snapshot);
     }
 }

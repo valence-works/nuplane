@@ -9,7 +9,7 @@ namespace Nuplane.Loading;
 /// Default implementation of <see cref="IPackageAssemblyProvider"/> that materializes package assemblies
 /// from collectible package-specific assembly load contexts.
 /// </summary>
-public sealed class PackageAssemblyProvider : IPackageAssemblyProvider
+internal sealed class PackageAssemblyProvider : IPackageAssemblyProvider
 {
     private readonly PackageLoader _packageLoader;
     private readonly ILogger<PackageAssemblyProvider> _logger;

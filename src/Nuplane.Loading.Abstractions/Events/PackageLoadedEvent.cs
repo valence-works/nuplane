@@ -8,7 +8,7 @@ namespace Nuplane.Loading.Events;
 /// <param name="CorrelationId">Correlation ID from the reconciliation cycle that triggered the load.</param>
 /// <param name="LoadedAt">UTC timestamp recorded immediately after loading completed.</param>
 /// <param name="LoadedPackages">Sessions for every package successfully loaded in this batch.</param>
-public sealed record PackageLoadedEvent(
+internal sealed record PackageLoadedEvent(
     string CorrelationId,
     DateTimeOffset LoadedAt,
     IReadOnlyList<PackageLoadSession> LoadedPackages);

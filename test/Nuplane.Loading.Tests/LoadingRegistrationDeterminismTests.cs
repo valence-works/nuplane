@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Nuplane.Operational;
 using Nuplane.Loading.Registration;
 
 namespace Nuplane.Loading.Tests;
@@ -11,40 +12,7 @@ namespace Nuplane.Loading.Tests;
 public sealed class LoadingRegistrationDeterminismTests
 {
     [Fact]
-    public void Register_CalledTwice_DoesNotDuplicatePackageLoader()
-    {
-        var services = new ServiceCollection();
-
-        LoadingRegistrationServices.Register(services);
-        LoadingRegistrationServices.Register(services);
-
-        Assert.Single(services, d => d.ServiceType == typeof(IPackageLoader));
-    }
-
-    [Fact]
-    public void Register_CalledTwice_DoesNotDuplicateTypeScanner()
-    {
-        var services = new ServiceCollection();
-
-        LoadingRegistrationServices.Register(services);
-        LoadingRegistrationServices.Register(services);
-
-        Assert.Single(services, d => d.ServiceType == typeof(IPackageTypeScanner));
-    }
-
-    [Fact]
-    public void Register_CalledTwice_DoesNotDuplicatePackageAssemblyProvider()
-    {
-        var services = new ServiceCollection();
-
-        LoadingRegistrationServices.Register(services);
-        LoadingRegistrationServices.Register(services);
-
-        Assert.Single(services, d => d.ServiceType == typeof(IPackageAssemblyProvider));
-    }
-
-    [Fact]
-    public void Register_CalledTwice_DoesNotDuplicatePackageAssemblyCatalog()
+    public void Register_CalledTwice_DoesNotDuplicateCanonicalPublicServices()
     {
         var services = new ServiceCollection();
 
@@ -52,39 +20,36 @@ public sealed class LoadingRegistrationDeterminismTests
         LoadingRegistrationServices.Register(services);
 
         Assert.Single(services, d => d.ServiceType == typeof(IPackageAssemblyCatalog));
+        Assert.Single(services, d => d.ServiceType == typeof(IPackageTypeFinder));
+        Assert.Single(services, d => d.ServiceType == typeof(IPackageLoadStateCatalog));
     }
 
     [Fact]
-    public void Register_CalledTwice_DoesNotDuplicateUnloadCoordinator()
+    public void Register_CalledTwice_DoesNotDuplicateModuleOwnedContributor()
     {
         var services = new ServiceCollection();
 
         LoadingRegistrationServices.Register(services);
         LoadingRegistrationServices.Register(services);
 
-        Assert.Single(services, d => d.ServiceType == typeof(IPackageUnloadCoordinator));
+        Assert.Single(services, d => d.ServiceType == typeof(IOperationalStateContributor));
     }
 
     [Fact]
-    public void Register_CalledTwice_ReplacesEventDispatcher()
+    public void Register_CalledTwice_DoesNotReintroduceRemovedMechanicsInterfaces()
     {
         var services = new ServiceCollection();
 
         LoadingRegistrationServices.Register(services);
         LoadingRegistrationServices.Register(services);
 
-        Assert.Single(services, d => d.ServiceType == typeof(ILoadingEventDispatcher));
-    }
-
-    [Fact]
-    public void Register_CalledTwice_ReplacesFailureTracker()
-    {
-        var services = new ServiceCollection();
-
-        LoadingRegistrationServices.Register(services);
-        LoadingRegistrationServices.Register(services);
-
-        Assert.Single(services, d => d.ServiceType == typeof(ILoadingFailureTracker));
+        Assert.DoesNotContain(services, d => d.ServiceType.Name == nameof(IPackageLoader));
+        Assert.DoesNotContain(services, d => d.ServiceType.Name == nameof(IPackageAssemblyProvider));
+        Assert.DoesNotContain(services, d => d.ServiceType.Name == nameof(IPackageUnloadCoordinator));
+        Assert.DoesNotContain(services, d => d.ServiceType.Name == nameof(ILoadingEventDispatcher));
+        Assert.DoesNotContain(services, d => d.ServiceType.Name == nameof(ILoadingFailureTracker));
+        Assert.DoesNotContain(services, d => d.ServiceType.Name == nameof(IPackageTypeScanner));
+        Assert.DoesNotContain(services, d => d.ServiceType.Name == nameof(ILoadingCatalog));
     }
 
     [Fact]

@@ -6,7 +6,7 @@ namespace Nuplane.Loading;
 /// Coordinates the unloading of package assembly load contexts, including deactivation
 /// timeout management, GC-assisted unload verification, and retry tracking.
 /// </summary>
-public sealed class PackageUnloadCoordinator : IPackageUnloadCoordinator
+internal sealed class PackageUnloadCoordinator : IPackageUnloadCoordinator
 {
     private readonly ConcurrentDictionary<string, int> _attempts = new(StringComparer.OrdinalIgnoreCase);
 

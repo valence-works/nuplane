@@ -3,7 +3,7 @@ namespace Nuplane.Loading;
 /// <summary>
 /// Per-package loading states reported by the loading catalog.
 /// </summary>
-public enum LoadingStatus
+internal enum LoadingStatus
 {
     /// <summary>
     /// Loading is disabled for the package because the loading module is disabled.

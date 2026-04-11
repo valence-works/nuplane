@@ -11,5 +11,30 @@ public sealed record ActivePackageCatalogSnapshot(
     DateTimeOffset SnapshotAtUtc,
     DateTimeOffset PersistedAtUtc,
     IReadOnlyList<ActivePackageDescriptor> Packages,
-    string CorrelationId);
+    string CorrelationId)
+{
+    /// <summary>
+    /// Converts this legacy active package catalog snapshot to the canonical <see cref="ActivePackagesSnapshot"/> model.
+    /// </summary>
+    public ActivePackagesSnapshot ToActivePackagesSnapshot() =>
+        new(
+            SnapshotAtUtc,
+            PersistedAtUtc,
+            Packages.Select(static package => package.ToActivePackage()).ToArray(),
+            CorrelationId);
+
+    /// <summary>
+    /// Creates a legacy active package catalog snapshot from the canonical <see cref="ActivePackagesSnapshot"/> model.
+    /// </summary>
+    public static ActivePackageCatalogSnapshot FromActivePackagesSnapshot(ActivePackagesSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        return new ActivePackageCatalogSnapshot(
+            snapshot.SnapshotAtUtc,
+            snapshot.PersistedAtUtc,
+            snapshot.Packages.Select(static package => package.ToDescriptor()).ToArray(),
+            snapshot.CorrelationId);
+    }
+}
 

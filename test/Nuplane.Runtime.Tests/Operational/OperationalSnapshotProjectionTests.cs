@@ -65,12 +65,12 @@ public sealed class OperationalSnapshotProjectionTests
             evaluator,
             new ReconciliationLogger(),
             new ReconciliationMetrics(new ReconciliationTelemetry()),
-            [new StubContributor(new OperationalStateContribution("loading", ["loading-stale:2"]))]);
+            [new StubContributor(new OperationalStateContribution("loading", ["load-state-stale:2"]))]);
 
         var snapshot = await projector.ProjectAsync("corr-contrib", CancellationToken.None);
 
         Assert.Equal(HealthState.Degraded, snapshot.Health);
-        Assert.Contains("loading-stale:2", snapshot.DegradedReasons);
+        Assert.Contains("load-state-stale:2", snapshot.DegradedReasons);
         Assert.Single(evaluator.LastOperationalStateContributions);
     }
 

@@ -207,20 +207,19 @@ using Nuplane.Sample.AspNetCore.Catalog;
 app.MapSampleCatalog();
 ```
 
-- Use `IActivePackageCatalog` when you only need the authoritative active package inventory.
-- Use `IPackageAssemblyCatalog` as the default loading-enabled host integration surface when you want sane-default access to loaded `Assembly` instances for the current active package set without manually filtering loading snapshots first.
+- Use `IActivePackageCatalog.GetActivePackagesAsync(ct)` when you only need the authoritative active package inventory.
+- Use `IPackageLoadStateCatalog.GetLoadStateAsync(ct)` when the optional loading module is installed and you need current-process load-state availability or per-package load status.
+- Use `IPackageAssemblyCatalog` as the default loading-enabled host integration surface when you want sane-default access to loaded `Assembly` instances for the current active package set without manually filtering load-state snapshots first.
 - Use `IPackageAssemblyCatalog.GetAssembliesAsync(packageId, ct)` when you want the currently active loaded version for one package identifier.
-- Use `IPackageAssemblyCatalog.GetAssembliesAsync(packageId, version, ct)` when you already know the exact active package version you want to inspect.
-- Use `ILoadingCatalog` when the optional loading module is installed and you need detailed current-process loading state, availability reasons, or scan-candidate guidance in addition to assembly access.
-- Use `IPackageTypeScanner.FindTypesAsync(packageId, ct)` as an optional convenience when you want Nuplane to apply assignability-based filtering over the current active loaded version for one package.
+- Use `IPackageTypeFinder.FindTypesAsync(packageId, ct)` only as an optional convenience after assembly access when you want Nuplane to apply assignability-based filtering over the current active loaded version for one package.
 - Use a host-owned query service such as the sample `PluginCatalog` when you want to explicitly discover all `IPlugin` implementations from the current active loaded package set while keeping package-aware control over the discovery flow.
-- Use the admin API (`/nuplane/admin/packages`, `/nuplane/admin/loading`, `/nuplane/admin/state`) when you want HTTP access to the same composed read surfaces.
+- Use the admin API (`/nuplane/admin/packages`, `/nuplane/admin/load-state`, `/nuplane/admin/state`) when you want HTTP access to the same composed read surfaces.
 
 #### Clean-break notes for query surfaces
 
-- `GET /nuplane/admin/loading` is owned by `Nuplane.Loading.Api`, not by the core admin packages.
+- `GET /nuplane/admin/load-state` is owned by `Nuplane.Loading.Api`, not by the core admin packages.
 - `GET /nuplane/admin/snapshot` is intentionally removed; package inventory and operational state are now separate reads.
-- The sample's `/catalog/assemblies` endpoint demonstrates the sane-default all-packages `IPackageAssemblyCatalog` convenience surface, `/catalog/assemblies/{packageId}` demonstrates the active-version-by-id overload, `/catalog/assemblies/{packageId}/{version}` demonstrates the exact-match overload, and `/catalog/plugins` layers host-owned plugin discovery on top of those catalog-first reads.
+- The sample's `/catalog/packages`, `/catalog/load-state`, `/catalog/assemblies`, and `/catalog/plugins` endpoints intentionally teach the default host decision tree in that order: active packages, load state, assemblies, then optional type finding.
 - The sample observers demonstrate cache invalidation and logging only; they are not the authoritative package/loading inventory source.
 - These surface changes are intentional breaking changes for hosts that previously depended on merged snapshot or core-admin loading compatibility payloads.
 

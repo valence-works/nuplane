@@ -11,7 +11,7 @@ namespace Nuplane.Loading;
 /// <param name="LoadedAt">The time at which the package was loaded.</param>
 /// <param name="IsLoaded">Whether the package was successfully loaded into an assembly context.</param>
 /// <param name="LastError">The error message from the last failed load attempt, if any.</param>
-public sealed record PackageLoadSession(
+internal sealed record PackageLoadSession(
     string PackageId,
     string Version,
     string ActiveInstallPath,

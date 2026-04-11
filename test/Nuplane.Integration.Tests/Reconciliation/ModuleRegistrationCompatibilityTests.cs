@@ -24,11 +24,10 @@ public sealed class ModuleRegistrationCompatibilityTests
 
         LoadingRegistrationServices.Register(services);
 
-        Assert.Contains(services, d => d.ServiceType == typeof(IPackageLoader));
-        Assert.Contains(services, d => d.ServiceType == typeof(IPackageUnloadCoordinator));
-        Assert.Contains(services, d => d.ServiceType == typeof(IPackageAssemblyProvider));
         Assert.Contains(services, d => d.ServiceType == typeof(IPackageAssemblyCatalog));
-        Assert.Contains(services, d => d.ServiceType == typeof(IPackageTypeScanner));
+        Assert.Contains(services, d => d.ServiceType == typeof(IPackageTypeFinder));
+        Assert.Contains(services, d => d.ServiceType == typeof(IPackageLoadStateCatalog));
+        Assert.Contains(services, d => d.ServiceType == typeof(PackageLoader));
         Assert.Contains(services, d => d.ServiceType == typeof(LoadingOptionsValidator));
     }
 
@@ -42,10 +41,10 @@ public sealed class ModuleRegistrationCompatibilityTests
 
         // TryAdd semantics should prevent duplicate registrations
         Assert.Equal(1, services.Count(d =>
-            d.ServiceType == typeof(IPackageLoader)
+            d.ServiceType == typeof(PackageLoader)
             && d.Lifetime == ServiceLifetime.Singleton));
         Assert.Equal(1, services.Count(d =>
-            d.ServiceType == typeof(IPackageUnloadCoordinator)
+            d.ServiceType == typeof(IPackageAssemblyCatalog)
             && d.Lifetime == ServiceLifetime.Singleton));
     }
 
@@ -81,9 +80,9 @@ public sealed class ModuleRegistrationCompatibilityTests
         LoadingRegistrationServices.Register(services);
 
         // Verify loading services are present alongside DI container
-        Assert.Contains(services, d => d.ServiceType == typeof(IPackageLoader));
-        Assert.Contains(services, d => d.ServiceType == typeof(ILoadingEventDispatcher));
-        Assert.Contains(services, d => d.ServiceType == typeof(ILoadingFailureTracker));
+        Assert.Contains(services, d => d.ServiceType == typeof(PackageLoader));
+        Assert.Contains(services, d => d.ServiceType == typeof(IPackageAssemblyCatalog));
+        Assert.Contains(services, d => d.ServiceType == typeof(IPackageLoadStateCatalog));
     }
 
     [Fact]
@@ -101,7 +100,7 @@ public sealed class ModuleRegistrationCompatibilityTests
         });
 
         // Both modules' services must be present
-        Assert.Contains(services, d => d.ServiceType == typeof(IPackageLoader));
+        Assert.Contains(services, d => d.ServiceType == typeof(PackageLoader));
         Assert.Contains(services, d => d.ServiceType == typeof(IDesiredPackageSource));
     }
 
@@ -166,7 +165,7 @@ public sealed class ModuleRegistrationCompatibilityTests
 
             // Both modules' types must be registered
             Assert.Contains(services, d => d.ServiceType == typeof(IDesiredPackageSource));
-            Assert.Contains(services, d => d.ServiceType == typeof(IPackageLoader));
+            Assert.Contains(services, d => d.ServiceType == typeof(PackageLoader));
         }
         finally
         {

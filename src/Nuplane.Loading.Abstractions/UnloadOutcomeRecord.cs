@@ -10,7 +10,7 @@ namespace Nuplane.Loading;
 /// <param name="PendingReason">A human-readable reason when the unload is pending or failed.</param>
 /// <param name="RetryEligible">Whether the unload can be retried in a subsequent cycle.</param>
 /// <param name="CorrelationId">The correlation identifier of the reconciliation cycle.</param>
-public sealed record UnloadOutcomeRecord(
+internal sealed record UnloadOutcomeRecord(
     string PackageId,
     int AttemptNumber,
     DateTimeOffset AttemptedAt,

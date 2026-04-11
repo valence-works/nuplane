@@ -25,12 +25,12 @@ internal sealed class LoadingOperationalStateContributor(
             return new OperationalStateContribution("loading", []);
         }
 
-        var activeSnapshot = await _activePackageCatalog.GetSnapshotAsync(cancellationToken);
+        var activeSnapshot = await _activePackageCatalog.GetActivePackagesAsync(cancellationToken);
         if (!_refreshTracker.HasRefreshed)
         {
             return new OperationalStateContribution(
                 "loading",
-                activeSnapshot.Packages.Count > 0 ? [$"loading-stale:{activeSnapshot.Packages.Count}"] : []);
+                activeSnapshot.Packages.Count > 0 ? [$"load-state-stale:{activeSnapshot.Packages.Count}"] : []);
         }
 
         var issueCount = 0;
@@ -57,17 +57,17 @@ internal sealed class LoadingOperationalStateContributor(
         var reasons = new List<string>(3);
         if (issueCount > 0)
         {
-            reasons.Add($"loading-catalog-issues:{issueCount}");
+            reasons.Add($"load-state-issues:{issueCount}");
         }
 
         if (staleCount > 0)
         {
-            reasons.Add($"loading-stale:{staleCount}");
+            reasons.Add($"load-state-stale:{staleCount}");
         }
 
         if (divergenceCount > 0)
         {
-            reasons.Add($"loading-divergence:{divergenceCount}");
+            reasons.Add($"load-state-divergence:{divergenceCount}");
         }
 
         return new OperationalStateContribution("loading", reasons);

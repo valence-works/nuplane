@@ -3,7 +3,7 @@ namespace Nuplane.Loading;
 /// <summary>
 /// Standalone host-facing query service for package loading state and scan guidance.
 /// </summary>
-public interface ILoadingCatalog
+internal interface ILoadingCatalog
 {
     /// <summary>
     /// Reads the current loading catalog snapshot.

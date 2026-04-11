@@ -85,7 +85,7 @@ internal static class ActivePackageCatalogMapper
         return descriptors;
     }
 
-    public static ActivePackageCatalogSnapshot MapSnapshot(StoreStateRecord state, string correlationId)
+    public static ActivePackagesSnapshot MapSnapshot(StoreStateRecord state, string correlationId)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
@@ -95,9 +95,10 @@ internal static class ActivePackageCatalogMapper
                 && string.Equals(version, package.Version, StringComparison.OrdinalIgnoreCase))
             .OrderBy(package => package.PackageId, StringComparer.OrdinalIgnoreCase)
             .ThenBy(package => package.Version, StringComparer.OrdinalIgnoreCase)
+            .Select(static package => package.ToActivePackage())
             .ToArray();
 
-        return new ActivePackageCatalogSnapshot(
+        return new ActivePackagesSnapshot(
             DateTimeOffset.UtcNow,
             state.UpdatedAt,
             packages,

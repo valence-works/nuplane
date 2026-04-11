@@ -6,7 +6,7 @@ namespace Nuplane.Loading;
 /// Fans out loading domain events to all registered <see cref="IPackageLoadingObserver"/>
 /// instances. Follows the same pattern as <c>IObserverEventDispatcher</c> in the runtime.
 /// </summary>
-public interface ILoadingEventDispatcher
+internal interface ILoadingEventDispatcher
 {
     /// <summary>Publish a <see cref="PackageLoadedEvent"/> to all observers.</summary>
     /// <param name="evt">The loading event to publish.</param>

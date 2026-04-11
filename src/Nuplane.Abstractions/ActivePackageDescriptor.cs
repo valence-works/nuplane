@@ -17,5 +17,36 @@ public sealed record ActivePackageDescriptor(
     string? SourceName,
     string InstallPath,
     DateTimeOffset ActivatedAtUtc,
-    string ActivationCorrelationId);
+    string ActivationCorrelationId)
+{
+    /// <summary>
+    /// Converts this legacy active-package descriptor to the canonical <see cref="ActivePackage"/> model.
+    /// </summary>
+    public ActivePackage ToActivePackage() =>
+        new(
+            PackageId,
+            Version,
+            FeedName,
+            SourceName,
+            InstallPath,
+            ActivatedAtUtc,
+            ActivationCorrelationId);
+
+    /// <summary>
+    /// Creates a legacy active-package descriptor from the canonical <see cref="ActivePackage"/> model.
+    /// </summary>
+    public static ActivePackageDescriptor FromActivePackage(ActivePackage package)
+    {
+        ArgumentNullException.ThrowIfNull(package);
+
+        return new ActivePackageDescriptor(
+            package.PackageId,
+            package.Version,
+            package.FeedName,
+            package.SourceName,
+            package.InstallPath,
+            package.ActivatedAtUtc,
+            package.ActivationCorrelationId);
+    }
+}
 

@@ -2,15 +2,15 @@ using Nuplane.Loading;
 
 namespace Nuplane.Loading.Api;
 
-internal sealed record LoadingCatalogResponse(
-    LoadingCatalogAvailability Availability,
+internal sealed record PackageLoadStateResponse(
+    PackageLoadStateAvailability Availability,
     DateTimeOffset SnapshotAtUtc,
     DateTimeOffset? RefreshedAtUtc,
-    IReadOnlyList<LoadingPackageDescriptor> Packages,
+    IReadOnlyList<PackageLoadState> Packages,
     string? Reason,
     string CorrelationId)
 {
-    public LoadingCatalogResponse(LoadingCatalogSnapshot snapshot)
+    public PackageLoadStateResponse(PackageLoadStateSnapshot snapshot)
         : this(
             snapshot.Availability,
             snapshot.SnapshotAtUtc,

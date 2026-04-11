@@ -4,7 +4,7 @@ namespace Nuplane.Loading;
 /// Coordinates the unloading of package assembly load contexts, including deactivation
 /// timeouts and GC-based collectibility verification.
 /// </summary>
-public interface IPackageUnloadCoordinator
+internal interface IPackageUnloadCoordinator
 {
     /// <summary>
     /// Attempts to deactivate and unload a package's assembly load context.

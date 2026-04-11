@@ -8,7 +8,7 @@ namespace Nuplane.Loading;
 /// All methods have default no-op implementations — implementors only override
 /// what they need. Adding new methods in future is non-breaking.
 /// </summary>
-public interface IPackageLoadingObserver
+internal interface IPackageLoadingObserver
 {
     /// <summary>
     /// Called after a batch of packages has been successfully loaded into

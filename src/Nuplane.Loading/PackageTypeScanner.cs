@@ -8,7 +8,7 @@ namespace Nuplane.Loading;
 /// Default implementation of <see cref="IPackageTypeScanner"/> that inspects assemblies
 /// loaded into package-specific assembly load contexts as a convenience layer over package assembly access.
 /// </summary>
-public sealed class PackageTypeScanner : IPackageTypeScanner
+internal sealed class PackageTypeScanner : IPackageTypeScanner
 {
     private readonly IPackageAssemblyCatalog _packageAssemblyCatalog;
     private readonly IPackageAssemblyProvider _packageAssemblyProvider;

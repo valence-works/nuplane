@@ -45,7 +45,7 @@ public sealed class OperationalStateContributorIntegrationTests
             var snapshot = await projector.ProjectAsync("corr-state-read", CancellationToken.None);
 
             Assert.Equal(HealthState.Degraded, snapshot.Health);
-            Assert.Contains("loading-stale:1", snapshot.DegradedReasons);
+            Assert.Contains("load-state-stale:1", snapshot.DegradedReasons);
         }
         finally
         {

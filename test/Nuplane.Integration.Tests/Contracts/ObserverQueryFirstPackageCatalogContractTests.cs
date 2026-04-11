@@ -9,7 +9,7 @@ namespace Nuplane.Integration.Tests.Contracts;
 public sealed class ObserverQueryFirstPackageCatalogContractTests
 {
     [Fact]
-    public async Task TriggerAsync_WithoutObservers_PackageCatalogStillProvidesAuthoritativeActiveState()
+    public async Task TriggerAsync_WithoutObservers_ActivePackagesStillProvideAuthoritativeActiveState()
     {
         var tempRoot = Path.Combine(Path.GetTempPath(), "nuplane-query-first-package-catalog", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
@@ -24,7 +24,7 @@ public sealed class ObserverQueryFirstPackageCatalogContractTests
 
             var result = await service.TriggerAsync(new ReconciliationTrigger(TriggerType.Manual), CancellationToken.None);
             var catalog = new ActivePackageCatalog(store, new ReconciliationLogger(), new ReconciliationMetrics(new ReconciliationTelemetry()));
-            var snapshot = await catalog.GetSnapshotAsync(CancellationToken.None);
+            var snapshot = await catalog.GetActivePackagesAsync(CancellationToken.None);
 
             Assert.False(result.Skipped);
             var package = Assert.Single(snapshot.Packages);

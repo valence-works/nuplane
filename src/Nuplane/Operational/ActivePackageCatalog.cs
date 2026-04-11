@@ -18,7 +18,7 @@ public sealed class ActivePackageCatalog(
     private readonly ReconciliationMetrics _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
 
     /// <inheritdoc />
-    public async Task<ActivePackageCatalogSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
+    public async Task<ActivePackagesSnapshot> GetActivePackagesAsync(CancellationToken cancellationToken)
     {
         var correlationId = CorrelationContext.CreateNew();
         var state = await _storeRegistry.GetStateAsync(cancellationToken);
@@ -30,6 +30,12 @@ public sealed class ActivePackageCatalog(
 
         return snapshot;
     }
+
+    /// <summary>
+    /// Reads the current active package catalog snapshot using legacy naming.
+    /// </summary>
+    public async Task<ActivePackageCatalogSnapshot> GetSnapshotAsync(CancellationToken cancellationToken) =>
+        (await GetActivePackagesAsync(cancellationToken).ConfigureAwait(false)).ToLegacySnapshot();
 
     private static int CalculateDescriptorIssues(StoreStateRecord state)
     {

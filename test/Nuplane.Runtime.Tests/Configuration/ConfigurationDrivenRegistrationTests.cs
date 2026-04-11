@@ -698,7 +698,7 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
-    public void AddNuplaneLoading_AndBuilder_DoNotDuplicatePackageLoader()
+    public void AddNuplaneLoading_AndBuilder_DoNotDuplicateConcretePackageLoader()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -706,7 +706,7 @@ public sealed class ConfigurationDrivenRegistrationTests
         services.AddNuplaneLoading();
         services.AddNuplane(nuplane => nuplane.AutoloadPackages());
 
-        var loaderCount = services.Count(d => d.ServiceType == typeof(IPackageLoader));
+        var loaderCount = services.Count(d => d.ServiceType == typeof(PackageLoader));
         Assert.Equal(1, loaderCount);
     }
 

@@ -63,11 +63,11 @@ public sealed class AdminReadEndpointContractTests
 
     private sealed class StubAdminOperations : INuplaneAdminOperations
     {
-        public Task<ActivePackageCatalogSnapshot> GetPackagesAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(new ActivePackageCatalogSnapshot(
+        public Task<ActivePackagesSnapshot> GetPackagesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new ActivePackagesSnapshot(
                 DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow,
-                [new ActivePackageDescriptor("pkg-a", "1.0.0", "feed-a", "source-a", "/packages/pkg-a/1.0.0", DateTimeOffset.UtcNow, "corr-packages")],
+                [new ActivePackage("pkg-a", "1.0.0", "feed-a", "source-a", "/packages/pkg-a/1.0.0", DateTimeOffset.UtcNow, "corr-packages")],
                 "corr-packages"));
 
         public Task<OperationalStateSnapshot> GetStateAsync(CancellationToken cancellationToken) =>

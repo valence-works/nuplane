@@ -3,7 +3,7 @@ namespace Nuplane.Loading;
 /// <summary>
 /// Describes the outcome of attempting to unload a package assembly load context.
 /// </summary>
-public enum UnloadOutcome
+internal enum UnloadOutcome
 {
     /// <summary>The assembly load context was fully unloaded and garbage collected.</summary>
     Unloaded,

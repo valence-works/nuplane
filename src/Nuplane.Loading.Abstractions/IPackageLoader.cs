@@ -5,7 +5,7 @@ namespace Nuplane.Loading;
 /// <summary>
 /// Manages the loading of package assemblies into isolated assembly load contexts.
 /// </summary>
-public interface IPackageLoader
+internal interface IPackageLoader
 {
     /// <summary>
     /// Ensures that all specified packages are loaded into assembly contexts, returning the load results.

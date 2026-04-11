@@ -42,11 +42,14 @@ public sealed class LoadingCatalogHealthTests
         await catalog.GetSnapshotAsync(CancellationToken.None);
         var snapshot = await projector.ProjectAsync("state-1", CancellationToken.None);
 
-        Assert.Contains("loading-stale:1", snapshot.DegradedReasons);
+        Assert.Contains("load-state-stale:1", snapshot.DegradedReasons);
     }
 
     private sealed class StubActivePackageCatalog(ActivePackageCatalogSnapshot snapshot) : IActivePackageCatalog
     {
+        public Task<ActivePackagesSnapshot> GetActivePackagesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(snapshot.ToActivePackagesSnapshot());
+
         public Task<ActivePackageCatalogSnapshot> GetSnapshotAsync(CancellationToken cancellationToken) => Task.FromResult(snapshot);
     }
 }
