@@ -36,8 +36,8 @@ internal static class AssemblyCatalogResponses
 internal sealed record AssemblyCatalogPackageResponse(
     string PackageId,
     string Version,
-    IReadOnlyList<AssemblyDescriptorResponse> Assemblies,
-    IReadOnlyList<AssemblyReferenceResponse> AssemblyReferences);
+    IReadOnlyList<AssemblyDescriptorResponse> LoadedAssemblies,
+    IReadOnlyList<AssemblyReferenceResponse> SelectedAssemblyReferences);
 
 internal sealed record AssemblyDescriptorResponse(
     string Name,

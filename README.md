@@ -213,6 +213,7 @@ app.MapSampleCatalog();
 - Use `IPackageAssemblyCatalog.GetAssembliesAsync(packageId, ct)` when you want the currently active loaded version for one package identifier.
 - Use `IPackageTypeFinder.FindTypesAsync(packageId, ct)` only as an optional convenience after assembly access when you want Nuplane to apply assignability-based filtering over the current active loaded version for one package.
 - Use a host-owned query service such as the sample `PluginCatalog` when you want to explicitly discover all `IPlugin` implementations from the current active loaded package set while keeping package-aware control over the discovery flow.
+- In the sample HTTP payloads for `/catalog/assemblies` and `/catalog/assemblies/{packageId}`, `loadedAssemblies` is the runtime-loaded assembly view while `selectedAssemblyReferences` is the durable loader-selected metadata view.
 - Use the admin API (`/nuplane/admin/packages`, `/nuplane/admin/load-state`, `/nuplane/admin/state`) when you want HTTP access to the same composed read surfaces.
 
 #### Clean-break notes for query surfaces
