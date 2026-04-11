@@ -65,7 +65,7 @@ public sealed record PackageAssemblies(
 /// <param name="Version">The active package version.</param>
 /// <param name="Assemblies">The loaded assemblies materialized for the package.</param>
 /// <param name="ScanCandidates">The deterministic scan candidates associated with the package.</param>
-public sealed record PackageAssemblyCatalogEntry(
+internal sealed record PackageAssemblyCatalogEntry(
     string PackageId,
     string Version,
     IReadOnlyList<Assembly> Assemblies,

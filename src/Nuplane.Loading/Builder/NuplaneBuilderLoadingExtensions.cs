@@ -40,8 +40,8 @@ public static class NuplaneBuilderLoadingExtensions
     }
 
     /// <summary>
-    /// Installs the Nuplane assembly loading subsystem, including the package loader,
-    /// unload coordinator, auto-loading observer, and loading event dispatcher.
+    /// Installs the Nuplane assembly loading subsystem, including its canonical public query services
+    /// and the internal auto-loading bridge that keeps load state current.
     /// </summary>
     /// <param name="builder">The Nuplane builder to extend.</param>
     /// <param name="configure">An optional callback to configure loading options.</param>
@@ -51,23 +51,6 @@ public static class NuplaneBuilderLoadingExtensions
         this NuplaneBuilder builder,
         Action<NuplaneLoadingBuilder>? configure = null) =>
         AutoloadPackagesCore(builder, configure, enableByDefault: true);
-
-    /// <summary>
-    /// Registers a loading event observer that is notified after packages are loaded into
-    /// Assembly Load Contexts.
-    /// </summary>
-    /// <typeparam name="T">A type implementing <see cref="IPackageLoadingObserver"/>.</typeparam>
-    /// <param name="builder">The Nuplane builder to extend.</param>
-    /// <returns>The same <see cref="NuplaneBuilder"/> for chaining.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> is <see langword="null"/>.</exception>
-    public static NuplaneBuilder OnPackagesLoaded<T>(this NuplaneBuilder builder)
-        where T : class, IPackageLoadingObserver
-    {
-        ArgumentNullException.ThrowIfNull(builder);
-
-        builder.Services.AddSingleton<IPackageLoadingObserver, T>();
-        return builder;
-    }
 
     private static NuplaneBuilder AutoloadPackagesCore(
         NuplaneBuilder builder,

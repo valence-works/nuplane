@@ -22,7 +22,7 @@ public sealed record PackageLoadState(
     /// <summary>
     /// Creates a canonical package load-state record from the legacy loading descriptor model.
     /// </summary>
-    public static PackageLoadState FromLegacy(LoadingPackageDescriptor descriptor)
+    internal static PackageLoadState FromLegacy(LoadingPackageDescriptor descriptor)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
 

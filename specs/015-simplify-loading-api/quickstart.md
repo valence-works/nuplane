@@ -19,6 +19,7 @@ dotnet pack samples/Nuplane.Sample.Plugin/Nuplane.Sample.Plugin.csproj -c Debug
 dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj
 dotnet test test/Nuplane.Loading.Tests/Nuplane.Loading.Tests.csproj
 dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj
+dotnet build samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj
 dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj
 dotnet test nuplane.sln
 ./build/validate-secrets.sh
@@ -71,6 +72,7 @@ dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj --fi
 3. Query or exercise the sample’s type-finding convenience path only after confirming assembly access works.
 4. Confirm type finding remains best-effort and host-neutral: Nuplane may filter assignable runtime types, but host-owned plugin/application semantics remain outside Nuplane’s public contract.
 5. Confirm public type-finding APIs do not expose synchronous exact-version methods.
+6. Confirm sample plugin discovery refreshes from core observer invalidation plus canonical query surfaces rather than from a public loading-observer API.
 
 ## 6) Validate unload-sensitive runtime object boundaries
 1. Review all durable or remotely exposed read models returned from admin and load-state routes.
@@ -84,7 +86,8 @@ dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj --fi
 2. Confirm `IPackageAssemblyProvider` is removed from the public host model.
 3. Confirm public exact-version assembly/type methods are removed.
 4. Confirm low-level loading orchestration abstractions (`IPackageLoader`, `IPackageUnloadCoordinator`, event/session/result bookkeeping) are internalized, merged, or deleted unless a documented internal-only safety boundary remains.
-5. Confirm no alias or compatibility layer survives only to preserve retired vocabulary.
+5. Confirm the builder surface no longer exposes a public loading-observer registration hook and that sample invalidation logic uses `INuplaneObserver` instead.
+6. Confirm no alias or compatibility layer survives only to preserve retired vocabulary.
 
 ## Expected test evidence
 - Runtime tests proving active package naming updates and deterministic inventory behavior.

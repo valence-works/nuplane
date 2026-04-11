@@ -7,7 +7,7 @@ using Nuplane.Loading;
 namespace Nuplane.Loading.Api;
 
 /// <summary>
-/// Provides extension methods for mapping load-state-owned Nuplane endpoints.
+/// Provides extension methods for mapping loading-owned Nuplane load-state endpoints.
 /// </summary>
 public static class NuplaneLoadStateEndpointExtensions
 {
@@ -27,7 +27,7 @@ public static class NuplaneLoadStateEndpointExtensions
             var snapshot = await loadStateCatalog.GetLoadStateAsync(cancellationToken);
             return Results.Ok(new PackageLoadStateResponse(snapshot));
         }).WithName("NuplaneGetLoadState")
-          .WithTags("NuplaneLoadState");
+          .WithTags("NuplaneLoading");
 
         return endpoints;
     }

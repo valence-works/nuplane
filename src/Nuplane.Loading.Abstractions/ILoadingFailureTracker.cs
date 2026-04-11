@@ -7,7 +7,7 @@ namespace Nuplane.Loading;
 /// loader failures in health and observability without taking a compile-time dependency
 /// on the loading hosting package implementation.
 /// </summary>
-public interface ILoadingFailureTracker : ICycleFailureContributor
+internal interface ILoadingFailureTracker : ICycleFailureContributor
 {
     /// <summary>
     /// Records a single package loading failure for the specified reconciliation correlation.

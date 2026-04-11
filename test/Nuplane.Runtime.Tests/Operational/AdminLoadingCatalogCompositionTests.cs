@@ -29,7 +29,7 @@ public sealed class AdminLoadingCatalogCompositionTests
         using var provider = services.BuildServiceProvider();
 
         Assert.NotNull(provider.GetRequiredService<INuplaneAdminOperations>());
-        Assert.Null(provider.GetService<ILoadingCatalog>());
+        Assert.Null(provider.GetService<IPackageLoadStateCatalog>());
     }
 }
 

@@ -39,12 +39,13 @@ public interface INuplaneAdminOperations
 - Core admin packages must not reference loading abstractions, loading DTOs, or load-state route extensions.
 - Sample and host guidance may compose both core admin and loading-owned surfaces, but they must teach the ownership split explicitly.
 - Compatibility aliases such as `/nuplane/admin/loading` are removed rather than retained.
+- Legacy core-admin loading wrappers and combined snapshot DTOs are removed rather than preserved as hidden compatibility shims.
 
 ## Documentation and sample rules
 - Default onboarding starts with active packages and uses load state only when availability or diagnostics are needed.
 - Assemblies are introduced before optional type finding.
 - Sample/plugin discovery remains host-owned; Nuplane may provide package-aware assemblies and optional assignability filtering, but not canonical plugin semantics.
-- Observer callbacks remain supplemental invalidation/logging hooks rather than the primary read model.
+- Observer callbacks remain supplemental invalidation/logging hooks rather than the primary read model, and the sample now uses `INuplaneObserver` invalidation instead of a public loading-observer hook.
 
 ## Validation and test obligations
 - API tests must prove core-admin mapping remains loading-free.

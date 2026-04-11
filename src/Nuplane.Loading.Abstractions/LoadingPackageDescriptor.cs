@@ -11,7 +11,7 @@ namespace Nuplane.Loading;
 /// <param name="Diagnostics">Secret-safe loading diagnostics.</param>
 /// <param name="ScanCandidates">The deterministic assembly scan candidates for the package.</param>
 /// <param name="ContextKey">The current load-context key, when one exists.</param>
-public sealed record LoadingPackageDescriptor(
+internal sealed record LoadingPackageDescriptor(
     string PackageId,
     string Version,
     LoadingStatus Status,

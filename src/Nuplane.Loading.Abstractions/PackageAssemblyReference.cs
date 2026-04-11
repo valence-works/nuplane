@@ -18,7 +18,7 @@ public sealed record PackageAssemblyReference(
     /// <summary>
     /// Creates a canonical assembly reference from the legacy scan-candidate model.
     /// </summary>
-    public static PackageAssemblyReference FromCandidate(AssemblyScanCandidate candidate)
+    internal static PackageAssemblyReference FromCandidate(AssemblyScanCandidate candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
 
@@ -33,7 +33,7 @@ public sealed record PackageAssemblyReference(
     /// <summary>
     /// Converts this canonical assembly reference back to the legacy scan-candidate model.
     /// </summary>
-    public AssemblyScanCandidate ToCandidate() =>
+    internal AssemblyScanCandidate ToCandidate() =>
         new(
             AssemblyPath,
             AssemblyFileName,

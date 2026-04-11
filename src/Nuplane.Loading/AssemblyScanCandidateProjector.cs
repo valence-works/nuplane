@@ -5,7 +5,7 @@ namespace Nuplane.Loading;
 /// <summary>
 /// Projects deterministic assembly scan guidance for active packages using the package loader's asset-selection rules.
 /// </summary>
-public sealed class AssemblyScanCandidateProjector(PackageLoader packageLoader)
+internal sealed class AssemblyScanCandidateProjector(PackageLoader packageLoader)
 {
     private readonly PackageLoader _packageLoader = packageLoader ?? throw new ArgumentNullException(nameof(packageLoader));
 

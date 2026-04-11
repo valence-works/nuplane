@@ -1,5 +1,4 @@
 using Nuplane;
-using Nuplane.Abstractions;
 using Nuplane.Admin;
 using Nuplane.Admin.Api;
 using Nuplane.Loading.Api;
@@ -16,7 +15,7 @@ builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
     nuplane.AddDirectoryFeedsFromConfiguration(nuplaneConfiguration);
     nuplane.AutoloadPackages(nuplaneConfiguration.GetSection("Loading"));
     nuplane.OnPackagesChanged<PackageChangeObserver>();
-    nuplane.OnPackagesLoaded<PluginDiscoveryObserver>();
+    nuplane.OnPackagesChanged<PluginDiscoveryObserver>();
 });
 builder.Services.AddNuplaneAdmin();
 builder.Services.AddSingleton<PluginCatalog>();

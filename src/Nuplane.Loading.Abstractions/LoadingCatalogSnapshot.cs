@@ -9,7 +9,7 @@ namespace Nuplane.Loading;
 /// <param name="Packages">The per-package loading descriptors.</param>
 /// <param name="Reason">A machine-readable reason when loading is disabled or stale.</param>
 /// <param name="CorrelationId">The correlation identifier for this read.</param>
-public sealed record LoadingCatalogSnapshot(
+internal sealed record LoadingCatalogSnapshot(
     LoadingCatalogAvailability Availability,
     DateTimeOffset SnapshotAtUtc,
     DateTimeOffset? RefreshedAtUtc,

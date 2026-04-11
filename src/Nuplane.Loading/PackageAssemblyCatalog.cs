@@ -4,7 +4,7 @@ namespace Nuplane.Loading;
 /// Default implementation of <see cref="IPackageAssemblyCatalog"/> that composes loading state with
 /// package assembly materialization using loading-owned default filtering semantics.
 /// </summary>
-public sealed class PackageAssemblyCatalog(
+internal sealed class PackageAssemblyCatalog(
     IPackageLoadStateCatalog loadStateCatalog,
     IPackageAssemblyProvider packageAssemblyProvider) : IPackageAssemblyCatalog
 {

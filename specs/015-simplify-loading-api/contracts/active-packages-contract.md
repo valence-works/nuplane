@@ -48,7 +48,8 @@ public sealed record ActivePackage(
 ## Composition contract
 - Hosts may inject `IActivePackageCatalog` directly.
 - Core admin routes compose this same service rather than maintaining a separate authoritative package inventory.
-- Compatibility wrappers and old names such as `GetSnapshotAsync`, `ActivePackageCatalogSnapshot`, and `ActivePackageDescriptor` are removed rather than retained as aliases.
+- The implemented host-facing contract is `GetActivePackagesAsync` returning `ActivePackagesSnapshot`.
+- Any remaining in-repo legacy snapshot/descriptor helpers are transitional implementation details and are not part of the final guidance for host integrations.
 
 ## Validation and test obligations
 - Runtime and store tests must prove deterministic ordering, restart recovery, active-versus-retained separation, and the clean-break contract rename.

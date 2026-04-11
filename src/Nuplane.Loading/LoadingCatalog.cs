@@ -5,10 +5,10 @@ using Nuplane.Observability;
 namespace Nuplane.Loading;
 
 /// <summary>
-/// Default runtime implementation of <see cref="ILoadingCatalog"/>.
-/// Reports current-process loading state and deterministic scan guidance for the active package set.
+/// Default runtime implementation of <see cref="IPackageLoadStateCatalog"/>.
+/// Reports current-process load state and deterministic assembly-reference guidance for the active package set.
 /// </summary>
-public sealed class LoadingCatalog(
+internal sealed class LoadingCatalog(
     IActivePackageCatalog activePackageCatalog,
     PackageLoader packageLoader,
     AssemblyScanCandidateProjector candidateProjector,

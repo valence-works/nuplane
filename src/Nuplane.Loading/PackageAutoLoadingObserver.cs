@@ -11,21 +11,61 @@ namespace Nuplane.Loading;
 /// Subscribes to reconciliation completion callbacks, ensures newly applied or not-yet-loaded
 /// packages are loaded into Assembly Load Contexts, and dispatches loading-domain events.
 /// </summary>
-internal sealed class PackageAutoLoadingObserver(
-    IPackageLoader loader,
-    ILoadingEventDispatcher dispatcher,
-    IOptions<LoadingOptions> loadingOptions,
-    ILogger<PackageAutoLoadingObserver> logger,
-    IFailureRecorder? failureRecorder = null,
-    ReconciliationMetrics? metrics = null,
-    ILoadingFailureTracker? loadingFailureTracker = null,
-    LoadingCatalogRefreshTracker? refreshTracker = null)
-    : INuplaneObserver
+internal sealed class PackageAutoLoadingObserver : INuplaneObserver
 {
-    private readonly IPackageLoader _loader = loader ?? throw new ArgumentNullException(nameof(loader));
-    private readonly ILoadingEventDispatcher _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
-    private readonly LoadingOptions _loadingOptions = (loadingOptions ?? throw new ArgumentNullException(nameof(loadingOptions))).Value;
-    private readonly ILogger<PackageAutoLoadingObserver> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly IPackageLoader _loader;
+    private readonly ILoadingEventDispatcher _dispatcher;
+    private readonly LoadingOptions _loadingOptions;
+    private readonly ILogger<PackageAutoLoadingObserver> _logger;
+
+    internal PackageAutoLoadingObserver(
+        PackageLoader loader,
+        LoadingEventDispatcher dispatcher,
+        IOptions<LoadingOptions> loadingOptions,
+        ILogger<PackageAutoLoadingObserver> logger,
+        IFailureRecorder? failureRecorder = null,
+        ReconciliationMetrics? metrics = null,
+        LoadingFailureTracker? loadingFailureTracker = null,
+        LoadingCatalogRefreshTracker? refreshTracker = null)
+        : this(
+            (IPackageLoader)loader,
+            (ILoadingEventDispatcher)dispatcher,
+            loadingOptions,
+            logger,
+            failureRecorder,
+            metrics,
+            loadingFailureTracker,
+            refreshTracker)
+    {
+    }
+
+    internal PackageAutoLoadingObserver(
+        IPackageLoader loader,
+        ILoadingEventDispatcher dispatcher,
+        IOptions<LoadingOptions> loadingOptions,
+        ILogger<PackageAutoLoadingObserver> logger,
+        IFailureRecorder? failureRecorder = null,
+        ReconciliationMetrics? metrics = null,
+        ILoadingFailureTracker? loadingFailureTracker = null,
+        LoadingCatalogRefreshTracker? refreshTracker = null)
+    {
+        _loader = loader ?? throw new ArgumentNullException(nameof(loader));
+        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+        _loadingOptions = (loadingOptions ?? throw new ArgumentNullException(nameof(loadingOptions))).Value;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        FailureRecorder = failureRecorder;
+        Metrics = metrics;
+        LoadingFailureTracker = loadingFailureTracker;
+        RefreshTracker = refreshTracker;
+    }
+
+    private IFailureRecorder? FailureRecorder { get; }
+
+    private ReconciliationMetrics? Metrics { get; }
+
+    private ILoadingFailureTracker? LoadingFailureTracker { get; }
+
+    private LoadingCatalogRefreshTracker? RefreshTracker { get; }
 
     /// <inheritdoc />
     public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
@@ -48,7 +88,7 @@ internal sealed class PackageAutoLoadingObserver(
         var packagesToLoad = BuildPackagesToLoad(changeSet, appliedPackages);
         if (packagesToLoad.Count == 0)
         {
-            refreshTracker?.MarkRefreshed(changeSet.CorrelationId);
+            RefreshTracker?.MarkRefreshed(changeSet.CorrelationId);
             return;
         }
 
@@ -59,7 +99,7 @@ internal sealed class PackageAutoLoadingObserver(
 
         foreach (var _ in packagesToLoad)
         {
-            metrics?.RecordLoadAttemptStarted();
+            Metrics?.RecordLoadAttemptStarted();
         }
 
         var sharedPolicy = _loadingOptions.SharedAssemblies
@@ -70,13 +110,13 @@ internal sealed class PackageAutoLoadingObserver(
 
         foreach (var _ in loadResult.Loaded)
         {
-            metrics?.RecordLoadSucceeded();
+            Metrics?.RecordLoadSucceeded();
         }
 
         foreach (var (packageId, reason) in loadResult.FailedByPackageId)
         {
-            metrics?.RecordLoadFailed();
-            loadingFailureTracker?.RecordFailure(changeSet.CorrelationId, packageId, reason);
+            Metrics?.RecordLoadFailed();
+            LoadingFailureTracker?.RecordFailure(changeSet.CorrelationId, packageId, reason);
 
             _logger.LogWarning(
                 "Package {PackageId} failed to load: {Reason}. CorrelationId={CorrelationId}",
@@ -84,17 +124,17 @@ internal sealed class PackageAutoLoadingObserver(
                 reason,
                 changeSet.CorrelationId);
 
-            if (failureRecorder is not null)
+            if (FailureRecorder is not null)
             {
-                await failureRecorder.RecordAsync(packageId, "load", reason, changeSet.CorrelationId, ct);
+                await FailureRecorder.RecordAsync(packageId, "load", reason, changeSet.CorrelationId, ct);
             }
 
 
             await _dispatcher.PublishFailedAsync(packageId, reason, ct);
         }
 
-        metrics?.RecordLoaderBoundaryOutcome(loadResult.Loaded.Count, loadResult.FailedByPackageId.Count, skipped: 0);
-        refreshTracker?.MarkRefreshed(changeSet.CorrelationId);
+        Metrics?.RecordLoaderBoundaryOutcome(loadResult.Loaded.Count, loadResult.FailedByPackageId.Count, skipped: 0);
+        RefreshTracker?.MarkRefreshed(changeSet.CorrelationId);
 
         if (loadResult.Loaded.Count > 0)
         {

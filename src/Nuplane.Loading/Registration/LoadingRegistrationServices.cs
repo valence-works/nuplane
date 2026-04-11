@@ -11,14 +11,14 @@ namespace Nuplane.Loading.Registration;
 /// Registers the core loading module services into the service collection.
 /// Both builder and direct <see cref="IServiceCollection"/> extension paths
 /// delegate here to share a single deterministic registration implementation.
-/// Uses last-registration-wins semantics for module-owned services.
+/// Uses last-registration-wins semantics for module-owned services while keeping
+/// low-level loading mechanics internal to the module.
 /// </summary>
 public static class LoadingRegistrationServices
 {
     /// <summary>
     /// Registers loading module services: options validation with <c>ValidateOnStart()</c>,
-    /// the package loader, package assembly provider, type scanner, unload coordinator, shared assembly policy matcher,
-    /// event dispatcher, and failure tracker.
+    /// the canonical public query services, and the internal runtime infrastructure they depend on.
     /// Re-registration replaces earlier module state deterministically.
     /// </summary>
     public static void Register(IServiceCollection services)
@@ -33,26 +33,22 @@ public static class LoadingRegistrationServices
 
         // ── Core loading services ─────────────────────────────────────────────────
         ReplaceSingleton<LoadingFailureTracker, LoadingFailureTracker>(services);
-        ReplaceSingleton<ILoadingFailureTracker, LoadingFailureTracker>(services, sp => sp.GetRequiredService<LoadingFailureTracker>());
-        services.TryAddSingleton<ICycleFailureContributor>(sp => sp.GetRequiredService<ILoadingFailureTracker>());
-        ReplaceSingleton<ILoadingEventDispatcher, LoadingEventDispatcher>(services);
+        services.TryAddSingleton<ICycleFailureContributor>(sp => sp.GetRequiredService<LoadingFailureTracker>());
+        ReplaceSingleton<LoadingEventDispatcher, LoadingEventDispatcher>(services);
         services.TryAddSingleton<LoadingCatalogRefreshTracker>();
         services.TryAddSingleton<SharedAssemblyPolicyMatcher>();
         services.TryAddSingleton<PackageLoader>();
-        services.TryAddSingleton<IPackageLoader>(sp => sp.GetRequiredService<PackageLoader>());
         services.TryAddSingleton<AssemblyScanCandidateProjector>();
         services.TryAddSingleton<PackageAssemblyProvider>();
-        services.TryAddSingleton<IPackageAssemblyProvider>(sp => sp.GetRequiredService<PackageAssemblyProvider>());
-        services.TryAddSingleton<PackageAssemblyCatalog>();
+        services.TryAddSingleton<PackageAssemblyCatalog>(sp =>
+            new PackageAssemblyCatalog(
+                sp.GetRequiredService<IPackageLoadStateCatalog>(),
+                sp.GetRequiredService<PackageAssemblyProvider>()));
         services.TryAddSingleton<IPackageAssemblyCatalog>(sp => sp.GetRequiredService<PackageAssemblyCatalog>());
         services.TryAddSingleton<PackageTypeFinder>();
         services.TryAddSingleton<IPackageTypeFinder>(sp => sp.GetRequiredService<PackageTypeFinder>());
-        services.TryAddSingleton<PackageTypeScanner>();
-        services.TryAddSingleton<IPackageTypeScanner>(sp => sp.GetRequiredService<PackageTypeScanner>());
         services.TryAddSingleton<PackageUnloadCoordinator>();
-        services.TryAddSingleton<IPackageUnloadCoordinator>(sp => sp.GetRequiredService<PackageUnloadCoordinator>());
         services.TryAddSingleton<LoadingCatalog>();
-        services.TryAddSingleton<ILoadingCatalog>(sp => sp.GetRequiredService<LoadingCatalog>());
         services.TryAddSingleton<IPackageLoadStateCatalog>(sp => sp.GetRequiredService<LoadingCatalog>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, LoadingOperationalStateContributor>());
     }

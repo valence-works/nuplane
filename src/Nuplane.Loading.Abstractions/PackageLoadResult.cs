@@ -6,6 +6,6 @@ namespace Nuplane.Loading;
 /// </summary>
 /// <param name="Loaded">The list of packages that were successfully loaded.</param>
 /// <param name="FailedByPackageId">A dictionary mapping failed package identifiers to their error messages.</param>
-public sealed record PackageLoadResult(
+internal sealed record PackageLoadResult(
     IReadOnlyList<PackageLoadSession> Loaded,
     IReadOnlyDictionary<string, string> FailedByPackageId);

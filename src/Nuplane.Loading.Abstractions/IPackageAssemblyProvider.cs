@@ -22,7 +22,7 @@ namespace Nuplane.Loading;
 /// reconciliation cycle to preserve runtime unload behavior.
 /// </para>
 /// </remarks>
-public interface IPackageAssemblyProvider
+internal interface IPackageAssemblyProvider
 {
     /// <summary>
     /// Gets the assemblies Nuplane has loaded (or can deterministically materialize) for the specified package version.

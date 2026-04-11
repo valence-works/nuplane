@@ -8,7 +8,7 @@ namespace Nuplane.Loading;
 /// Default implementation of <see cref="IPackageTypeFinder"/> that inspects assemblies
 /// from the current active loaded package version as a secondary convenience over assembly access.
 /// </summary>
-public sealed class PackageTypeFinder : IPackageTypeFinder
+internal sealed class PackageTypeFinder : IPackageTypeFinder
 {
     private readonly IPackageAssemblyCatalog _packageAssemblyCatalog;
     private readonly ILogger<PackageTypeFinder> _logger;

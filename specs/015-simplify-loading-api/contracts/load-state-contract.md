@@ -79,6 +79,10 @@ public sealed record PackageAssemblyReference(
 - When the loading module or loading-owned API package is absent, the load-state route is simply not mapped.
 - The legacy loading route name (`/nuplane/admin/loading`) is removed rather than kept as a compatibility alias.
 
+## Final implementation notes
+- The legacy `ILoadingCatalog`/`LoadingCatalogSnapshot` family is internal-only and is no longer registered on the public DI surface.
+- Low-level loading event/failure/session bookkeeping stays internal to `src/Nuplane.Loading` and internal `src/Nuplane.Loading.Abstractions` seams.
+
 ## Observability rules
 - Load-state reads emit correlation-friendly logs and machine-readable reasons for disabled, stale, and divergence/failure conditions.
 - Metrics distinguish load-state reads from active-package reads and core operational-state reads.

@@ -22,27 +22,27 @@ public sealed class AdminEndpointOwnershipContractTests
         Assert.True(EndpointRouteTestHarness.HasRoute(app, "/nuplane/admin/packages", "GET"));
         Assert.True(EndpointRouteTestHarness.HasRoute(app, "/nuplane/admin/state", "GET"));
         Assert.True(EndpointRouteTestHarness.HasRoute(app, "/nuplane/admin/reconcile", "POST"));
-        Assert.False(EndpointRouteTestHarness.HasRoute(app, "/nuplane/admin/loading", "GET"));
+        Assert.False(EndpointRouteTestHarness.HasRoute(app, "/nuplane/admin/load-state", "GET"));
         Assert.False(EndpointRouteTestHarness.HasRoute(app, "/nuplane/admin/snapshot", "GET"));
     }
 
     [Fact]
-    public void MapNuplaneLoading_SeparatelyOwnsTheLoadingRoute()
+    public void MapNuplaneLoadState_SeparatelyOwnsTheLoadStateRoute()
     {
         using var app = EndpointRouteTestHarness.CreateApp(
             services =>
             {
                 services.AddSingleton<INuplaneAdminOperations>(new StubAdminOperations());
-                services.AddSingleton<ILoadingCatalog>(new StubLoadingCatalog());
+                services.AddSingleton<IPackageLoadStateCatalog>(new StubLoadStateCatalog());
             },
             endpoints =>
             {
                 endpoints.MapNuplaneAdmin();
-                endpoints.MapNuplaneLoading();
+                endpoints.MapNuplaneLoadState();
             });
 
         Assert.True(EndpointRouteTestHarness.HasRoute(app, "/nuplane/admin/packages", "GET"));
-        Assert.True(EndpointRouteTestHarness.HasRoute(app, "/nuplane/admin/loading", "GET"));
+        Assert.True(EndpointRouteTestHarness.HasRoute(app, "/nuplane/admin/load-state", "GET"));
         Assert.False(EndpointRouteTestHarness.HasRoute(app, "/nuplane/admin/snapshot", "GET"));
     }
 
@@ -58,10 +58,10 @@ public sealed class AdminEndpointOwnershipContractTests
             Task.FromResult(new ManualReconcileOutcome(ManualReconcileOutcomeCode.Completed, "corr-reconcile", null, null));
     }
 
-    private sealed class StubLoadingCatalog : ILoadingCatalog
+    private sealed class StubLoadStateCatalog : IPackageLoadStateCatalog
     {
-        public Task<LoadingCatalogSnapshot> GetSnapshotAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(new LoadingCatalogSnapshot(LoadingCatalogAvailability.Disabled, DateTimeOffset.UtcNow, null, [], "loading-disabled", "corr-loading"));
+        public Task<PackageLoadStateSnapshot> GetLoadStateAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new PackageLoadStateSnapshot(PackageLoadStateAvailability.Disabled, DateTimeOffset.UtcNow, null, [], "loading-disabled", "corr-loading"));
     }
 }
 

@@ -10,7 +10,7 @@ namespace Nuplane.Loading;
 /// and providing context removal for unloading. Resolves the main assembly within
 /// each package's install directory.
 /// </summary>
-public sealed class PackageLoader : IPackageLoader
+internal sealed class PackageLoader : IPackageLoader
 {
     private readonly SharedAssemblyPolicyMatcher _matcher;
     private readonly ConcurrentDictionary<string, PackageAssemblyLoadContext> _contexts = new(StringComparer.OrdinalIgnoreCase);

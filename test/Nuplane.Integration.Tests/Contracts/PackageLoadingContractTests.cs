@@ -1,33 +1,40 @@
-using Nuplane.Abstractions;
+using System.Reflection;
 using Nuplane.Loading;
+using Nuplane.Loading.Api;
 
 namespace Nuplane.Integration.Tests.Contracts;
 
 public sealed class PackageLoadingContractTests
 {
     [Fact]
-    public async Task EnsureLoadedAsync_ReturnsFailureForInvalidInstallPath_AndContinuesOtherPackages()
+    public void PublicAssemblyAndTypeContracts_DoNotExposeProviderOrExactVersionMechanics()
     {
-        var loader = new PackageLoader();
+        var assemblyCatalogMethods = typeof(IPackageAssemblyCatalog).GetMethods(BindingFlags.Public | BindingFlags.Instance);
+        var typeFinderMethods = typeof(IPackageTypeFinder).GetMethods(BindingFlags.Public | BindingFlags.Instance);
 
-        var good = CreateResolvedPackage("pkg-good", "1.0.0");
-        var bad = new ResolvedPackage("pkg-bad", "1.0.0", "feed-a", "/path/does/not/exist", DateTimeOffset.UtcNow, "test");
+        Assert.All(assemblyCatalogMethods, method =>
+        {
+            Assert.DoesNotContain(method.GetParameters(), parameter => string.Equals(parameter.Name, "version", StringComparison.Ordinal));
+        });
 
-        var result = await loader.EnsureLoadedAsync([good, bad], [], CancellationToken.None);
+        Assert.All(typeFinderMethods, method =>
+        {
+            Assert.DoesNotContain(method.GetParameters(), parameter => string.Equals(parameter.Name, "version", StringComparison.Ordinal));
+        });
 
-        Assert.Contains(result.Loaded, x => string.Equals(x.PackageId, "pkg-good", StringComparison.OrdinalIgnoreCase));
-        Assert.True(result.FailedByPackageId.ContainsKey("pkg-bad"));
+        Assert.DoesNotContain(typeof(IPackageAssemblyCatalog).Assembly.GetExportedTypes(), type => type.Name == nameof(IPackageAssemblyProvider));
+        Assert.DoesNotContain(typeof(IPackageAssemblyCatalog).Assembly.GetExportedTypes(), type => type.Name == nameof(IPackageTypeScanner));
     }
 
-    private static ResolvedPackage CreateResolvedPackage(string id, string version)
+    [Fact]
+    public void LoadingApi_ExposesOnlyLoadStateEndpointMapping()
     {
-        var root = Path.Combine(Path.GetTempPath(), "nuplane-loading-contract-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
+        var methodNames = typeof(NuplaneLoadStateEndpointExtensions)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Select(static method => method.Name)
+            .ToArray();
 
-        var sourceAssembly = typeof(PackageLoader).Assembly.Location;
-        var targetAssembly = Path.Combine(root, Path.GetFileName(sourceAssembly));
-        File.Copy(sourceAssembly, targetAssembly, overwrite: true);
-
-        return new(id, version, "feed-a", root, DateTimeOffset.UtcNow, "test");
+        Assert.Contains("MapNuplaneLoadState", methodNames);
+        Assert.DoesNotContain("MapNuplaneLoading", methodNames);
     }
 }

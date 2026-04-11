@@ -3,7 +3,7 @@ namespace Nuplane.Loading;
 /// <summary>
 /// Availability states for the standalone loading catalog.
 /// </summary>
-public enum LoadingCatalogAvailability
+internal enum LoadingCatalogAvailability
 {
     /// <summary>
     /// Loading support is installed but disabled by configuration.

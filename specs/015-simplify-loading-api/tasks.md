@@ -94,41 +94,41 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T036 [P] [US2] Add public surface reduction assertions for removed/internalized mechanics in `test/Nuplane.Loading.Tests/LoadingOwnershipContractTests.cs`
-- [ ] T037 [P] [US2] Add surviving-service registration coverage after internalization in `test/Nuplane.Loading.Tests/LoadingRegistrationDeterminismTests.cs`
-- [ ] T038 [P] [US2] Add no-provider/no-exact-version contract coverage in `test/Nuplane.Integration.Tests/Contracts/PackageLoadingContractTests.cs`
-- [ ] T039 [P] [US2] Add stale/failure regression coverage after load-state cleanup in `test/Nuplane.Integration.Tests/Loading/LoadingCatalogIntegrationTests.cs`
-- [ ] T040 [P] [US2] Add module ownership boundary coverage for internalized loading mechanics in `test/Nuplane.Runtime.Tests/Reconciliation/ModuleOwnershipBoundaryTests.cs`
+- [X] T036 [P] [US2] Add public surface reduction assertions for removed/internalized mechanics in `test/Nuplane.Loading.Tests/LoadingOwnershipContractTests.cs`
+- [X] T037 [P] [US2] Add surviving-service registration coverage after internalization in `test/Nuplane.Loading.Tests/LoadingRegistrationDeterminismTests.cs`
+- [X] T038 [P] [US2] Add no-provider/no-exact-version contract coverage in `test/Nuplane.Integration.Tests/Contracts/PackageLoadingContractTests.cs`
+- [X] T039 [P] [US2] Add stale/failure regression coverage after load-state cleanup in `test/Nuplane.Integration.Tests/Loading/LoadingCatalogIntegrationTests.cs`
+- [X] T040 [P] [US2] Add module ownership boundary coverage for internalized loading mechanics in `test/Nuplane.Runtime.Tests/Reconciliation/ModuleOwnershipBoundaryTests.cs`
 
 ### Implementation for User Story 2
 
-- [ ] T041 [P] [US2] Remove the public assembly-provider abstraction from the host surface in `src/Nuplane.Loading.Abstractions/IPackageAssemblyProvider.cs`
-- [ ] T042 [P] [US2] Remove the public loader abstraction from the host surface in `src/Nuplane.Loading.Abstractions/IPackageLoader.cs`
-- [ ] T043 [P] [US2] Remove the public unload-coordinator abstraction from the host surface in `src/Nuplane.Loading.Abstractions/IPackageUnloadCoordinator.cs`
-- [ ] T044 [P] [US2] Remove the public loading event dispatcher abstraction in `src/Nuplane.Loading.Abstractions/ILoadingEventDispatcher.cs`
-- [ ] T045 [P] [US2] Remove the public loading observer abstraction in `src/Nuplane.Loading.Abstractions/IPackageLoadingObserver.cs`
-- [ ] T046 [P] [US2] Remove the public loading failure tracker abstraction in `src/Nuplane.Loading.Abstractions/ILoadingFailureTracker.cs`
-- [ ] T047 [P] [US2] Collapse the public load-session bookkeeping model in `src/Nuplane.Loading.Abstractions/PackageLoadSession.cs`
-- [ ] T048 [P] [US2] Collapse the public load-context bookkeeping model in `src/Nuplane.Loading.Abstractions/PackageLoadContextHandle.cs`
-- [ ] T049 [P] [US2] Collapse the public load-result bookkeeping model in `src/Nuplane.Loading.Abstractions/PackageLoadResult.cs`
-- [ ] T050 [P] [US2] Collapse the public deactivation bookkeeping model in `src/Nuplane.Loading.Abstractions/DeactivationAttempt.cs`
-- [ ] T051 [P] [US2] Collapse the public unload outcome enum in `src/Nuplane.Loading.Abstractions/UnloadOutcome.cs`
-- [ ] T052 [P] [US2] Collapse the public unload outcome record in `src/Nuplane.Loading.Abstractions/UnloadOutcomeRecord.cs`
-- [ ] T053 [US2] Refactor loading registrations around the surviving canonical public services in `src/Nuplane.Loading/Registration/LoadingRegistrationServices.cs`
-- [ ] T054 [P] [US2] Internalize assembly materialization behind runtime implementations in `src/Nuplane.Loading/PackageAssemblyProvider.cs`
-- [ ] T055 [P] [US2] Internalize load orchestration behind runtime implementations in `src/Nuplane.Loading/PackageLoader.cs`
-- [ ] T056 [P] [US2] Internalize unload coordination behind runtime implementations in `src/Nuplane.Loading/PackageUnloadCoordinator.cs`
-- [ ] T057 [P] [US2] Consolidate loading failure tracking into internal runtime infrastructure in `src/Nuplane.Loading/LoadingFailureTracker.cs`
-- [ ] T058 [P] [US2] Consolidate loading event fan-out into internal runtime infrastructure in `src/Nuplane.Loading/LoadingEventDispatcher.cs`
-- [ ] T059 [US2] Remove public loading observer registration from the builder surface in `src/Nuplane.Loading/Builder/NuplaneBuilderLoadingExtensions.cs`
-- [ ] T060 [US2] Refactor the auto-loading bridge to stop depending on public mechanics-first contracts in `src/Nuplane.Loading/PackageAutoLoadingObserver.cs`
-- [ ] T061 [US2] Remove the legacy loading compatibility type from core admin composition in `src/Nuplane.Admin/AdminLoadingCatalogReadResult.cs`
-- [ ] T062 [US2] Remove the legacy loading compatibility DTO from core admin HTTP composition in `src/Nuplane.Admin.Api/LoadingCatalogResponse.cs`
-- [ ] T063 [US2] Remove the legacy combined snapshot DTO from core admin HTTP composition in `src/Nuplane.Admin.Api/SnapshotResponse.cs`
-- [ ] T064 [US2] Remove the legacy combined operational snapshot model in `src/Nuplane/Operational/OperationalSnapshot.cs`
-- [ ] T065 [US2] Update sample host composition after observer/internalization cleanup in `samples/Nuplane.Sample.AspNetCore/Program.cs`
-- [ ] T066 [P] [US2] Reframe the sample package-change observer as invalidation/logging only in `samples/Nuplane.Sample.AspNetCore/PackageChangeObserver.cs`
-- [ ] T067 [P] [US2] Rework sample plugin discovery away from public loading observers in `samples/Nuplane.Sample.AspNetCore/PluginDiscoveryObserver.cs`
+- [X] T041 [P] [US2] Remove the public assembly-provider abstraction from the host surface in `src/Nuplane.Loading.Abstractions/IPackageAssemblyProvider.cs`
+- [X] T042 [P] [US2] Remove the public loader abstraction from the host surface in `src/Nuplane.Loading.Abstractions/IPackageLoader.cs`
+- [X] T043 [P] [US2] Remove the public unload-coordinator abstraction from the host surface in `src/Nuplane.Loading.Abstractions/IPackageUnloadCoordinator.cs`
+- [X] T044 [P] [US2] Remove the public loading event dispatcher abstraction in `src/Nuplane.Loading.Abstractions/ILoadingEventDispatcher.cs`
+- [X] T045 [P] [US2] Remove the public loading observer abstraction in `src/Nuplane.Loading.Abstractions/IPackageLoadingObserver.cs`
+- [X] T046 [P] [US2] Remove the public loading failure tracker abstraction in `src/Nuplane.Loading.Abstractions/ILoadingFailureTracker.cs`
+- [X] T047 [P] [US2] Collapse the public load-session bookkeeping model in `src/Nuplane.Loading.Abstractions/PackageLoadSession.cs`
+- [X] T048 [P] [US2] Collapse the public load-context bookkeeping model in `src/Nuplane.Loading.Abstractions/PackageLoadContextHandle.cs`
+- [X] T049 [P] [US2] Collapse the public load-result bookkeeping model in `src/Nuplane.Loading.Abstractions/PackageLoadResult.cs`
+- [X] T050 [P] [US2] Collapse the public deactivation bookkeeping model in `src/Nuplane.Loading.Abstractions/DeactivationAttempt.cs`
+- [X] T051 [P] [US2] Collapse the public unload outcome enum in `src/Nuplane.Loading.Abstractions/UnloadOutcome.cs`
+- [X] T052 [P] [US2] Collapse the public unload outcome record in `src/Nuplane.Loading.Abstractions/UnloadOutcomeRecord.cs`
+- [X] T053 [US2] Refactor loading registrations around the surviving canonical public services in `src/Nuplane.Loading/Registration/LoadingRegistrationServices.cs`
+- [X] T054 [P] [US2] Internalize assembly materialization behind runtime implementations in `src/Nuplane.Loading/PackageAssemblyProvider.cs`
+- [X] T055 [P] [US2] Internalize load orchestration behind runtime implementations in `src/Nuplane.Loading/PackageLoader.cs`
+- [X] T056 [P] [US2] Internalize unload coordination behind runtime implementations in `src/Nuplane.Loading/PackageUnloadCoordinator.cs`
+- [X] T057 [P] [US2] Consolidate loading failure tracking into internal runtime infrastructure in `src/Nuplane.Loading/LoadingFailureTracker.cs`
+- [X] T058 [P] [US2] Consolidate loading event fan-out into internal runtime infrastructure in `src/Nuplane.Loading/LoadingEventDispatcher.cs`
+- [X] T059 [US2] Remove public loading observer registration from the builder surface in `src/Nuplane.Loading/Builder/NuplaneBuilderLoadingExtensions.cs`
+- [X] T060 [US2] Refactor the auto-loading bridge to stop depending on public mechanics-first contracts in `src/Nuplane.Loading/PackageAutoLoadingObserver.cs`
+- [X] T061 [US2] Remove the legacy loading compatibility type from core admin composition in `src/Nuplane.Admin/AdminLoadingCatalogReadResult.cs`
+- [X] T062 [US2] Remove the legacy loading compatibility DTO from core admin HTTP composition in `src/Nuplane.Admin.Api/LoadingCatalogResponse.cs`
+- [X] T063 [US2] Remove the legacy combined snapshot DTO from core admin HTTP composition in `src/Nuplane.Admin.Api/SnapshotResponse.cs`
+- [X] T064 [US2] Remove the legacy combined operational snapshot model in `src/Nuplane/Operational/OperationalSnapshot.cs`
+- [X] T065 [US2] Update sample host composition after observer/internalization cleanup in `samples/Nuplane.Sample.AspNetCore/Program.cs`
+- [X] T066 [P] [US2] Reframe the sample package-change observer as invalidation/logging only in `samples/Nuplane.Sample.AspNetCore/PackageChangeObserver.cs`
+- [X] T067 [P] [US2] Rework sample plugin discovery away from public loading observers in `samples/Nuplane.Sample.AspNetCore/PluginDiscoveryObserver.cs`
 
 **Checkpoint**: User Story 2 completes the architecture cleanup so only the intended host-facing surfaces remain public and the loading internals no longer teach the wrong mental model.
 
@@ -138,12 +138,12 @@
 
 **Purpose**: Reconcile the feature docs and validation evidence with the final implemented surface.
 
-- [ ] T068 [P] Update final validation commands and renamed API references in `specs/015-simplify-loading-api/quickstart.md`
-- [ ] T069 Capture complete validation evidence in `specs/015-simplify-loading-api/quickstart-validation.md`
-- [ ] T070 [P] Refresh final active-package contract notes in `specs/015-simplify-loading-api/contracts/active-packages-contract.md`
-- [ ] T071 [P] Refresh final load-state contract notes in `specs/015-simplify-loading-api/contracts/load-state-contract.md`
-- [ ] T072 [P] Refresh final assembly/type query contract notes in `specs/015-simplify-loading-api/contracts/assembly-and-type-query-contract.md`
-- [ ] T073 [P] Refresh final admin/loading composition contract notes in `specs/015-simplify-loading-api/contracts/admin-composition-contract.md`
+- [X] T068 [P] Update final validation commands and renamed API references in `specs/015-simplify-loading-api/quickstart.md`
+- [X] T069 Capture complete validation evidence in `specs/015-simplify-loading-api/quickstart-validation.md`
+- [X] T070 [P] Refresh final active-package contract notes in `specs/015-simplify-loading-api/contracts/active-packages-contract.md`
+- [X] T071 [P] Refresh final load-state contract notes in `specs/015-simplify-loading-api/contracts/load-state-contract.md`
+- [X] T072 [P] Refresh final assembly/type query contract notes in `specs/015-simplify-loading-api/contracts/assembly-and-type-query-contract.md`
+- [X] T073 [P] Refresh final admin/loading composition contract notes in `specs/015-simplify-loading-api/contracts/admin-composition-contract.md`
 
 ---
 

@@ -10,7 +10,7 @@ namespace Nuplane.Loading;
 /// <param name="TimedOut">Whether the deactivation timed out.</param>
 /// <param name="OutcomeCode">A machine-readable code describing the deactivation outcome.</param>
 /// <param name="CorrelationId">The correlation identifier of the reconciliation cycle.</param>
-public sealed record DeactivationAttempt(
+internal sealed record DeactivationAttempt(
     string PackageId,
     DateTimeOffset RequestedAt,
     int TimeoutMs,

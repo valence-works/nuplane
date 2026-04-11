@@ -55,6 +55,8 @@ public sealed record PackageAssemblies(
 - `IPackageAssemblyProvider` is removed from the public host model.
 - If exact-version materialization logic still exists for internal runtime reasons, it stays inside `src/Nuplane.Loading` and is not exposed as a public abstraction.
 - Low-level loader/unload/session/result types are internal runtime infrastructure and not part of this public query contract.
+- The legacy `IPackageTypeScanner` surface is internal-only; hosts learn only `IPackageTypeFinder` as the optional secondary query surface.
+- Sample/plugin discovery remains host-owned and now refreshes from core invalidation plus canonical query surfaces rather than from a public loading-observer API.
 
 ## Validation and test obligations
 - Loading tests must prove disabled/stale reads return empty assembly or type results without forcing callers through mechanics-first APIs.

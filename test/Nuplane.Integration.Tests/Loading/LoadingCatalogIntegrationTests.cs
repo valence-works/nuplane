@@ -10,7 +10,7 @@ namespace Nuplane.Integration.Tests.Loading;
 public sealed class LoadingCatalogIntegrationTests
 {
     [Fact]
-    public async Task GetSnapshotAsync_AfterRestartWithPersistedActivePackages_ReturnsStaleLoadingState()
+    public async Task GetLoadStateAsync_AfterRestartWithPersistedActivePackages_ReturnsStaleLoadState()
     {
         var tempRoot = Path.Combine(Path.GetTempPath(), "nuplane-loading-restart", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
@@ -50,11 +50,11 @@ public sealed class LoadingCatalogIntegrationTests
                 logger,
                 metrics);
 
-            var snapshot = await loadingCatalog.GetSnapshotAsync(CancellationToken.None);
+            var snapshot = await loadingCatalog.GetLoadStateAsync(CancellationToken.None);
 
-            Assert.Equal(LoadingCatalogAvailability.Stale, snapshot.Availability);
+            Assert.Equal(PackageLoadStateAvailability.Stale, snapshot.Availability);
             var package = Assert.Single(snapshot.Packages);
-            Assert.Equal(LoadingStatus.Stale, package.Status);
+            Assert.Equal(PackageLoadStatus.Stale, package.Status);
             Assert.Equal(persistedDescriptor.PackageId, package.PackageId);
         }
         finally
@@ -71,7 +71,7 @@ public sealed class LoadingCatalogIntegrationTests
     }
 
     [Fact]
-    public async Task LoadingFailure_ForActivePackage_ProducesFailedLoadingSnapshotWithoutRemovingTheActivePackage()
+    public async Task LoadingFailure_ForActivePackage_ProducesFailedLoadStateWithoutRemovingTheActivePackage()
     {
         var tempRoot = Path.Combine(Path.GetTempPath(), "nuplane-loading-divergence", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
@@ -116,10 +116,10 @@ public sealed class LoadingCatalogIntegrationTests
                 logger,
                 metrics);
 
-            var loadingSnapshot = await loadingCatalog.GetSnapshotAsync(CancellationToken.None);
-            Assert.Equal(LoadingCatalogAvailability.Available, loadingSnapshot.Availability);
+            var loadingSnapshot = await loadingCatalog.GetLoadStateAsync(CancellationToken.None);
+            Assert.Equal(PackageLoadStateAvailability.Available, loadingSnapshot.Availability);
             var package = Assert.Single(loadingSnapshot.Packages);
-            Assert.Equal(LoadingStatus.Failed, package.Status);
+            Assert.Equal(PackageLoadStatus.Failed, package.Status);
             Assert.Equal(descriptor.PackageId, package.PackageId);
         }
         finally

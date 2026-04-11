@@ -20,7 +20,7 @@ public sealed record PackageLoadStateSnapshot(
     /// <summary>
     /// Creates a canonical load-state snapshot from the legacy loading catalog snapshot model.
     /// </summary>
-    public static PackageLoadStateSnapshot FromLegacy(LoadingCatalogSnapshot snapshot)
+    internal static PackageLoadStateSnapshot FromLegacy(LoadingCatalogSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 

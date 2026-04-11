@@ -22,7 +22,7 @@ namespace Nuplane.Loading;
 /// type filtering over those assemblies.
 /// </para>
 /// </remarks>
-public interface IPackageTypeScanner
+internal interface IPackageTypeScanner
 {
     /// <summary>
     /// Finds concrete, non-abstract types within the current active loaded version of the specified package

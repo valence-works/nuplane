@@ -1,5 +1,4 @@
-using Nuplane.Loading;
-using Nuplane.Loading.Events;
+using Nuplane.Abstractions;
 using Nuplane.Sample.AspNetCore.Catalog;
 
 namespace Nuplane.Sample.AspNetCore;
@@ -7,20 +6,23 @@ namespace Nuplane.Sample.AspNetCore;
 internal sealed class PluginDiscoveryObserver(
     PluginCatalog pluginCatalog,
     ILogger<PluginDiscoveryObserver> logger)
-    : IPackageLoadingObserver
+    : INuplaneObserver
 {
     private readonly PluginCatalog _pluginCatalog = pluginCatalog ?? throw new ArgumentNullException(nameof(pluginCatalog));
 
     /// <summary>
-    /// Called after packages are loaded into Assembly Load Contexts. Triggers an explicit
-    /// sample-owned discovery refresh so the sample can enumerate plugin types from the
-    /// current active package assemblies.
+    /// Observer registrations are only invalidation hooks; explicit plugin discovery remains sample-owned
+    /// and re-queries the canonical package/load-state/assembly surfaces after reconciliation.
     /// </summary>
-    public async Task OnPackagesLoadedAsync(PackageLoadedEvent evt, CancellationToken cancellationToken)
+    public async Task OnPackagesReconciledAsync(
+        PackageChangeSet changeSet,
+        IReadOnlyList<ResolvedPackage> appliedPackages,
+        CancellationToken cancellationToken)
     {
         logger.LogInformation(
-            "Packages loaded invalidation received. Count={Count}, CorrelationId={CorrelationId}. Refreshing sample-owned plugin discovery from the active package assemblies.",
-            evt.LoadedPackages.Count, evt.CorrelationId);
+            "Packages reconciled invalidation received. ActivePackageCount={Count}, CorrelationId={CorrelationId}. Refreshing sample-owned plugin discovery from the canonical query surfaces.",
+            appliedPackages.Count,
+            changeSet.CorrelationId);
 
         var discoveredPlugins = await _pluginCatalog.DiscoverAsync(cancellationToken);
         if (discoveredPlugins.Count == 0)
@@ -45,12 +47,16 @@ internal sealed class PluginDiscoveryObserver(
         }
     }
 
+    public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
+
+    public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
+
     /// <summary>
-    /// Called when a package fails to load.
+    /// Logs package failures as invalidation signals while keeping query surfaces authoritative.
     /// </summary>
-    public Task OnPackageLoadFailedAsync(string packageId, string reason, CancellationToken cancellationToken)
+    public Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken cancellationToken)
     {
-        logger.LogWarning("Package {PackageId} failed to load: {Reason}.", packageId, reason);
+        logger.LogWarning(exception, "Package {PackageId} failed during reconciliation or load processing.", packageId);
         return Task.CompletedTask;
     }
 }
