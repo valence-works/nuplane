@@ -44,12 +44,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.Loading.Abstraction
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane", "src\Nuplane\Nuplane.csproj", "{72324F7F-5AA3-495F-9CCD-9546096FF2F3}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{B5399A3A-BDFA-4BB9-BD23-F3A0D7A0B4FE}"
-	ProjectSection(SolutionItems) = preProject
-		docs\coding-conventions.md = docs\coding-conventions.md
-		docs\roadmap.md = docs\roadmap.md
-	EndProjectSection
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.Loading.Tests.Fixtures", "test\Nuplane.Loading.Tests.Fixtures\Nuplane.Loading.Tests.Fixtures.csproj", "{00281DE1-F8DF-4BB8-B3B6-787FB8406E72}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.Loading.Tests", "test\Nuplane.Loading.Tests\Nuplane.Loading.Tests.csproj", "{849142DF-61A7-4691-A4A0-6DFAC6A55D18}"
@@ -75,6 +69,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{512DF290-0AB1-442F-AA22-8ECCD694B269}"
 	ProjectSection(SolutionItems) = preProject
 		.github\workflows\publish-packages.yml = .github\workflows\publish-packages.yml
+		.github\workflows\publish-wiki.yml = .github\workflows\publish-wiki.yml
 	EndProjectSection
 EndProject
 Global
