@@ -86,21 +86,30 @@ As a maintainer, advanced adopter, or architect, I want the wiki to explain Nupl
 - The initial audience scope includes advanced adopters and contributors who need architectural orientation, but detailed maintainer procedures and operational runbooks remain repository-owned reference material unless a later feature expands the wiki scope.
 - The content should reflect Nuplane's current positioning as host-neutral runtime package reconciliation infrastructure with optional loading capabilities.
 - The feature scope is the documentation experience and information architecture for the wiki, not changes to Nuplane runtime behavior.
-- The first implementation scope includes a baseline page set covering home, overview, getting started, usage, architecture, and concepts/glossary, with room for implementation-time naming refinement as long as those purposes remain covered.
+- The first implementation scope delivers a repository-owned GitHub wiki source set under `docs/wiki/`, covering home, overview, getting started, usage, architecture, and concepts/glossary, with room for implementation-time naming refinement as long as those purposes remain covered.
+- Publishing or synchronizing that source set into the hosted GitHub wiki is outside the first implementation scope unless a later feature adds an explicit publication workflow.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The project MUST provide a GitHub wiki that presents Nuplane as a host-neutral runtime control plane for NuGet packages and clearly explains why the project exists.
+- **FR-001**: The project MUST provide a repository-owned GitHub wiki source set that presents Nuplane as a host-neutral runtime control plane for NuGet packages and clearly explains why the project exists.
 - **FR-002**: The wiki MUST explain the core problem Nuplane solves, the types of hosts or teams that benefit from it, and the primary value it provides for runtime package reconciliation.
 - **FR-003**: The wiki MUST include a clear statement of what Nuplane does and what it explicitly does not do, including the boundary that Nuplane is not a plugin model and does not own host-specific activation semantics.
-- **FR-004**: The wiki MUST describe the main capabilities available in Nuplane today, including package resolution, deterministic local storage, reconciliation, transactional updates, query-first state access, observability, and optional loading-related capabilities.
-- **FR-005**: The wiki MUST describe the most important ways a user can use Nuplane, including at minimum a basic runtime package-management scenario, a local-package or sample-driven scenario, and a loading-enabled scenario for hosts that need it.
+- **FR-004A**: The wiki MUST describe package resolution as a current Nuplane capability.
+- **FR-004B**: The wiki MUST describe deterministic local storage and transactional updates as current Nuplane capabilities.
+- **FR-004C**: The wiki MUST describe reconciliation and query-first state access as current Nuplane capabilities.
+- **FR-004D**: The wiki MUST describe observability and operational visibility as current Nuplane capabilities.
+- **FR-004E**: The wiki MUST describe optional loading-related capabilities as non-baseline capabilities with clear applicability labeling.
+- **FR-005A**: The wiki MUST describe a basic runtime package-management scenario.
+- **FR-005B**: The wiki MUST describe a local-package or sample-driven scenario.
+- **FR-005C**: The wiki MUST describe a loading-enabled scenario for hosts that need it.
 - **FR-006**: The wiki MUST provide a beginner-friendly getting-started path that explains the recommended learning order from overview to setup to first-use validation.
 - **FR-007**: The wiki MUST provide practical usage guidance that helps readers understand configuration-driven and code-driven adoption paths, common workflows, and where sample applications fit into learning and validation.
 - **FR-008**: The wiki MUST explain Nuplane's architecture in a way that identifies the major modules, their responsibilities, the core control loop, and the ownership boundary between core behavior and optional modules.
-- **FR-009**: The wiki MUST explain Nuplane's technical model using current project terminology, including desired state, actual state, feeds, reconciliation, package store, active packages, operational state, observers, and optional loading concepts where relevant.
+- **FR-009A**: The wiki MUST explain desired state, actual state, feeds, and reconciliation using current project terminology.
+- **FR-009B**: The wiki MUST explain package store, active packages, and operational state using current project terminology.
+- **FR-009C**: The wiki MUST explain observers and optional loading concepts where relevant using current project terminology.
 - **FR-010**: The wiki MUST present a documentation structure that makes it easy for readers to navigate between overview, concepts, usage guidance, architecture, and deeper technical reference.
 - **FR-010A**: The initial wiki release MUST include a concrete minimum page set covering at least: Home, Overview, Getting Started, Usage Guide, Architecture Guide, and Concepts/Glossary, even if final page titles or minor structural groupings differ during implementation.
 - **FR-011**: The wiki MUST use consistent terminology and narrative alignment with current repository documentation so that readers do not encounter conflicting descriptions across the wiki, `README.md`, roadmap material, samples, or accepted feature specs.
@@ -152,3 +161,4 @@ As a maintainer, advanced adopter, or architect, I want the wiki to explain Nupl
 - **SC-008**: In content review, 100% of wiki sections describing optional, phase-based, recently changed, or evolving capabilities include an explicit stability or applicability label, and no baseline capability is mislabeled as tentative.
 - **SC-009**: In scope review, evaluators, integrators, and architecture-oriented contributors can each identify a clear navigation path from the wiki home, while maintainer-only or runbook topics are clearly treated as referenced repository material rather than missing wiki pages.
 - **SC-010**: Before implementation begins, maintainers can map 100% of required first-scope topics to a baseline wiki page in the minimum page set with no unresolved gap in ownership.
+- **SC-011**: Validation evidence for SC-002 and SC-003 MUST record the reviewer persona, timing method, questions asked, and pass/fail result in the feature review artifact so the comprehension targets are auditable.

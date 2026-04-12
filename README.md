@@ -9,6 +9,19 @@ It enables .NET applications to resolve, synchronize, and manage NuGet packages 
 Nuplane does **not** define a plugin model.  
 It provides infrastructure for package reconciliation — nothing more, nothing less.
 
+## 📖 Start With The Wiki
+
+If you are evaluating or onboarding to Nuplane, start with the repository-owned wiki under [`docs/wiki/`](docs/wiki/):
+
+- [`Home`](docs/wiki/Home.md) — product framing and audience routes
+- [`Overview`](docs/wiki/Overview.md) — why Nuplane exists, what it does, and what it does not do
+- [`Getting Started`](docs/wiki/Getting-Started.md) — recommended first-use path
+- [`Usage Guide`](docs/wiki/Usage-Guide.md) — core-runtime vs optional-loading usage guidance
+- [`Architecture Guide`](docs/wiki/Architecture-Guide.md) — module map and repository-to-concept view
+- [`Concepts and Glossary`](docs/wiki/Concepts-and-Glossary.md) — normalized terminology
+
+The wiki follows a **hybrid-hub** model: it is self-sufficient for evaluation and onboarding, while deeper validation details, roadmap history, sample mechanics, and other fast-moving reference material remain repository-owned.
+
 ---
 
 ## ✨ What Nuplane Does

@@ -15,6 +15,16 @@ It does **not** define a plugin programming model.
 It does **not** impose activation semantics.
 It is infrastructure only.
 
+## Contributor Wiki Orientation
+
+For contributor-facing architecture orientation, start with the repository-owned wiki under [`docs/wiki/`](wiki/):
+
+- [`Architecture Guide`](wiki/Architecture-Guide.md) for the module map, control loop, and repository-to-concept walkthrough
+- [`Concepts and Glossary`](wiki/Concepts-and-Glossary.md) for normalized terminology used across the wiki, README, roadmap, and accepted specs
+- [`Source References`](wiki/_Source-References.md) for the wiki-vs-repository ownership matrix when deciding where future documentation updates belong
+
+Treat this roadmap as the deeper source for phase scope, staged evolution, and implementation-history detail. The wiki summarizes those areas, but it does not replace this document.
+
 ## Phase 1 Implementation Status (2026-03-02)
 
 Current repository behavior aligns with the Phase 1 runtime baseline:
