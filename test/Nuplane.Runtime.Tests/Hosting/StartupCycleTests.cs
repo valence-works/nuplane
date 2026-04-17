@@ -49,9 +49,10 @@ public sealed class StartupCycleTests
     public async Task StartupCycle_FiresBeforePeriodicTick()
     {
         var service = new TrackingReconciliationService();
-        var (dispatcher, scheduler) = CreateHostedServices(service);
+        var (dispatcher, scheduler, startup) = CreateHostedServices(service);
 
         await dispatcher.StartAsync(CancellationToken.None);
+        await startup.StartAsync(CancellationToken.None);
         await scheduler.StartAsync(CancellationToken.None);
 
         try
@@ -75,7 +76,7 @@ public sealed class StartupCycleTests
             PollInterval = TimeSpan.FromMilliseconds(50)
         };
 
-        var (dispatcher, scheduler) = CreateHostedServices(service, options);
+        var (dispatcher, scheduler, _) = CreateHostedServices(service, options);
 
         await dispatcher.StartAsync(CancellationToken.None);
         await scheduler.StartAsync(CancellationToken.None);
@@ -95,12 +96,19 @@ public sealed class StartupCycleTests
     public async Task StopAsync_Completes_WhenStartupDispatchObservesCancellation()
     {
         var service = new BlockingCancellationAwareReconciliationService();
-        var (dispatcher, scheduler) = CreateHostedServices(service);
+        var (dispatcher, scheduler, startup) = CreateHostedServices(service);
 
         await dispatcher.StartAsync(CancellationToken.None);
-        await scheduler.StartAsync(CancellationToken.None);
+
+        // Start NuplaneStartupHostedService on a background thread — it blocks until the
+        // startup reconciliation completes (or is cancelled), so it cannot be awaited inline.
+        using var startupCts = new CancellationTokenSource();
+        var startupTask = startup.StartAsync(startupCts.Token);
 
         await service.WaitUntilStartedAsync().WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Cancel the startup service and stop the dispatcher so the blocking TriggerAsync observes cancellation.
+        startupCts.Cancel();
         await StopHostedServicesAsync(scheduler, dispatcher);
 
         await service.WaitForCancellationObservedAsync().WaitAsync(TimeSpan.FromSeconds(5));
@@ -136,7 +144,7 @@ public sealed class StartupCycleTests
 
     #region Helpers
 
-    private static (ReconciliationTriggerDispatcherHostedService Dispatcher, ReconciliationHostedService Scheduler) CreateHostedServices(
+    private static (ReconciliationTriggerDispatcherHostedService Dispatcher, ReconciliationHostedService Scheduler, NuplaneStartupHostedService Startup) CreateHostedServices(
         IReconciliationService reconciliationService,
         ReconciliationOptions? options = null)
     {
@@ -159,7 +167,10 @@ public sealed class StartupCycleTests
                 queue,
                 new OptionsWrapper<ReconciliationOptions>(options),
                 new OptionsWrapper<ConvergenceOptions>(new()),
-                NullLogger<ReconciliationHostedService>.Instance));
+                NullLogger<ReconciliationHostedService>.Instance),
+            new(
+                queue,
+                NullLogger<NuplaneStartupHostedService>.Instance));
     }
 
     private static async Task StopHostedServicesAsync(ReconciliationHostedService scheduler, ReconciliationTriggerDispatcherHostedService dispatcher)

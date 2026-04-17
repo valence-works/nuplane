@@ -53,9 +53,10 @@ public sealed class ConfigurationDrivenRegistrationTests
                 .Where(static type => type is not null)
                 .ToArray();
 
-            Assert.Equal(2, hostedServiceTypes.Length);
+            Assert.Equal(3, hostedServiceTypes.Length);
             Assert.Contains(typeof(ReconciliationHostedService), hostedServiceTypes);
             Assert.Contains(typeof(ReconciliationTriggerDispatcherHostedService), hostedServiceTypes);
+            Assert.Contains(typeof(NuplaneStartupHostedService), hostedServiceTypes);
         }
         finally
         {
