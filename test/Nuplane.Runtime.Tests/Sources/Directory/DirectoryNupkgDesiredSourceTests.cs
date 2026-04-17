@@ -148,6 +148,39 @@ public sealed class DirectoryNupkgDesiredSourceTests : IDisposable
         Assert.Empty(results);
     }
 
+    [Fact]
+    public async Task GetDesiredAsync_MultipleVersionsOfSamePackage_ReturnsHighestVersionOnly()
+    {
+        CreateNupkg("MyPlugin.1.0.0.nupkg");
+        CreateNupkg("MyPlugin.1.0.1.nupkg");
+        CreateNupkg("MyPlugin.2.0.0.nupkg");
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], feedName: "local-drop");
+
+        var results = await source.GetDesiredAsync(CancellationToken.None);
+
+        var request = Assert.Single(results);
+        Assert.Equal("MyPlugin", request.Id);
+        Assert.Equal("2.0.0", request.VersionRange);
+    }
+
+    [Fact]
+    public async Task GetDesiredAsync_MultipleVersionsOfDifferentPackages_ReturnsHighestVersionPerPackage()
+    {
+        CreateNupkg("PluginA.1.0.0.nupkg");
+        CreateNupkg("PluginA.1.2.0.nupkg");
+        CreateNupkg("PluginB.3.0.0.nupkg");
+        CreateNupkg("PluginB.2.0.0.nupkg");
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], feedName: "local-drop");
+
+        var results = await source.GetDesiredAsync(CancellationToken.None);
+
+        Assert.Equal(2, results.Count);
+        Assert.Equal("PluginA", results[0].Id);
+        Assert.Equal("1.2.0", results[0].VersionRange);
+        Assert.Equal("PluginB", results[1].Id);
+        Assert.Equal("3.0.0", results[1].VersionRange);
+    }
+
     private void CreateNupkg(string fileName)
     {
         File.WriteAllBytes(Path.Combine(_tempDir, fileName), [0x50, 0x4B, 0x03, 0x04]);

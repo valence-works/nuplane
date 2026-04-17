@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using NuGet.Versioning;
 using Nuplane.Abstractions;
 
 namespace Nuplane.Sources.Directory;
@@ -83,13 +84,20 @@ public sealed class DirectoryNupkgDesiredSource(string sourceName, string direct
             }
         }
 
-        requests.Sort((a, b) =>
-        {
-            var idCmp = StringComparer.OrdinalIgnoreCase.Compare(a.Id, b.Id);
-            return idCmp != 0 ? idCmp : StringComparer.OrdinalIgnoreCase.Compare(a.VersionRange, b.VersionRange);
-        });
+        // When multiple versions of the same package exist in the directory,
+        // keep only the highest version. The downstream aggregator deduplicates by
+        // package ID using alphabetical tie-breaking on VersionRange, which would
+        // incorrectly select the lowest version (e.g., "1.0.0" before "1.0.1").
+        var dedupedByHighestVersion = requests
+            .GroupBy(r => r.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.Count() == 1
+                ? g.First()
+                : g.OrderByDescending(r => NuGetVersion.Parse(r.VersionRange)).First())
+            .OrderBy(r => r.Id, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.VersionRange, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        return requests;
+        return dedupedByHighestVersion;
     }
 
     private PackageRequest? CreateRequest(string fileNameWithoutExtension)
