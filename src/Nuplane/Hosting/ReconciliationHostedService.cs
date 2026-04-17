@@ -9,11 +9,14 @@ using Nuplane.Reconciliation.Models;
 namespace Nuplane.Hosting;
 
 /// <summary>
-/// A background service that queues startup and periodic reconciliation triggers.
+/// A background service that queues periodic reconciliation triggers.
 /// Uses <see cref="ConvergenceOptions.PollInterval"/> when convergence is configured,
 /// otherwise falls back to <see cref="ReconciliationOptions.PollInterval"/>.
 /// Registered automatically when <see cref="ReconciliationOptions.EnableAutomaticReconciliation"/> is <see langword="true"/>.
 /// </summary>
+/// <remarks>
+/// The startup reconciliation trigger is handled by <see cref="NuplaneStartupHostedService"/>.
+/// </remarks>
 internal sealed class ReconciliationHostedService(
     IReconciliationTriggerIngress triggerSink,
     IOptions<ReconciliationOptions> options,
@@ -30,15 +33,9 @@ internal sealed class ReconciliationHostedService(
 
         logger.LogInformation("Nuplane automatic reconciliation started with poll interval {PollInterval}", effectivePollInterval);
 
-        try
-        {
-            triggerSink.Enqueue(ReconciliationTrigger.Startup());
-            logger.LogDebug("Startup reconciliation trigger queued");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to queue startup reconciliation trigger");
-        }
+        // Note: The startup reconciliation trigger is handled by NuplaneStartupHostedService,
+        // which blocks until the initial reconciliation completes. This service only handles
+        // periodic scheduled triggers.
 
         using var timer = new PeriodicTimer(effectivePollInterval);
 

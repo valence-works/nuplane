@@ -64,5 +64,6 @@ public static class NuplaneRuntimeRegistrationServices
         services.AddSingleton<ReconciliationTriggerQueue>();
         services.AddSingleton<IReconciliationTriggerIngress>(sp => sp.GetRequiredService<ReconciliationTriggerQueue>());
         services.AddHostedService<ReconciliationTriggerDispatcherHostedService>();
+        services.AddHostedService<NuplaneStartupHostedService>();
     }
 }
