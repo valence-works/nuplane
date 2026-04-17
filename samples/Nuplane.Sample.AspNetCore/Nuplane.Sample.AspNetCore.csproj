@@ -15,6 +15,10 @@
     <PackageReference Include="JetBrains.Annotations" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="packages\" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>

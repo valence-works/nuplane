@@ -28,14 +28,6 @@ public interface INuplaneObserver
     Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken ct);
 
     /// <summary>
-    /// Called when a scoped failure occurs during convergence (source, acquisition, loader, or admin).
-    /// Default implementation is a no-op for backward compatibility.
-    /// </summary>
-    /// <param name="failure">The scoped failure details including target, scope, and reason code.</param>
-    /// <param name="ct">A token to cancel the operation.</param>
-    Task OnScopedFailureAsync(ScopedFailureEvent failure, CancellationToken ct) => Task.CompletedTask;
-
-    /// <summary>
     /// Called after a reconciliation cycle successfully applies packages, carrying the set of
     /// packages that are active for the cycle even when the change set itself is empty.
     /// Default implementation is a no-op for backward compatibility.
