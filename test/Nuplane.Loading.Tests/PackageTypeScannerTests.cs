@@ -262,12 +262,12 @@ public sealed class PackageTypeScannerTests : IDisposable
         Func<IReadOnlyList<Assembly>> assembliesFactory)
         : IPackageAssemblyCatalog
     {
-        public Task<IReadOnlyList<PackageAssemblies>> GetAssembliesAsync(CancellationToken cancellationToken) =>
+        public Task<IReadOnlyList<PackageAssemblies>> GetPackagedAssembliesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<PackageAssemblies>>([
                 new PackageAssemblies(packageId, version, assembliesFactory(), [])
             ]);
 
-        public Task<PackageAssemblies?> GetAssembliesAsync(string requestedPackageId, CancellationToken cancellationToken) =>
+        public Task<PackageAssemblies?> GetPackagedAssembliesAsync(string requestedPackageId, CancellationToken cancellationToken) =>
             Task.FromResult<PackageAssemblies?>(
                 string.Equals(requestedPackageId, packageId, StringComparison.OrdinalIgnoreCase)
                     ? new PackageAssemblies(packageId, version, assembliesFactory(), [])

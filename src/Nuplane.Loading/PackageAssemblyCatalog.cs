@@ -12,7 +12,7 @@ internal sealed class PackageAssemblyCatalog(
     private readonly IPackageAssemblyProvider _packageAssemblyProvider = packageAssemblyProvider ?? throw new ArgumentNullException(nameof(packageAssemblyProvider));
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<PackageAssemblies>> GetAssembliesAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PackageAssemblies>> GetPackagedAssembliesAsync(CancellationToken cancellationToken)
     {
         var packages = await GetLoadedPackagesAsync(cancellationToken);
 
@@ -22,7 +22,7 @@ internal sealed class PackageAssemblyCatalog(
     }
 
     /// <inheritdoc />
-    public async Task<PackageAssemblies?> GetAssembliesAsync(string packageId, CancellationToken cancellationToken)
+    public async Task<PackageAssemblies?> GetPackagedAssembliesAsync(string packageId, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
 

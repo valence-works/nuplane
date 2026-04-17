@@ -21,7 +21,7 @@ public sealed class PackageAssemblyCatalogTests
         var assemblyProvider = new StubPackageAssemblyProvider();
         var sut = new PackageAssemblyCatalog(loadingCatalog, assemblyProvider);
 
-        var assemblies = await sut.GetAssembliesAsync(CancellationToken.None);
+        var assemblies = await sut.GetPackagedAssembliesAsync(CancellationToken.None);
 
         Assert.Empty(assemblies);
         Assert.Empty(assemblyProvider.Requests);
@@ -73,7 +73,7 @@ public sealed class PackageAssemblyCatalogTests
             });
         var sut = new PackageAssemblyCatalog(loadingCatalog, assemblyProvider);
 
-        var assemblies = await sut.GetAssembliesAsync(CancellationToken.None);
+        var assemblies = await sut.GetPackagedAssembliesAsync(CancellationToken.None);
 
         Assert.Collection(
             assemblies,
@@ -112,7 +112,7 @@ public sealed class PackageAssemblyCatalogTests
         var assemblyProvider = new StubPackageAssemblyProvider();
         var sut = new PackageAssemblyCatalog(loadingCatalog, assemblyProvider);
 
-        var package = await sut.GetAssembliesAsync("pkg-a", CancellationToken.None);
+        var package = await sut.GetPackagedAssembliesAsync("pkg-a", CancellationToken.None);
 
         Assert.Null(package);
         Assert.Empty(assemblyProvider.Requests);
@@ -153,7 +153,7 @@ public sealed class PackageAssemblyCatalogTests
             });
         var sut = new PackageAssemblyCatalog(loadingCatalog, assemblyProvider);
 
-        var package = await sut.GetAssembliesAsync("PKG-A", CancellationToken.None);
+        var package = await sut.GetPackagedAssembliesAsync("PKG-A", CancellationToken.None);
 
         Assert.NotNull(package);
         Assert.Equal("pkg-a", package.PackageId);
@@ -185,7 +185,7 @@ public sealed class PackageAssemblyCatalogTests
         var assemblyProvider = new StubPackageAssemblyProvider();
         var sut = new PackageAssemblyCatalog(loadingCatalog, assemblyProvider);
 
-        var package = await sut.GetAssembliesAsync("pkg-a", CancellationToken.None);
+        var package = await sut.GetPackagedAssembliesAsync("pkg-a", CancellationToken.None);
 
         Assert.Null(package);
         Assert.Empty(assemblyProvider.Requests);
@@ -195,7 +195,7 @@ public sealed class PackageAssemblyCatalogTests
     public void IPackageAssemblyCatalog_DoesNotExposeExactVersionOverload()
     {
         var exactVersionMethod = typeof(IPackageAssemblyCatalog).GetMethod(
-            nameof(IPackageAssemblyCatalog.GetAssembliesAsync),
+            nameof(IPackageAssemblyCatalog.GetPackagedAssembliesAsync),
             [typeof(string), typeof(string), typeof(CancellationToken)]);
 
         Assert.Null(exactVersionMethod);

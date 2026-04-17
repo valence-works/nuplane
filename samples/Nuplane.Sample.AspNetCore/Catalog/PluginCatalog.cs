@@ -21,7 +21,7 @@ internal sealed class PluginCatalog(
     {
         var discovered = new List<DiscoveredPluginDescriptor>();
 
-        foreach (var package in (await _packageAssemblyCatalog.GetAssembliesAsync(cancellationToken))
+        foreach (var package in (await _packageAssemblyCatalog.GetPackagedAssembliesAsync(cancellationToken))
                      .Where(static package => package.AssemblyReferences.Count > 0))
         {
             var pluginTypes = (await _packageTypeFinder.FindTypesAsync(typeof(IPlugin), package.PackageId, cancellationToken))

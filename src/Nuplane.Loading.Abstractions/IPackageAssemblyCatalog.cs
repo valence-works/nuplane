@@ -31,7 +31,7 @@ public interface IPackageAssemblyCatalog
     /// <returns>
     /// A deterministic, package-grouped list of loaded assemblies and their corresponding durable assembly references.
     /// </returns>
-    Task<IReadOnlyList<PackageAssemblies>> GetAssembliesAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<PackageAssemblies>> GetPackagedAssembliesAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Gets assemblies for the current active loaded version of a specific package using loading-owned default filtering.
@@ -42,7 +42,7 @@ public interface IPackageAssemblyCatalog
     /// The active loaded package entry for the specified package identifier when one exists;
     /// otherwise <see langword="null"/>.
     /// </returns>
-    Task<PackageAssemblies?> GetAssembliesAsync(string packageId, CancellationToken cancellationToken);
+    Task<PackageAssemblies?> GetPackagedAssembliesAsync(string packageId, CancellationToken cancellationToken);
 }
 
 /// <summary>

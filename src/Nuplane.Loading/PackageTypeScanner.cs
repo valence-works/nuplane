@@ -37,7 +37,7 @@ internal sealed class PackageTypeScanner : IPackageTypeScanner
         ArgumentNullException.ThrowIfNull(interfaceType);
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
 
-        var package = await _packageAssemblyCatalog.GetAssembliesAsync(packageId, cancellationToken);
+        var package = await _packageAssemblyCatalog.GetPackagedAssembliesAsync(packageId, cancellationToken);
         return package is null
             ? []
             : ScanAssemblies(interfaceType, package.Assemblies, package.PackageId, package.Version);
