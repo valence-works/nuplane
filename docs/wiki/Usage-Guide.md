@@ -4,6 +4,30 @@
 
 This page helps integrators choose the right Nuplane adoption path and understand where baseline runtime usage ends and optional module behavior begins.
 
+## What you are integrating
+
+Nuplane's primary practical capability is **installing NuGet packages into a running .NET application at runtime**. The Usage Guide helps you wire that capability into your specific host shape.
+
+The drop-folder workflow is the fastest way to see it work end-to-end:
+
+1. Configure a directory-backed feed watching a local `packages` folder.
+2. Enable automatic reconciliation so Nuplane reacts to file-system changes.
+3. Enable the optional loading module so assemblies are loaded into isolated contexts.
+4. Register observers so your host is notified when packages change.
+5. Read authoritative type lists from your catalog services.
+
+From that baseline you can replace the folder with a remote NuGet feed, swap the file-drop trigger for a manifest or a CI/CD push, and build the host-side activation or routing logic that matches your use case.
+
+## Common scenarios
+
+| Scenario | Starting shape |
+|---|---|
+| Hot-reload plugins via file drop | Directory feed + watcher, loading module, `IPlugin` discovery in observers |
+| Remote feed–driven feature delivery | NuGet v3 feed, polling reconciliation, loading module |
+| SaaS tenant customization | Per-tenant directory feed or feed filter, isolated load contexts, tenant-scoped catalog reads |
+| Workflow step registry | Directory or remote feed, loading module, type-finder over a known step interface |
+| Metadata-only package-state tracking | Core runtime only, no loading module |
+
 ## Start with the decision table
 
 | Need | Applicability | Recommended path |

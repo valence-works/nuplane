@@ -12,11 +12,22 @@ This wiki is a **hybrid hub**:
 
 ## What Nuplane is for
 
-Nuplane exists for hosts that want runtime package reconciliation without turning package management into a plugin framework.
+Nuplane exists to let .NET applications **install, update, and load NuGet packages at runtime** — without a restart.
 
 - **Applicability:** `Core`
-- Use it when you need deterministic package resolution, transactional updates, runtime package-state visibility, and host-controlled reactions.
-- Do **not** expect it to define plugin entry points, own your dependency-injection container, or dictate activation semantics.
+- Use it when you want to drop a `.nupkg` into a watched folder (or push to a feed) and have the package resolved, loaded into the running process, and available for type discovery within seconds.
+- Use it when you need deterministic package resolution, transactional updates, runtime package-state visibility, and host-controlled reactions to package changes.
+- Do **not** expect it to define plugin entry points, own your dependency-injection container, or dictate activation semantics. Your host keeps those decisions.
+
+### Practical use cases
+
+| Scenario | What you get |
+|---|---|
+| **Hot-reload plugin systems** | Drop a `.nupkg` into a folder; the running app discovers the new plugin types seconds later. |
+| **Modular feature delivery** | Update individual feature packages at runtime without a full redeployment. |
+| **SaaS per-tenant extensions** | Load per-tenant behaviour packages dynamically, isolated per load context. |
+| **Workflow and rule engines** | Deploy new steps or validators as packages and pick them up live. |
+| **Internal tool hosts** | Push a new package version to a watched folder; the host auto-reconciles. |
 
 ## Audience routes
 

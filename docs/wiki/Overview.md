@@ -2,10 +2,14 @@
 
 ## Why Nuplane exists
 
-Nuplane exists to give .NET hosts a predictable way to **resolve, synchronize, and manage NuGet packages at runtime** without forcing them into a plugin framework or a framework-specific runtime model.
+Nuplane exists to let .NET applications **install, update, and load NuGet packages while they are running** — without a restart, without bespoke packaging infrastructure, and without adopting a full plugin framework.
 
-Teams usually feel this need when they want to:
+The core scenario is straightforward: drop a `.nupkg` into a watched local folder (or push a new version to a NuGet feed), and Nuplane detects the change, resolves the package and its dependencies, applies a transactional install to a deterministic on-disk store, loads the assemblies into isolated contexts, and signals your host. Your host then re-queries the catalog and decides what to do with the loaded types.
 
+Teams reach for this when they want to:
+
+- ship and hot-reload plugins as NuGet packages without redeploying the host;
+- deliver application features as independently versioned packages that can be updated at runtime;
 - keep a runtime package set aligned with desired state from feeds or local package drops;
 - make package updates safe, observable, and retryable;
 - let the host stay in charge of what happens when packages change.
@@ -42,6 +46,30 @@ Nuplane’s current repository behavior centers on a straightforward control loo
 | Assembly loading and load-state surfaces | `Optional Module` | Available through the loading module when the host explicitly opts in |
 | Phase-specific governance or rollout features | `Phase-Based` | Roadmap work exists, but not every phase feature is part of every host’s baseline story |
 
+## What you can build
+
+Nuplane's dynamic package installation infrastructure enables use cases that would otherwise require a full redeployment or a bespoke package management system:
+
+| Scenario | How Nuplane helps |
+|---|---|
+| **Hot-reload plugin systems** | Package plugins as `.nupkg` files. Drop one into the watched folder; the running host discovers and activates it within seconds — no restart. |
+| **Modular feature delivery** | Split your application into independently versioned feature packages. Update a single feature at runtime. Other features keep running. |
+| **SaaS per-tenant extensions** | Each tenant provides their behaviour as a package. Nuplane installs and isolates them per load context at runtime. |
+| **Workflow and rule engines** | Operators deploy new steps, validators, or routing rules as packages. The engine picks them up live. |
+| **Internal tool hosts** | Teams push a new version to a shared internal folder; all running hosts auto-reconcile and load the update. |
+
+### Sample walkthrough
+
+The [`Nuplane.Sample.AspNetCore`](../../samples/Nuplane.Sample.AspNetCore/) project shows the full hot-install loop:
+
+1. Start the ASP.NET Core host (`dotnet run`).
+2. Pack the sample plugin (`dotnet pack`).
+3. Drop the `.nupkg` into the `packages` folder.
+4. Nuplane's file watcher fires, reconciles, loads the assemblies, and signals the observers.
+5. Query `/catalog/plugins` — the new `IPlugin` implementation appears, live in the running process.
+
+The whole cycle from file drop to discoverable type takes about one second.
+
 ## What Nuplane does not do
 
 Nuplane does **not**:
@@ -52,11 +80,11 @@ Nuplane does **not**:
 - guarantee in-process assembly unload;
 - sandbox untrusted code.
 
-Nuplane is **infrastructure for package reconciliation**. Your host owns the meaning of those packages.
+Nuplane is **infrastructure for package installation and reconciliation**. Your host owns the meaning of those packages.
 
-## Why Nuplane is not a plugin framework
+## Plugin semantics stay with your host
 
-Nuplane can help a host acquire packages, expose authoritative package state, and optionally load assemblies through an opt-in loading module. That still does **not** make Nuplane the owner of plugin semantics.
+Nuplane provides the machinery to get packages into your process. What you call those packages — plugins, modules, features, extensions — and how you activate, route, or configure them is your host's responsibility.
 
 - **Applicability:** `Core`
 - A host still decides what counts as a plugin, how types are discovered, and when code is activated or deactivated.

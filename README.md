@@ -2,12 +2,23 @@
 
 # Nuplane
 
-Nuplane is a lightweight runtime control plane for NuGet packages.
+Nuplane is a runtime control plane for NuGet packages. It lets your .NET application install, update, and load NuGet packages **while it is running** — no restart required.
 
-It enables .NET applications to resolve, synchronize, and manage NuGet packages at runtime with deterministic storage, transactional updates, and host-neutral change events.
+Drop a `.nupkg` into a watched folder or point Nuplane at a NuGet feed. It resolves the package, extracts it to a deterministic local store, loads the assemblies into an isolated context, and signals your host. Your host decides what to do with the loaded types.
 
-Nuplane does **not** define a plugin model.  
-It provides infrastructure for package reconciliation — nothing more, nothing less.
+## What you can build
+
+The most immediate use case is **dynamic NuGet package installation into a live .NET application**:
+
+- **Hot-reload plugin systems** — ship plugins as NuGet packages; drop them into a local feed folder at runtime and have them discoverable in the live app within seconds.
+- **Modular feature delivery** — split an application into independently versioned feature packages and update individual features at runtime without a full redeployment.
+- **SaaS per-tenant extensions** — load per-tenant behaviour packages at runtime; each tenant gets their customizations without shared hosting risk.
+- **Workflow and rule engines** — deploy new steps, validators, or rules as packages and pick them up live without restarting the engine.
+- **Internal tool hosts** — extend internal platforms dynamically by pushing a new package to a watched folder; the host picks it up automatically.
+
+See the [End-to-End ASP.NET Plugin Demo](#-end-to-end-aspnet-plugin-demo) below for a full walkthrough of the drop-folder workflow with a live ASP.NET Core host.
+
+Nuplane handles the infrastructure: feed resolution, deterministic storage, transactional updates, last-known-good fallback, isolated assembly loading, and structured change events. Your host decides what the loaded packages mean.
 
 ## 📖 Start With The Wiki
 
@@ -468,15 +479,17 @@ Removing the file removes it.
 
 The same setup can be declared through `Nuplane:Setup:Feeds` when you prefer configuration-driven hosts.
 
-## 🧪 End-to-End ASP.NET Plugin Demo
+## 🧪 End-to-End ASP.NET Plugin Demo — Dynamic Package Installation in Action
 
-The sample app demonstrates the full lifecycle:
+The sample app shows what it looks like to install a NuGet package into a running ASP.NET Core application without restarting it:
 
-1. Directory-based desired state (`packages` local directory feed)
-2. File-change-triggered reconcile (watcher + debounce)
-3. `INuplaneObserver` notifications on completion
-4. Assembly loading via the optional loading subsystem
-5. Type discovery for `IPlugin` implementations
+1. A local `packages` folder acts as a directory-backed feed (desired state).
+2. A file-system watcher detects new `.nupkg` files and triggers reconciliation (with 1-second debounce).
+3. Nuplane resolves and extracts the package, loads its assemblies, and emits `PackageChangeSet` events.
+4. `PackageChangeObserver` and `PluginDiscoveryObserver` react to those events and re-query the authoritative catalog surfaces.
+5. The `/catalog/plugins` endpoint exposes all `IPlugin` implementations discovered from the newly loaded packages.
+
+The whole loop — from dropping a file to having the types available through the HTTP surface — takes about a second.
 
 ### Build and pack the sample plugin
 

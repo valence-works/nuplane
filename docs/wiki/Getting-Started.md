@@ -2,7 +2,25 @@
 
 ## Primary purpose
 
-This page gives you the **recommended first-use path** for Nuplane without duplicating command sequences that already have a better repository home.
+This page gets you to your first working dynamic package installation in a .NET application — and then points you to the right next steps.
+
+### What "first use" looks like
+
+```bash
+# 1. Start the sample host
+dotnet run --project samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj
+
+# 2. Pack the sample plugin
+dotnet pack samples/Nuplane.Sample.Plugin/Nuplane.Sample.Plugin.csproj -c Debug
+
+# 3. Drop it into the watched folder
+mkdir -p packages
+cp samples/Nuplane.Sample.Plugin/bin/Debug/Nuplane.Sample.Plugin.1.0.0.nupkg packages/
+```
+
+Within about a second, Nuplane detects the new `.nupkg`, resolves and installs it, loads the assemblies, and signals the host. Query `/catalog/plugins` and you'll see `Nuplane.Sample.Plugin.HelloPlugin` in the response — discovered live in the running process, with no restart.
+
+That is the core workflow this page helps you understand before you integrate it into your own application.
 
 ## Recommended reading and usage order
 
