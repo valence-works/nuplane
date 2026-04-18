@@ -26,7 +26,7 @@ jobs:
 
       - name: Copy wiki files
         run: |
-          cp wiki/*.md wiki-repo/
+          cp docs/wiki/*.md wiki-repo/
 
       - name: Commit and push
         run: |
