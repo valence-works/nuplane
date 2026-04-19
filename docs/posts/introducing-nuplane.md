@@ -197,11 +197,10 @@ The drop-folder workflow is the easiest to demonstrate, but Nuplane also support
 builder.Services.AddNuplane(nuplane =>
 {
     nuplane.PollEvery(TimeSpan.FromMinutes(1));
-    nuplane.AddDirectoryFeed("local-packages", "packages", dir =>
+    nuplane.AddFeed("nuget.org", feed =>
     {
-        dir.Watch = true;
-        dir.DebounceWindow = TimeSpan.FromSeconds(1);
-        dir.IncludeAll();
+        feed.FromUri("https://api.nuget.org/v3/index.json");
+        feed.Include("MyCompany.Plugins.*");
     });
 });
 ```
