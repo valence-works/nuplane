@@ -205,13 +205,21 @@ builder.Services.AddNuplane(nuplane =>
 });
 ```
 
-Or declaratively in configuration, pointing at nuget.org or an internal feed with an include pattern to filter which packages Nuplane tracks:
+Or declaratively in configuration, using the full `Nuplane:Setup:Feeds` shape and pointing at nuget.org or an internal feed with an include pattern to filter which packages Nuplane tracks:
 
 ```json
 {
-  "Name": "nuget.org",
-  "ServiceIndex": "https://api.nuget.org/v3/index.json",
-  "IncludePatterns": ["MyCompany.Plugins.*"]
+  "Nuplane": {
+    "Setup": {
+      "Feeds": [
+        {
+          "Name": "nuget.org",
+          "ServiceIndex": "https://api.nuget.org/v3/index.json",
+          "IncludePatterns": ["MyCompany.Plugins.*"]
+        }
+      ]
+    }
+  }
 }
 ```
 
