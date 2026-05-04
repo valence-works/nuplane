@@ -56,6 +56,14 @@ public sealed class FeedResolutionOptions
     public TimeSpan VersionCacheTtl { get; set; } = TimeSpan.FromMinutes(5);
 
     /// <summary>
+    /// Gets or sets whether the NuGet HTTP cache is disabled.
+    /// When <c>true</c>, the underlying NuGet client bypasses its local HTTP cache (~30 minutes),
+    /// relying solely on Nuplane's own <see cref="VersionCacheTtl"/>-based cache.
+    /// Default is <c>true</c> to avoid stale version lists from recently published packages.
+    /// </summary>
+    public bool DisableNuGetHttpCache { get; set; } = true;
+
+    /// <summary>
     /// Sets the resolution priority for the specified feed.
     /// </summary>
     /// <param name="feedName">The feed name.</param>

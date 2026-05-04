@@ -18,6 +18,13 @@ public sealed class FeedResolutionOptionsValidatorTests
     }
 
     [Fact]
+    public void Default_DisableNuGetHttpCache_IsTrue()
+    {
+        var options = new FeedResolutionOptions();
+        Assert.True(options.DisableNuGetHttpCache);
+    }
+
+    [Fact]
     public void Validate_VersionCacheTtl_PositiveDuration_Succeeds()
     {
         var options = new FeedResolutionOptions { VersionCacheTtl = TimeSpan.FromMinutes(10) };
