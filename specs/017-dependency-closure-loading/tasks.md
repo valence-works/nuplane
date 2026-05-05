@@ -11,10 +11,10 @@
 
 **Purpose**: Establish graph model locations and test fixtures without changing behavior.
 
-- [ ] T001 Create placeholder graph model files in `src/Nuplane/Reconciliation/Models/ResolvedPackageGraph.cs`, `src/Nuplane/Reconciliation/Models/ResolvedPackageNode.cs`, and `src/Nuplane/Reconciliation/Models/DependencyEdge.cs`
-- [ ] T002 [P] Create dependency graph resolver test fixture helpers in `test/Nuplane.Runtime.Tests/TestSupport/DependencyGraphTestPackages.cs`
-- [ ] T003 [P] Create graph loading fixture projects or assembly builders in `test/Nuplane.Loading.Tests.Fixtures/` for root package and dependency package assemblies
-- [ ] T004 [P] Add graph terminology constants/test builders in `test/Nuplane.Integration.Tests/Support/GraphReconciliationTestSupport.cs`
+- [X] T001 Create placeholder graph model files in `src/Nuplane/Reconciliation/Models/ResolvedPackageGraph.cs`, `src/Nuplane/Reconciliation/Models/ResolvedPackageNode.cs`, and `src/Nuplane/Reconciliation/Models/DependencyEdge.cs`
+- [X] T002 [P] Create dependency graph resolver test fixture helpers in `test/Nuplane.Runtime.Tests/TestSupport/DependencyGraphTestPackages.cs`
+- [X] T003 [P] Create graph loading fixture projects or assembly builders in `test/Nuplane.Loading.Tests.Fixtures/` for root package and dependency package assemblies
+- [X] T004 [P] Add graph terminology constants/test builders in `test/Nuplane.Integration.Tests/Support/GraphReconciliationTestSupport.cs`
 
 ---
 
