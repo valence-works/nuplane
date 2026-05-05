@@ -48,7 +48,7 @@ internal sealed class PackageAssemblyCatalog(
         }
 
         return snapshot.Packages
-            .Where(static package => package.Status == PackageLoadStatus.Loaded)
+            .Where(static package => package.Status == PackageLoadStatus.Loaded && package.Discoverable)
             .OrderBy(static package => package.PackageId, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
             .ToArray();

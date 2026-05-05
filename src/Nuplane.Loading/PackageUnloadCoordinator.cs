@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.Loader;
 
 namespace Nuplane.Loading;
 
@@ -42,7 +43,7 @@ internal sealed class PackageUnloadCoordinator : IPackageUnloadCoordinator
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
-        if (context.Context is not PackageAssemblyLoadContext loadContext)
+        if (context.Context is not AssemblyLoadContext loadContext)
         {
             throw new ArgumentException("Invalid load context handle.", nameof(context));
         }

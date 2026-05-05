@@ -22,6 +22,7 @@ public sealed class PackageApplyExecutor(
     private readonly PackageTransactionCoordinator _transactionCoordinator = transactionCoordinator ?? throw new ArgumentNullException(nameof(transactionCoordinator));
     private readonly IReconciliationRetryPolicy _retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
     private readonly IFailureRecorder _failureRecorder = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
+    private readonly PackageDependencyGraphResolver _graphResolver = new(packageResolver, retryPolicy);
 
     /// <inheritdoc />
     public async Task<PackageResolutionResult> ResolveAsync(
@@ -35,20 +36,28 @@ public sealed class PackageApplyExecutor(
         var resolved = new List<ResolvedPackage>();
         var failed = new List<string>();
         var decisions = new List<FeedResolutionDecision>();
+        var graphs = new List<ResolvedPackageGraph>();
 
         foreach (var request in desiredRequests)
         {
             try
             {
-                var pkg = await _retryPolicy.ExecuteAsync(
-                    ct => _packageResolver.ResolveAsync(request, ct),
+                var graphResult = await _graphResolver.ResolveAsync(
+                    [request],
+                    ResolveRootAsync,
                     cancellationToken);
-                resolved.Add(pkg);
+                resolved.AddRange(graphResult.ResolvedPackages);
+                graphs.AddRange(graphResult.ResolvedGraphs);
 
-                if (_packageResolver is MultiFeedPackageResolver multiFeedResolver &&
-                    multiFeedResolver.TryGetDecision(request.Id, out var decision))
+                if (_packageResolver is MultiFeedPackageResolver multiFeedResolver)
                 {
-                    decisions.Add(decision with { CorrelationId = correlationId });
+                    foreach (var package in graphResult.ResolvedPackages)
+                    {
+                        if (multiFeedResolver.TryGetDecision(package.Id, out var decision))
+                        {
+                            decisions.Add(decision with { CorrelationId = correlationId });
+                        }
+                    }
                 }
             }
             catch (Exception ex)
@@ -70,7 +79,25 @@ public sealed class PackageApplyExecutor(
             }
         }
 
-        return new(resolved, failed, decisions);
+        var deduplicatedResolved = resolved
+            .GroupBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group
+                .OrderBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
+                .First())
+            .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var deduplicatedDecisions = decisions
+            .GroupBy(static decision => decision.PackageId, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.Last())
+            .OrderBy(static decision => decision.PackageId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return new(deduplicatedResolved, failed, deduplicatedDecisions, graphs);
+
+        Task<ResolvedPackage> ResolveRootAsync(PackageRequest packageRequest, CancellationToken ct) =>
+            _retryPolicy.ExecuteAsync(
+                token => _packageResolver.ResolveAsync(packageRequest, token),
+                ct);
     }
 
     /// <inheritdoc />

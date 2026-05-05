@@ -10,6 +10,7 @@ namespace Nuplane.Loading;
 /// <param name="LoadedAtUtc">The UTC time loading completed, when applicable.</param>
 /// <param name="Diagnostics">Secret-safe load diagnostics.</param>
 /// <param name="AssemblyReferences">The deterministic assembly references associated with the package.</param>
+/// <param name="Discoverable">Whether this loaded package should be exposed by default discovery surfaces.</param>
 public sealed record PackageLoadState(
     string PackageId,
     string Version,
@@ -17,7 +18,8 @@ public sealed record PackageLoadState(
     string InstallPath,
     DateTimeOffset? LoadedAtUtc,
     IReadOnlyList<string> Diagnostics,
-    IReadOnlyList<PackageAssemblyReference> AssemblyReferences)
+    IReadOnlyList<PackageAssemblyReference> AssemblyReferences,
+    bool Discoverable = true)
 {
     /// <summary>
     /// Creates a canonical package load-state record from the legacy loading descriptor model.
@@ -43,4 +45,3 @@ public sealed record PackageLoadState(
             descriptor.ScanCandidates.Select(static candidate => PackageAssemblyReference.FromCandidate(candidate)).ToArray());
     }
 }
-

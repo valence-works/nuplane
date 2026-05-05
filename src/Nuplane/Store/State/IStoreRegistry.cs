@@ -37,6 +37,16 @@ public interface IStoreRegistry
         IReadOnlyDictionary<string, ActivePackageDescriptor>? activePackageDescriptors)
         => PersistActiveVersionsAsync(activeVersions, successfullyApplied, correlationId, cancellationToken);
 
+    /// <summary>Persists updated active versions together with package and graph activation metadata.</summary>
+    Task PersistActiveVersionsAsync(
+        IReadOnlyDictionary<string, string> activeVersions,
+        IReadOnlyDictionary<string, string> successfullyApplied,
+        string correlationId,
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, ActivePackageDescriptor>? activePackageDescriptors,
+        IReadOnlyDictionary<string, GraphActivationRecord>? activeGraphs)
+        => PersistActiveVersionsAsync(activeVersions, successfullyApplied, correlationId, cancellationToken, activePackageDescriptors);
+
     /// <summary>Persists a failure record for a package.</summary>
     Task PersistFailureAsync(
         string packageId,

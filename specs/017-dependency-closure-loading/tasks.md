@@ -44,18 +44,18 @@
 
 ### Tests for MVP Gate
 
-- [ ] T011A [P] [MVP] Create root/dependency fixture packages where the root assembly metadata references a dependency type in `test/Nuplane.Loading.Tests.Fixtures/`
+- [X] T011A [P] [MVP] Create root/dependency fixture packages where the root assembly metadata references a dependency type in `test/Nuplane.Loading.Tests.Fixtures/`
 - [ ] T011B [MVP] Add root-only reconciliation/loading integration test in `test/Nuplane.Integration.Tests/Loading/DependencyClosureVerticalSliceTests.cs`
-- [ ] T011C [MVP] Assert the vertical slice fails under per-package load-context behavior and passes only when root and dependency assemblies share one graph load context in `test/Nuplane.Loading.Tests/PackageLoaderGraphRegressionTests.cs`
-- [ ] T011D [MVP] Assert default assembly projection returns the root as discoverable and the dependency as support-only in `test/Nuplane.Loading.Tests/PackageAssemblyCatalogGraphTests.cs`
+- [X] T011C [MVP] Assert the vertical slice fails under per-package load-context behavior and passes only when root and dependency assemblies share one graph load context in `test/Nuplane.Loading.Tests/PackageLoaderGraphRegressionTests.cs`
+- [X] T011D [MVP] Assert default assembly projection returns the root as discoverable and the dependency as support-only in `test/Nuplane.Loading.Tests/PackageAssemblyCatalogGraphTests.cs`
 
 ### Implementation for MVP Gate
 
-- [ ] T011E [MVP] Wire `PackageDependencyGraphResolver` into normal `PackageResolutionMiddleware` startup reconciliation for root-only desired inputs in `src/Nuplane/Reconciliation/Middleware/PackageResolutionMiddleware.cs`
-- [ ] T011F [MVP] Acquire and install root plus dependency nodes before active publish in `src/Nuplane/Reconciliation/PackageApplyExecutor.cs`
-- [ ] T011G [MVP] Publish root/dependency graph metadata consumed by loading in `src/Nuplane/Operational/ActivePackageCatalogMapper.cs`
-- [ ] T011H [MVP] Implement enough `PackageGraphLoadContext` behavior in `src/Nuplane.Loading/PackageGraphLoadContext.cs` for one root assembly to bind to one dependency assembly
-- [ ] T011I [MVP] Route `PackageLoader` and `IPackageAssemblyCatalog` through graph sessions instead of independent per-package contexts in `src/Nuplane.Loading/PackageLoader.cs` and `src/Nuplane.Loading/PackageAssemblyCatalog.cs`
+- [X] T011E [MVP] Wire `PackageDependencyGraphResolver` into normal `PackageResolutionMiddleware` startup reconciliation for root-only desired inputs in `src/Nuplane/Reconciliation/Middleware/PackageResolutionMiddleware.cs`
+- [X] T011F [MVP] Acquire and install root plus dependency nodes before active publish in `src/Nuplane/Reconciliation/PackageApplyExecutor.cs`
+- [X] T011G [MVP] Publish root/dependency graph metadata consumed by loading in `src/Nuplane/Operational/ActivePackageCatalogMapper.cs`
+- [X] T011H [MVP] Implement enough `PackageGraphLoadContext` behavior in `src/Nuplane.Loading/PackageGraphLoadContext.cs` for one root assembly to bind to one dependency assembly
+- [X] T011I [MVP] Route `PackageLoader` and `IPackageAssemblyCatalog` through graph sessions instead of independent per-package contexts in `src/Nuplane.Loading/PackageLoader.cs` and `src/Nuplane.Loading/PackageAssemblyCatalog.cs`
 - [ ] T011J [MVP] Validate Scenario 0 in `specs/017-dependency-closure-loading/quickstart.md` and record the result in the implementation PR
 
 **Checkpoint**: With only a root package configured, Nuplane automatically acquires the dependency package, records graph metadata, loads both assemblies in one graph context, reflects root metadata without `FileNotFoundException`, and surfaces only the root as discoverable.

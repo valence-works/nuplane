@@ -159,7 +159,8 @@ internal sealed class LoadingCatalog(
             package.InstallPath,
             loadedAtUtc,
             diagnostics,
-            assemblyReferences.ToArray());
+            assemblyReferences.ToArray(),
+            package.Discoverable);
 
     private static IReadOnlyList<string> BuildDiagnostics(string? message)
     {
@@ -191,4 +192,3 @@ internal sealed class LoadingCatalog(
         return null;
     }
 }
-

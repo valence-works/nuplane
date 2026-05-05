@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Plugin.Dependency</AssemblyName>
+    <RootNamespace>Plugin.Dependency</RootNamespace>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Remove="coverlet.collector" />
+    <PackageReference Remove="Microsoft.NET.Test.Sdk" />
+    <PackageReference Remove="xunit" />
+    <PackageReference Remove="xunit.runner.visualstudio" />
+    <Using Remove="Xunit" />
+  </ItemGroup>
+
+</Project>

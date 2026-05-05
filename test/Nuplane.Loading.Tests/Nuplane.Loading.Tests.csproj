@@ -5,6 +5,12 @@
     <ProjectReference Include="..\..\src\Nuplane.Loading.Abstractions\Nuplane.Loading.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Loading.Api\Nuplane.Loading.Api.csproj" />
     <ProjectReference Include="..\Nuplane.Loading.Tests.Fixtures\Nuplane.Loading.Tests.Fixtures.csproj" />
+    <ProjectReference Include="..\Nuplane.Loading.Tests.Fixtures.Dependency\Nuplane.Loading.Tests.Fixtures.Dependency.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+    <ProjectReference Include="..\Nuplane.Loading.Tests.Fixtures.Root\Nuplane.Loading.Tests.Fixtures.Root.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
     <ProjectReference Include="..\Nuplane.Loading.Tests.Fixtures.BrokenCandidate\Nuplane.Loading.Tests.Fixtures.BrokenCandidate.csproj"
                       ReferenceOutputAssembly="false"
                       PrivateAssets="all" />
