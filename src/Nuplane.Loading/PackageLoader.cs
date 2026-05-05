@@ -213,37 +213,15 @@ internal sealed class PackageLoader : IPackageLoader
             foreach (var package in packages)
             {
                 var key = BuildKey(package.Id, package.Version);
-                try
-                {
-                    var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath, package.Id);
-                    var context = new PackageAssemblyLoadContext(mainAssemblyPath, sharedPolicy, _matcher);
-                    context.LoadFromAssemblyName(AssemblyName.GetAssemblyName(mainAssemblyPath));
-
-                    _contexts[key] = context;
-                    var session = new PackageLoadSession(
-                        package.Id,
-                        package.Version,
-                        package.InstallPath,
-                        key,
-                        DateTimeOffset.UtcNow,
-                        IsLoaded: true,
-                        LastError: null);
-
-                    _sessions[key] = session;
-                    loaded.Add(session);
-                }
-                catch (Exception packageException)
-                {
-                    failed[package.Id] = packageException.Message;
-                    _sessions[key] = new(
-                        package.Id,
-                        package.Version,
-                        package.InstallPath,
-                        graphKey,
-                        DateTimeOffset.UtcNow,
-                        IsLoaded: false,
-                        LastError: string.IsNullOrWhiteSpace(packageException.Message) ? ex.Message : packageException.Message);
-                }
+                failed[package.Id] = ex.Message;
+                _sessions[key] = new(
+                    package.Id,
+                    package.Version,
+                    package.InstallPath,
+                    graphKey,
+                    DateTimeOffset.UtcNow,
+                    IsLoaded: false,
+                    LastError: ex.Message);
             }
         }
 

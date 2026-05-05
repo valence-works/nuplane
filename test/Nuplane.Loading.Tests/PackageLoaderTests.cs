@@ -86,6 +86,25 @@ public sealed class PackageLoaderTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureGraphLoadedAsync_WhenGraphLoadFails_DoesNotFallbackToPerPackageContexts()
+    {
+        var goodPath = CreateInstallDir("good-pkg");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[
+                Pkg("good-pkg", "1.0.0", goodPath),
+                Pkg("bad-pkg", "1.0.0", "/nonexistent/nope")
+            ]],
+            [],
+            CancellationToken.None);
+
+        Assert.Empty(result.Loaded);
+        Assert.Equal(["bad-pkg", "good-pkg"], result.FailedByPackageId.Keys.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.False(loader.TryGetContext("good-pkg", "1.0.0", out _));
+    }
+
+    [Fact]
     public void ResolveMainAssemblyPath_MultiTargetPackage_PicksExactHostFrameworkAssembly()
     {
         var installPath = CreateMultiTargetInstallDir("Nuplane.Loading.Tests.Fixtures", GetHostFrameworkFolderName(), "net8.0", "net9.0");

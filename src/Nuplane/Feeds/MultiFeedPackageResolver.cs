@@ -108,7 +108,35 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                 continue;
             }
 
-            var installPath = await ResolveInstallPathAsync(candidate, request.Id, selectedVersion.Version!, cancellationToken);
+            string installPath;
+            try
+            {
+                installPath = await ResolveInstallPathAsync(candidate, request.Id, selectedVersion.Version!, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                lastFailure = FeedResolutionDecision.Failed(
+                    request,
+                    candidateNames,
+                    correlationId: string.Empty,
+                    decisionPath: "candidate-acquisition-failed",
+                    feedUnavailable: false,
+                    failureReason: ex.Message,
+                    selectedFeed: candidate.Name,
+                    enumeratedVersionCount: selectedVersion.EnumeratedCount,
+                    cacheHit: selectedVersion.CacheHit);
+                _decisions[request.Id] = lastFailure;
+
+                var shouldStop = _options.PolicyMode == FeedResolutionPolicyMode.Strict
+                    || _options.StopOnFirstSuccessfulFeed
+                    || !string.IsNullOrWhiteSpace(request.FeedName);
+                if (shouldStop)
+                {
+                    throw;
+                }
+
+                continue;
+            }
             var resolved = new ResolvedPackage(
                 request.Id,
                 selectedVersion.Version!,

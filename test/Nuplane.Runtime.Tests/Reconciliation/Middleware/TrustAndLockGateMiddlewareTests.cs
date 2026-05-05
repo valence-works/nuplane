@@ -25,6 +25,21 @@ public sealed class TrustAndLockGateMiddlewareTests
     }
 
     [Fact]
+    public async Task InvokeAsync_AllPackagesTrustedAndLockClean_PreservesResolvedGraphs()
+    {
+        var root = Pkg("Plugin.Root");
+        var dependency = Pkg("Plugin.Dependency");
+        var graph = Graph(root, dependency);
+        var middleware = Build();
+
+        var ctx = Ctx([root, dependency], [graph]);
+        await middleware.InvokeAsync(ctx, () => Task.CompletedTask);
+
+        var preservedGraph = Assert.Single(ctx.ResolutionResult!.ResolvedGraphs);
+        Assert.Same(graph, preservedGraph);
+    }
+
+    [Fact]
     public async Task InvokeAsync_OnePackageBlockedByLock_ExcludedAndFailureRecorded()
     {
         var recorder = new FakeFailureRecorder();
@@ -85,7 +100,9 @@ public sealed class TrustAndLockGateMiddlewareTests
             failureRecorder ?? new FakeFailureRecorder(),
             new NullLogger());
 
-    private static ReconciliationCycleContext Ctx(ResolvedPackage[] resolved)
+    private static ReconciliationCycleContext Ctx(
+        ResolvedPackage[] resolved,
+        IReadOnlyList<ResolvedPackageGraph>? graphs = null)
     {
         var ctx = new ReconciliationCycleContext
         {
@@ -93,13 +110,50 @@ public sealed class TrustAndLockGateMiddlewareTests
             CycleStartedAt = DateTimeOffset.UtcNow,
             CancellationToken = CancellationToken.None,
             DesiredRequests = resolved.Select(r => new PackageRequest(r.Id, r.Version, r.FeedName, PackageUpdatePolicy.Exact, r.SourceName ?? "src")).ToArray(),
-            ResolutionResult = new(resolved, [], [])
+            ResolutionResult = new(resolved, [], [], graphs)
         };
         return ctx;
     }
 
     private static ResolvedPackage Pkg(string id) =>
         new(id, "1.0.0", "feed-a", $"/store/{id}", DateTimeOffset.UtcNow, id);
+
+    private static ResolvedPackageGraph Graph(ResolvedPackage root, ResolvedPackage dependency)
+    {
+        var createdAtUtc = DateTimeOffset.UtcNow;
+        var rootNode = Node(root, PackageNodeRole.Root);
+        var dependencyNode = Node(dependency, PackageNodeRole.Dependency);
+
+        return new ResolvedPackageGraph(
+            "graph-1",
+            "generation-1",
+            "net10.0",
+            [rootNode],
+            [rootNode, dependencyNode],
+            [new DependencyEdge(
+                root.Id,
+                root.Version,
+                dependency.Id,
+                "[1.0.0, )",
+                dependency.Version,
+                "net10.0",
+                Optional: false)],
+            [],
+            createdAtUtc);
+    }
+
+    private static ResolvedPackageNode Node(ResolvedPackage package, PackageNodeRole role) =>
+        new(
+            package.Id,
+            package.Version,
+            role,
+            package.InstallPath,
+            PackageSourceKind.RemoteFeed,
+            package.SourceName,
+            PackageContentHash: null,
+            RuntimeAssets: [],
+            DiscoverableAssets: role is PackageNodeRole.Root or PackageNodeRole.RootAndDependency ? [$"{package.Id}.dll"] : [],
+            SupportAssets: role is PackageNodeRole.Dependency ? [$"{package.Id}.dll"] : []);
 
     private sealed class FakeLockCoordinator(IReadOnlyCollection<string> blockedIds) : ILockFileCoordinator
     {

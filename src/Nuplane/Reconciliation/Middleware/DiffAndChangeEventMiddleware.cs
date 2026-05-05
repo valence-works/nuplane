@@ -1,3 +1,4 @@
+using Nuplane.Abstractions;
 using Nuplane.Events;
 using Nuplane.Observability;
 using Nuplane.Store.State;
@@ -15,7 +16,8 @@ internal sealed class DiffAndChangeEventMiddleware(
     public async Task InvokeAsync(ReconciliationCycleContext context, Func<Task> next)
     {
         // Compute diff against pre-apply active state so Changing fires with accurate data
-        var activeVersions = await storeRegistry.GetActiveVersionsAsync(context.CancellationToken);
+        var storeState = await storeRegistry.GetStateAsync(context.CancellationToken);
+        var activeVersions = storeState.ActiveVersionById;
         context.ActiveVersions = activeVersions;
 
         var dryRunPlan = await retryPolicy.ExecuteAsync(
@@ -32,6 +34,7 @@ internal sealed class DiffAndChangeEventMiddleware(
             activeVersions,
             context.CorrelationId,
             DateTimeOffset.UtcNow);
+        changeSet = PreserveActivePackagesForFailedRoots(changeSet, context.ResolutionResult.FailedPackageIds, storeState);
         context.ChangeSet = changeSet;
 
         // Emit Changing before transactions begin (observer contract)
@@ -42,5 +45,39 @@ internal sealed class DiffAndChangeEventMiddleware(
 
         await next();
     }
-}
 
+    private static PackageChangeSet PreserveActivePackagesForFailedRoots(
+        PackageChangeSet changeSet,
+        IReadOnlyList<string> failedPackageIds,
+        StoreStateRecord storeState)
+    {
+        if (failedPackageIds.Count == 0 || changeSet.Removed.Count == 0)
+        {
+            return changeSet;
+        }
+
+        var failed = failedPackageIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var retained = new HashSet<string>(failed, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var graph in storeState.ActiveGraphsByIdNormalized.Values)
+        {
+            if (graph.RootPackageIds.Any(root => failed.Contains(root)))
+            {
+                retained.UnionWith(graph.NodePackageIds);
+            }
+        }
+
+        if (retained.Count == failed.Count && storeState.ActiveGraphsByIdNormalized.Count == 0)
+        {
+            retained.UnionWith(storeState.ActiveVersionById.Keys);
+        }
+
+        var removed = changeSet.Removed
+            .Where(packageId => !retained.Contains(packageId))
+            .ToArray();
+
+        return removed.Length == changeSet.Removed.Count
+            ? changeSet
+            : changeSet with { Removed = removed };
+    }
+}

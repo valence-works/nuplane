@@ -55,12 +55,17 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
             while (queue.Count > 0)
             {
                 var (parent, dependency) = queue.Dequeue();
+                if (IsHostProvidedDependency(dependency.PackageId))
+                {
+                    continue;
+                }
+
                 var dependencyRequest = new PackageRequest(
                     dependency.PackageId,
                     dependency.VersionRange,
-                    request.FeedName,
+                    FeedName: null,
                     PackageUpdatePolicy.Exact,
-                    request.SourceName);
+                    $"dependency-of:{parent.Id}");
 
                 var dependencyPackage = await retryPolicy.ExecuteAsync(
                     ct => packageResolver.ResolveAsync(dependencyRequest, ct),
@@ -296,6 +301,35 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
     }
 
     private static string BuildPackageKey(string packageId, string version) => $"{packageId}@{version}";
+
+    private static bool IsHostProvidedDependency(string packageId)
+    {
+        if (string.IsNullOrWhiteSpace(packageId))
+        {
+            return false;
+        }
+
+        if (File.Exists(Path.Combine(AppContext.BaseDirectory, $"{packageId}.dll")))
+        {
+            return true;
+        }
+
+        var trustedPlatformAssemblies = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
+        if (!string.IsNullOrWhiteSpace(trustedPlatformAssemblies))
+        {
+            var assemblyFileName = $"{packageId}.dll";
+            if (trustedPlatformAssemblies
+                .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+                .Any(path => string.Equals(Path.GetFileName(path), assemblyFileName, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return AppDomain.CurrentDomain
+            .GetAssemblies()
+            .Any(assembly => string.Equals(assembly.GetName().Name, packageId, StringComparison.OrdinalIgnoreCase));
+    }
 
     private sealed record DependencyGroupMetadata(string? TargetFramework, IReadOnlyList<PackageDependencyMetadata> Dependencies);
 

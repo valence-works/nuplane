@@ -36,6 +36,48 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveAsync_DependencyRequest_DoesNotPinRootFeed()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Plugin.Dependency", dependencyVersionRange: "[1.0.0]");
+        var dependency = CreateInstalledPackage("Plugin.Dependency", "1.0.0");
+        var resolver = new StubPackageResolver(
+            new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Plugin.Dependency"] = dependency
+            });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "root-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        var dependencyRequest = Assert.Single(resolver.Requests);
+        Assert.Equal("Plugin.Dependency", dependencyRequest.Id);
+        Assert.Null(dependencyRequest.FeedName);
+        Assert.Equal("dependency-of:Plugin.Root", dependencyRequest.SourceName);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_DependencyProvidedByHost_DoesNotAcquireDependencyNode()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Nuplane.Abstractions", dependencyVersionRange: "[1.0.0]");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "root-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        Assert.Empty(resolver.Requests);
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Single(graph.Nodes);
+        Assert.Empty(graph.Edges);
+    }
+
+
+    [Fact]
     public async Task ResolveAsync_WithFrameworkSpecificDependencyGroups_SelectsCompatibleHostGroupOnly()
     {
         var root = CreateInstalledPackage(
@@ -120,10 +162,15 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
 
     private sealed class StubPackageResolver(IReadOnlyDictionary<string, ResolvedPackage> packages) : IPackageResolver
     {
-        public Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken) =>
-            packages.TryGetValue(request.Id, out var package)
+        public List<PackageRequest> Requests { get; } = [];
+
+        public Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            return packages.TryGetValue(request.Id, out var package)
                 ? Task.FromResult(package)
                 : Task.FromException<ResolvedPackage>(new InvalidOperationException($"Package '{request.Id}' was not configured."));
+        }
     }
 
     private sealed class PassthroughRetryPolicy : IReconciliationRetryPolicy
