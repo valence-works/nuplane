@@ -41,6 +41,7 @@ Graph failure MUST NOT produce partial active graphs. Diagnostics MUST be visibl
 
 ## Test Contract
 
+- Normal startup reconciliation with only a root package configured publishes both root and dependency active descriptors in one graph.
 - Graph activation publishes all nodes atomically.
 - Failed dependency acquisition leaves prior active graph intact.
 - Dependency cycle failure leaves prior active graph intact and records cycle-path diagnostics.

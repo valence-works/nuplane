@@ -4,6 +4,41 @@
 
 Validate that Nuplane can install a desired package root, automatically install its dependency closure, and load the resulting graph so root assemblies can bind to dependency assemblies.
 
+## Scenario 0: Required MVP Vertical Slice
+
+This scenario is the minimum acceptable implementation gate. It must pass before broader edge cases are considered complete.
+
+1. Create a deterministic test NuGet V3 feed containing:
+   - `Plugin.Dependency` `1.0.0`, exposing a public type such as `Plugin.Dependency.DependencyMarker`.
+   - `Plugin.Root` `1.0.0`, declaring a NuGet dependency on `Plugin.Dependency [1.0.0]`.
+2. Ensure `Plugin.Root` contains reflection metadata that forces the runtime to bind `Plugin.Dependency`, such as an assembly/type attribute, exported type, base type, or implemented interface that references `Plugin.Dependency.DependencyMarker`.
+3. Configure Nuplane with only the root package:
+
+   ```json
+   {
+     "Nuplane": {
+       "Feeds": [
+         {
+           "Name": "test-feed",
+           "Url": "https://localhost:5005/v3/index.json",
+           "IncludePatterns": [
+             "Plugin.Root [1.0.0]"
+           ]
+         }
+       ],
+       "Loading": {
+         "Enabled": true
+       }
+     }
+   }
+   ```
+
+4. Run normal startup reconciliation and loading.
+5. Verify active package state contains `Plugin.Root` as root/discoverable and `Plugin.Dependency` as dependency-only/support.
+6. Query `IPackageAssemblyCatalog` and reflect the root assembly metadata that references `Plugin.Dependency`.
+7. Verify no `FileNotFoundException` or dependency `TypeLoadException` is thrown.
+8. Verify default feature discovery sees `Plugin.Root` and does not treat `Plugin.Dependency` as an independent root.
+
 ## Scenario A: Remote Root With Remote Dependency
 
 1. Create or use a test NuGet V3 feed containing:

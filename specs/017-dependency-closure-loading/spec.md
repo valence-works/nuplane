@@ -7,6 +7,21 @@
 
 ## User Scenarios & Testing *(mandatory)*
 
+### MVP Implementation Gate - Root-Only Dependency Binding (Priority: P0)
+
+The first implementation PR that claims dependency handling MUST deliver one end-to-end vertical slice before broader edge cases are attempted: a single configured root package, one transitive dependency package that is not listed in desired configuration, graph-level acquisition/activation, graph-scoped loading, and reflection over the root assembly that forces binding to the dependency assembly.
+
+**Why this priority**: The current failure is not caused by missing graph data models alone. The fix is only proven when Nuplane can both acquire the dependency closure and load the root plus dependency in one graph context. Model-only, persistence-only, or resolver-only slices MUST NOT be considered sufficient implementation of dependency handling.
+
+**Independent Test**: Build a synthetic NuGet feed containing `Plugin.Root` and `Plugin.Dependency`. `Plugin.Root` must reference a type from `Plugin.Dependency` through an attribute constructor argument, attribute property, base type, implemented interface, or exported type metadata so ordinary reflection reproduces the `FileNotFoundException` failure class when the dependency assembly is not visible. Configure only `Plugin.Root [1.0.0]`, run reconciliation, query package assemblies, and reflect the root assembly. The test passes only when no missing dependency assembly exception is thrown and active state records the dependency as dependency-only.
+
+**Acceptance Scenarios**:
+
+1. **Given** only `Plugin.Root [1.0.0]` is desired and `Plugin.Root` depends on `Plugin.Dependency [1.0.0]`, **When** reconciliation and loading complete, **Then** `Plugin.Dependency` is acquired and installed without being manually configured.
+2. **Given** `Plugin.Root` contains reflection metadata that requires loading `Plugin.Dependency`, **When** the host reflects root assembly attributes or exported types, **Then** dependency binding succeeds from the same graph load context.
+3. **Given** `Plugin.Dependency` exists only because `Plugin.Root` depends on it, **When** package assemblies are projected for feature discovery, **Then** `Plugin.Root` is discoverable and `Plugin.Dependency` is support-only.
+4. **Given** this MVP gate is not passing, **When** implementation status is reported, **Then** the feature MUST be reported as incomplete regardless of model, persistence, or partial resolver progress.
+
 ### User Story 1 - Reconcile Dependency Closures (Priority: P1)
 
 As an operator, when I configure one desired NuGet package root such as `Elsa.ServiceBus.MassTransit.RabbitMq`, Nuplane MUST resolve, acquire, install, and activate that package's NuGet dependency closure without requiring every transitive dependency to be listed manually in configuration.
@@ -96,6 +111,8 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 - **FR-013**: If dependency resolution introduces new configuration, every new options type MUST remain data-only and MUST be validated with `IValidateOptions<T>` plus startup fail-fast behavior through `ValidateOnStart()`. The default behavior MUST resolve dependencies automatically for remote NuGet package roots.
 - **FR-014**: Directory-sourced `.nupkg` roots MUST continue to reconcile successfully. If dependency metadata from a local package requires packages that are not locally present, the graph resolver MUST either resolve them from configured trusted remote feeds or fail with a graph-level diagnostic; it MUST NOT silently ignore missing dependencies.
 - **FR-015**: The implementation MUST provide unit, contract, and integration tests for dependency graph resolution, graph-level reconciliation, graph-scoped assembly loading, host-shared assembly resolution, failure/LKG behavior, and directory package regression coverage.
+- **FR-016**: The implementation MUST include a root-only vertical-slice regression test that creates a root package with a dependency package, configures only the root package, reconciles the dependency closure, loads the graph, and reflects root assembly metadata that requires the dependency assembly. The test MUST fail against per-package load contexts and pass only with graph-scoped loading.
+- **FR-017**: The dependency graph resolver and graph loader MUST be wired into the normal Nuplane reconciliation/loading pipeline by default. A graph model or service that is not exercised by startup reconciliation and `IPackageAssemblyCatalog` MUST NOT satisfy this feature.
 
 ### Operational & Safety Requirements *(mandatory)*
 
@@ -106,6 +123,7 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 - **OSR-005**: Load-state health MUST distinguish graph resolution/acquisition failures from assembly load/bind failures and MUST identify the affected desired root package.
 - **OSR-006**: Runtime object exposure MUST remain in-process only. Durable, serialized, or remote read models MUST NOT contain `Assembly`, `Type`, `AssemblyLoadContext`, or other unload-sensitive runtime objects.
 - **OSR-007**: The implementation MUST include regression coverage for the observed scenario where a root package can be installed but reflection fails because a dependency assembly from a sibling package is not visible to the root assembly.
+- **OSR-008**: Implementation progress MUST be reported by vertical-slice behavior, not by artifact presence. Model/state changes alone are foundational and MUST be labeled incomplete until dependency acquisition and graph-scoped loading pass the MVP implementation gate.
 
 ### Key Entities
 
@@ -129,6 +147,7 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 - **SC-004**: If a dependency cannot be resolved, the resulting diagnostic names the desired root, dependency package, requested version range, searched source(s), and failure reason, and the previous active graph remains available.
 - **SC-005**: Dependency-only assemblies are available for runtime binding but are not returned as independent feature discovery roots unless also explicitly configured as desired roots.
 - **SC-006**: Automated tests cover graph resolution, directory package behavior, graph-level LKG, graph-scoped assembly loading, host-shared assembly policy, unsatisfiable dependency failure, dependency cycle failure, side-by-side independent graph dependency versions, unsupported native/runtime asset failure, and the observed missing sibling dependency regression.
+- **SC-007**: With only one root package configured in the synthetic MVP fixture, automated validation proves all of the following in one test path: transitive dependency acquisition, active graph metadata, graph-scoped assembly binding, root-only feature discovery, and no `FileNotFoundException` during reflection.
 
 ## Clarifications
 
@@ -141,6 +160,11 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 - Q: How should Nuplane handle required native or runtime-specific assets unsupported by the graph loader? -> A: Fail graph load preparation and preserve LKG.
 - Q: How should Nuplane handle a package that is both explicitly desired and a dependency? -> A: Keep both roles and expose for discovery.
 - Q: How should Nuplane handle dependency cycles in package metadata? -> A: Fail graph resolution and preserve LKG.
+
+### Session 2026-05-06
+
+- Q: What is the minimum implementation that proves dependency handling works? -> A: A vertical slice that configures only a root package, automatically acquires its dependency, loads both into one graph-scoped collectible load context, and reflects root metadata that requires the dependency assembly without `FileNotFoundException`.
+- Q: Are graph models and persisted graph metadata enough to claim this feature is working? -> A: No. They are foundational only; the resolver and graph loader must be wired into normal reconciliation/loading and pass the MVP implementation gate.
 
 ## Assumptions
 

@@ -43,6 +43,7 @@ Load or bind failure MUST degrade load state for the affected root graph without
 
 ## Test Contract
 
+- A vertical-slice fixture configures only a root package, loads the resolved graph, and reflects root assembly metadata that requires a dependency assembly without `FileNotFoundException`.
 - Root assembly referencing dependency assembly loads and reflects without `FileNotFoundException`.
 - Host-shared contract assembly resolves from host context.
 - Dependency package assembly is not returned as an independent feature root by default.

@@ -51,6 +51,7 @@ Failures MUST include:
 
 ## Test Contract
 
+- Root-only desired configuration resolves the root and its dependency without requiring the dependency to appear in desired input.
 - Root with one dependency resolves both nodes.
 - Root with transitive dependency resolves all nodes.
 - Compatible duplicate dependency edge deduplicates the node.

@@ -36,6 +36,32 @@
 
 ---
 
+## Phase 2A: Required MVP Vertical Slice (Blocking Gate)
+
+**Purpose**: Prove the feature end-to-end before expanding edge-case coverage. This phase intentionally crosses US1, US2, and the minimum US3 projection because the observed bug only disappears when resolver, reconciliation, loading, and discovery cooperate.
+
+**CRITICAL**: Dependency handling MUST remain marked incomplete until this phase passes. Foundational model/state work alone is not enough.
+
+### Tests for MVP Gate
+
+- [ ] T011A [P] [MVP] Create root/dependency fixture packages where the root assembly metadata references a dependency type in `test/Nuplane.Loading.Tests.Fixtures/`
+- [ ] T011B [MVP] Add root-only reconciliation/loading integration test in `test/Nuplane.Integration.Tests/Loading/DependencyClosureVerticalSliceTests.cs`
+- [ ] T011C [MVP] Assert the vertical slice fails under per-package load-context behavior and passes only when root and dependency assemblies share one graph load context in `test/Nuplane.Loading.Tests/PackageLoaderGraphRegressionTests.cs`
+- [ ] T011D [MVP] Assert default assembly projection returns the root as discoverable and the dependency as support-only in `test/Nuplane.Loading.Tests/PackageAssemblyCatalogGraphTests.cs`
+
+### Implementation for MVP Gate
+
+- [ ] T011E [MVP] Wire `PackageDependencyGraphResolver` into normal `PackageResolutionMiddleware` startup reconciliation for root-only desired inputs in `src/Nuplane/Reconciliation/Middleware/PackageResolutionMiddleware.cs`
+- [ ] T011F [MVP] Acquire and install root plus dependency nodes before active publish in `src/Nuplane/Reconciliation/PackageApplyExecutor.cs`
+- [ ] T011G [MVP] Publish root/dependency graph metadata consumed by loading in `src/Nuplane/Operational/ActivePackageCatalogMapper.cs`
+- [ ] T011H [MVP] Implement enough `PackageGraphLoadContext` behavior in `src/Nuplane.Loading/PackageGraphLoadContext.cs` for one root assembly to bind to one dependency assembly
+- [ ] T011I [MVP] Route `PackageLoader` and `IPackageAssemblyCatalog` through graph sessions instead of independent per-package contexts in `src/Nuplane.Loading/PackageLoader.cs` and `src/Nuplane.Loading/PackageAssemblyCatalog.cs`
+- [ ] T011J [MVP] Validate Scenario 0 in `specs/017-dependency-closure-loading/quickstart.md` and record the result in the implementation PR
+
+**Checkpoint**: With only a root package configured, Nuplane automatically acquires the dependency package, records graph metadata, loads both assemblies in one graph context, reflects root metadata without `FileNotFoundException`, and surfaces only the root as discoverable.
+
+---
+
 ## Phase 3: User Story 1 - Reconcile Dependency Closures (Priority: P1)
 
 **Goal**: A configured root package resolves and activates its complete dependency closure transactionally.
@@ -152,6 +178,7 @@
 
 - **Setup (Phase 1)**: no dependencies
 - **Foundational (Phase 2)**: depends on setup; blocks all user stories
+- **MVP Vertical Slice (Phase 2A)**: depends on foundational; blocks claiming dependency handling is implemented
 - **User Story 1 (Phase 3)**: depends on foundational; required before production use
 - **User Story 2 (Phase 4)**: depends on foundational and can start once graph metadata shape is stable; runtime validation needs US1-style active graph data
 - **User Story 3 (Phase 5)**: depends on US2 projections and graph sessions
@@ -177,9 +204,10 @@
 ### MVP First
 
 1. Complete Phase 1 and Phase 2.
-2. Complete US1 graph reconciliation and tests.
-3. Complete US2 graph-scoped loading and tests.
-4. Validate the Elsa RabbitMQ scenario before adding broader polish.
+2. Complete Phase 2A and prove the root-only vertical slice.
+3. Complete US1 graph reconciliation hardening and tests.
+4. Complete US2 graph-scoped loading hardening and tests.
+5. Validate the Elsa RabbitMQ scenario before adding broader polish.
 
 ### Incremental Delivery
 

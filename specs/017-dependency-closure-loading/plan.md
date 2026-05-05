@@ -7,6 +7,8 @@
 
 Nuplane must treat configured packages as desired roots, resolve each root's NuGet dependency closure, acquire every required package node transactionally, persist graph membership metadata, and load each active graph generation into one collectible assembly load context. The approach is to add graph-resolution models and services to runtime/reconciliation, extend persisted active state with root/dependency graph metadata, and replace per-package assembly binding with graph-scoped loading that keeps host-shared contracts in the host context while allowing independent root graphs to load different dependency versions side-by-side.
 
+The first implementation milestone is a required vertical slice, not a model layer: configure only one root package, automatically acquire its dependency package, publish graph metadata, load both packages in one graph-scoped collectible load context, and reflect root assembly metadata that requires the dependency assembly without `FileNotFoundException`.
+
 ## Technical Context
 
 **Language/Version**: C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0`  
@@ -119,9 +121,10 @@ test/
 
 ## Delivery Stages
 
-1. **Stage 1 - Graph resolution and persistence (US1)**: Add graph models, dependency metadata resolution, cycle detection, graph-level package acquisition, active-state graph metadata, graph-aware cleanup, and failure/LKG diagnostics.
-2. **Stage 2 - Graph-scoped loading (US2)**: Replace per-package assembly context binding with one collectible load context per active graph generation, apply host-shared assembly policy first, support side-by-side independent graph dependency versions, fail unsupported required native/runtime-specific assets during load preparation, and produce graph-aware load state.
-3. **Stage 3 - Discovery semantics and hardening (US3)**: Distinguish discoverable root assemblies from dependency-only support assemblies, preserve both roles for explicit-root dependency nodes, update catalog projections, add observability and health details, and validate directory/local package regressions.
+1. **Stage 0 - MVP vertical slice (P0, US1, US2, US3 minimal)**: Build the synthetic root/dependency fixture and make one normal reconciliation/loading path pass with only the root package configured. This stage must include dependency acquisition, graph activation metadata, graph-scoped assembly binding, and root/support assembly projection.
+2. **Stage 1 - Graph resolution and persistence hardening (US1)**: Add broader graph models, dependency metadata resolution, cycle detection, graph-level package acquisition, active-state graph metadata, graph-aware cleanup, and failure/LKG diagnostics beyond the MVP path.
+3. **Stage 2 - Graph-scoped loading hardening (US2)**: Replace per-package assembly context binding with one collectible load context per active graph generation, apply host-shared assembly policy first, support side-by-side independent graph dependency versions, fail unsupported required native/runtime-specific assets during load preparation, and produce graph-aware load state.
+4. **Stage 3 - Discovery semantics and hardening (US3)**: Distinguish discoverable root assemblies from dependency-only support assemblies, preserve both roles for explicit-root dependency nodes, update catalog projections, add observability and health details, and validate directory/local package regressions.
 
 ## Post-Design Constitution Re-evaluation
 
