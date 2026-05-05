@@ -17,6 +17,7 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
     private readonly ILoadingEventDispatcher _dispatcher;
     private readonly LoadingOptions _loadingOptions;
     private readonly ILogger<PackageAutoLoadingObserver> _logger;
+    private readonly IStoreRegistry? _storeRegistry;
 
     public PackageAutoLoadingObserver(
         PackageLoader loader,
@@ -26,7 +27,8 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
         IFailureRecorder? failureRecorder = null,
         ReconciliationMetrics? metrics = null,
         LoadingFailureTracker? loadingFailureTracker = null,
-        LoadingCatalogRefreshTracker? refreshTracker = null)
+        LoadingCatalogRefreshTracker? refreshTracker = null,
+        IStoreRegistry? storeRegistry = null)
     {
         _loader = loader ?? throw new ArgumentNullException(nameof(loader));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
@@ -36,6 +38,7 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
         Metrics = metrics;
         LoadingFailureTracker = loadingFailureTracker;
         RefreshTracker = refreshTracker;
+        _storeRegistry = storeRegistry;
     }
 
     internal PackageAutoLoadingObserver(
@@ -46,7 +49,8 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
         IFailureRecorder? failureRecorder = null,
         ReconciliationMetrics? metrics = null,
         ILoadingFailureTracker? loadingFailureTracker = null,
-        LoadingCatalogRefreshTracker? refreshTracker = null)
+        LoadingCatalogRefreshTracker? refreshTracker = null,
+        IStoreRegistry? storeRegistry = null)
     {
         _loader = loader ?? throw new ArgumentNullException(nameof(loader));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
@@ -56,6 +60,7 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
         Metrics = metrics;
         LoadingFailureTracker = loadingFailureTracker;
         RefreshTracker = refreshTracker;
+        _storeRegistry = storeRegistry;
     }
 
     private IFailureRecorder? FailureRecorder { get; }
@@ -105,7 +110,8 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
             .Select(x => new SharedAssemblyPolicyEntry(x.Name, x.PublicKeyToken, x.MajorVersion))
             .ToArray();
 
-        var loadResult = await _loader.EnsureLoadedAsync(packagesToLoad, sharedPolicy, ct);
+        var packageGraphs = await BuildPackageGraphsAsync(packagesToLoad, ct);
+        var loadResult = await _loader.EnsureGraphLoadedAsync(packageGraphs, sharedPolicy, ct);
 
         foreach (var _ in loadResult.Loaded)
         {
@@ -189,4 +195,30 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
     }
 
     private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";
+
+    private async Task<IReadOnlyList<IReadOnlyList<ResolvedPackage>>> BuildPackageGraphsAsync(
+        IReadOnlyList<ResolvedPackage> packagesToLoad,
+        CancellationToken cancellationToken)
+    {
+        if (_storeRegistry is null || packagesToLoad.Count <= 1)
+        {
+            return packagesToLoad.Select(static package => (IReadOnlyList<ResolvedPackage>)[package]).ToArray();
+        }
+
+        var state = await _storeRegistry.GetStateAsync(cancellationToken);
+        var descriptors = state.ActivePackageDescriptorsByIdNormalized;
+
+        return packagesToLoad
+            .GroupBy(package => descriptors.TryGetValue(package.Id, out var descriptor)
+                    && string.Equals(descriptor.Version, package.Version, StringComparison.OrdinalIgnoreCase)
+                    ? descriptor.GraphGenerationId
+                    : BuildKey(package.Id, package.Version),
+                StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => (IReadOnlyList<ResolvedPackage>)group
+                .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
+                .ToArray())
+            .ToArray();
+    }
 }

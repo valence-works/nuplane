@@ -247,6 +247,37 @@ public sealed class StoreRegistryTests
     }
 
     [Fact]
+    public async Task GetStateAsync_AfterPersistingActiveGraphs_ReturnsActiveGraphRecords()
+    {
+        var registry = new StoreRegistry(new StoreStateSerializer(), stateFilePath: null);
+        var activatedAtUtc = DateTimeOffset.Parse("2026-05-06T10:00:00Z");
+
+        await registry.PersistActiveVersionsAsync(
+            new Dictionary<string, string> { ["Plugin.Root"] = "1.0.0", ["Plugin.Dependency"] = "1.0.0" },
+            new Dictionary<string, string> { ["Plugin.Root"] = "1.0.0", ["Plugin.Dependency"] = "1.0.0" },
+            "corr-graph",
+            CancellationToken.None,
+            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, GraphActivationRecord>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["graph-1"] = new(
+                    "graph-1",
+                    "generation-1",
+                    ["Plugin.Root"],
+                    ["Plugin.Root", "Plugin.Dependency"],
+                    activatedAtUtc,
+                    "corr-graph",
+                    GraphActivationStatus.Active)
+            });
+
+        var state = await registry.GetStateAsync(CancellationToken.None);
+
+        var graph = Assert.Single(state.ActiveGraphsByIdNormalized).Value;
+        Assert.Equal("graph-1", graph.GraphId);
+        Assert.Equal(["Plugin.Root", "Plugin.Dependency"], graph.NodePackageIds);
+    }
+
+    [Fact]
     public async Task DefaultPath_SaveThenLoad_RestoresActivePackageDescriptors()
     {
         var tempRoot = Path.Combine(Path.GetTempPath(), "nuplane-descriptor-roundtrip", Guid.NewGuid().ToString("N"));

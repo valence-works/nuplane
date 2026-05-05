@@ -13,11 +13,11 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
         var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");
         var loader = new PackageLoader();
 
-        var result = await loader.EnsureLoadedAsync(
-            [
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[
                 new ResolvedPackage("Plugin.Root", "1.0.0", "test-feed", rootInstall, DateTimeOffset.UtcNow, "test-source"),
                 new ResolvedPackage("Plugin.Dependency", "1.0.0", "test-feed", dependencyInstall, DateTimeOffset.UtcNow, "test-source")
-            ],
+            ]],
             [],
             CancellationToken.None);
 

@@ -222,6 +222,12 @@ public sealed class PackageAutoLoadingObserverTests
             return Task.FromResult(new PackageLoadResult(loaded, failed));
         }
 
+        public Task<PackageLoadResult> EnsureGraphLoadedAsync(
+            IReadOnlyList<IReadOnlyList<ResolvedPackage>> packageGraphs,
+            IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+            CancellationToken cancellationToken) =>
+            EnsureLoadedAsync(packageGraphs.SelectMany(static graph => graph).ToArray(), sharedPolicy, cancellationToken);
+
         public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
         {
             var key = BuildKey(packageId, version);

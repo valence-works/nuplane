@@ -78,7 +78,8 @@ public sealed partial class StoreRegistry : IStoreRegistry
                 new(_currentState.LastFailureById, StringComparer.OrdinalIgnoreCase),
                 new(_currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
                 _currentState.UpdatedAt,
-                new(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase));
+                new(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase),
+                new(_currentState.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase));
         }
         finally
         {

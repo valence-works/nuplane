@@ -4,6 +4,7 @@ using Nuplane.Feeds.Policy;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Store.State;
 using Nuplane.Store.Transactions;
+using Nuplane.Versioning;
 
 namespace Nuplane.Reconciliation;
 
@@ -79,10 +80,48 @@ public sealed class PackageApplyExecutor(
             }
         }
 
+        var conflictingPackageIds = resolved
+            .GroupBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .Where(static group => group.Select(package => package.Version).Distinct(StringComparer.OrdinalIgnoreCase).Skip(1).Any())
+            .Select(static group => group.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (conflictingPackageIds.Count > 0)
+        {
+            foreach (var graph in graphs.Where(graph => graph.Nodes.Any(node => conflictingPackageIds.Contains(node.PackageId))))
+            {
+                foreach (var root in graph.Roots)
+                {
+                    if (!failed.Contains(root.PackageId, StringComparer.OrdinalIgnoreCase))
+                    {
+                        failed.Add(root.PackageId);
+                    }
+                }
+            }
+
+            var conflictMessage = $"Conflicting graph package versions were resolved for package id(s): {string.Join(", ", conflictingPackageIds.Order(StringComparer.OrdinalIgnoreCase))}.";
+            foreach (var packageId in failed.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                await _failureRecorder.RecordAsync(packageId, "resolve-graph-conflict", conflictMessage, correlationId, cancellationToken);
+            }
+
+            graphs = graphs
+                .Where(graph => graph.Nodes.All(node => !conflictingPackageIds.Contains(node.PackageId)))
+                .ToList();
+            var validPackageKeys = graphs
+                .SelectMany(static graph => graph.Nodes)
+                .Select(static node => BuildKey(node.PackageId, node.Version))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            resolved = resolved
+                .Where(package => validPackageKeys.Contains(BuildKey(package.Id, package.Version)))
+                .ToList();
+        }
+
         var deduplicatedResolved = resolved
             .GroupBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
             .Select(static group => group
-                .OrderBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(static package => VersionKey.Create(package.Version))
+                .ThenBy(static package => package.SourceName, StringComparer.OrdinalIgnoreCase)
                 .First())
             .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -113,27 +152,102 @@ public sealed class PackageApplyExecutor(
         var failed = new List<string>(resolutionResult.FailedPackageIds);
         var failureMessages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var resolved in resolutionResult.ResolvedPackages)
+        if (resolutionResult.ResolvedGraphs.Count == 0)
         {
-            var transaction = await _transactionCoordinator.ExecuteAsync(
-                new(resolved.Id, resolved.Version, correlationId),
-                cancellationToken);
+            foreach (var resolved in resolutionResult.ResolvedPackages)
+            {
+                var transaction = await _transactionCoordinator.ExecuteAsync(
+                    new(resolved.Id, resolved.Version, correlationId),
+                    cancellationToken);
 
-            if (transaction.Succeeded)
-            {
-                applied.Add(resolved);
-            }
-            else
-            {
-                failed.Add(resolved.Id);
-                if (!string.IsNullOrWhiteSpace(transaction.FailureMessage))
+                if (transaction.Succeeded)
                 {
-                    failureMessages[resolved.Id] = transaction.FailureMessage;
+                    applied.Add(resolved);
                 }
+                else
+                {
+                    failed.Add(resolved.Id);
+                    if (!string.IsNullOrWhiteSpace(transaction.FailureMessage))
+                    {
+                        failureMessages[resolved.Id] = transaction.FailureMessage;
+                    }
+                }
+            }
+
+            return new(applied, failed, failureMessages);
+        }
+
+        var packagesByKey = resolutionResult.ResolvedPackages
+            .ToDictionary(package => BuildKey(package.Id, package.Version), package => package, StringComparer.OrdinalIgnoreCase);
+        var appliedByKey = new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var graph in resolutionResult.ResolvedGraphs)
+        {
+            var graphApplied = new List<ResolvedPackage>();
+            var graphFailures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var node in graph.Nodes.OrderBy(static node => node.PackageId, StringComparer.OrdinalIgnoreCase))
+            {
+                var key = BuildKey(node.PackageId, node.Version);
+                if (appliedByKey.TryGetValue(key, out var alreadyApplied))
+                {
+                    graphApplied.Add(alreadyApplied);
+                    continue;
+                }
+
+                if (!packagesByKey.TryGetValue(key, out var resolved))
+                {
+                    graphFailures[node.PackageId] = $"Resolved package '{node.PackageId}@{node.Version}' was missing from graph resolution output.";
+                    continue;
+                }
+
+                var transaction = await _transactionCoordinator.ExecuteAsync(
+                    new(resolved.Id, resolved.Version, correlationId),
+                    cancellationToken);
+
+                if (transaction.Succeeded)
+                {
+                    graphApplied.Add(resolved);
+                }
+                else
+                {
+                    graphFailures[resolved.Id] = string.IsNullOrWhiteSpace(transaction.FailureMessage)
+                        ? $"Package '{resolved.Id}' failed to apply."
+                        : transaction.FailureMessage;
+                }
+            }
+
+            if (graphFailures.Count == 0)
+            {
+                foreach (var graphPackage in graphApplied)
+                {
+                    appliedByKey[BuildKey(graphPackage.Id, graphPackage.Version)] = graphPackage;
+                }
+
+                continue;
+            }
+
+            var graphFailureMessage = $"Graph '{graph.GraphId}' activation failed; no graph nodes were published.";
+            foreach (var node in graph.Nodes)
+            {
+                if (!failed.Contains(node.PackageId, StringComparer.OrdinalIgnoreCase))
+                {
+                    failed.Add(node.PackageId);
+                }
+
+                failureMessages[node.PackageId] = graphFailures.TryGetValue(node.PackageId, out var nodeFailure)
+                    ? nodeFailure
+                    : graphFailureMessage;
             }
         }
 
-        return new(applied, failed, failureMessages);
+        return new(
+            appliedByKey.Values
+                .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            failed.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            failureMessages);
     }
 
     /// <inheritdoc />
@@ -149,4 +263,6 @@ public sealed class PackageApplyExecutor(
 
         await _failureRecorder.RecordAsync(packageId, "load", message, correlationId, cancellationToken);
     }
+
+    private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";
 }

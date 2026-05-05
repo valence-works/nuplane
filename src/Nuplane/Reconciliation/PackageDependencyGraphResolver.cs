@@ -175,22 +175,139 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
         using var stream = File.OpenRead(nuspecPath);
         var document = XDocument.Load(stream);
 
+        var groups = document
+            .Descendants()
+            .Where(static element => element.Name.LocalName == "group" && element.Parent?.Name.LocalName == "dependencies")
+            .Select(static group => new DependencyGroupMetadata(
+                group.Attribute("targetFramework")?.Value,
+                group.Elements()
+                    .Where(static element => element.Name.LocalName == "dependency")
+                    .Select(element => new PackageDependencyMetadata(
+                        element.Attribute("id")?.Value ?? string.Empty,
+                        element.Attribute("version")?.Value ?? string.Empty,
+                        group.Attribute("targetFramework")?.Value))
+                    .ToArray()))
+            .ToArray();
+
+        var selectedGroups = SelectDependencyGroups(groups);
+        if (selectedGroups.Count > 0)
+        {
+            return selectedGroups
+                .SelectMany(static group => group.Dependencies)
+                .Where(static dependency => !string.IsNullOrWhiteSpace(dependency.PackageId)
+                    && !string.IsNullOrWhiteSpace(dependency.VersionRange))
+                .OrderBy(static dependency => dependency.PackageId, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
         return document
             .Descendants()
-            .Where(static element => element.Name.LocalName == "dependency")
+            .Where(static element => element.Name.LocalName == "dependency" && element.Parent?.Name.LocalName == "dependencies")
             .Select(static element => new PackageDependencyMetadata(
                 element.Attribute("id")?.Value ?? string.Empty,
                 element.Attribute("version")?.Value ?? string.Empty,
-                element.Parent?.Name.LocalName == "group" ? element.Parent.Attribute("targetFramework")?.Value : null))
+                TargetFramework: null))
             .Where(static dependency => !string.IsNullOrWhiteSpace(dependency.PackageId)
                 && !string.IsNullOrWhiteSpace(dependency.VersionRange))
             .OrderBy(static dependency => dependency.PackageId, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
+    private static IReadOnlyList<DependencyGroupMetadata> SelectDependencyGroups(IReadOnlyList<DependencyGroupMetadata> groups)
+    {
+        if (groups.Count == 0)
+        {
+            return [];
+        }
+
+        if (!TryParseFramework(TargetFrameworkMonikerProvider.Current, out var hostTarget))
+        {
+            return groups.Where(static group => string.IsNullOrWhiteSpace(group.TargetFramework)).ToArray();
+        }
+
+        var compatibleGroups = groups
+            .Select(group => new
+            {
+                Group = group,
+                Parsed = TryParseFramework(group.TargetFramework, out var target) ? target : null
+            })
+            .Where(candidate => candidate.Parsed is not null && IsCompatible(hostTarget, candidate.Parsed))
+            .OrderByDescending(candidate => candidate.Parsed!.Kind == hostTarget.Kind ? 1 : 0)
+            .ThenByDescending(candidate => candidate.Parsed!.Version)
+            .Select(candidate => candidate.Group)
+            .ToArray();
+
+        if (compatibleGroups.Length > 0)
+        {
+            return [compatibleGroups[0]];
+        }
+
+        return groups.Where(static group => string.IsNullOrWhiteSpace(group.TargetFramework)).ToArray();
+    }
+
+    private static bool IsCompatible(FrameworkTarget host, FrameworkTarget candidate)
+    {
+        if (candidate.Kind == FrameworkKind.NetStandard)
+        {
+            return candidate.Version <= new Version(2, 1);
+        }
+
+        return candidate.Kind == host.Kind && candidate.Version <= host.Version;
+    }
+
+    private static bool TryParseFramework(string? value, out FrameworkTarget target)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            target = null!;
+            return false;
+        }
+
+        var normalized = value.Trim();
+        if (normalized.StartsWith(".NETCoreApp,Version=v", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryParseVersion(normalized[21..], FrameworkKind.NetCoreApp, out target);
+        }
+
+        if (normalized.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryParseVersion(normalized[11..], FrameworkKind.NetStandard, out target);
+        }
+
+        if (normalized.StartsWith("net", StringComparison.OrdinalIgnoreCase) && normalized.Contains('.'))
+        {
+            return TryParseVersion(normalized[3..], FrameworkKind.NetCoreApp, out target);
+        }
+
+        target = null!;
+        return false;
+    }
+
+    private static bool TryParseVersion(string value, FrameworkKind kind, out FrameworkTarget target)
+    {
+        if (Version.TryParse(value, out var version))
+        {
+            target = new FrameworkTarget(kind, new Version(version.Major, version.Minor));
+            return true;
+        }
+
+        target = null!;
+        return false;
+    }
+
     private static string BuildPackageKey(string packageId, string version) => $"{packageId}@{version}";
 
+    private sealed record DependencyGroupMetadata(string? TargetFramework, IReadOnlyList<PackageDependencyMetadata> Dependencies);
+
     private sealed record PackageDependencyMetadata(string PackageId, string VersionRange, string? TargetFramework);
+
+    private sealed record FrameworkTarget(FrameworkKind Kind, Version Version);
+
+    private enum FrameworkKind
+    {
+        NetCoreApp,
+        NetStandard
+    }
 }
 
 /// <summary>

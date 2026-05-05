@@ -286,6 +286,12 @@ public sealed class StartupLoadingEventIntegrationTests
             return Task.FromResult(new PackageLoadResult(sessions, failures));
         }
 
+        public Task<PackageLoadResult> EnsureGraphLoadedAsync(
+            IReadOnlyList<IReadOnlyList<ResolvedPackage>> packageGraphs,
+            IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicies,
+            CancellationToken ct) =>
+            EnsureLoadedAsync(packageGraphs.SelectMany(static graph => graph).ToArray(), sharedPolicies, ct);
+
         public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
         {
             var key = BuildKey(packageId, version);

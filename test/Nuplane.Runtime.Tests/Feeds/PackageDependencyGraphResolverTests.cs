@@ -35,6 +35,44 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
         Assert.Equal("[1.0.0]", edge.RequestedVersionRange);
     }
 
+    [Fact]
+    public async Task ResolveAsync_WithFrameworkSpecificDependencyGroups_SelectsCompatibleHostGroupOnly()
+    {
+        var root = CreateInstalledPackage(
+            "Plugin.Root",
+            "1.0.0",
+            dependenciesXml: """
+                <dependencies>
+                  <group targetFramework="net8.0">
+                    <dependency id="Plugin.Compatible" version="[1.0.0]" />
+                  </group>
+                  <group targetFramework="net472">
+                    <dependency id="Plugin.Legacy" version="[1.0.0]" />
+                  </group>
+                </dependencies>
+                """);
+        var compatible = CreateInstalledPackage("Plugin.Compatible", "1.0.0");
+        var legacy = CreateInstalledPackage("Plugin.Legacy", "1.0.0");
+        var resolver = new StubPackageResolver(
+            new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Plugin.Compatible"] = compatible,
+                ["Plugin.Legacy"] = legacy
+            });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Contains(graph.Nodes, static node => node.PackageId == "Plugin.Compatible");
+        Assert.DoesNotContain(graph.Nodes, static node => node.PackageId == "Plugin.Legacy");
+        var edge = Assert.Single(graph.Edges);
+        Assert.Equal("Plugin.Compatible", edge.ToPackageId);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))
@@ -47,11 +85,12 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
         string packageId,
         string version,
         string? dependencyId = null,
-        string? dependencyVersionRange = null)
+        string? dependencyVersionRange = null,
+        string? dependenciesXml = null)
     {
         var installPath = Path.Combine(tempRoot, packageId, version);
         Directory.CreateDirectory(installPath);
-        File.WriteAllText(Path.Combine(installPath, $"{packageId}.nuspec"), CreateNuspec(packageId, version, dependencyId, dependencyVersionRange));
+        File.WriteAllText(Path.Combine(installPath, $"{packageId}.nuspec"), CreateNuspec(packageId, version, dependencyId, dependencyVersionRange, dependenciesXml));
         return new ResolvedPackage(packageId, version, "test-feed", installPath, DateTimeOffset.UtcNow, "test-source");
     }
 
@@ -59,7 +98,8 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
         string packageId,
         string version,
         string? dependencyId,
-        string? dependencyVersionRange) =>
+        string? dependencyVersionRange,
+        string? dependenciesXml) =>
         $$"""
         <?xml version="1.0" encoding="utf-8"?>
         <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
@@ -68,7 +108,7 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
             <version>{{version}}</version>
             <authors>test</authors>
             <description>Test package</description>
-            {{CreateDependencies(dependencyId, dependencyVersionRange)}}
+            {{dependenciesXml ?? CreateDependencies(dependencyId, dependencyVersionRange)}}
           </metadata>
         </package>
         """;

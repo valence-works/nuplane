@@ -70,6 +70,22 @@ public sealed class PackageLoaderTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureLoadedAsync_WithMultipleFlatPackages_KeepsIndependentContexts()
+    {
+        var firstPath = CreateInstallDir("pkg-a");
+        var secondPath = CreateInstallDir("pkg-b");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureLoadedAsync(
+            [Pkg("pkg-a", "1.0.0", firstPath), Pkg("pkg-b", "1.0.0", secondPath)],
+            [],
+            CancellationToken.None);
+
+        Assert.Equal(2, result.Loaded.Count);
+        Assert.NotEqual(result.Loaded[0].ContextKey, result.Loaded[1].ContextKey);
+    }
+
+    [Fact]
     public void ResolveMainAssemblyPath_MultiTargetPackage_PicksExactHostFrameworkAssembly()
     {
         var installPath = CreateMultiTargetInstallDir("Nuplane.Loading.Tests.Fixtures", GetHostFrameworkFolderName(), "net8.0", "net9.0");
