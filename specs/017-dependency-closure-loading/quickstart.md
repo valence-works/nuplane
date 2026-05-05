@@ -71,6 +71,32 @@ Validate that Nuplane can install a desired package root, automatically install 
 7. Run reconciliation again.
 8. Verify Nuplane records a graph resolution failure and preserves the previous active graph if one exists.
 
+## Scenario D: Independent Graphs With Different Dependency Versions
+
+1. Create a test feed containing:
+   - `Plugin.Dependency` `1.0.0`
+   - `Plugin.Dependency` `2.0.0`
+   - `Plugin.RootA` `1.0.0`, depending on `Plugin.Dependency [1.0.0]`
+   - `Plugin.RootB` `1.0.0`, depending on `Plugin.Dependency [2.0.0]`
+2. Configure Nuplane with `Plugin.RootA [1.0.0]` and `Plugin.RootB [1.0.0]` as desired roots.
+3. Run reconciliation and graph loading.
+4. Verify both roots activate successfully with independent graph ids/generations.
+5. Verify each graph load context resolves its own selected dependency version and feature discovery exposes only the explicitly desired root assemblies.
+
+## Scenario E: Dependency Cycle Failure
+
+1. Create package metadata where `Plugin.A [1.0.0]` depends on `Plugin.B [1.0.0]` and `Plugin.B [1.0.0]` depends on `Plugin.A [1.0.0]`.
+2. Configure Nuplane with `Plugin.A [1.0.0]` as the desired root.
+3. Run reconciliation.
+4. Verify graph resolution fails before acquisition, diagnostics include the detected cycle path, and the previous active graph remains available if one exists.
+
+## Scenario F: Unsupported Required Native Asset Failure
+
+1. Create a root package graph whose selected runtime assets include a required native or runtime-specific asset unsupported by the initial graph loader.
+2. Configure Nuplane with that package as the desired root.
+3. Run reconciliation and graph load preparation.
+4. Verify activation fails before publishing the new graph, load-state diagnostics identify the unsupported asset, and the previous active graph remains available if one exists.
+
 ## Required Automated Validation
 
 Run the focused test suites:
@@ -91,6 +117,7 @@ dotnet test Nuplane.sln
 ## Expected Diagnostics
 
 - Graph resolution logs include root package id, dependency package id, requested version range, selected version, source, and target framework.
+- Graph resolution failure logs include dependency cycle path when package metadata contains a cycle.
 - Reconciliation logs include graph id, generation id, package count, activation outcome, and LKG preservation outcome.
-- Load-state diagnostics include graph id, generation id, root package id, dependency package id, assembly path, and bind/load failure reason.
+- Load-state diagnostics include graph id, generation id, root package id, dependency package id, assembly path, unsupported asset path when applicable, and bind/load failure reason.
 - Metrics include dependency graph resolution success/failure, graph activation success/failure, assembly load success/failure, and graph unload attempts.

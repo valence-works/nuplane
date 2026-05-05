@@ -21,7 +21,7 @@
 **Alternatives Considered**:
 
 - Flatten all packages into one active package list with no role: rejected because it cannot distinguish desired plugins from supporting libraries.
-- Create one graph per package including every transitive dependency even when roots share dependencies: accepted as a baseline, with deterministic graph identity and conflict diagnostics. Implementation may later unify compatible graphs if it preserves the same semantics.
+- Create one graph per desired root including every transitive dependency: accepted as the baseline. Independent root graphs may select different versions of the same dependency side-by-side because graph unification is out of scope.
 
 ## Decision 3: Use One Collectible Load Context Per Active Graph Generation
 
@@ -57,13 +57,35 @@
 - Ignore dependencies for local packages: rejected because it preserves the observed runtime failure.
 - Require all dependencies to be local for directory roots: rejected because mixed local-root/remote-dependency workflows are useful and still honor configured trusted feeds.
 
-## Decision 6: Conflict Handling Fails Deterministically First
+## Decision 6: Graph Boundary Determines Version Conflict Handling
 
-**Decision**: If two roots in the same resolution scope require incompatible versions of a dependency, Nuplane records a deterministic graph resolution failure and preserves LKG. Compatible shared dependency versions may be selected using existing version range and feed priority rules.
+**Decision**: If one graph cannot satisfy all dependency version ranges for a selected package node, Nuplane records a deterministic graph resolution failure and preserves LKG. Independent desired root graphs may resolve and load different versions of the same dependency side-by-side when each graph can satisfy its own constraints.
 
-**Rationale**: Silent conflict resolution would make package behavior unpredictable. A first implementation should prefer explicit diagnostics over risky unification.
+**Rationale**: The graph boundary is the unit of resolution, activation, and loading. Failing unsatisfiable constraints inside one graph preserves NuGet metadata correctness, while allowing independent graphs to load side-by-side preserves isolation and avoids unnecessary global conflicts.
 
 **Alternatives Considered**:
 
-- Load conflicting dependency versions in separate graph contexts: viable when roots are independent, but not when one graph must satisfy both roots. The resolver must define the graph boundary before choosing this.
+- Fail all roots globally when any two roots require incompatible versions: rejected because independent graph load contexts can isolate side-by-side versions safely.
 - Pick newest compatible-looking version despite range conflicts: rejected because it violates declared package metadata.
+
+## Decision 7: Fail Dependency Cycles During Resolution
+
+**Decision**: Dependency cycles in package metadata fail graph resolution before acquisition. Diagnostics include the detected cycle path and preserve the last-known-good graph when present.
+
+**Rationale**: NuGet package dependency metadata is expected to form a traversable closure. Treating cycles as success risks incomplete graph identity and non-obvious activation behavior.
+
+**Alternatives Considered**:
+
+- Break cycles by retaining each package node once: rejected because it could hide invalid package metadata and produce incomplete edge diagnostics.
+- Ignore cyclic edges after first visit: rejected because silent recovery conflicts with deterministic diagnostics.
+
+## Decision 8: Unsupported Required Native Assets Fail Load Preparation
+
+**Decision**: Required native or runtime-specific assets that Nuplane cannot support cause graph load preparation to fail before publish, preserving LKG and producing graph-aware diagnostics.
+
+**Rationale**: Activating a graph with known unsupported runtime assets would shift failure to host execution time and weaken transactional activation semantics.
+
+**Alternatives Considered**:
+
+- Best-effort copy/probe of native assets: deferred until Nuplane explicitly supports native/runtime asset policy.
+- Ignore unsupported assets unless managed assembly loading fails later: rejected because it can publish a graph known to be incomplete.

@@ -21,6 +21,7 @@ As an operator, when I configure one desired NuGet package root such as `Elsa.Se
 2. **Given** a dependency package was installed only because a root package requires it, **When** active package state is read, **Then** the dependency is distinguishable from the explicitly desired root.
 3. **Given** the same feed contents and desired package inputs are reconciled twice, **When** the second cycle completes, **Then** no package is reacquired or reactivated solely because it is part of the dependency graph.
 4. **Given** a root package dependency cannot be resolved from the configured trusted feeds, **When** reconciliation runs, **Then** Nuplane records a root-level resolution failure, preserves the last-known-good active graph, and does not publish a partial graph.
+5. **Given** package dependency metadata contains a dependency cycle, **When** graph resolution runs, **Then** Nuplane fails graph resolution, preserves the last-known-good active graph when present, and records diagnostics that include the detected cycle path.
 
 ---
 
@@ -36,8 +37,10 @@ As a host loading runtime package assemblies, I need all packages in one resolve
 
 1. **Given** a root package assembly references a dependency package assembly, **When** the root package assembly is reflected by a host, **Then** dependency assembly resolution succeeds without the dependency being referenced by the host application.
 2. **Given** a configured host-shared assembly such as a contract or abstraction assembly is requested by a package, **When** the package graph load context resolves that assembly, **Then** the assembly identity comes from the host context according to the shared assembly policy.
-3. **Given** two unrelated root packages have independent dependency graphs, **When** assemblies are loaded, **Then** each graph has an independent collectible load context unless graph unification is required by a deterministic conflict policy.
+3. **Given** two unrelated root packages have independent dependency graphs, **When** assemblies are loaded, **Then** each graph has an independent collectible load context. Graph unification is out of scope for this feature and may be introduced only by a future explicit conflict/unification policy.
 4. **Given** a graph generation is replaced by a later generation, **When** hosts release runtime objects from the old generation, **Then** the old collectible load context can unload.
+5. **Given** two independent desired root graphs require incompatible versions of the same dependency package, **When** both graphs can resolve their required versions from trusted sources, **Then** Nuplane activates and loads each graph with its own selected dependency version in its own collectible load context.
+6. **Given** a resolved package graph contains required native or runtime-specific assets that Nuplane cannot support, **When** graph load preparation runs, **Then** Nuplane fails activation for that graph, preserves the last-known-good graph when present, and records graph-aware diagnostics.
 
 ---
 
@@ -52,19 +55,20 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 **Acceptance Scenarios**:
 
 1. **Given** a dependency package exists only as part of a root package graph, **When** the host asks for package assemblies for feature discovery, **Then** the root package assemblies are returned as discoverable entries and dependency assemblies are not surfaced as independent plugin roots.
-2. **Given** the dependency package is also explicitly configured as a desired package, **When** reconciliation runs, **Then** Nuplane may treat it as both a dependency and a desired root with deterministic graph ownership metadata.
+2. **Given** the dependency package is also explicitly configured as a desired package, **When** reconciliation runs, **Then** Nuplane marks it as both a dependency and a desired root with deterministic graph ownership metadata and exposes it for feature discovery because it was explicitly desired.
 3. **Given** load-state diagnostics are requested, **When** a dependency assembly failed to load, **Then** the diagnostic identifies the affected root graph and the dependency package that failed.
 
 ### Edge Cases
 
 - A dependency version range has no satisfiable version in any configured feed.
-- Two desired roots require incompatible versions of the same dependency.
+- Two desired roots require incompatible versions of the same dependency; independent root graphs resolve and load side-by-side when each graph can satisfy its own dependency constraints.
 - Two desired roots require the same dependency version from different feeds with different configured priority.
 - A dependency package exists in the local package directory and the same package exists in a remote feed.
 - A dependency package has framework-specific dependency groups that do not include the host target framework.
 - A dependency package contains only `ref/` assets, only unsupported `lib/` assets, or no managed assemblies.
-- A package contains native or runtime-specific assets that cannot be satisfied by the initial graph loading implementation.
-- A dependency cycle or duplicate dependency edge appears in package metadata.
+- A package contains required native or runtime-specific assets that cannot be satisfied by the initial graph loading implementation; graph load preparation fails activation for that graph and preserves last-known-good state.
+- A dependency cycle appears in package metadata; graph resolution fails and records the detected cycle path.
+- A duplicate dependency edge appears in package metadata; graph resolution treats the duplicate edge deterministically without changing the selected package node more than once.
 - A dependency package is removed from a feed after it was part of the last-known-good graph.
 - A root package is removed from desired configuration while another root still depends on one of its dependencies.
 - A stale active descriptor points to an old install path after packages are reinstalled under a different state root; implementation should compose with the stale-install-path fix from `fix/loading-catalog-missing-install-path`.
@@ -75,15 +79,19 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 
 - **FR-001**: A `PackageDependencyGraphResolver` component MUST resolve a complete dependency graph for each desired NuGet package root by reading NuGet package dependency metadata from configured package sources and by applying NuGet version range semantics for dependency edges.
 - **FR-002**: The dependency graph resolver MUST select dependency versions deterministically using existing feed priority, package identity, version range, pre-release, and target framework rules already established for direct package requests.
-- **FR-003**: The dependency graph resolver MUST use the host target framework when choosing NuGet dependency groups and package asset groups, with an explicit override path matching existing loading target-framework override behavior.
+- **FR-003**: The dependency graph resolver MUST use the host target framework when choosing NuGet dependency groups and package asset groups, using the same configured target-framework override value already consumed by package loading when that override is present.
 - **FR-004**: A `ResolvedPackageGraph` model MUST represent desired roots, dependency nodes, dependency edges, selected versions, source decisions, target framework compatibility, and graph identity/generation information.
 - **FR-005**: Reconciliation middleware MUST convert desired package roots into resolved package graphs before acquisition and MUST acquire every package node required by the graph before publishing active state.
 - **FR-006**: Active package state MUST persist whether a package node is an explicit desired root, dependency-only, or both, and MUST persist enough graph membership metadata for loading, diagnostics, cleanup, and idempotent reconciliation.
 - **FR-007**: Reconciliation publish behavior MUST be transactional at the graph level: if any required node in a graph cannot be resolved, acquired, validated, or installed, the graph MUST NOT be partially published.
+- **FR-007A**: If dependency graph resolution detects a dependency cycle, graph resolution MUST fail before acquisition, preserve last-known-good graph state when present, and expose diagnostics that include the detected cycle path.
 - **FR-008**: Package cleanup/orphan detection MUST account for dependency graph membership so a dependency package is retained while any active graph still requires it and is eligible for cleanup only when no active graph references it.
 - **FR-009**: A `PackageGraphLoadContext` component MUST create one collectible `AssemblyLoadContext` per active package graph generation and MUST make all selected runtime assemblies in that graph available to each other through one graph-scoped resolution policy.
 - **FR-010**: The graph load context MUST apply an explicit host-shared assembly policy before probing package graph assemblies so configured contract and host-owned abstraction assemblies resolve from the host context.
+- **FR-010A**: Independent desired root graphs MUST be allowed to resolve and load different selected versions of the same dependency package side-by-side when graph unification is not in scope and each graph's dependency constraints are satisfiable.
+- **FR-010B**: If graph load preparation detects required native or runtime-specific assets that Nuplane cannot support, activation for that graph MUST fail before publish, preserve last-known-good graph state when present, and expose graph-aware diagnostics.
 - **FR-011**: Package assembly selection MUST distinguish discoverable root assemblies from dependency-only support assemblies while preserving support assemblies for runtime binding.
+- **FR-011A**: A package node that is both an explicit desired root and a dependency of another root MUST retain both roles in graph metadata and MUST be exposed for feature discovery because it was explicitly desired.
 - **FR-012**: `IPackageAssemblyCatalog` and load-state query surfaces MUST expose graph-aware diagnostics that identify the root package, dependency package, selected version, feed/source decision, install path, load context generation, and failure reason.
 - **FR-013**: If dependency resolution introduces new configuration, every new options type MUST remain data-only and MUST be validated with `IValidateOptions<T>` plus startup fail-fast behavior through `ValidateOnStart()`. The default behavior MUST resolve dependencies automatically for remote NuGet package roots.
 - **FR-014**: Directory-sourced `.nupkg` roots MUST continue to reconcile successfully. If dependency metadata from a local package requires packages that are not locally present, the graph resolver MUST either resolve them from configured trusted remote feeds or fail with a graph-level diagnostic; it MUST NOT silently ignore missing dependencies.
@@ -120,7 +128,7 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 - **SC-003**: Repeating reconciliation with unchanged package inputs and feed contents produces the same active graph identities and performs no unnecessary reacquire/reactivate work.
 - **SC-004**: If a dependency cannot be resolved, the resulting diagnostic names the desired root, dependency package, requested version range, searched source(s), and failure reason, and the previous active graph remains available.
 - **SC-005**: Dependency-only assemblies are available for runtime binding but are not returned as independent feature discovery roots unless also explicitly configured as desired roots.
-- **SC-006**: Automated tests cover graph resolution, directory package behavior, graph-level LKG, graph-scoped assembly loading, host-shared assembly policy, dependency conflict failure, and the observed missing sibling dependency regression.
+- **SC-006**: Automated tests cover graph resolution, directory package behavior, graph-level LKG, graph-scoped assembly loading, host-shared assembly policy, unsatisfiable dependency failure, dependency cycle failure, side-by-side independent graph dependency versions, unsupported native/runtime asset failure, and the observed missing sibling dependency regression.
 
 ## Clarifications
 
@@ -129,6 +137,10 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 - Q: Should Nuplane load all packages into the default `AssemblyLoadContext`? -> A: No. Use graph-scoped collectible load contexts and keep an explicit host-shared assembly policy for contracts/abstractions.
 - Q: Should dependency packages be manually listed in `IncludePatterns`? -> A: No. Operators should configure desired roots; Nuplane owns dependency closure resolution.
 - Q: Should dependency-only packages be scanned as independent feature roots? -> A: No. They must be available for binding but not treated as root plugins unless explicitly desired.
+- Q: How should Nuplane handle incompatible transitive dependency versions across independent desired root graphs? -> A: Allow side-by-side versions per independent root graph.
+- Q: How should Nuplane handle required native or runtime-specific assets unsupported by the graph loader? -> A: Fail graph load preparation and preserve LKG.
+- Q: How should Nuplane handle a package that is both explicitly desired and a dependency? -> A: Keep both roles and expose for discovery.
+- Q: How should Nuplane handle dependency cycles in package metadata? -> A: Fail graph resolution and preserve LKG.
 
 ## Assumptions
 
@@ -136,4 +148,4 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 - Existing remote feed acquisition, local directory package acquisition, and source validation mechanisms remain the trusted acquisition path.
 - The implementation can add NuGet dependency metadata reading where needed but should not shell out to `dotnet restore`.
 - The current stale active install path fix is expected to land separately; this feature should not reintroduce absolute-path staleness when graph metadata changes.
-- Native/runtime-specific asset support may be limited initially to existing Nuplane runtime asset selection behavior unless implementation research identifies a required extension.
+- Native/runtime-specific asset support is limited initially to existing Nuplane runtime asset selection behavior; required unsupported native/runtime-specific assets fail graph load preparation.

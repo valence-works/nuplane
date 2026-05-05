@@ -32,7 +32,7 @@ Acquire, validate, install, publish, and clean up packages at dependency graph b
 6. Active state MUST include graph id and generation id for every active package node.
 7. Cleanup MUST retain installed packages referenced by any active graph.
 8. Cleanup MAY remove installed packages no longer referenced by active graphs according to existing cleanup policy.
-9. Failed resolution/acquisition/validation/install MUST preserve the previous active graph generation when available.
+9. Failed resolution/acquisition/validation/install/load preparation MUST preserve the previous active graph generation when available.
 10. First activation failure with no LKG MUST record diagnostics and leave the failed root inactive.
 
 ## Failure Contract
@@ -43,6 +43,8 @@ Graph failure MUST NOT produce partial active graphs. Diagnostics MUST be visibl
 
 - Graph activation publishes all nodes atomically.
 - Failed dependency acquisition leaves prior active graph intact.
+- Dependency cycle failure leaves prior active graph intact and records cycle-path diagnostics.
+- Unsupported required native/runtime-specific asset failure leaves prior active graph intact.
 - First activation failure publishes no partial active package descriptors.
 - Cleanup retains dependency package while any active graph references it.
 - Cleanup releases dependency package after last referencing graph is removed/replaced.

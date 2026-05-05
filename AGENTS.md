@@ -68,3 +68,10 @@ Run focused tests first for the area changed, then run the full solution when pr
 - Do not run destructive git commands such as `git reset --hard` or `git checkout --` unless explicitly requested.
 - Before editing a file with existing modifications, inspect it carefully and preserve unrelated changes.
 - Prefer small, reviewable changes that match existing project patterns.
+
+## Active Technologies
+- C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0` + Microsoft.Extensions.DependencyInjection/Options/Logging/Hosting, NuGet.Protocol and NuGet.Versioning already used by feed version resolution, System.Runtime.Loader, xUnit, NSubstitute (017-dependency-closure-loading)
+- File-backed Nuplane store state and package install directories under configured state/package roots; no database (017-dependency-closure-loading)
+
+## Recent Changes
+- 017-dependency-closure-loading: Added C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0` + Microsoft.Extensions.DependencyInjection/Options/Logging/Hosting, NuGet.Protocol and NuGet.Versioning already used by feed version resolution, System.Runtime.Loader, xUnit, NSubstitute

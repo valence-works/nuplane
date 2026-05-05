@@ -31,7 +31,9 @@ Resolve desired package roots into complete package dependency graphs before pac
 6. The resolver MUST deduplicate identical package id/version nodes and preserve every dependency edge that selected that node.
 7. The resolver MUST fail the graph when a required dependency edge has no satisfiable package version.
 8. The resolver MUST fail deterministically when incompatible dependency ranges cannot be satisfied by one selected version inside the graph boundary.
-9. The resolver MUST return sorted nodes, edges, roots, and source decisions so graph identity is stable for unchanged inputs.
+9. The resolver MUST allow independent desired root graphs to select different versions of the same dependency package when each graph satisfies its own dependency constraints.
+10. The resolver MUST detect dependency cycles and fail graph resolution before acquisition.
+11. The resolver MUST return sorted nodes, edges, roots, and source decisions so graph identity is stable for unchanged inputs.
 
 ## Failure Contract
 
@@ -45,13 +47,16 @@ Failures MUST include:
 - target framework
 - failure stage
 - reason code
+- cycle path, when dependency metadata contains a cycle
 
 ## Test Contract
 
 - Root with one dependency resolves both nodes.
 - Root with transitive dependency resolves all nodes.
 - Compatible duplicate dependency edge deduplicates the node.
-- Incompatible dependency edge fails graph resolution.
+- Unsatisfiable dependency edge fails graph resolution.
+- Independent roots with incompatible dependency versions resolve as side-by-side graphs when each graph is satisfiable.
+- Dependency cycle fails graph resolution and reports the cycle path.
 - Missing dependency package fails graph resolution.
 - Dependency group incompatible with host target framework fails with target-framework diagnostic.
 - Local root can resolve a dependency from a configured remote feed.

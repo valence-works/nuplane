@@ -44,20 +44,27 @@
 
 ### Tests for User Story 1
 
-- [ ] T012 [P] [US1] Add resolver unit tests for direct, transitive, duplicate, missing, and incompatible dependencies in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphResolverTests.cs`
+- [ ] T012 [P] [US1] Add resolver unit tests for direct, transitive, duplicate, missing, and unsatisfiable dependencies in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphResolverTests.cs`
+- [ ] T012A [P] [US1] Add dependency cycle detection tests that verify graph resolution fails with cycle-path diagnostics and preserves LKG behavior in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphCycleTests.cs`
+- [ ] T012B [P] [US1] Add side-by-side independent root graph version tests for incompatible transitive dependency versions in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphSideBySideVersionTests.cs`
+- [ ] T012C [P] [US1] Add resolver tests for the same dependency package id/version available from multiple trusted feeds with different configured priority in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphFeedPriorityTests.cs`
 - [ ] T013 [P] [US1] Add target-framework dependency group tests in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphTargetFrameworkTests.cs`
 - [ ] T014 [P] [US1] Add integration test for remote root plus remote dependency activation in `test/Nuplane.Integration.Tests/Reconciliation/DependencyClosureReconciliationTests.cs`
 - [ ] T015 [P] [US1] Add LKG preservation test for failed dependency acquisition in `test/Nuplane.Integration.Tests/Reconciliation/DependencyClosureLkgTests.cs`
 - [ ] T016 [P] [US1] Add directory root dependency regression tests in `test/Nuplane.Integration.Tests/Reconciliation/DirectoryDependencyClosureRegressionTests.cs`
+- [ ] T016A [P] [US1] Add resolver/acquisition tests verifying transitive dependency metadata and package content are accepted only from explicitly configured trusted sources and pass existing source/integrity validation in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphTrustPolicyTests.cs`
 
 ### Implementation for User Story 1
 
 - [ ] T017 [US1] Define `IPackageDependencyGraphResolver` in `src/Nuplane/Feeds/IPackageDependencyGraphResolver.cs`
 - [ ] T018 [US1] Implement dependency metadata reading and graph expansion in `src/Nuplane/Feeds/PackageDependencyGraphResolver.cs`
+- [ ] T018A [US1] Implement dependency cycle detection with cycle-path diagnostics in `src/Nuplane/Feeds/PackageDependencyGraphResolver.cs`
 - [ ] T019 [US1] Integrate existing version range/feed priority behavior into dependency edge selection in `src/Nuplane/Feeds/PackageDependencyGraphResolver.cs`
+- [ ] T019A [US1] Wire dependency graph resolution target-framework selection to the existing loading target-framework override behavior in `src/Nuplane/Feeds/PackageDependencyGraphResolver.cs`
 - [ ] T020 [US1] Extend `PackageResolutionResult` in `src/Nuplane/Reconciliation/Models/PackageResolutionResult.cs` with resolved graph results and graph failures
 - [ ] T021 [US1] Update `PackageResolutionMiddleware` in `src/Nuplane/Reconciliation/Middleware/PackageResolutionMiddleware.cs` to resolve desired roots into graphs before apply
 - [ ] T022 [US1] Update `PackageApplyExecutor` in `src/Nuplane/Reconciliation/PackageApplyExecutor.cs` to acquire and install all graph nodes before active publish
+- [ ] T022A [US1] Enforce existing trusted source and package integrity validation paths for dependency metadata and transitive package acquisition in `src/Nuplane/Feeds/PackageDependencyGraphResolver.cs` and `src/Nuplane/Reconciliation/PackageApplyExecutor.cs`
 - [ ] T023 [US1] Update `ActivePackageCatalogMapper` in `src/Nuplane/Operational/ActivePackageCatalogMapper.cs` to publish root/dependency graph metadata
 - [ ] T024 [US1] Update `PackageCleanupService` and `CleanupPolicyEvaluator` in `src/Nuplane/Store/Cleanup/` to retain packages referenced by active graphs
 - [ ] T025 [US1] Register graph resolver services in `src/Nuplane/Registration/NuplaneFeedVersioningRegistrationServices.cs` or the appropriate runtime registration file
@@ -76,20 +83,23 @@
 ### Tests for User Story 2
 
 - [ ] T027 [P] [US2] Add graph load context binding tests in `test/Nuplane.Loading.Tests/PackageGraphLoadContextTests.cs`
+- [ ] T027A [P] [US2] Add graph loading tests that verify independent root graphs can load different selected versions of the same dependency package side-by-side in `test/Nuplane.Loading.Tests/PackageGraphSideBySideVersionLoadingTests.cs`
 - [ ] T028 [P] [US2] Add host-shared assembly policy tests in `test/Nuplane.Loading.Tests/PackageGraphSharedAssemblyPolicyTests.cs`
 - [ ] T029 [P] [US2] Add package loader regression test for missing sibling dependency failure in `test/Nuplane.Loading.Tests/PackageLoaderGraphRegressionTests.cs`
 - [ ] T030 [P] [US2] Add integration test for graph load state after restart in `test/Nuplane.Integration.Tests/Loading/GraphLoadingCatalogIntegrationTests.cs`
 - [ ] T031 [P] [US2] Add unloadability test for replaced graph generation in `test/Nuplane.Loading.Tests/PackageGraphUnloadTests.cs`
+- [ ] T031A [P] [US2] Add graph load-preparation failure tests for unsupported required native or runtime-specific assets in `test/Nuplane.Loading.Tests/PackageGraphNativeAssetFailureTests.cs`
 
 ### Implementation for User Story 2
 
 - [ ] T032 [US2] Implement `PackageGraphLoadContext` in `src/Nuplane.Loading/PackageGraphLoadContext.cs`
 - [ ] T033 [US2] Update or replace `PackageAssemblyLoadContext` in `src/Nuplane.Loading/PackageAssemblyLoadContext.cs` so graph assembly probing is identity-based and shared-policy-first
 - [ ] T034 [US2] Update `PackageLoader` in `src/Nuplane.Loading/PackageLoader.cs` to create/load sessions per graph generation instead of per package main assembly
+- [ ] T034A [US2] Update graph load preparation in `src/Nuplane.Loading/PackageLoader.cs` to fail activation before publish when required native or runtime-specific assets are unsupported
 - [ ] T035 [US2] Update `PackageUnloadCoordinator` in `src/Nuplane.Loading/PackageUnloadCoordinator.cs` to track graph generation unloads
 - [ ] T036 [US2] Update `LoadingCatalog` in `src/Nuplane.Loading/LoadingCatalog.cs` to report graph-aware load state and bind failures
 - [ ] T037 [US2] Update `PackageAssemblyProvider` in `src/Nuplane.Loading/PackageAssemblyProvider.cs` to retrieve assemblies from graph sessions
-- [ ] T038 [US2] Add loading logs/metrics for graph context creation, bind failures, and unload attempts in `src/Nuplane.Loading/`
+- [ ] T038 [US2] Add loading logs/metrics for graph context creation, bind failures, and unload attempts in `src/Nuplane.Loading/PackageLoader.cs`, `src/Nuplane.Loading/LoadingCatalog.cs`, `src/Nuplane.Loading/LoadingEventDispatcher.cs`, and `src/Nuplane.Loading/PackageUnloadCoordinator.cs`
 
 **Checkpoint**: User Story 2 works independently; installed graph assemblies bind correctly without loading packages into the default context.
 
@@ -123,7 +133,7 @@
 
 **Purpose**: Documentation, validation, and final verification.
 
-- [ ] T047 [P] Update loading and reconciliation documentation/examples to describe desired roots, dependency closure, graph load contexts, and dependency-only package behavior
+- [ ] T047 [P] Update `README.md`, relevant pages under `docs/wiki/`, and sample loading/reconciliation examples under `samples/` to describe desired roots, dependency closure, graph load contexts, and dependency-only package behavior
 - [ ] T048 [P] Update XML documentation on changed public models and catalogs in `src/Nuplane.Abstractions/` and `src/Nuplane.Loading.Abstractions/`
 - [ ] T049 Run quickstart Scenario A with a local test feed and record validation notes in the implementation PR
 - [ ] T050 Run quickstart Scenario C for directory package regression and record validation notes in the implementation PR
@@ -131,6 +141,7 @@
 - [ ] T052 Run `dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj`
 - [ ] T053 Run `dotnet test test/Nuplane.Loading.Tests/Nuplane.Loading.Tests.csproj`
 - [ ] T054 Run `dotnet test test/Nuplane.Sources.Directory.Tests/Nuplane.Sources.Directory.Tests.csproj`
+- [ ] T054A Run `dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj`
 - [ ] T055 Run `dotnet test Nuplane.sln`
 
 ---
@@ -156,8 +167,8 @@
 
 - T002-T004 can run in parallel.
 - T010-T011 can run in parallel after graph metadata is defined.
-- T012-T016 can run in parallel because they cover different test files.
-- T027-T031 can run in parallel because they cover different loading behaviors.
+- T012, T012A, T012B, T012C, and T013-T016A can run in parallel because they cover different test files.
+- T027, T027A, and T028-T031A can run in parallel because they cover different loading behaviors.
 - T039-T041 can run in parallel.
 - Documentation tasks T047-T048 can run in parallel with final validation.
 

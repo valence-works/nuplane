@@ -37,6 +37,8 @@ Deterministic dependency closure for one desired root or a compatible set of des
 
 - Same desired roots, selected nodes, edges, sources, and target framework produce the same `GraphId`.
 - Graph is publishable only when every required node is resolved, acquired, validated, and installed.
+- Independent desired root graphs may select different versions of the same dependency package and load side-by-side because graph identity is scoped per graph.
+- Graph resolution fails if dependency metadata contains a cycle.
 
 ## ResolvedPackageNode
 
@@ -58,6 +60,7 @@ One package identity/version selected for a graph.
 **Rules**
 
 - Dependency-only nodes are not discoverable roots by default.
+- Nodes with `RootAndDependency` remain discoverable because they were explicitly desired.
 - A node may be referenced by multiple edges and roots.
 
 ## DependencyEdge
@@ -78,6 +81,8 @@ Relationship from one selected package node to another.
 
 - Edges are part of graph identity.
 - Unsatisfied non-optional edges fail graph resolution.
+- Dependency cycles fail graph resolution and are captured in failure diagnostics.
+- Duplicate edges are retained deterministically without selecting the same package node more than once.
 
 ## GraphActivationRecord
 
@@ -132,11 +137,13 @@ In-memory runtime state for one active graph generation.
 - `SupportAssemblyEntries`
 - `LoadStatus`
 - `Failures`
+- `RequiredUnsupportedAssets`: Native or runtime-specific assets required by the graph but unsupported by Nuplane.
 
 **Rules**
 
 - Collectible and unloadable after hosts release runtime objects.
 - Uses host-shared assembly policy before graph assembly probing.
+- Fails load preparation before publish when required native or runtime-specific assets are unsupported.
 - In-memory only; never serialized.
 
 ## PackageAssemblyEntry
@@ -174,6 +181,8 @@ Diagnostic record for failures before or during graph activation/loading.
 - `ReasonCode`
 - `Message`
 - `CorrelationId`
+- `CyclePath`: Ordered package id/version path when failure is caused by a dependency cycle.
+- `UnsupportedAssetPath`: Package-relative asset path when failure is caused by unsupported required native or runtime-specific assets.
 
 **Rules**
 
