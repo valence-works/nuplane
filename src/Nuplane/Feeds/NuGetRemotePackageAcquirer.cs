@@ -136,12 +136,20 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
             var id = idProperty.GetString();
             if (!string.IsNullOrWhiteSpace(id))
             {
-                return new(id, UriKind.Absolute);
+                return EnsureTrailingSlash(new(id, UriKind.Absolute));
             }
         }
 
         throw new InvalidOperationException(
             $"NuGet service index '{serviceIndex}' does not expose a PackageBaseAddress resource.");
+    }
+
+    private static Uri EnsureTrailingSlash(Uri uri)
+    {
+        var value = uri.AbsoluteUri;
+        return value.EndsWith("/", StringComparison.Ordinal)
+            ? uri
+            : new Uri(value + "/", UriKind.Absolute);
     }
 
     private string ResolveInstallRoot() =>

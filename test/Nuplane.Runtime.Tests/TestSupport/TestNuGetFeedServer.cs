@@ -12,15 +12,17 @@ internal sealed class TestNuGetFeedServer : IAsyncDisposable
     private readonly string _packageId;
     private readonly string _version;
     private readonly string _baseAddress;
+    private readonly bool _omitPackageBaseTrailingSlash;
 
     public int PackageDownloads { get; private set; }
     public Uri ServiceIndexUri => new(new(_baseAddress), "v3/index.json");
 
-    public TestNuGetFeedServer(string packageId, string version, byte[] packageBytes)
+    public TestNuGetFeedServer(string packageId, string version, byte[] packageBytes, bool omitPackageBaseTrailingSlash = false)
     {
         _packageId = packageId ?? throw new ArgumentNullException(nameof(packageId));
         _version = version ?? throw new ArgumentNullException(nameof(version));
         _packageBytes = packageBytes ?? throw new ArgumentNullException(nameof(packageBytes));
+        _omitPackageBaseTrailingSlash = omitPackageBaseTrailingSlash;
 
         var prefix = $"http://127.0.0.1:{GetFreePort()}/";
         _baseAddress = prefix;
@@ -76,6 +78,9 @@ internal sealed class TestNuGetFeedServer : IAsyncDisposable
         var lowerPackageId = _packageId.ToLowerInvariant();
         var lowerVersion = _version.ToLowerInvariant();
         var lowerNupkgName = $"{lowerPackageId}.{lowerVersion}.nupkg";
+        var packageBaseAddress = _omitPackageBaseTrailingSlash
+            ? $"{_baseAddress}flatcontainer"
+            : $"{_baseAddress}flatcontainer/";
 
         if (requestPath.Equals("/v3/index.json", StringComparison.OrdinalIgnoreCase))
         {
@@ -84,7 +89,7 @@ internal sealed class TestNuGetFeedServer : IAsyncDisposable
                   "version": "3.0.0",
                   "resources": [
                     {
-                      "@id": "{{_baseAddress}}flatcontainer/",
+                      "@id": "{{packageBaseAddress}}",
                       "@type": "PackageBaseAddress/3.0.0"
                     }
                   ]
@@ -142,4 +147,3 @@ internal sealed class TestNuGetFeedServer : IAsyncDisposable
         }
     }
 }
-

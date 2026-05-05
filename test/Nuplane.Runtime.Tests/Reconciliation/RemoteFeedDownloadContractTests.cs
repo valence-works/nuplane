@@ -57,6 +57,35 @@ public sealed class RemoteFeedDownloadContractTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Resolve_RemoteFeed_DownloadsPackageWhenPackageBaseAddressOmitsTrailingSlash()
+    {
+        var packageBytes = NupkgTestBuilder.Create("MyPlugin", "1.0.0").Build();
+        await using var server = new TestNuGetFeedServer(
+            "MyPlugin",
+            "1.0.0",
+            packageBytes,
+            omitPackageBaseTrailingSlash: true);
+
+        var options = new FeedResolutionOptions { PackageInstallRoot = Path.Combine(_tempDir, "installed") };
+        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri));
+        var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
+        var resolver = new MultiFeedPackageResolver(
+            new OptionsWrapper<FeedResolutionOptions>(options), policy,
+            new NuGetRemotePackageAcquirer(new OptionsWrapper<FeedResolutionOptions>(options)),
+            StubVersionEnumerator("1.0.0"),
+            StubVersionRangeEvaluator(),
+            NullLogger<MultiFeedPackageResolver>.Instance);
+
+        var result = await resolver.ResolveAsync(
+            new("MyPlugin", "1.0.0", "remote-feed", PackageUpdatePolicy.Exact, "remote-source"),
+            CancellationToken.None);
+
+        Assert.Equal("remote-feed", result.FeedName);
+        Assert.True(File.Exists(Path.Combine(result.InstallPath, "MyPlugin.nuspec")));
+        Assert.Equal(1, server.PackageDownloads);
+    }
+
+    [Fact]
     public async Task Resolve_RemoteFeed_ReusesExtractedInstallPathOnSubsequentResolve()
     {
         var packageBytes = NupkgTestBuilder.Create("MyPlugin", "1.0.0").Build();
@@ -103,4 +132,3 @@ public sealed class RemoteFeedDownloadContractTests : IAsyncLifetime
         return evaluator;
     }
 }
-
