@@ -43,7 +43,8 @@ internal static class ActivePackageCatalogMapper
 
             if (!changedPackageIds.Contains(package.Id) &&
                 descriptors.TryGetValue(package.Id, out var existing) &&
-                string.Equals(existing.Version, package.Version, StringComparison.OrdinalIgnoreCase))
+                string.Equals(existing.Version, package.Version, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(existing.InstallPath, package.InstallPath, StringComparison.Ordinal))
             {
                 continue;
             }
@@ -107,4 +108,3 @@ internal static class ActivePackageCatalogMapper
 
     private static string? Sanitize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 }
-

@@ -8,6 +8,46 @@ namespace Nuplane.Runtime.Tests.Operational;
 public sealed class ActivePackageCatalogTests
 {
     [Fact]
+    public void BuildNextDescriptors_WhenResolvedInstallPathChangesForSameVersion_RefreshesDescriptor()
+    {
+        var currentState = new StoreStateRecord(
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SamplePackage"] = "0.0.1"
+            },
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, FailureRecord>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, SourceSnapshotRef>(StringComparer.OrdinalIgnoreCase),
+            DateTimeOffset.Parse("2026-04-08T15:00:00Z"),
+            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SamplePackage"] = new("SamplePackage", "0.0.1", "local-packages", "local-packages", "/app/packages/.installed/SamplePackage/0.0.1", DateTimeOffset.UtcNow, "old-corr")
+            });
+        var resolvedPackage = new ResolvedPackage(
+            "SamplePackage",
+            "0.0.1",
+            "local-packages",
+            "/Users/me/app/packages/.installed/SamplePackage/0.0.1",
+            DateTimeOffset.UtcNow,
+            "local-packages");
+
+        var descriptors = ActivePackageCatalogMapper.BuildNextDescriptors(
+            currentState,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SamplePackage"] = "0.0.1"
+            },
+            [resolvedPackage],
+            new PackageChangeSet([], [], [], "new-corr", DateTimeOffset.UtcNow),
+            "new-corr",
+            DateTimeOffset.UtcNow);
+
+        var descriptor = Assert.Single(descriptors).Value;
+        Assert.Equal(resolvedPackage.InstallPath, descriptor.InstallPath);
+        Assert.Equal("new-corr", descriptor.ActivationCorrelationId);
+    }
+
+    [Fact]
     public async Task GetActivePackagesAsync_ReturnsOnlyActivePackagesInDeterministicOrder()
     {
         var state = new StoreStateRecord(
@@ -87,4 +127,3 @@ public sealed class ActivePackageCatalogTests
             Task.CompletedTask;
     }
 }
-
