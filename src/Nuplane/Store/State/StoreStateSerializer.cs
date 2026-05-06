@@ -44,6 +44,7 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
     private static StoreStateRecord Normalize(StoreStateRecord state) =>
         state with
         {
-            ActivePackageDescriptorsById = new(state.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase)
+            ActivePackageDescriptorsById = new(state.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase),
+            ActiveGraphsById = new(state.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase)
         };
 }

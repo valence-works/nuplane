@@ -70,6 +70,60 @@ public sealed class PackageLoaderTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureLoadedAsync_WithMultipleFlatPackages_KeepsIndependentContexts()
+    {
+        var firstPath = CreateInstallDir("pkg-a");
+        var secondPath = CreateInstallDir("pkg-b");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureLoadedAsync(
+            [Pkg("pkg-a", "1.0.0", firstPath), Pkg("pkg-b", "1.0.0", secondPath)],
+            [],
+            CancellationToken.None);
+
+        Assert.Equal(2, result.Loaded.Count);
+        Assert.NotEqual(result.Loaded[0].ContextKey, result.Loaded[1].ContextKey);
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_WhenGraphLoadFails_DoesNotFallbackToPerPackageContexts()
+    {
+        var goodPath = CreateInstallDir("good-pkg");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[
+                Pkg("good-pkg", "1.0.0", goodPath),
+                Pkg("bad-pkg", "1.0.0", "/nonexistent/nope")
+            ]],
+            [],
+            CancellationToken.None);
+
+        Assert.Empty(result.Loaded);
+        Assert.Equal(["bad-pkg", "good-pkg"], result.FailedByPackageId.Keys.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.False(loader.TryGetContext("good-pkg", "1.0.0", out _));
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_WhenPackagesAlreadyLoadedIndividually_ReloadsIntoGraphContext()
+    {
+        var firstPath = CreateInstallDir("pkg-a");
+        var secondPath = CreateInstallDir("pkg-b");
+        var loader = new PackageLoader();
+        var first = Pkg("pkg-a", "1.0.0", firstPath);
+        var second = Pkg("pkg-b", "1.0.0", secondPath);
+
+        await loader.EnsureLoadedAsync([first, second], [], CancellationToken.None);
+        var result = await loader.EnsureGraphLoadedAsync([[first, second]], [], CancellationToken.None);
+
+        Assert.Equal(2, result.Loaded.Count);
+        var contextKeys = result.Loaded.Select(static session => session.ContextKey).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var graphKey = Assert.Single(contextKeys);
+        Assert.StartsWith("graph:", graphKey, StringComparison.OrdinalIgnoreCase);
+        Assert.All(result.Loaded, session => Assert.Equal(graphKey, loader.Sessions[$"{session.PackageId}@{session.Version}"].ContextKey));
+    }
+
+    [Fact]
     public void ResolveMainAssemblyPath_MultiTargetPackage_PicksExactHostFrameworkAssembly()
     {
         var installPath = CreateMultiTargetInstallDir("Nuplane.Loading.Tests.Fixtures", GetHostFrameworkFolderName(), "net8.0", "net9.0");

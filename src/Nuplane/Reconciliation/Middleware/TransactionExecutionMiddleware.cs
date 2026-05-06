@@ -31,7 +31,11 @@ internal sealed class TransactionExecutionMiddleware(
         }
 
         // Merge applied packages into existing active state: preserve active versions for packages that failed
-        var appliedVersions = desiredActualDiffEngine.BuildNextActiveVersions(applyResult.AppliedPackages);
+        var failedPackageIds = applyResult.FailedPackageIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var successfulResolvedPackages = context.ResolutionResult!.ResolvedPackages
+            .Where(package => !failedPackageIds.Contains(package.Id))
+            .ToArray();
+        var activeResolvedVersions = desiredActualDiffEngine.BuildNextActiveVersions(successfulResolvedPackages);
         var mergedActive = new Dictionary<string, string>(context.ActiveVersions!, StringComparer.OrdinalIgnoreCase);
 
         foreach (var removedPackageId in context.ChangeSet?.Removed ?? [])
@@ -39,7 +43,7 @@ internal sealed class TransactionExecutionMiddleware(
             mergedActive.Remove(removedPackageId);
         }
 
-        foreach (var (id, version) in appliedVersions)
+        foreach (var (id, version) in activeResolvedVersions)
         {
             mergedActive[id] = version;
         }
@@ -49,4 +53,3 @@ internal sealed class TransactionExecutionMiddleware(
         await next();
     }
 }
-

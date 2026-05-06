@@ -17,20 +17,29 @@ internal sealed class CleanupMiddleware(
         var appliedVersions = desiredActualDiffEngine.BuildNextActiveVersions(context.ApplyResult!.AppliedPackages);
         var storeState = await storeRegistry.GetStateAsync(context.CancellationToken);
         var changeSet = context.ChangeSet ?? new([], [], [], context.CorrelationId, DateTimeOffset.UtcNow);
+        var activatedAtUtc = DateTimeOffset.UtcNow;
         var activePackageDescriptors = ActivePackageCatalogMapper.BuildNextDescriptors(
             storeState,
             context.MergedActive!,
             context.ApplyResult.AppliedPackages,
             changeSet,
             context.CorrelationId,
-            DateTimeOffset.UtcNow);
+            activatedAtUtc,
+            context.ResolutionResult?.ResolvedGraphs);
+        var activeGraphRecords = ActivePackageCatalogMapper.BuildActiveGraphRecords(
+            storeState,
+            context.ResolutionResult?.ResolvedGraphs ?? [],
+            context.MergedActive!,
+            context.CorrelationId,
+            activatedAtUtc);
 
         await storeRegistry.PersistActiveVersionsAsync(
             context.MergedActive!,
             appliedVersions,
             context.CorrelationId,
             context.CancellationToken,
-            activePackageDescriptors);
+            activePackageDescriptors,
+            activeGraphRecords);
 
         storeState = await storeRegistry.GetStateAsync(context.CancellationToken);
         var cleanupInputs = context.MergedActive!
@@ -54,5 +63,4 @@ internal sealed class CleanupMiddleware(
         await next();
     }
 }
-
 

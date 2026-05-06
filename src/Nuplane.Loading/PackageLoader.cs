@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using System.Runtime.Loader;
 using System.Runtime.Versioning;
 using Nuplane.Abstractions;
 
@@ -13,7 +14,7 @@ namespace Nuplane.Loading;
 internal sealed class PackageLoader : IPackageLoader
 {
     private readonly SharedAssemblyPolicyMatcher _matcher;
-    private readonly ConcurrentDictionary<string, PackageAssemblyLoadContext> _contexts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, AssemblyLoadContext> _contexts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, PackageLoadSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -69,6 +70,46 @@ internal sealed class PackageLoader : IPackageLoader
         var loaded = new List<PackageLoadSession>();
         var failed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        EnsurePackagesLoaded(packages, sharedPolicy, cancellationToken, loaded, failed);
+
+        return Task.FromResult<PackageLoadResult>(new(loaded, failed));
+    }
+
+    /// <inheritdoc />
+    public Task<PackageLoadResult> EnsureGraphLoadedAsync(
+        IReadOnlyList<IReadOnlyList<ResolvedPackage>> packageGraphs,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(packageGraphs);
+        ArgumentNullException.ThrowIfNull(sharedPolicy);
+
+        var loaded = new List<PackageLoadSession>();
+        var failed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var packageGraph in packageGraphs)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (packageGraph.Count <= 1)
+            {
+                EnsurePackagesLoaded(packageGraph, sharedPolicy, cancellationToken, loaded, failed);
+                continue;
+            }
+
+            EnsureGraphLoaded(packageGraph, sharedPolicy, loaded, failed);
+        }
+
+        return Task.FromResult<PackageLoadResult>(new(loaded, failed));
+    }
+
+    private void EnsurePackagesLoaded(
+        IReadOnlyList<ResolvedPackage> packages,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        CancellationToken cancellationToken,
+        List<PackageLoadSession> loaded,
+        Dictionary<string, string> failed)
+    {
         foreach (var package in packages)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -114,8 +155,112 @@ internal sealed class PackageLoader : IPackageLoader
                     LastError: ex.Message);
             }
         }
+    }
 
-        return Task.FromResult<PackageLoadResult>(new(loaded, failed));
+    private PackageLoadResult EnsureGraphLoaded(
+        IReadOnlyList<ResolvedPackage> packages,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        List<PackageLoadSession> loaded,
+        Dictionary<string, string> failed)
+    {
+        var graphKey = "graph:" + string.Join('|', packages
+            .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
+            .Select(static package => BuildKey(package.Id, package.Version)));
+
+        var existingGraphSessions = packages
+            .Select(package => _sessions.TryGetValue(BuildKey(package.Id, package.Version), out var session) ? session : null)
+            .Where(session => session is not null && session.IsLoaded && string.Equals(session.ContextKey, graphKey, StringComparison.OrdinalIgnoreCase))
+            .Cast<PackageLoadSession>()
+            .ToArray();
+
+        if (existingGraphSessions.Length == packages.Count)
+        {
+            loaded.AddRange(existingGraphSessions);
+            return new(loaded, failed);
+        }
+
+        PackageGraphLoadContext? context = null;
+        var replacedContexts = new List<AssemblyLoadContext>();
+
+        try
+        {
+            var mainAssemblyPaths = packages
+                .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
+                .Select(static package => ResolveMainAssemblyPath(package.InstallPath, package.Id))
+                .ToArray();
+            context = new PackageGraphLoadContext(graphKey, mainAssemblyPaths, sharedPolicy, _matcher);
+
+            foreach (var mainAssemblyPath in mainAssemblyPaths)
+            {
+                context.LoadFromAssemblyName(AssemblyName.GetAssemblyName(mainAssemblyPath));
+            }
+
+            foreach (var package in packages)
+            {
+                var key = BuildKey(package.Id, package.Version);
+                if (_contexts.TryGetValue(key, out var previousContext) &&
+                    !ReferenceEquals(previousContext, context))
+                {
+                    replacedContexts.Add(previousContext);
+                }
+
+                _contexts[key] = context;
+
+                var session = new PackageLoadSession(
+                    package.Id,
+                    package.Version,
+                    package.InstallPath,
+                    graphKey,
+                    DateTimeOffset.UtcNow,
+                    IsLoaded: true,
+                    LastError: null);
+
+                _sessions[key] = session;
+                loaded.Add(session);
+            }
+
+            UnloadUnreferencedContexts(replacedContexts);
+        }
+        catch (Exception ex)
+        {
+            context?.Unload();
+
+            foreach (var package in packages)
+            {
+                var key = BuildKey(package.Id, package.Version);
+                if (context is not null &&
+                    _contexts.TryGetValue(key, out var existingContext) &&
+                    ReferenceEquals(existingContext, context))
+                {
+                    _contexts.TryRemove(key, out _);
+                }
+
+                failed[package.Id] = ex.Message;
+                _sessions[key] = new(
+                    package.Id,
+                    package.Version,
+                    package.InstallPath,
+                    graphKey,
+                    DateTimeOffset.UtcNow,
+                    IsLoaded: false,
+                    LastError: ex.Message);
+            }
+        }
+
+        return new(loaded, failed);
+    }
+
+    private void UnloadUnreferencedContexts(IEnumerable<AssemblyLoadContext> contexts)
+    {
+        foreach (var context in contexts.Distinct())
+        {
+            if (!_contexts.Values.Any(existing => ReferenceEquals(existing, context)))
+            {
+                context.Unload();
+            }
+        }
     }
 
     /// <inheritdoc />

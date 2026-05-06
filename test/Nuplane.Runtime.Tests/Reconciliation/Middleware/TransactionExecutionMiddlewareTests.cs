@@ -66,6 +66,28 @@ public sealed class TransactionExecutionMiddlewareTests
         Assert.True(ctx.MergedActive!.ContainsKey("alpha"));
     }
 
+    [Fact]
+    public async Task InvokeAsync_WhenApplyResultContainsSubset_MergedActivePreservesSuccessfulResolvedClosure()
+    {
+        var root = Pkg("Plugin.Root", "1.0.0");
+        var dependency = Pkg("Plugin.Dependency", "1.0.0");
+        var executor = new FakeApplyExecutor(appliedIds: ["Plugin.Root"]);
+
+        var ctx = Ctx([root, dependency]);
+        ctx.ActiveVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Plugin.Root"] = "1.0.0",
+            ["Plugin.Dependency"] = "1.0.0"
+        };
+
+        await new TransactionExecutionMiddleware(executor, new DesiredActualDiffEngine(), new NullDispatcher())
+            .InvokeAsync(ctx, () => Task.CompletedTask);
+
+        Assert.NotNull(ctx.MergedActive);
+        Assert.Equal("1.0.0", ctx.MergedActive!["Plugin.Root"]);
+        Assert.Equal("1.0.0", ctx.MergedActive["Plugin.Dependency"]);
+    }
+
     private static TransactionExecutionMiddleware Build(
         IPackageApplyExecutor executor, IObserverEventDispatcher dispatcher) =>
         new(executor, new FakeDiffEngine(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)), dispatcher);

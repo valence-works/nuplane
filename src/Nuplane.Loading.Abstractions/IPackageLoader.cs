@@ -20,6 +20,18 @@ internal interface IPackageLoader
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Ensures that each supplied package graph is loaded into its own assembly context.
+    /// </summary>
+    /// <param name="packageGraphs">The graph-scoped package groups to load.</param>
+    /// <param name="sharedPolicy">The shared assembly policy entries controlling host assembly sharing.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The result containing loaded sessions and any failures.</returns>
+    Task<PackageLoadResult> EnsureGraphLoadedAsync(
+        IReadOnlyList<IReadOnlyList<ResolvedPackage>> packageGraphs,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Attempts to remove the assembly load context for a specific package version.
     /// </summary>
     /// <param name="packageId">The package identifier.</param>

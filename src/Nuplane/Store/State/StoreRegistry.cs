@@ -78,7 +78,8 @@ public sealed partial class StoreRegistry : IStoreRegistry
                 new(_currentState.LastFailureById, StringComparer.OrdinalIgnoreCase),
                 new(_currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
                 _currentState.UpdatedAt,
-                new(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase));
+                new(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase),
+                new(_currentState.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase));
         }
         finally
         {
@@ -117,6 +118,22 @@ public sealed partial class StoreRegistry : IStoreRegistry
         string correlationId,
         CancellationToken cancellationToken,
         IReadOnlyDictionary<string, ActivePackageDescriptor>? activePackageDescriptors = null)
+        => await PersistActiveVersionsAsync(
+            activeVersions,
+            successfullyApplied,
+            correlationId,
+            cancellationToken,
+            activePackageDescriptors,
+            activeGraphs: null);
+
+    /// <inheritdoc />
+    public async Task PersistActiveVersionsAsync(
+        IReadOnlyDictionary<string, string> activeVersions,
+        IReadOnlyDictionary<string, string> successfullyApplied,
+        string correlationId,
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, ActivePackageDescriptor>? activePackageDescriptors,
+        IReadOnlyDictionary<string, GraphActivationRecord>? activeGraphs)
     {
         ArgumentNullException.ThrowIfNull(activeVersions);
         ArgumentNullException.ThrowIfNull(successfullyApplied);
@@ -133,6 +150,9 @@ public sealed partial class StoreRegistry : IStoreRegistry
             var nextDescriptors = activePackageDescriptors is null
                 ? new Dictionary<string, ActivePackageDescriptor>(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, ActivePackageDescriptor>(activePackageDescriptors, StringComparer.OrdinalIgnoreCase);
+            var nextGraphs = activeGraphs is null
+                ? new Dictionary<string, GraphActivationRecord>(_currentState.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, GraphActivationRecord>(activeGraphs, StringComparer.OrdinalIgnoreCase);
 
             foreach (var (id, version) in successfullyApplied)
             {
@@ -152,7 +172,8 @@ public sealed partial class StoreRegistry : IStoreRegistry
                 ActiveVersionById = nextActive,
                 LastKnownGoodById = nextLkg,
                 UpdatedAt = now,
-                ActivePackageDescriptorsById = nextDescriptors
+                ActivePackageDescriptorsById = nextDescriptors,
+                ActiveGraphsById = nextGraphs
             };
 
             if (!string.IsNullOrWhiteSpace(_stateFilePath))

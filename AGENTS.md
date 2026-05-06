@@ -10,6 +10,12 @@ Nuplane is a .NET runtime control plane for NuGet packages. It resolves desired 
 - Use `specs/` for feature-specific requirements and validation history.
 - Use `.github/agents/` and `.github/prompts/` only when working on Spec Kit-driven workflows.
 
+## Agent Operating Principles
+- Do not assume, hide confusion, or flatten uncertainty; surface questions, constraints, and tradeoffs explicitly.
+- Write the minimum code that solves the defined problem; do not add speculative abstractions, features, or cleanup.
+- Touch only the files and behavior required for the task; clean up only issues introduced by your own changes.
+- Define success criteria before implementation, then iterate until the criteria are verified or clearly state what could not be verified.
+
 ## Repository Layout
 - `src/`: Packable source projects. Most libraries multi-target `net8.0;net9.0;net10.0` through `src/Directory.Build.props`.
 - `test/`: xUnit test projects targeting `net10.0` through `test/Directory.Build.props`.
@@ -68,3 +74,10 @@ Run focused tests first for the area changed, then run the full solution when pr
 - Do not run destructive git commands such as `git reset --hard` or `git checkout --` unless explicitly requested.
 - Before editing a file with existing modifications, inspect it carefully and preserve unrelated changes.
 - Prefer small, reviewable changes that match existing project patterns.
+
+## Active Technologies
+- C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0` + Microsoft.Extensions.DependencyInjection/Options/Logging/Hosting, NuGet.Protocol and NuGet.Versioning already used by feed version resolution, System.Runtime.Loader, xUnit, NSubstitute (017-dependency-closure-loading)
+- File-backed Nuplane store state and package install directories under configured state/package roots; no database (017-dependency-closure-loading)
+
+## Recent Changes
+- 017-dependency-closure-loading: Added C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0` + Microsoft.Extensions.DependencyInjection/Options/Logging/Hosting, NuGet.Protocol and NuGet.Versioning already used by feed version resolution, System.Runtime.Loader, xUnit, NSubstitute

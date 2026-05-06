@@ -43,9 +43,9 @@ internal sealed class TrustAndLockGateMiddleware(
         context.ResolutionResult = new(
             trustAndLockPassed,
             combinedFailures.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray(),
-            resolutionResult.FeedDecisions);
+            resolutionResult.FeedDecisions,
+            resolutionResult.ResolvedGraphs);
 
         await next();
     }
 }
-

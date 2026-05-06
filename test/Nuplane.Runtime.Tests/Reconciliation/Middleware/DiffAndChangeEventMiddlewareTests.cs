@@ -81,6 +81,50 @@ public sealed class DiffAndChangeEventMiddlewareTests
         Assert.Equal(1, dispatcher.PublishChangingCallCount);
     }
 
+    [Fact]
+    public async Task InvokeAsync_WhenRootResolutionFails_PreservesActiveGraphNodesFromRemoval()
+    {
+        var active = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Plugin.Root"] = "1.0.0",
+            ["Plugin.Dependency"] = "1.0.0"
+        };
+        var storeState = new StoreStateRecord(
+            new(active, StringComparer.OrdinalIgnoreCase),
+            new(StringComparer.OrdinalIgnoreCase),
+            new(StringComparer.OrdinalIgnoreCase),
+            new(StringComparer.OrdinalIgnoreCase),
+            DateTimeOffset.UtcNow,
+            new(StringComparer.OrdinalIgnoreCase),
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["graph-root"] = new(
+                    "graph-root",
+                    "generation-1",
+                    ["Plugin.Root"],
+                    ["Plugin.Root", "Plugin.Dependency"],
+                    DateTimeOffset.UtcNow,
+                    "previous",
+                    GraphActivationStatus.Active)
+            });
+        var changeSet = new PackageChangeSet([], [], ["Plugin.Root", "Plugin.Dependency"], "test", DateTimeOffset.UtcNow);
+        var diffEngine = new FakeDiffEngine(changeSet, new Dictionary<string, string>());
+        var storeRegistry = new FakeStoreRegistry(active, storeState);
+
+        var ctx = new ReconciliationCycleContext
+        {
+            CorrelationId = "test",
+            CycleStartedAt = DateTimeOffset.UtcNow,
+            CancellationToken = CancellationToken.None,
+            ResolutionResult = new([], ["Plugin.Root"], [])
+        };
+
+        await Build(diffEngine, storeRegistry, new RecordingDispatcher()).InvokeAsync(ctx, () => Task.CompletedTask);
+
+        Assert.Empty(ctx.ChangeSet!.Removed);
+        Assert.Equal(0, storeRegistry.GetActiveVersionsCallCount);
+    }
+
     private static DiffAndChangeEventMiddleware Build(
         IDesiredActualDiffEngine diff,
         IStoreRegistry store,
@@ -159,13 +203,24 @@ public sealed class DiffAndChangeEventMiddlewareTests
             Task.CompletedTask;
     }
 
-    private sealed class FakeStoreRegistry(IReadOnlyDictionary<string, string> active) : IStoreRegistry
+    private sealed class FakeStoreRegistry(
+        IReadOnlyDictionary<string, string> active,
+        StoreStateRecord? state = null) : IStoreRegistry
     {
+        public int GetActiveVersionsCallCount { get; private set; }
+
         public Task<IReadOnlyDictionary<string, string>> GetActiveVersionsAsync(CancellationToken ct) =>
-            Task.FromResult(active);
+            Task.FromResult<IReadOnlyDictionary<string, string>>(IncrementAndReturnActive());
 
         public Task<StoreStateRecord> GetStateAsync(CancellationToken ct) =>
-            Task.FromResult(StoreStateRecord.Empty());
+            Task.FromResult(state ?? new StoreStateRecord(
+                new(active, StringComparer.OrdinalIgnoreCase),
+                new(StringComparer.OrdinalIgnoreCase),
+                new(StringComparer.OrdinalIgnoreCase),
+                new(StringComparer.OrdinalIgnoreCase),
+                DateTimeOffset.UtcNow,
+                new(StringComparer.OrdinalIgnoreCase),
+                new(StringComparer.OrdinalIgnoreCase)));
 
         public Task PersistActiveVersionsAsync(IReadOnlyDictionary<string, string> v, IReadOnlyDictionary<string, string> applied, string c, CancellationToken ct) =>
             Task.CompletedTask;
@@ -175,5 +230,11 @@ public sealed class DiffAndChangeEventMiddlewareTests
 
         public Task PersistSourceSnapshotAsync(string n, SourceSnapshotRef snap, CancellationToken ct) =>
             Task.CompletedTask;
+
+        private IReadOnlyDictionary<string, string> IncrementAndReturnActive()
+        {
+            GetActiveVersionsCallCount++;
+            return active;
+        }
     }
 }
