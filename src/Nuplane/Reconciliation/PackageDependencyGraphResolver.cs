@@ -1,7 +1,9 @@
 using System.Runtime.Versioning;
+using System.Text.Json;
 using System.Xml.Linq;
 using Nuplane.Abstractions;
 using Nuplane.Reconciliation.Models;
+using NuGet.Versioning;
 
 namespace Nuplane.Reconciliation;
 
@@ -56,7 +58,7 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
             while (queue.Count > 0)
             {
                 var (parent, dependency, path) = queue.Dequeue();
-                if (IsHostProvidedDependency(dependency.PackageId))
+                if (IsHostProvidedDependency(dependency.PackageId, dependency.VersionRange))
                 {
                     continue;
                 }
@@ -317,31 +319,105 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
         return string.Join(" -> ", path.Skip(cycleStartIndex).Concat([repeatedKey]));
     }
 
-    private static bool IsHostProvidedDependency(string packageId)
+    private static readonly Lazy<IReadOnlyDictionary<string, string>> HostPackageVersions = new(LoadHostPackageVersions);
+
+    private static bool IsHostProvidedDependency(string packageId, string versionRange)
     {
         if (string.IsNullOrWhiteSpace(packageId))
         {
             return false;
         }
 
-        if (File.Exists(Path.Combine(AppContext.BaseDirectory, $"{packageId}.dll")))
+        if (IsSharedHostContractPackage(packageId))
         {
             return true;
         }
 
-        var trustedPlatformAssemblies = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
-        if (!string.IsNullOrWhiteSpace(trustedPlatformAssemblies))
+        return HostPackageVersions.Value.TryGetValue(packageId, out var hostVersion) &&
+            VersionSatisfiesRange(hostVersion, versionRange);
+    }
+
+    private static bool IsSharedHostContractPackage(string packageId) =>
+        packageId.Equals("CShells.Abstractions", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("CShells.AspNetCore.Abstractions", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("CShells.FastEndpoints.Abstractions", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Nuplane.Abstractions", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Nuplane.Loading.Abstractions", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Elsa.Api.Common", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Elsa.Caching", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Elsa.Common", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Elsa.Expressions", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Elsa.Features", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Elsa.KeyValues", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Elsa.Mediator", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Elsa.Resilience", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Elsa.Resilience.Core", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Elsa.Tenants", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Elsa.Workflows.Core", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Elsa.Workflows.Management", StringComparison.OrdinalIgnoreCase) ||
+        packageId.Equals("Elsa.Workflows.Runtime", StringComparison.OrdinalIgnoreCase) ||
+        packageId.StartsWith("Microsoft.Extensions.", StringComparison.OrdinalIgnoreCase);
+
+    private static bool VersionSatisfiesRange(string hostVersion, string versionRange)
+    {
+        if (!NuGetVersion.TryParse(hostVersion, out var parsedHostVersion))
         {
-            var assemblyFileName = $"{packageId}.dll";
-            if (trustedPlatformAssemblies
-                .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-                .Any(path => string.Equals(Path.GetFileName(path), assemblyFileName, StringComparison.OrdinalIgnoreCase)))
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(versionRange))
+        {
+            return false;
+        }
+
+        if (NuGetVersion.TryParse(versionRange, out _) &&
+            !versionRange.StartsWith('[') &&
+            !versionRange.StartsWith('('))
+        {
+            versionRange = $"[{versionRange}]";
+        }
+
+        return VersionRange.TryParse(versionRange, out var range) && range.Satisfies(parsedHostVersion);
+    }
+
+    private static IReadOnlyDictionary<string, string> LoadHostPackageVersions()
+    {
+        var packageVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var depsFile in Directory.EnumerateFiles(AppContext.BaseDirectory, "*.deps.json"))
+        {
+            using var document = JsonDocument.Parse(File.ReadAllBytes(depsFile));
+            if (!document.RootElement.TryGetProperty("libraries", out var libraries) ||
+                libraries.ValueKind != JsonValueKind.Object)
             {
-                return true;
+                continue;
+            }
+
+            foreach (var library in libraries.EnumerateObject())
+            {
+                var separatorIndex = library.Name.LastIndexOf('/');
+                if (separatorIndex <= 0 || separatorIndex == library.Name.Length - 1)
+                {
+                    continue;
+                }
+
+                var packageId = library.Name[..separatorIndex];
+                var version = library.Name[(separatorIndex + 1)..];
+                if (!NuGetVersion.TryParse(version, out var parsedVersion))
+                {
+                    continue;
+                }
+
+                if (!packageVersions.TryGetValue(packageId, out var existingVersion) ||
+                    !NuGetVersion.TryParse(existingVersion, out var parsedExistingVersion) ||
+                    parsedVersion > parsedExistingVersion)
+                {
+                    packageVersions[packageId] = parsedVersion.ToNormalizedString();
+                }
             }
         }
 
-        return false;
+        return packageVersions;
     }
 
     private sealed record DependencyGroupMetadata(string? TargetFramework, IReadOnlyList<PackageDependencyMetadata> Dependencies);
