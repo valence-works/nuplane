@@ -88,10 +88,12 @@ public sealed class PackageApplyExecutor(
 
         if (conflictingPackageIds.Count > 0)
         {
+            var conflictFailedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var graph in graphs.Where(graph => graph.Nodes.Any(node => conflictingPackageIds.Contains(node.PackageId))))
             {
                 foreach (var root in graph.Roots)
                 {
+                    conflictFailedPackageIds.Add(root.PackageId);
                     if (!failed.Contains(root.PackageId, StringComparer.OrdinalIgnoreCase))
                     {
                         failed.Add(root.PackageId);
@@ -100,7 +102,7 @@ public sealed class PackageApplyExecutor(
             }
 
             var conflictMessage = $"Conflicting graph package versions were resolved for package id(s): {string.Join(", ", conflictingPackageIds.Order(StringComparer.OrdinalIgnoreCase))}.";
-            foreach (var packageId in failed.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var packageId in conflictFailedPackageIds.Order(StringComparer.OrdinalIgnoreCase))
             {
                 await _failureRecorder.RecordAsync(packageId, "resolve-graph-conflict", conflictMessage, correlationId, cancellationToken);
             }
