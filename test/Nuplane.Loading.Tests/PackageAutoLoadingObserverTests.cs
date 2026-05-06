@@ -140,6 +140,55 @@ public sealed class PackageAutoLoadingObserverTests
     }
 
     [Fact]
+    public async Task ChangeSetContainsUnappliedPackage_LoadsOnlyAppliedPackages()
+    {
+        var loader = new FakePackageLoader();
+        var dispatcher = new FakeLoadingEventDispatcher();
+        var sut = CreateObserver(loader, dispatcher, new() { Enabled = true });
+
+        var applied = new ResolvedPackage("pkg-applied", "1.0.0", "feed", "/path-applied", Now);
+        var unapplied = new ResolvedPackage("pkg-unapplied", "1.0.0", "feed", "/path-unapplied", Now);
+        var changeSet = new PackageChangeSet([applied, unapplied], [], [], "corr-applied-only", Now);
+
+        await sut.OnPackagesReconciledAsync(changeSet, [applied], CancellationToken.None);
+
+        var packageGraph = Assert.Single(loader.PackageGraphs);
+        Assert.Equal(["pkg-applied"], packageGraph.Select(static package => package.Id));
+        Assert.Single(dispatcher.LoadedEvents);
+        Assert.Equal(["pkg-applied"], dispatcher.LoadedEvents[0].LoadedPackages.Select(static package => package.PackageId));
+    }
+
+    [Fact]
+    public async Task StoreAvailable_LoadsOnlyActiveAppliedPackages()
+    {
+        var loader = new FakePackageLoader();
+        var dispatcher = new FakeLoadingEventDispatcher();
+        var active = new ResolvedPackage("pkg-active", "1.0.0", "feed", "/path-active", Now);
+        var inactive = new ResolvedPackage("pkg-inactive", "1.0.0", "feed", "/path-inactive", Now);
+        var storeRegistry = new FakeStoreRegistry(
+            StoreStateRecord.Empty() with
+            {
+                ActiveVersionById = new(StringComparer.OrdinalIgnoreCase)
+                {
+                    [active.Id] = active.Version
+                },
+                ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase)
+                {
+                    [active.Id] = Descriptor(active)
+                }
+            });
+        var sut = CreateObserver(loader, dispatcher, new() { Enabled = true }, storeRegistry: storeRegistry);
+        var changeSet = new PackageChangeSet([active, inactive], [], [], "corr-active-only", Now);
+
+        await sut.OnPackagesReconciledAsync(changeSet, [active, inactive], CancellationToken.None);
+
+        var packageGraph = Assert.Single(loader.PackageGraphs);
+        Assert.Equal(["pkg-active"], packageGraph.Select(static package => package.Id));
+        Assert.Single(dispatcher.LoadedEvents);
+        Assert.Equal(["pkg-active"], dispatcher.LoadedEvents[0].LoadedPackages.Select(static package => package.PackageId));
+    }
+
+    [Fact]
     public async Task EmptyChangeSet_WithAlreadyLoadedAppliedPackages_DoesNotPublishAgain()
     {
         var loader = new FakePackageLoader(preloadedPackages: [new("pkg-a", "1.0.0", "feed", "/path-a", Now)]);
@@ -166,6 +215,18 @@ public sealed class PackageAutoLoadingObserverTests
         var storeRegistry = new FakeStoreRegistry(
             StoreStateRecord.Empty() with
             {
+                ActiveVersionById = new(StringComparer.OrdinalIgnoreCase)
+                {
+                    [rootA.Id] = rootA.Version,
+                    [rootB.Id] = rootB.Version,
+                    [dependency.Id] = dependency.Version
+                },
+                ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase)
+                {
+                    [rootA.Id] = Descriptor(rootA),
+                    [rootB.Id] = Descriptor(rootB),
+                    [dependency.Id] = Descriptor(dependency)
+                },
                 ActiveGraphsById = new(StringComparer.OrdinalIgnoreCase)
                 {
                     ["graph-a"] = Graph("graph-a", "generation-a", [rootA.Id, dependency.Id]),
@@ -209,6 +270,16 @@ public sealed class PackageAutoLoadingObserverTests
             Now,
             "corr-graph",
             GraphActivationStatus.Active);
+
+    private static ActivePackageDescriptor Descriptor(ResolvedPackage package) =>
+        ActivePackageDescriptor.FromActivePackage(new ActivePackage(
+            package.Id,
+            package.Version,
+            package.FeedName,
+            package.SourceName,
+            package.InstallPath,
+            Now,
+            "corr-active"));
 
     internal sealed class FakePackageLoader(
         IEnumerable<string>? failIds = null,

@@ -88,18 +88,37 @@ public sealed class TransactionExecutionMiddlewareTests
         Assert.Equal("1.0.0", ctx.MergedActive["Plugin.Dependency"]);
     }
 
+    [Fact]
+    public async Task InvokeAsync_WithResolvedGraphs_MergedActiveExcludesAppliedPackagesOutsideGraph()
+    {
+        var root = Pkg("Plugin.Root", "1.0.0");
+        var traversalArtifact = Pkg("Plugin.TraversalArtifact", "1.0.0");
+        var graph = Graph(root);
+        var executor = new FakeApplyExecutor(appliedIds: ["Plugin.Root", "Plugin.TraversalArtifact"]);
+
+        var ctx = Ctx([root, traversalArtifact], [graph]);
+        ctx.ActiveVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        await new TransactionExecutionMiddleware(executor, new DesiredActualDiffEngine(), new NullDispatcher())
+            .InvokeAsync(ctx, () => Task.CompletedTask);
+
+        Assert.NotNull(ctx.MergedActive);
+        Assert.Equal("1.0.0", ctx.MergedActive!["Plugin.Root"]);
+        Assert.False(ctx.MergedActive.ContainsKey("Plugin.TraversalArtifact"));
+    }
+
     private static TransactionExecutionMiddleware Build(
         IPackageApplyExecutor executor, IObserverEventDispatcher dispatcher) =>
         new(executor, new FakeDiffEngine(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)), dispatcher);
 
-    private static ReconciliationCycleContext Ctx(ResolvedPackage[] packages)
+    private static ReconciliationCycleContext Ctx(ResolvedPackage[] packages, IReadOnlyList<ResolvedPackageGraph>? graphs = null)
     {
         var ctx = new ReconciliationCycleContext
         {
             CorrelationId = "test",
             CycleStartedAt = DateTimeOffset.UtcNow,
             CancellationToken = CancellationToken.None,
-            ResolutionResult = new(packages, [], []),
+            ResolutionResult = new(packages, [], [], graphs ?? []),
             ActiveVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         };
         return ctx;
@@ -107,6 +126,30 @@ public sealed class TransactionExecutionMiddlewareTests
 
     private static ResolvedPackage Pkg(string id, string version) =>
         new(id, version, "feed-a", $"/store/{id}", DateTimeOffset.UtcNow, id);
+
+    private static ResolvedPackageGraph Graph(ResolvedPackage root)
+    {
+        var node = new ResolvedPackageNode(
+            root.Id,
+            root.Version,
+            PackageNodeRole.Root,
+            root.InstallPath,
+            PackageSourceKind.RemoteFeed,
+            root.FeedName,
+            null,
+            [],
+            [],
+            []);
+        return new(
+            "graph-test",
+            "generation-test",
+            "net10.0",
+            [node],
+            [node],
+            [],
+            [],
+            DateTimeOffset.UtcNow);
+    }
 
     private sealed class FakeApplyExecutor(
         IReadOnlyList<string>? appliedIds = null,

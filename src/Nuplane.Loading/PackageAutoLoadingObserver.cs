@@ -24,11 +24,11 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
         LoadingEventDispatcher dispatcher,
         IOptions<LoadingOptions> loadingOptions,
         ILogger<PackageAutoLoadingObserver> logger,
+        IStoreRegistry storeRegistry,
         IFailureRecorder? failureRecorder = null,
         ReconciliationMetrics? metrics = null,
         LoadingFailureTracker? loadingFailureTracker = null,
-        LoadingCatalogRefreshTracker? refreshTracker = null,
-        IStoreRegistry? storeRegistry = null)
+        LoadingCatalogRefreshTracker? refreshTracker = null)
     {
         _loader = loader ?? throw new ArgumentNullException(nameof(loader));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
@@ -38,7 +38,7 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
         Metrics = metrics;
         LoadingFailureTracker = loadingFailureTracker;
         RefreshTracker = refreshTracker;
-        _storeRegistry = storeRegistry;
+        _storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
     }
 
     internal PackageAutoLoadingObserver(
@@ -167,19 +167,9 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
     {
         var packagesToLoad = new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var package in changeSet.Added.Concat(changeSet.Updated))
-        {
-            packagesToLoad[BuildKey(package.Id, package.Version)] = package;
-        }
-
         foreach (var package in appliedPackages)
         {
             var key = BuildKey(package.Id, package.Version);
-            if (packagesToLoad.ContainsKey(key))
-            {
-                continue;
-            }
-
             if (_loader.TryGetContext(package.Id, package.Version, out _))
             {
                 continue;
@@ -200,12 +190,24 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
         IReadOnlyList<ResolvedPackage> packagesToLoad,
         CancellationToken cancellationToken)
     {
-        if (_storeRegistry is null || packagesToLoad.Count <= 1)
+        if (_storeRegistry is null)
         {
             return packagesToLoad.Select(static package => (IReadOnlyList<ResolvedPackage>)[package]).ToArray();
         }
 
         var state = await _storeRegistry.GetStateAsync(cancellationToken);
+        packagesToLoad = packagesToLoad
+            .Where(package => state.ActiveVersionById.TryGetValue(package.Id, out var activeVersion)
+                && string.Equals(activeVersion, package.Version, StringComparison.OrdinalIgnoreCase)
+                && state.ActivePackageDescriptorsByIdNormalized.TryGetValue(package.Id, out var descriptor)
+                && string.Equals(descriptor.Version, package.Version, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (packagesToLoad.Count <= 1)
+        {
+            return packagesToLoad.Select(static package => (IReadOnlyList<ResolvedPackage>)[package]).ToArray();
+        }
+
         var activeGraphs = state.ActiveGraphsByIdNormalized.Values
             .Where(static graph => graph.Status == GraphActivationStatus.Active)
             .OrderBy(static graph => graph.GraphId, StringComparer.OrdinalIgnoreCase)

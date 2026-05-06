@@ -79,6 +79,42 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveAsync_MicrosoftExtensionsDependency_DoesNotAcquireDependencyNode()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Microsoft.Extensions.Options", dependencyVersionRange: "[8.0.0]");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "root-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        Assert.Empty(resolver.Requests);
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Single(graph.Nodes);
+        Assert.Empty(graph.Edges);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ElsaFrameworkDependency_DoesNotAcquireDependencyNode()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Elsa.Api.Common", dependencyVersionRange: "[3.7.0-rc1]");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "root-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        Assert.Empty(resolver.Requests);
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Single(graph.Nodes);
+        Assert.Empty(graph.Edges);
+    }
+
+    [Fact]
     public async Task ResolveAsync_DependencyAlreadyLoadedAsPlugin_StillAcquiresDependencyNode()
     {
         var loadedDependencyId = $"Plugin.LoadedDependency.{Guid.NewGuid():N}";
@@ -99,6 +135,37 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
         var graph = Assert.Single(result.ResolvedGraphs);
         Assert.Contains(graph.Nodes, node => string.Equals(node.PackageId, loadedDependencyId, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(resolver.Requests, request => string.Equals(request.Id, loadedDependencyId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_DependencyDllExistsInAppBase_StillAcquiresDependencyNode()
+    {
+        var dependencyId = $"Plugin.AppBaseDependency.{Guid.NewGuid():N}";
+        var appBaseDll = Path.Combine(AppContext.BaseDirectory, $"{dependencyId}.dll");
+        File.WriteAllBytes(appBaseDll, []);
+        try
+        {
+            var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: dependencyId, dependencyVersionRange: "[1.0.0]");
+            var dependency = CreateInstalledPackage(dependencyId, "1.0.0");
+            var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+            {
+                [dependencyId] = dependency
+            });
+            var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+            var result = await sut.ResolveAsync(
+                [new PackageRequest("Plugin.Root", "[1.0.0]", "root-feed", PackageUpdatePolicy.Exact, "test-source")],
+                (_, _) => Task.FromResult(root),
+                CancellationToken.None);
+
+            var graph = Assert.Single(result.ResolvedGraphs);
+            Assert.Contains(graph.Nodes, node => string.Equals(node.PackageId, dependencyId, StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(resolver.Requests, request => string.Equals(request.Id, dependencyId, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            File.Delete(appBaseDll);
+        }
     }
 
 
