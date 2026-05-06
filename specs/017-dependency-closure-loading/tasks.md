@@ -74,6 +74,8 @@
 - [ ] T012A [P] [US1] Add dependency cycle detection tests that verify graph resolution fails with cycle-path diagnostics and preserves LKG behavior in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphCycleTests.cs`
 - [ ] T012B [P] [US1] Add graph-conflict tests for independent root graphs that select incompatible transitive dependency versions for the same package id in `test/Nuplane.Runtime.Tests/Reconciliation/PackageApplyExecutorTests.cs`
 - [ ] T012C [P] [US1] Add resolver tests for the same dependency package id/version available from multiple trusted feeds with different configured priority in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphFeedPriorityTests.cs`
+- [ ] T012D [P] [US1] Add resolver regression test proving app-base DLL presence does not suppress dependency acquisition when the host package version does not satisfy the dependency range.
+- [ ] T012E [P] [US1] Add resolver tests for explicit host/shared package filtering, including `Microsoft.Extensions.*`, CShells/Nuplane abstractions, and Elsa framework infrastructure packages.
 - [ ] T013 [P] [US1] Add target-framework dependency group tests in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphTargetFrameworkTests.cs`
 - [ ] T014 [P] [US1] Add integration test for remote root plus remote dependency activation in `test/Nuplane.Integration.Tests/Reconciliation/DependencyClosureReconciliationTests.cs`
 - [ ] T015 [P] [US1] Add LKG preservation test for failed dependency acquisition in `test/Nuplane.Integration.Tests/Reconciliation/DependencyClosureLkgTests.cs`
@@ -114,6 +116,8 @@
 - [ ] T028 [P] [US2] Add host-shared assembly policy tests in `test/Nuplane.Loading.Tests/PackageGraphSharedAssemblyPolicyTests.cs`
 - [ ] T029 [P] [US2] Add package loader regression test for missing sibling dependency failure in `test/Nuplane.Loading.Tests/PackageLoaderGraphRegressionTests.cs`
 - [ ] T030 [P] [US2] Add integration test for graph load state after restart in `test/Nuplane.Integration.Tests/Loading/GraphLoadingCatalogIntegrationTests.cs`
+- [ ] T030A [P] [US2] Add loading observer regression test proving only persisted active graph packages are loaded, even when resolution downloaded additional traversal packages.
+- [ ] T030B [P] [US2] Add real-world validation for `Elsa.Scheduling.Quartz.EFCore.PostgreSql [3.8.0-preview,)` and `Elsa.ServiceBus.MassTransit.RabbitMq [3.8.0-preview,)` using feedz.io plus nuget.org fallback.
 - [ ] T031 [P] [US2] Add unloadability test for replaced graph generation in `test/Nuplane.Loading.Tests/PackageGraphUnloadTests.cs`
 - [ ] T031A [P] [US2] Add graph load-preparation failure tests for unsupported required native or runtime-specific assets in `test/Nuplane.Loading.Tests/PackageGraphNativeAssetFailureTests.cs`
 - [ ] T031B [P] [US2] Add graph loading regression tests for flat package roots containing unmanaged `runtimes/**/native/*.dll` files in `test/Nuplane.Loading.Tests/PackageLoaderGraphRegressionTests.cs`

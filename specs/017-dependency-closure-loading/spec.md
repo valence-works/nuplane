@@ -87,6 +87,9 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 - A dependency package is removed from a feed after it was part of the last-known-good graph.
 - A root package is removed from desired configuration while another root still depends on one of its dependencies.
 - A stale active descriptor points to an old install path after packages are reinstalled under a different state root; implementation should compose with the stale-install-path fix from `fix/loading-catalog-missing-install-path`.
+- A host output directory contains `{PackageId}.dll` for an older version than a dependency requires; Nuplane must still acquire the dependency version selected by the graph.
+- A package dependency points to host-owned framework packages such as `Microsoft.Extensions.*`, CShells abstractions, Nuplane abstractions, or Elsa framework infrastructure; Nuplane must resolve these from the host/shared policy and avoid activating them as plugin graph nodes by default.
+- Dependency traversal downloads metadata/support packages that are not part of the final active graph; these packages must remain in package storage only and must not be loaded or exposed for feature discovery.
 
 ## Requirements *(mandatory)*
 
@@ -113,6 +116,8 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 - **FR-015**: The implementation MUST provide unit, contract, and integration tests for dependency graph resolution, graph-level reconciliation, graph-scoped assembly loading, host-shared assembly resolution, failure/LKG behavior, and directory package regression coverage.
 - **FR-016**: The implementation MUST include a root-only vertical-slice regression test that creates a root package with a dependency package, configures only the root package, reconciles the dependency closure, loads the graph, and reflects root assembly metadata that requires the dependency assembly. The test MUST fail against per-package load contexts and pass only with graph-scoped loading.
 - **FR-017**: The dependency graph resolver and graph loader MUST be wired into the normal Nuplane reconciliation/loading pipeline by default. A graph model or service that is not exercised by startup reconciliation and `IPackageAssemblyCatalog` MUST NOT satisfy this feature.
+- **FR-018**: Host-provided dependency detection MUST be version-aware. The resolver MUST NOT skip dependency acquisition solely because a matching assembly file exists in the host app base directory or trusted platform assembly list. A package may be treated as host-provided only when it is an explicit host/shared contract package or when the host `.deps.json` declares a package version satisfying the requested dependency range.
+- **FR-019**: Reconciliation and loading MUST distinguish resolved/acquired packages from active graph packages. Packages downloaded during dependency traversal MUST NOT become active package descriptors, load sessions, or discoverable assemblies unless they are selected nodes in a successfully activated graph.
 
 ### Operational & Safety Requirements *(mandatory)*
 
@@ -148,6 +153,7 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 - **SC-005**: Dependency-only assemblies are available for runtime binding but are not returned as independent feature discovery roots unless also explicitly configured as desired roots.
 - **SC-006**: Automated tests cover graph resolution, directory package behavior, graph-level LKG, graph-scoped assembly loading, host-shared assembly policy, unsatisfiable dependency failure, dependency cycle failure, conflicting same-id dependency versions, unsupported native/runtime asset failure, and the observed missing sibling dependency regression.
 - **SC-007**: With only one root package configured in the synthetic MVP fixture, automated validation proves all of the following in one test path: transitive dependency acquisition, active graph metadata, graph-scoped assembly binding, root-only feature discovery, and no `FileNotFoundException` during reflection.
+- **SC-008**: With feedz.io and nuget.org configured, Nuplane can reconcile `Elsa.Scheduling.Quartz.EFCore.PostgreSql [3.8.0-preview,)` and `Elsa.ServiceBus.MassTransit.RabbitMq [3.8.0-preview,)` without graph degradation, with required dependencies present in `.nuplane`, without duplicate host framework feature discovery, and without missing sibling assembly binding errors.
 
 ## Clarifications
 
@@ -165,6 +171,9 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 
 - Q: What is the minimum implementation that proves dependency handling works? -> A: A vertical slice that configures only a root package, automatically acquires its dependency, loads both into one graph-scoped collectible load context, and reflects root metadata that requires the dependency assembly without `FileNotFoundException`.
 - Q: Are graph models and persisted graph metadata enough to claim this feature is working? -> A: No. They are foundational only; the resolver and graph loader must be wired into normal reconciliation/loading and pass the MVP implementation gate.
+- Q: Can Nuplane skip a dependency because `{PackageId}.dll` exists in the host app output? -> A: No. App-base DLL presence is not enough. Nuplane may skip a dependency only when it is an explicit host/shared contract package, or when the host `.deps.json` contains the package id/version and that version satisfies the dependency version range.
+- Q: Should host framework packages become active Nuplane graph nodes? -> A: No. Host-owned framework/contract packages such as Nuplane abstractions, CShells abstractions, Microsoft.Extensions infrastructure packages, and Elsa host framework packages should resolve from the host and should not become active plugin graph nodes by default.
+- Q: Are resolved/downloaded packages automatically active/loadable? -> A: No. Package resolution may download packages while traversing metadata, but only packages in the final resolved active graph should be persisted as active and loaded.
 
 ## Assumptions
 
