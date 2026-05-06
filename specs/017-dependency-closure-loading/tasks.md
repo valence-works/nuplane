@@ -72,7 +72,7 @@
 
 - [ ] T012 [P] [US1] Add resolver unit tests for direct, transitive, duplicate, missing, and unsatisfiable dependencies in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphResolverTests.cs`
 - [ ] T012A [P] [US1] Add dependency cycle detection tests that verify graph resolution fails with cycle-path diagnostics and preserves LKG behavior in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphCycleTests.cs`
-- [ ] T012B [P] [US1] Add side-by-side independent root graph version tests for incompatible transitive dependency versions in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphSideBySideVersionTests.cs`
+- [ ] T012B [P] [US1] Add graph-conflict tests for independent root graphs that select incompatible transitive dependency versions for the same package id in `test/Nuplane.Runtime.Tests/Reconciliation/PackageApplyExecutorTests.cs`
 - [ ] T012C [P] [US1] Add resolver tests for the same dependency package id/version available from multiple trusted feeds with different configured priority in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphFeedPriorityTests.cs`
 - [ ] T013 [P] [US1] Add target-framework dependency group tests in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphTargetFrameworkTests.cs`
 - [ ] T014 [P] [US1] Add integration test for remote root plus remote dependency activation in `test/Nuplane.Integration.Tests/Reconciliation/DependencyClosureReconciliationTests.cs`
@@ -110,7 +110,7 @@
 ### Tests for User Story 2
 
 - [ ] T027 [P] [US2] Add graph load context binding tests in `test/Nuplane.Loading.Tests/PackageGraphLoadContextTests.cs`
-- [ ] T027A [P] [US2] Add graph loading tests that verify independent root graphs can load different selected versions of the same dependency package side-by-side in `test/Nuplane.Loading.Tests/PackageGraphSideBySideVersionLoadingTests.cs`
+- [ ] T027A [P] [US2] Add graph loading tests that verify overlapping active graph closures with the same dependency package id/version are co-loaded for shared dependency type identity in `test/Nuplane.Loading.Tests/PackageAutoLoadingObserverTests.cs`
 - [ ] T028 [P] [US2] Add host-shared assembly policy tests in `test/Nuplane.Loading.Tests/PackageGraphSharedAssemblyPolicyTests.cs`
 - [ ] T029 [P] [US2] Add package loader regression test for missing sibling dependency failure in `test/Nuplane.Loading.Tests/PackageLoaderGraphRegressionTests.cs`
 - [ ] T030 [P] [US2] Add integration test for graph load state after restart in `test/Nuplane.Integration.Tests/Loading/GraphLoadingCatalogIntegrationTests.cs`

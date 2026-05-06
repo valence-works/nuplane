@@ -180,6 +180,8 @@ internal sealed class PackageLoader : IPackageLoader
             return new(loaded, failed);
         }
 
+        PackageGraphLoadContext? context = null;
+
         try
         {
             var mainAssemblyPaths = packages
@@ -187,7 +189,7 @@ internal sealed class PackageLoader : IPackageLoader
                 .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
                 .Select(static package => ResolveMainAssemblyPath(package.InstallPath, package.Id))
                 .ToArray();
-            var context = new PackageGraphLoadContext(graphKey, mainAssemblyPaths, sharedPolicy, _matcher);
+            context = new PackageGraphLoadContext(graphKey, mainAssemblyPaths, sharedPolicy, _matcher);
 
             foreach (var mainAssemblyPath in mainAssemblyPaths)
             {
@@ -214,9 +216,18 @@ internal sealed class PackageLoader : IPackageLoader
         }
         catch (Exception ex)
         {
+            context?.Unload();
+
             foreach (var package in packages)
             {
                 var key = BuildKey(package.Id, package.Version);
+                if (context is not null &&
+                    _contexts.TryGetValue(key, out var existingContext) &&
+                    ReferenceEquals(existingContext, context))
+                {
+                    _contexts.TryRemove(key, out _);
+                }
+
                 failed[package.Id] = ex.Message;
                 _sessions[key] = new(
                     package.Id,

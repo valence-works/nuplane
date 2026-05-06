@@ -52,9 +52,9 @@ As a host loading runtime package assemblies, I need all packages in one resolve
 
 1. **Given** a root package assembly references a dependency package assembly, **When** the root package assembly is reflected by a host, **Then** dependency assembly resolution succeeds without the dependency being referenced by the host application.
 2. **Given** a configured host-shared assembly such as a contract or abstraction assembly is requested by a package, **When** the package graph load context resolves that assembly, **Then** the assembly identity comes from the host context according to the shared assembly policy.
-3. **Given** two unrelated root packages have independent dependency graphs, **When** assemblies are loaded, **Then** each graph has an independent collectible load context. Graph unification is out of scope for this feature and may be introduced only by a future explicit conflict/unification policy.
+3. **Given** two unrelated root packages have independent dependency graphs with no shared package nodes, **When** assemblies are loaded, **Then** each graph has an independent collectible load context. Graphs that overlap on the same package id/version may be co-loaded to preserve shared dependency type identity.
 4. **Given** a graph generation is replaced by a later generation, **When** hosts release runtime objects from the old generation, **Then** the old collectible load context can unload.
-5. **Given** two independent desired root graphs require incompatible versions of the same dependency package, **When** both graphs can resolve their required versions from trusted sources, **Then** Nuplane activates and loads each graph with its own selected dependency version in its own collectible load context.
+5. **Given** two desired root graphs require incompatible versions of the same dependency package id, **When** reconciliation detects both versions in the same active set, **Then** Nuplane fails the conflicting graph roots deterministically and records graph-conflict diagnostics. Side-by-side activation of multiple versions for the same package id is out of scope until active state supports package id/version keys throughout.
 6. **Given** a resolved package graph contains required native or runtime-specific assets that Nuplane cannot support, **When** graph load preparation runs, **Then** Nuplane fails activation for that graph, preserves the last-known-good graph when present, and records graph-aware diagnostics.
 
 ---
@@ -76,7 +76,7 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 ### Edge Cases
 
 - A dependency version range has no satisfiable version in any configured feed.
-- Two desired roots require incompatible versions of the same dependency; independent root graphs resolve and load side-by-side when each graph can satisfy its own dependency constraints.
+- Two desired roots require incompatible versions of the same dependency package id; reconciliation records graph-conflict diagnostics and does not publish partial conflicting graphs.
 - Two desired roots require the same dependency version from different feeds with different configured priority.
 - A dependency package exists in the local package directory and the same package exists in a remote feed.
 - A dependency package has framework-specific dependency groups that do not include the host target framework.
@@ -101,9 +101,9 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 - **FR-007**: Reconciliation publish behavior MUST be transactional at the graph level: if any required node in a graph cannot be resolved, acquired, validated, or installed, the graph MUST NOT be partially published.
 - **FR-007A**: If dependency graph resolution detects a dependency cycle, graph resolution MUST fail before acquisition, preserve last-known-good graph state when present, and expose diagnostics that include the detected cycle path.
 - **FR-008**: Package cleanup/orphan detection MUST account for dependency graph membership so a dependency package is retained while any active graph still requires it and is eligible for cleanup only when no active graph references it.
-- **FR-009**: A `PackageGraphLoadContext` component MUST create one collectible `AssemblyLoadContext` per active package graph generation and MUST make all selected runtime assemblies in that graph available to each other through one graph-scoped resolution policy.
+- **FR-009**: A `PackageGraphLoadContext` component MUST create collectible `AssemblyLoadContext` instances for active package graph generations and MUST make all selected runtime assemblies in each loaded graph closure available to each other through one graph-scoped resolution policy.
 - **FR-010**: The graph load context MUST apply an explicit host-shared assembly policy before probing package graph assemblies so configured contract and host-owned abstraction assemblies resolve from the host context.
-- **FR-010A**: Independent desired root graphs MUST be allowed to resolve and load different selected versions of the same dependency package side-by-side when graph unification is not in scope and each graph's dependency constraints are satisfiable.
+- **FR-010A**: Independent desired root graphs that select different versions of the same package id in the same active set MUST fail with graph-conflict diagnostics until active state supports package id/version-keyed side-by-side activation.
 - **FR-010B**: If graph load preparation detects required native or runtime-specific assets that Nuplane cannot support, activation for that graph MUST fail before publish, preserve last-known-good graph state when present, and expose graph-aware diagnostics.
 - **FR-011**: Package assembly selection MUST distinguish discoverable root assemblies from dependency-only support assemblies while preserving support assemblies for runtime binding.
 - **FR-011A**: A package node that is both an explicit desired root and a dependency of another root MUST retain both roles in graph metadata and MUST be exposed for feature discovery because it was explicitly desired.
@@ -146,7 +146,7 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 - **SC-003**: Repeating reconciliation with unchanged package inputs and feed contents produces the same active graph identities and performs no unnecessary reacquire/reactivate work.
 - **SC-004**: If a dependency cannot be resolved, the resulting diagnostic names the desired root, dependency package, requested version range, searched source(s), and failure reason, and the previous active graph remains available.
 - **SC-005**: Dependency-only assemblies are available for runtime binding but are not returned as independent feature discovery roots unless also explicitly configured as desired roots.
-- **SC-006**: Automated tests cover graph resolution, directory package behavior, graph-level LKG, graph-scoped assembly loading, host-shared assembly policy, unsatisfiable dependency failure, dependency cycle failure, side-by-side independent graph dependency versions, unsupported native/runtime asset failure, and the observed missing sibling dependency regression.
+- **SC-006**: Automated tests cover graph resolution, directory package behavior, graph-level LKG, graph-scoped assembly loading, host-shared assembly policy, unsatisfiable dependency failure, dependency cycle failure, conflicting same-id dependency versions, unsupported native/runtime asset failure, and the observed missing sibling dependency regression.
 - **SC-007**: With only one root package configured in the synthetic MVP fixture, automated validation proves all of the following in one test path: transitive dependency acquisition, active graph metadata, graph-scoped assembly binding, root-only feature discovery, and no `FileNotFoundException` during reflection.
 
 ## Clarifications
@@ -156,7 +156,7 @@ As a host using Nuplane for feature discovery, I want dependency-only package as
 - Q: Should Nuplane load all packages into the default `AssemblyLoadContext`? -> A: No. Use graph-scoped collectible load contexts and keep an explicit host-shared assembly policy for contracts/abstractions.
 - Q: Should dependency packages be manually listed in `IncludePatterns`? -> A: No. Operators should configure desired roots; Nuplane owns dependency closure resolution.
 - Q: Should dependency-only packages be scanned as independent feature roots? -> A: No. They must be available for binding but not treated as root plugins unless explicitly desired.
-- Q: How should Nuplane handle incompatible transitive dependency versions across independent desired root graphs? -> A: Allow side-by-side versions per independent root graph.
+- Q: How should Nuplane handle incompatible transitive dependency versions across independent desired root graphs? -> A: Fail same package id version conflicts deterministically until active state supports package id/version-keyed side-by-side activation.
 - Q: How should Nuplane handle required native or runtime-specific assets unsupported by the graph loader? -> A: Fail graph load preparation and preserve LKG.
 - Q: How should Nuplane handle a package that is both explicitly desired and a dependency? -> A: Keep both roles and expose for discovery.
 - Q: How should Nuplane handle dependency cycles in package metadata? -> A: Fail graph resolution and preserve LKG.

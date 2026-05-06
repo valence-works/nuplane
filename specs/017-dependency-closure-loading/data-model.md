@@ -37,7 +37,7 @@ Deterministic dependency closure for one desired root or a compatible set of des
 
 - Same desired roots, selected nodes, edges, sources, and target framework produce the same `GraphId`.
 - Graph is publishable only when every required node is resolved, acquired, validated, and installed.
-- Independent desired root graphs may select different versions of the same dependency package and load side-by-side because graph identity is scoped per graph.
+- Active state is keyed by package id for this feature, so one active set cannot publish multiple versions of the same package id side-by-side. Independent roots that resolve incompatible versions of the same dependency package id fail with graph-conflict diagnostics until package id/version-keyed active state is introduced.
 - Graph resolution fails if dependency metadata contains a cycle.
 
 ## ResolvedPackageNode

@@ -25,7 +25,7 @@ Load each active graph generation into a single collectible assembly load contex
 
 ## Behavioral Contract
 
-1. The loader MUST create one collectible load context per active graph generation.
+1. The loader MUST create collectible load contexts for active graph generations, co-loading overlapping graph closures that share package nodes when required to preserve dependency type identity.
 2. The load context MUST index graph assemblies by simple name and full assembly identity before loading root assemblies.
 3. The load context MUST resolve configured host-shared assemblies from the host/default context before probing graph package assemblies.
 4. The load context MUST resolve non-shared dependency assemblies from the graph's selected support assemblies.
@@ -33,7 +33,7 @@ Load each active graph generation into a single collectible assembly load contex
 6. `IPackageAssemblyCatalog` MUST expose root/discoverable assemblies for feature discovery by default.
 7. Dependency-only assemblies MUST remain available for binding and diagnostics but MUST NOT become independent discoverable package roots by default.
 8. Packages that are both explicit roots and dependencies MUST retain both roles and remain discoverable.
-9. Independent graph load contexts MUST allow different selected versions of the same dependency package to load side-by-side.
+9. Independent graph load contexts MAY load different selected versions of the same assembly name when package ids differ; side-by-side active versions of the same package id are out of scope for this feature.
 10. Graph load preparation MUST fail before publish when required native or runtime-specific assets are unsupported.
 11. Load state MUST identify graph id, generation id, root package, dependency package, assembly path, and failure reason for load/bind failures.
 12. Old graph generations MUST remain collectible when no host holds `Assembly`, `Type`, or other runtime references.
@@ -50,8 +50,9 @@ Load or bind failure MUST degrade load state for the affected root graph without
 - Host-shared contract assembly resolves from host context.
 - Dependency package assembly is not returned as an independent feature root by default.
 - Explicitly desired package that is also a dependency is discoverable as a root.
-- Two unrelated graphs use separate collectible load contexts.
-- Two independent graphs can load different versions of the same dependency package side-by-side.
+- Two unrelated graphs with no shared package nodes use separate collectible load contexts.
+- Overlapping active graph closures that share the same package id/version are co-loaded so roots share dependency type identity.
+- Two independent graphs that select different versions of the same package id fail during reconciliation before graph loading.
 - Unsupported required native/runtime-specific asset fails graph load preparation before publish.
 - Replaced graph generation unloads after runtime references are released.
 - Missing support assembly produces graph-aware bind diagnostic.

@@ -75,7 +75,7 @@ public sealed class ActivePackageGraphMetadataTests
     }
 
     [Fact]
-    public void BuildNextDescriptors_WithDependencyGraph_KeepsDependencyNodesDiscoverable()
+    public void BuildNextDescriptors_WithDependencyGraph_MarksDependencyNodesSupportOnly()
     {
         var activatedAtUtc = DateTimeOffset.Parse("2026-05-05T10:00:00Z");
         var state = new StoreStateRecord(
@@ -114,7 +114,7 @@ public sealed class ActivePackageGraphMetadataTests
 
         var dependencyDescriptor = descriptors["Plugin.Dependency"];
         Assert.Equal(ActivePackageRole.Dependency, dependencyDescriptor.PackageRole);
-        Assert.True(dependencyDescriptor.Discoverable);
+        Assert.False(dependencyDescriptor.Discoverable);
     }
 
     [Fact]

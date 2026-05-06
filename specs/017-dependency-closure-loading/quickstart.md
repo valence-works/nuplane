@@ -106,7 +106,7 @@ This scenario is the minimum acceptable implementation gate. It must pass before
 7. Run reconciliation again.
 8. Verify Nuplane records a graph resolution failure and preserves the previous active graph if one exists.
 
-## Scenario D: Independent Graphs With Different Dependency Versions
+## Scenario D: Independent Graphs With Conflicting Dependency Versions
 
 1. Create a test feed containing:
    - `Plugin.Dependency` `1.0.0`
@@ -114,9 +114,9 @@ This scenario is the minimum acceptable implementation gate. It must pass before
    - `Plugin.RootA` `1.0.0`, depending on `Plugin.Dependency [1.0.0]`
    - `Plugin.RootB` `1.0.0`, depending on `Plugin.Dependency [2.0.0]`
 2. Configure Nuplane with `Plugin.RootA [1.0.0]` and `Plugin.RootB [1.0.0]` as desired roots.
-3. Run reconciliation and graph loading.
-4. Verify both roots activate successfully with independent graph ids/generations.
-5. Verify each graph load context resolves its own selected dependency version and feature discovery exposes only the explicitly desired root assemblies.
+3. Run reconciliation.
+4. Verify Nuplane records graph-conflict diagnostics for the conflicting roots and does not publish partial conflicting graphs.
+5. Verify the previous active graph remains available when an LKG exists.
 
 ## Scenario E: Dependency Cycle Failure
 

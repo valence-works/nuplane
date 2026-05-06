@@ -21,7 +21,7 @@
 **Alternatives Considered**:
 
 - Flatten all packages into one active package list with no role: rejected because it cannot distinguish desired plugins from supporting libraries.
-- Create one graph per desired root including every transitive dependency: accepted as the baseline. Independent root graphs may select different versions of the same dependency side-by-side because graph unification is out of scope.
+- Create one graph per desired root including every transitive dependency: accepted as the baseline. The current active state remains package-id keyed, so independent root graphs that select different versions of the same package id are detected as conflicts rather than published side-by-side.
 
 ## Decision 3: Use One Collectible Load Context Per Active Graph Generation
 
@@ -59,13 +59,13 @@
 
 ## Decision 6: Graph Boundary Determines Version Conflict Handling
 
-**Decision**: If one graph cannot satisfy all dependency version ranges for a selected package node, Nuplane records a deterministic graph resolution failure and preserves LKG. Independent desired root graphs may resolve and load different versions of the same dependency side-by-side when each graph can satisfy its own constraints.
+**Decision**: If one graph cannot satisfy all dependency version ranges for a selected package node, Nuplane records a deterministic graph resolution failure and preserves LKG. If independent desired root graphs select different versions of the same package id in the same active set, Nuplane records graph-conflict diagnostics and does not publish the conflicting roots.
 
-**Rationale**: The graph boundary is the unit of resolution, activation, and loading. Failing unsatisfiable constraints inside one graph preserves NuGet metadata correctness, while allowing independent graphs to load side-by-side preserves isolation and avoids unnecessary global conflicts.
+**Rationale**: The graph boundary is the unit of resolution, activation, and loading, but existing active package state is keyed by package id. Failing conflicting same-id versions preserves deterministic active state until a future package id/version-keyed model can support true side-by-side activation.
 
 **Alternatives Considered**:
 
-- Fail all roots globally when any two roots require incompatible versions: rejected because independent graph load contexts can isolate side-by-side versions safely.
+- Fail all roots globally when any two roots require incompatible versions: accepted for same package id conflicts in this feature because active state cannot represent multiple active versions for one package id.
 - Pick newest compatible-looking version despite range conflicts: rejected because it violates declared package metadata.
 
 ## Decision 7: Fail Dependency Cycles During Resolution
