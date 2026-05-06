@@ -45,7 +45,14 @@ public interface IStoreRegistry
         CancellationToken cancellationToken,
         IReadOnlyDictionary<string, ActivePackageDescriptor>? activePackageDescriptors,
         IReadOnlyDictionary<string, GraphActivationRecord>? activeGraphs)
-        => PersistActiveVersionsAsync(activeVersions, successfullyApplied, correlationId, cancellationToken, activePackageDescriptors);
+    {
+        if (activeGraphs is { Count: > 0 })
+        {
+            return Task.FromException(new NotSupportedException("This store registry implementation does not support graph activation metadata."));
+        }
+
+        return PersistActiveVersionsAsync(activeVersions, successfullyApplied, correlationId, cancellationToken, activePackageDescriptors);
+    }
 
     /// <summary>Persists a failure record for a package.</summary>
     Task PersistFailureAsync(

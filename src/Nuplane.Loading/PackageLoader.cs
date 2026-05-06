@@ -170,7 +170,7 @@ internal sealed class PackageLoader : IPackageLoader
 
         var existingGraphSessions = packages
             .Select(package => _sessions.TryGetValue(BuildKey(package.Id, package.Version), out var session) ? session : null)
-            .Where(static session => session is not null && session.IsLoaded)
+            .Where(session => session is not null && session.IsLoaded && string.Equals(session.ContextKey, graphKey, StringComparison.OrdinalIgnoreCase))
             .Cast<PackageLoadSession>()
             .ToArray();
 
@@ -181,6 +181,7 @@ internal sealed class PackageLoader : IPackageLoader
         }
 
         PackageGraphLoadContext? context = null;
+        var replacedContexts = new List<AssemblyLoadContext>();
 
         try
         {
@@ -199,6 +200,12 @@ internal sealed class PackageLoader : IPackageLoader
             foreach (var package in packages)
             {
                 var key = BuildKey(package.Id, package.Version);
+                if (_contexts.TryGetValue(key, out var previousContext) &&
+                    !ReferenceEquals(previousContext, context))
+                {
+                    replacedContexts.Add(previousContext);
+                }
+
                 _contexts[key] = context;
 
                 var session = new PackageLoadSession(
@@ -213,6 +220,8 @@ internal sealed class PackageLoader : IPackageLoader
                 _sessions[key] = session;
                 loaded.Add(session);
             }
+
+            UnloadUnreferencedContexts(replacedContexts);
         }
         catch (Exception ex)
         {
@@ -241,6 +250,17 @@ internal sealed class PackageLoader : IPackageLoader
         }
 
         return new(loaded, failed);
+    }
+
+    private void UnloadUnreferencedContexts(IEnumerable<AssemblyLoadContext> contexts)
+    {
+        foreach (var context in contexts.Distinct())
+        {
+            if (!_contexts.Values.Any(existing => ReferenceEquals(existing, context)))
+            {
+                context.Unload();
+            }
+        }
     }
 
     /// <inheritdoc />

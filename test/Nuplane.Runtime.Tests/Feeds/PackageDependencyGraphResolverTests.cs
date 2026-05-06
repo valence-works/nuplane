@@ -140,6 +140,28 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
         Assert.Equal("Plugin.Compatible", edge.ToPackageId);
     }
 
+    [Fact]
+    public async Task ResolveAsync_WithDependencyCycle_ThrowsCycleDiagnostic()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Plugin.Dependency", dependencyVersionRange: "[1.0.0]");
+        var dependency = CreateInstalledPackage("Plugin.Dependency", "1.0.0", dependencyId: "Plugin.Root", dependencyVersionRange: "[1.0.0]");
+        var resolver = new StubPackageResolver(
+            new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Plugin.Root"] = root,
+                ["Plugin.Dependency"] = dependency
+            });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None));
+
+        Assert.Contains("Dependency cycle detected", exception.Message);
+        Assert.Contains("Plugin.Root@1.0.0 -> Plugin.Dependency@1.0.0 -> Plugin.Root@1.0.0", exception.Message);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))

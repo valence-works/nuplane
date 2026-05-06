@@ -45,16 +45,17 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
                 [BuildPackageKey(rootPackage.Id, rootPackage.Version)] = rootNode
             };
             var edges = new List<DependencyEdge>();
-            var queue = new Queue<(ResolvedPackage Parent, PackageDependencyMetadata Dependency)>();
+            var queue = new Queue<(ResolvedPackage Parent, PackageDependencyMetadata Dependency, IReadOnlyList<string> Path)>();
+            var rootKey = BuildPackageKey(rootPackage.Id, rootPackage.Version);
 
             foreach (var dependency in ReadDependencyMetadata(rootPackage))
             {
-                queue.Enqueue((rootPackage, dependency));
+                queue.Enqueue((rootPackage, dependency, [rootKey]));
             }
 
             while (queue.Count > 0)
             {
-                var (parent, dependency) = queue.Dequeue();
+                var (parent, dependency, path) = queue.Dequeue();
                 if (IsHostProvidedDependency(dependency.PackageId))
                 {
                     continue;
@@ -72,6 +73,11 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
                     cancellationToken);
                 var dependencyKey = BuildPackageKey(dependencyPackage.Id, dependencyPackage.Version);
                 resolvedPackages[dependencyKey] = dependencyPackage;
+
+                if (path.Contains(dependencyKey, StringComparer.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException($"Dependency cycle detected: {FormatCyclePath(path, dependencyKey)}.");
+                }
 
                 edges.Add(new DependencyEdge(
                     parent.Id,
@@ -91,7 +97,7 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
 
                 foreach (var transitiveDependency in ReadDependencyMetadata(dependencyPackage))
                 {
-                    queue.Enqueue((dependencyPackage, transitiveDependency));
+                    queue.Enqueue((dependencyPackage, transitiveDependency, path.Concat([dependencyKey]).ToArray()));
                 }
             }
 
@@ -300,6 +306,16 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
     }
 
     private static string BuildPackageKey(string packageId, string version) => $"{packageId}@{version}";
+
+    private static string FormatCyclePath(IReadOnlyList<string> path, string repeatedKey)
+    {
+        var cycleStartIndex = path
+            .Select((key, index) => new { key, index })
+            .First(item => string.Equals(item.key, repeatedKey, StringComparison.OrdinalIgnoreCase))
+            .index;
+
+        return string.Join(" -> ", path.Skip(cycleStartIndex).Concat([repeatedKey]));
+    }
 
     private static bool IsHostProvidedDependency(string packageId)
     {
