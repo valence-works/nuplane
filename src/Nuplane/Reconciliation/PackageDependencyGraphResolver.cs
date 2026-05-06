@@ -325,9 +325,7 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
             }
         }
 
-        return AppDomain.CurrentDomain
-            .GetAssemblies()
-            .Any(assembly => string.Equals(assembly.GetName().Name, packageId, StringComparison.OrdinalIgnoreCase));
+        return false;
     }
 
     private sealed record DependencyGroupMetadata(string? TargetFramework, IReadOnlyList<PackageDependencyMetadata> Dependencies);

@@ -207,7 +207,7 @@ internal static class ActivePackageCatalogMapper
             graphNode.Role,
             graphNode.RootPackageIds,
             graphNode.DependencyOfPackageIds,
-            Discoverable: graphNode.Role != ActivePackageRole.Dependency);
+            Discoverable: true);
     }
 
     private static IReadOnlyDictionary<string, GraphNodeProjection> BuildGraphNodesByPackageId(IReadOnlyList<ResolvedPackageGraph> graphs)

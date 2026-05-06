@@ -1,6 +1,8 @@
 using Nuplane.Abstractions;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Models;
+using System.Reflection;
+using System.Reflection.Emit;
 
 namespace Nuplane.Runtime.Tests.Feeds;
 
@@ -74,6 +76,29 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
         var graph = Assert.Single(result.ResolvedGraphs);
         Assert.Single(graph.Nodes);
         Assert.Empty(graph.Edges);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_DependencyAlreadyLoadedAsPlugin_StillAcquiresDependencyNode()
+    {
+        var loadedDependencyId = $"Plugin.LoadedDependency.{Guid.NewGuid():N}";
+        AssemblyBuilder.DefineDynamicAssembly(new AssemblyName(loadedDependencyId), AssemblyBuilderAccess.Run);
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: loadedDependencyId, dependencyVersionRange: "[1.0.0]");
+        var dependency = CreateInstalledPackage(loadedDependencyId, "1.0.0");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+        {
+            [loadedDependencyId] = dependency
+        });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "root-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Contains(graph.Nodes, node => string.Equals(node.PackageId, loadedDependencyId, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(resolver.Requests, request => string.Equals(request.Id, loadedDependencyId, StringComparison.OrdinalIgnoreCase));
     }
 
 
