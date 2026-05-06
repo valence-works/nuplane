@@ -57,14 +57,19 @@ public sealed class GraphActivationStateSerializationTests
                 },
                 new Dictionary<string, GraphActivationRecord>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["graph-1"] = new(
+                        ["graph-1"] = new(
                         "graph-1",
                         "generation-1",
                         ["Plugin.Root"],
                         ["Plugin.Root", "Plugin.Dependency"],
                         activatedAtUtc,
                         "corr-1",
-                        GraphActivationStatus.Active)
+                        GraphActivationStatus.Active,
+                        NodeVersionsByPackageId: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["Plugin.Root"] = "1.0.0",
+                            ["Plugin.Dependency"] = "1.0.0"
+                        })
                 });
 
             var serializer = new StoreStateSerializer();
@@ -77,6 +82,7 @@ public sealed class GraphActivationStateSerializationTests
             Assert.Equal("generation-1", graph.GenerationId);
             Assert.Equal(GraphActivationStatus.Active, graph.Status);
             Assert.Equal(["Plugin.Root", "Plugin.Dependency"], graph.NodePackageIds);
+            Assert.Equal("1.0.0", graph.NodeVersionsByPackageId!["Plugin.Dependency"]);
 
             var dependency = loaded.ActivePackageDescriptorsByIdNormalized["Plugin.Dependency"];
             Assert.Equal("graph-1", dependency.GraphId);

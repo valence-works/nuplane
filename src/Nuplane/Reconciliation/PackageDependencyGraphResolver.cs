@@ -39,7 +39,7 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
             var rootPackage = await resolveRootAsync(request, cancellationToken);
             resolvedPackages[BuildPackageKey(rootPackage.Id, rootPackage.Version)] = rootPackage;
 
-            var rootNode = CreateNode(rootPackage, PackageNodeRole.Root, dependencyOfPackageIds: []);
+            var rootNode = CreateNode(rootPackage, PackageNodeRole.Root);
             var nodes = new Dictionary<string, ResolvedPackageNode>(StringComparer.OrdinalIgnoreCase)
             {
                 [BuildPackageKey(rootPackage.Id, rootPackage.Version)] = rootNode
@@ -87,7 +87,7 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
                     continue;
                 }
 
-                nodes[dependencyKey] = CreateNode(dependencyPackage, PackageNodeRole.Dependency, [parent.Id]);
+                nodes[dependencyKey] = CreateNode(dependencyPackage, PackageNodeRole.Dependency);
 
                 foreach (var transitiveDependency in ReadDependencyMetadata(dependencyPackage))
                 {
@@ -132,8 +132,7 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
 
     private static ResolvedPackageNode CreateNode(
         ResolvedPackage package,
-        PackageNodeRole role,
-        IReadOnlyList<string> dependencyOfPackageIds) =>
+        PackageNodeRole role) =>
         new(
             package.Id,
             package.Version,

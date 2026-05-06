@@ -30,10 +30,11 @@ Acquire, validate, install, publish, and clean up packages at dependency graph b
 4. Reconciliation MUST publish graph activation records and active package descriptors in one store update.
 5. A package descriptor MUST identify whether it is a desired root, dependency-only, or both.
 6. Active state MUST include graph id and generation id for every active package node.
-7. Cleanup MUST retain installed packages referenced by any active graph.
-8. Cleanup MAY remove installed packages no longer referenced by active graphs according to existing cleanup policy.
-9. Failed resolution/acquisition/validation/install/load preparation MUST preserve the previous active graph generation when available.
-10. First activation failure with no LKG MUST record diagnostics and leave the failed root inactive.
+7. Active graph records MUST persist selected node versions in addition to node package ids.
+8. Cleanup MUST retain installed packages referenced by any active graph at the matching package id and selected version.
+9. Cleanup MAY remove installed packages no longer referenced by active graphs according to existing cleanup policy.
+10. Failed resolution/acquisition/validation/install/load preparation MUST preserve the previous active graph generation when available.
+11. First activation failure with no LKG MUST record diagnostics and leave the failed root inactive.
 
 ## Failure Contract
 
@@ -49,5 +50,6 @@ Graph failure MUST NOT produce partial active graphs. Diagnostics MUST be visibl
 - First activation failure publishes no partial active package descriptors.
 - Cleanup retains dependency package while any active graph references it.
 - Cleanup releases dependency package after last referencing graph is removed/replaced.
+- Cleanup removes stale graph records when a graph node package id remains active but its selected version changes.
 - Active package catalog maps root/dependency role metadata correctly.
-- Store restart preserves graph activation metadata and package roles.
+- Store restart preserves graph activation metadata, node versions, and package roles.

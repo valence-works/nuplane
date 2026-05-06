@@ -70,6 +70,46 @@ internal sealed class PackageLoader : IPackageLoader
         var loaded = new List<PackageLoadSession>();
         var failed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        EnsurePackagesLoaded(packages, sharedPolicy, cancellationToken, loaded, failed);
+
+        return Task.FromResult<PackageLoadResult>(new(loaded, failed));
+    }
+
+    /// <inheritdoc />
+    public Task<PackageLoadResult> EnsureGraphLoadedAsync(
+        IReadOnlyList<IReadOnlyList<ResolvedPackage>> packageGraphs,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(packageGraphs);
+        ArgumentNullException.ThrowIfNull(sharedPolicy);
+
+        var loaded = new List<PackageLoadSession>();
+        var failed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var packageGraph in packageGraphs)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (packageGraph.Count <= 1)
+            {
+                EnsurePackagesLoaded(packageGraph, sharedPolicy, cancellationToken, loaded, failed);
+                continue;
+            }
+
+            EnsureGraphLoaded(packageGraph, sharedPolicy, loaded, failed);
+        }
+
+        return Task.FromResult<PackageLoadResult>(new(loaded, failed));
+    }
+
+    private void EnsurePackagesLoaded(
+        IReadOnlyList<ResolvedPackage> packages,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        CancellationToken cancellationToken,
+        List<PackageLoadSession> loaded,
+        Dictionary<string, string> failed)
+    {
         foreach (var package in packages)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -115,42 +155,6 @@ internal sealed class PackageLoader : IPackageLoader
                     LastError: ex.Message);
             }
         }
-
-        return Task.FromResult<PackageLoadResult>(new(loaded, failed));
-    }
-
-    /// <inheritdoc />
-    public Task<PackageLoadResult> EnsureGraphLoadedAsync(
-        IReadOnlyList<IReadOnlyList<ResolvedPackage>> packageGraphs,
-        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(packageGraphs);
-        ArgumentNullException.ThrowIfNull(sharedPolicy);
-
-        var loaded = new List<PackageLoadSession>();
-        var failed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var packageGraph in packageGraphs)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (packageGraph.Count <= 1)
-            {
-                var singleResult = EnsureLoadedAsync(packageGraph, sharedPolicy, cancellationToken).GetAwaiter().GetResult();
-                loaded.AddRange(singleResult.Loaded);
-                foreach (var failure in singleResult.FailedByPackageId)
-                {
-                    failed[failure.Key] = failure.Value;
-                }
-
-                continue;
-            }
-
-            EnsureGraphLoaded(packageGraph, sharedPolicy, loaded, failed);
-        }
-
-        return Task.FromResult<PackageLoadResult>(new(loaded, failed));
     }
 
     private PackageLoadResult EnsureGraphLoaded(

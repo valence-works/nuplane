@@ -25,8 +25,14 @@ internal sealed class PackageGraphLoadContext : AssemblyLoadContext
         dependencyResolvers = mainAssemblyPaths.Select(static path => new AssemblyDependencyResolver(path)).ToArray();
         assemblyPathsByName = mainAssemblyPaths
             .SelectMany(path => Directory.EnumerateFiles(Path.GetDirectoryName(path)!, "*.dll", SearchOption.AllDirectories))
-            .GroupBy(static path => AssemblyName.GetAssemblyName(path).Name ?? Path.GetFileNameWithoutExtension(path), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(static group => group.Key, static group => group.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).First(), StringComparer.OrdinalIgnoreCase);
+            .Select(static path => new
+            {
+                Path = path,
+                AssemblyName = TryGetManagedAssemblyName(path)
+            })
+            .Where(static candidate => candidate.AssemblyName is not null)
+            .GroupBy(static candidate => candidate.AssemblyName!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.OrderBy(static candidate => candidate.Path, StringComparer.OrdinalIgnoreCase).First().Path, StringComparer.OrdinalIgnoreCase);
     }
 
     protected override Assembly? Load(AssemblyName assemblyName)
@@ -58,5 +64,17 @@ internal sealed class PackageGraphLoadContext : AssemblyLoadContext
         }
 
         return null;
+    }
+
+    private static string? TryGetManagedAssemblyName(string path)
+    {
+        try
+        {
+            return AssemblyName.GetAssemblyName(path).Name ?? Path.GetFileNameWithoutExtension(path);
+        }
+        catch (BadImageFormatException)
+        {
+            return null;
+        }
     }
 }

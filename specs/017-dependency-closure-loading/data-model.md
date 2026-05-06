@@ -94,6 +94,7 @@ Persisted active-state record for one active graph generation.
 - `GenerationId`
 - `RootPackageIds`
 - `NodePackageIds`
+- `NodeVersionsByPackageId`: Selected node versions keyed by package id.
 - `ActivatedAtUtc`
 - `CorrelationId`
 - `Status`: `Active`, `Stale`, `Failed`, or `Replaced`
@@ -103,6 +104,7 @@ Persisted active-state record for one active graph generation.
 
 - References active package descriptors by package id/version.
 - Used by cleanup to decide whether installed packages remain referenced.
+- Cleanup decisions must compare both package id and selected version so replaced graph generations do not retain stale dependency closures after a dependency version changes.
 
 ## ActivePackage Graph Metadata
 
@@ -143,6 +145,7 @@ In-memory runtime state for one active graph generation.
 
 - Collectible and unloadable after hosts release runtime objects.
 - Uses host-shared assembly policy before graph assembly probing.
+- Graph assembly indexing skips unmanaged/native DLL candidates that are not managed assemblies; required unsupported native/runtime-specific assets are handled by load-preparation validation instead of causing best-effort assembly indexing to fail.
 - Fails load preparation before publish when required native or runtime-specific assets are unsupported.
 - In-memory only; never serialized.
 

@@ -11,6 +11,7 @@ namespace Nuplane.Store.State;
 /// <param name="CorrelationId">The reconciliation correlation that activated the graph.</param>
 /// <param name="Status">The persisted graph activation status.</param>
 /// <param name="Failure">The optional graph failure summary.</param>
+/// <param name="NodeVersionsByPackageId">The package versions selected in the graph, keyed by package identifier.</param>
 public sealed record GraphActivationRecord(
     string GraphId,
     string GenerationId,
@@ -19,7 +20,8 @@ public sealed record GraphActivationRecord(
     DateTimeOffset ActivatedAtUtc,
     string CorrelationId,
     GraphActivationStatus Status,
-    GraphActivationFailure? Failure = null);
+    GraphActivationFailure? Failure = null,
+    IReadOnlyDictionary<string, string>? NodeVersionsByPackageId = null);
 
 /// <summary>
 /// Describes the persisted lifecycle status of an activation graph.

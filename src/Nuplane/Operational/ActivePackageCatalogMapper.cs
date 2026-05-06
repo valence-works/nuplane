@@ -120,19 +120,34 @@ internal static class ActivePackageCatalogMapper
                     graph.Nodes.Select(static node => node.PackageId).ToArray(),
                     activatedAtUtc,
                     correlationId,
-                    GraphActivationStatus.Active);
+                    GraphActivationStatus.Active,
+                    NodeVersionsByPackageId: graph.Nodes.ToDictionary(static node => node.PackageId, static node => node.Version, StringComparer.OrdinalIgnoreCase));
             }
         }
 
         foreach (var graphId in records.Keys.ToArray())
         {
-            if (records[graphId].NodePackageIds.Any(packageId => !nextActiveVersions.ContainsKey(packageId)))
+            if (!IsGraphStillActive(records[graphId], nextActiveVersions))
             {
                 records.Remove(graphId);
             }
         }
 
         return records;
+    }
+
+    private static bool IsGraphStillActive(
+        GraphActivationRecord graph,
+        IReadOnlyDictionary<string, string> nextActiveVersions)
+    {
+        if (graph.NodePackageIds.Any(packageId => !nextActiveVersions.ContainsKey(packageId)))
+        {
+            return false;
+        }
+
+        return graph.NodeVersionsByPackageId is null ||
+            graph.NodeVersionsByPackageId.All(node => nextActiveVersions.TryGetValue(node.Key, out var activeVersion)
+                && string.Equals(activeVersion, node.Value, StringComparison.OrdinalIgnoreCase));
     }
 
     public static ActivePackagesSnapshot MapSnapshot(StoreStateRecord state, string correlationId)
@@ -216,12 +231,15 @@ internal static class ActivePackageCatalogMapper
                     .OrderBy(static id => id, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
 
-                projections[node.PackageId] = new GraphNodeProjection(
+                var projection = new GraphNodeProjection(
                     graph.GraphId,
                     graph.GenerationId,
                     MapRole(node.Role),
                     rootPackageIds,
                     dependencyOf);
+                projections[node.PackageId] = projections.TryGetValue(node.PackageId, out var existing)
+                    ? existing.Merge(projection)
+                    : projection;
             }
         }
 
@@ -241,5 +259,25 @@ internal static class ActivePackageCatalogMapper
         string GenerationId,
         ActivePackageRole Role,
         IReadOnlyList<string> RootPackageIds,
-        IReadOnlyList<string> DependencyOfPackageIds);
+        IReadOnlyList<string> DependencyOfPackageIds)
+    {
+        public GraphNodeProjection Merge(GraphNodeProjection other) =>
+            this with
+            {
+                Role = MergeRole(Role, other.Role),
+                RootPackageIds = RootPackageIds
+                    .Concat(other.RootPackageIds)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(static id => id, StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                DependencyOfPackageIds = DependencyOfPackageIds
+                    .Concat(other.DependencyOfPackageIds)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(static id => id, StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+            };
+    }
+
+    private static ActivePackageRole MergeRole(ActivePackageRole current, ActivePackageRole next) =>
+        current == next ? current : ActivePackageRole.RootAndDependency;
 }

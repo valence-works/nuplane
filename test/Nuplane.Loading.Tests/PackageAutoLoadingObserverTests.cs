@@ -155,13 +155,40 @@ public sealed class PackageAutoLoadingObserverTests
         Assert.Empty(dispatcher.LoadedEvents);
     }
 
+    [Fact]
+    public async Task ActiveGraphs_WithSharedDependency_LoadsOverlappingClosuresTogether()
+    {
+        var loader = new FakePackageLoader();
+        var dispatcher = new FakeLoadingEventDispatcher();
+        var rootA = new ResolvedPackage("root-a", "1.0.0", "feed", "/path-root-a", Now);
+        var rootB = new ResolvedPackage("root-b", "1.0.0", "feed", "/path-root-b", Now);
+        var dependency = new ResolvedPackage("dependency", "1.0.0", "feed", "/path-dependency", Now);
+        var storeRegistry = new FakeStoreRegistry(
+            StoreStateRecord.Empty() with
+            {
+                ActiveGraphsById = new(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["graph-a"] = Graph("graph-a", "generation-a", [rootA.Id, dependency.Id]),
+                    ["graph-b"] = Graph("graph-b", "generation-b", [rootB.Id, dependency.Id])
+                }
+            });
+        var sut = CreateObserver(loader, dispatcher, new() { Enabled = true }, storeRegistry: storeRegistry);
+        var changeSet = new PackageChangeSet([rootA, rootB, dependency], [], [], "corr-graph", Now);
+
+        await sut.OnPackagesReconciledAsync(changeSet, [rootA, rootB, dependency], CancellationToken.None);
+
+        var packageGraph = Assert.Single(loader.PackageGraphs);
+        Assert.Equal(["dependency", "root-a", "root-b"], packageGraph.Select(static package => package.Id));
+    }
+
     private static PackageAutoLoadingObserver CreateObserver(
         FakePackageLoader loader,
         FakeLoadingEventDispatcher dispatcher,
         LoadingOptions options,
         FakeFailureRecorder? failureRecorder = null,
         ReconciliationMetrics? metrics = null,
-        ILoadingFailureTracker? loadingFailureTracker = null) =>
+        ILoadingFailureTracker? loadingFailureTracker = null,
+        IStoreRegistry? storeRegistry = null) =>
         new(
             loader,
             dispatcher,
@@ -169,7 +196,19 @@ public sealed class PackageAutoLoadingObserverTests
             NullLogger<PackageAutoLoadingObserver>.Instance,
             failureRecorder,
             metrics,
-            loadingFailureTracker);
+            loadingFailureTracker,
+            null,
+            storeRegistry);
+
+    private static GraphActivationRecord Graph(string graphId, string generationId, IReadOnlyList<string> nodePackageIds) =>
+        new(
+            graphId,
+            generationId,
+            nodePackageIds.Take(1).ToArray(),
+            nodePackageIds,
+            Now,
+            "corr-graph",
+            GraphActivationStatus.Active);
 
     internal sealed class FakePackageLoader(
         IEnumerable<string>? failIds = null,
@@ -181,6 +220,8 @@ public sealed class PackageAutoLoadingObserverTests
         private readonly Dictionary<string, PackageLoadSession> _sessions = CreateSessions(preloadedPackages);
 
         public bool WasCalled { get; private set; }
+
+        public List<IReadOnlyList<ResolvedPackage>> PackageGraphs { get; } = [];
 
         public Task<PackageLoadResult> EnsureLoadedAsync(
             IReadOnlyList<ResolvedPackage> packages,
@@ -225,8 +266,11 @@ public sealed class PackageAutoLoadingObserverTests
         public Task<PackageLoadResult> EnsureGraphLoadedAsync(
             IReadOnlyList<IReadOnlyList<ResolvedPackage>> packageGraphs,
             IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
-            CancellationToken cancellationToken) =>
-            EnsureLoadedAsync(packageGraphs.SelectMany(static graph => graph).ToArray(), sharedPolicy, cancellationToken);
+            CancellationToken cancellationToken)
+        {
+            PackageGraphs.AddRange(packageGraphs);
+            return EnsureLoadedAsync(packageGraphs.SelectMany(static graph => graph).ToArray(), sharedPolicy, cancellationToken);
+        }
 
         public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
         {
@@ -269,6 +313,35 @@ public sealed class PackageAutoLoadingObserverTests
 
             return sessions;
         }
+    }
+
+    private sealed class FakeStoreRegistry(StoreStateRecord state) : IStoreRegistry
+    {
+        public Task<IReadOnlyDictionary<string, string>> GetActiveVersionsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>>(state.ActiveVersionById);
+
+        public Task<StoreStateRecord> GetStateAsync(CancellationToken cancellationToken) => Task.FromResult(state);
+
+        public Task PersistActiveVersionsAsync(
+            IReadOnlyDictionary<string, string> activeVersions,
+            IReadOnlyDictionary<string, string> successfullyApplied,
+            string correlationId,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task PersistFailureAsync(
+            string packageId,
+            string stage,
+            string message,
+            string correlationId,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task PersistSourceSnapshotAsync(
+            string sourceName,
+            SourceSnapshotRef snapshot,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 
     internal sealed class FakeLoadingEventDispatcher : ILoadingEventDispatcher

@@ -29,13 +29,14 @@ Load each active graph generation into a single collectible assembly load contex
 2. The load context MUST index graph assemblies by simple name and full assembly identity before loading root assemblies.
 3. The load context MUST resolve configured host-shared assemblies from the host/default context before probing graph package assemblies.
 4. The load context MUST resolve non-shared dependency assemblies from the graph's selected support assemblies.
-5. `IPackageAssemblyCatalog` MUST expose root/discoverable assemblies for feature discovery by default.
-6. Dependency-only assemblies MUST remain available for binding and diagnostics but MUST NOT become independent discoverable package roots by default.
-7. Packages that are both explicit roots and dependencies MUST retain both roles and remain discoverable.
-8. Independent graph load contexts MUST allow different selected versions of the same dependency package to load side-by-side.
-9. Graph load preparation MUST fail before publish when required native or runtime-specific assets are unsupported.
-10. Load state MUST identify graph id, generation id, root package, dependency package, assembly path, and failure reason for load/bind failures.
-11. Old graph generations MUST remain collectible when no host holds `Assembly`, `Type`, or other runtime references.
+5. Graph assembly indexing MUST ignore unmanaged/native DLL candidates that are not managed assemblies, while preserving diagnostics for required unsupported native/runtime-specific assets during load preparation.
+6. `IPackageAssemblyCatalog` MUST expose root/discoverable assemblies for feature discovery by default.
+7. Dependency-only assemblies MUST remain available for binding and diagnostics but MUST NOT become independent discoverable package roots by default.
+8. Packages that are both explicit roots and dependencies MUST retain both roles and remain discoverable.
+9. Independent graph load contexts MUST allow different selected versions of the same dependency package to load side-by-side.
+10. Graph load preparation MUST fail before publish when required native or runtime-specific assets are unsupported.
+11. Load state MUST identify graph id, generation id, root package, dependency package, assembly path, and failure reason for load/bind failures.
+12. Old graph generations MUST remain collectible when no host holds `Assembly`, `Type`, or other runtime references.
 
 ## Failure Contract
 
@@ -45,6 +46,7 @@ Load or bind failure MUST degrade load state for the affected root graph without
 
 - A vertical-slice fixture configures only a root package, loads the resolved graph, and reflects root assembly metadata that requires a dependency assembly without `FileNotFoundException`.
 - Root assembly referencing dependency assembly loads and reflects without `FileNotFoundException`.
+- Flat package layouts with `runtimes/**/native/*.dll` do not fail graph assembly indexing solely because native DLLs are present.
 - Host-shared contract assembly resolves from host context.
 - Dependency package assembly is not returned as an independent feature root by default.
 - Explicitly desired package that is also a dependency is discoverable as a root.

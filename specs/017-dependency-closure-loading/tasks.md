@@ -27,9 +27,9 @@
 - [ ] T005 Define `ResolvedPackageGraph`, `ResolvedPackageNode`, `DependencyEdge`, `PackageNodeRole`, and graph identity behavior in `src/Nuplane/Reconciliation/Models/`
 - [ ] T006 Extend `ActivePackage` in `src/Nuplane.Abstractions/ActivePackage.cs` with graph id, generation id, package role, root package ids, dependency-of package ids, and discoverable flag
 - [ ] T007 Extend `ActivePackageDescriptor` in `src/Nuplane.Abstractions/ActivePackageDescriptor.cs` with persisted graph metadata and legacy default mapping
-- [ ] T008 Extend `StoreStateRecord` in `src/Nuplane/Store/State/StoreStateRecord.cs` with graph activation records
-- [ ] T009 Update `StoreStateSerializer` in `src/Nuplane/Store/State/StoreStateSerializer.cs` to round-trip graph metadata
-- [ ] T010 [P] Add store serialization tests for graph metadata in `test/Nuplane.Store.Tests/State/GraphActivationStateSerializationTests.cs`
+- [ ] T008 Extend `StoreStateRecord` in `src/Nuplane/Store/State/StoreStateRecord.cs` with graph activation records, including selected node versions keyed by package id
+- [ ] T009 Update `StoreStateSerializer` in `src/Nuplane/Store/State/StoreStateSerializer.cs` to round-trip graph metadata and node versions
+- [ ] T010 [P] Add store serialization tests for graph metadata and node versions in `test/Nuplane.Store.Tests/State/GraphActivationStateSerializationTests.cs`
 - [ ] T011 [P] Add active package mapper tests for root/dependency role defaults in `test/Nuplane.Runtime.Tests/Operational/ActivePackageGraphMetadataTests.cs`
 
 **Checkpoint**: Graph metadata can be represented, persisted, and mapped without changing package resolution yet.
@@ -79,6 +79,7 @@
 - [ ] T015 [P] [US1] Add LKG preservation test for failed dependency acquisition in `test/Nuplane.Integration.Tests/Reconciliation/DependencyClosureLkgTests.cs`
 - [ ] T016 [P] [US1] Add directory root dependency regression tests in `test/Nuplane.Integration.Tests/Reconciliation/DirectoryDependencyClosureRegressionTests.cs`
 - [ ] T016A [P] [US1] Add resolver/acquisition tests verifying transitive dependency metadata and package content are accepted only from explicitly configured trusted sources and pass existing source/integrity validation in `test/Nuplane.Runtime.Tests/Feeds/PackageDependencyGraphTrustPolicyTests.cs`
+- [ ] T016B [P] [US1] Add active graph cleanup regression tests for dependency version changes in `test/Nuplane.Runtime.Tests/Operational/ActivePackageGraphMetadataTests.cs`
 
 ### Implementation for User Story 1
 
@@ -115,6 +116,7 @@
 - [ ] T030 [P] [US2] Add integration test for graph load state after restart in `test/Nuplane.Integration.Tests/Loading/GraphLoadingCatalogIntegrationTests.cs`
 - [ ] T031 [P] [US2] Add unloadability test for replaced graph generation in `test/Nuplane.Loading.Tests/PackageGraphUnloadTests.cs`
 - [ ] T031A [P] [US2] Add graph load-preparation failure tests for unsupported required native or runtime-specific assets in `test/Nuplane.Loading.Tests/PackageGraphNativeAssetFailureTests.cs`
+- [ ] T031B [P] [US2] Add graph loading regression tests for flat package roots containing unmanaged `runtimes/**/native/*.dll` files in `test/Nuplane.Loading.Tests/PackageLoaderGraphRegressionTests.cs`
 
 ### Implementation for User Story 2
 
