@@ -218,8 +218,8 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
             if (!result.Success)
             {
                 _metrics?.RecordVersionResolution(feed.Name, "no-match", versionList.CacheHit, stopwatch.Elapsed);
-                _logger.LogWarning(
-                    "Version resolution failed for {PackageId} on feed {FeedName}: {FailureReason}; candidates={CandidateCount}, cacheHit={CacheHit}, durationMs={DurationMs}",
+                _logger.LogDebug(
+                    "No matching version found for {PackageId} on feed {FeedName}: {FailureReason}; candidates={CandidateCount}, cacheHit={CacheHit}, durationMs={DurationMs}",
                     request.Id,
                     feed.Name,
                     result.FailureReason,
