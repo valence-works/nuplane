@@ -52,11 +52,15 @@ public interface IPackageAssemblyCatalog
 /// <param name="Version">The active package version.</param>
 /// <param name="Assemblies">The loaded assemblies materialized for the package.</param>
 /// <param name="AssemblyReferences">The deterministic durable assembly references associated with the package.</param>
+/// <param name="LoadMode">The effective load mode used for the package.</param>
+/// <param name="FrameworkIntegrationSafe">Whether the loaded assemblies are safe for framework integration.</param>
 public sealed record PackageAssemblies(
     string PackageId,
     string Version,
     IReadOnlyList<Assembly> Assemblies,
-    IReadOnlyList<PackageAssemblyReference> AssemblyReferences);
+    IReadOnlyList<PackageAssemblyReference> AssemblyReferences,
+    PackageLoadMode LoadMode = PackageLoadMode.Collectible,
+    bool FrameworkIntegrationSafe = false);
 
 /// <summary>
 /// Legacy assembly catalog entry retained temporarily while the repo migrates to <see cref="PackageAssemblies"/>.
@@ -65,11 +69,15 @@ public sealed record PackageAssemblies(
 /// <param name="Version">The active package version.</param>
 /// <param name="Assemblies">The loaded assemblies materialized for the package.</param>
 /// <param name="ScanCandidates">The deterministic scan candidates associated with the package.</param>
+/// <param name="LoadMode">The effective load mode used for the package.</param>
+/// <param name="FrameworkIntegrationSafe">Whether the loaded assemblies are safe for framework integration.</param>
 internal sealed record PackageAssemblyCatalogEntry(
     string PackageId,
     string Version,
     IReadOnlyList<Assembly> Assemblies,
-    IReadOnlyList<AssemblyScanCandidate> ScanCandidates)
+    IReadOnlyList<AssemblyScanCandidate> ScanCandidates,
+    PackageLoadMode LoadMode = PackageLoadMode.Collectible,
+    bool FrameworkIntegrationSafe = false)
 {
     /// <summary>
     /// Converts this legacy assembly catalog entry to the canonical <see cref="PackageAssemblies"/> model.
@@ -79,7 +87,9 @@ internal sealed record PackageAssemblyCatalogEntry(
             PackageId,
             Version,
             Assemblies,
-            ScanCandidates.Select(static candidate => PackageAssemblyReference.FromCandidate(candidate)).ToArray());
+            ScanCandidates.Select(static candidate => PackageAssemblyReference.FromCandidate(candidate)).ToArray(),
+            LoadMode,
+            FrameworkIntegrationSafe);
 
     /// <summary>
     /// Creates a legacy assembly catalog entry from the canonical <see cref="PackageAssemblies"/> model.
@@ -89,5 +99,7 @@ internal sealed record PackageAssemblyCatalogEntry(
             package.PackageId,
             package.Version,
             package.Assemblies,
-            package.AssemblyReferences.Select(static reference => reference.ToCandidate()).ToArray());
+            package.AssemblyReferences.Select(static reference => reference.ToCandidate()).ToArray(),
+            package.LoadMode,
+            package.FrameworkIntegrationSafe);
 }

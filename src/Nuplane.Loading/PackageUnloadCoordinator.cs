@@ -83,6 +83,19 @@ internal sealed class PackageUnloadCoordinator : IPackageUnloadCoordinator
 
         var attempt = _attempts.AddOrUpdate(sessionKey, 1, (_, current) => current + 1);
 
+        if (!loadContext.IsCollectible)
+        {
+            var unloadSkipped = new UnloadOutcomeRecord(
+                packageId,
+                attempt,
+                DateTimeOffset.UtcNow,
+                UnloadOutcome.Failed,
+                "host-integrated-context-not-collectible",
+                RetryEligible: false,
+                correlationId);
+            return (deactivation, unloadSkipped);
+        }
+
         try
         {
             var weakReference = new WeakReference(loadContext);

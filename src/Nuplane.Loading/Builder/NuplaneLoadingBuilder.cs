@@ -52,6 +52,48 @@ public sealed class NuplaneLoadingBuilder
     }
 
     /// <summary>
+    /// Sets the default package load mode for autoloaded packages.
+    /// </summary>
+    /// <param name="loadMode">The default load mode to apply when no package-specific override exists.</param>
+    public NuplaneLoadingBuilder WithDefaultLoadMode(PackageLoadMode loadMode)
+    {
+        Services.Configure<LoadingOptions>(options =>
+        {
+            options.DefaultLoadMode = loadMode;
+        });
+
+        return this;
+    }
+
+    /// <summary>
+    /// Sets a package-specific load mode override.
+    /// </summary>
+    /// <param name="packageId">The package identifier to override.</param>
+    /// <param name="loadMode">The load mode to use for the package.</param>
+    public NuplaneLoadingBuilder PackageLoadMode(string packageId, PackageLoadMode loadMode)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+
+        Services.Configure<LoadingOptions>(options =>
+        {
+            var existing = options.PackageLoadModes.FirstOrDefault(candidate =>
+                string.Equals(candidate.PackageId, packageId, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+            {
+                options.PackageLoadModes.Remove(existing);
+            }
+
+            options.PackageLoadModes.Add(new()
+            {
+                PackageId = packageId,
+                LoadMode = loadMode
+            });
+        });
+
+        return this;
+    }
+
+    /// <summary>
     /// Enables assembly loading when it was previously disabled.
     /// Useful for code-based overrides on top of configuration.
     /// </summary>

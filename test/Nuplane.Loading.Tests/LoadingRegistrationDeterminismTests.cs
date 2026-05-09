@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nuplane.Operational;
+using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Loading.Registration;
 
 namespace Nuplane.Loading.Tests;
@@ -75,5 +76,34 @@ public sealed class LoadingRegistrationDeterminismTests
         LoadingRegistrationServices.Register(services);
 
         Assert.Single(services, d => d.ServiceType == typeof(SharedAssemblyPolicyMatcher));
+    }
+
+    [Fact]
+    public void NuplaneLoadingBuilder_WithDefaultLoadMode_ConfiguresOptions()
+    {
+        var services = new ServiceCollection();
+        services.AddOptions();
+        var builder = new NuplaneLoadingBuilder(services);
+
+        builder.WithDefaultLoadMode(PackageLoadMode.HostIntegrated);
+
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<LoadingOptions>>().Value;
+        Assert.Equal(PackageLoadMode.HostIntegrated, options.DefaultLoadMode);
+    }
+
+    [Fact]
+    public void NuplaneLoadingBuilder_PackageLoadMode_ConfiguresPackageOverride()
+    {
+        var services = new ServiceCollection();
+        services.AddOptions();
+        var builder = new NuplaneLoadingBuilder(services);
+
+        builder.PackageLoadMode("pkg-a", PackageLoadMode.HostIntegrated);
+
+        using var provider = services.BuildServiceProvider();
+        var packageOverride = Assert.Single(provider.GetRequiredService<IOptions<LoadingOptions>>().Value.PackageLoadModes);
+        Assert.Equal("pkg-a", packageOverride.PackageId);
+        Assert.Equal(PackageLoadMode.HostIntegrated, packageOverride.LoadMode);
     }
 }

@@ -11,6 +11,8 @@ namespace Nuplane.Loading;
 /// <param name="Diagnostics">Secret-safe loading diagnostics.</param>
 /// <param name="ScanCandidates">The deterministic assembly scan candidates for the package.</param>
 /// <param name="ContextKey">The current load-context key, when one exists.</param>
+/// <param name="LoadMode">The effective load mode used for the package.</param>
+/// <param name="FrameworkIntegrationSafe">Whether the loaded package assemblies are safe for framework integration.</param>
 internal sealed record LoadingPackageDescriptor(
     string PackageId,
     string Version,
@@ -19,5 +21,6 @@ internal sealed record LoadingPackageDescriptor(
     DateTimeOffset? LoadedAtUtc,
     IReadOnlyList<string> Diagnostics,
     IReadOnlyList<AssemblyScanCandidate> ScanCandidates,
-    string? ContextKey);
-
+    string? ContextKey,
+    PackageLoadMode LoadMode = PackageLoadMode.Collectible,
+    bool FrameworkIntegrationSafe = false);

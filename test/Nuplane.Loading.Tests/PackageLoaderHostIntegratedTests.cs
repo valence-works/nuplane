@@ -1,0 +1,61 @@
+using System.Reflection;
+using System.Runtime.Loader;
+using Microsoft.Extensions.Options;
+using Nuplane.Abstractions;
+using Nuplane.Loading.Tests.Fixtures;
+
+namespace Nuplane.Loading.Tests;
+
+public sealed class PackageLoaderHostIntegratedTests : IDisposable
+{
+    private readonly DirectoryInfo tempDir = Directory.CreateTempSubdirectory("nuplane-host-integrated-test-");
+
+    public void Dispose() => tempDir.Delete(recursive: true);
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_HostIntegratedPackage_RegistersNonCollectibleFrameworkSafeSession()
+    {
+        var installPath = CreateInstallDir("Nuplane.Loading.Tests.Fixtures");
+        var catalog = new HostIntegratedAssemblyResolutionCatalog();
+        var options = Options.Create(new LoadingOptions { DefaultLoadMode = PackageLoadMode.HostIntegrated });
+        var loader = new PackageLoader(options: options, hostIntegratedResolutionCatalog: catalog);
+        var package = Pkg("Nuplane.Loading.Tests.Fixtures", "1.0.0", installPath);
+
+        var result = await loader.EnsureGraphLoadedAsync([[package]], [], CancellationToken.None);
+
+        var session = Assert.Single(result.Loaded);
+        Assert.Empty(result.FailedByPackageId);
+        Assert.Equal(PackageLoadMode.HostIntegrated, session.LoadMode);
+        Assert.True(session.FrameworkIntegrationSafe);
+        Assert.True(loader.TryGetContext(package.Id, package.Version, out var handle));
+        var loadContext = Assert.IsAssignableFrom<AssemblyLoadContext>(handle!.Context);
+        Assert.False(loadContext.IsCollectible);
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_HostIntegratedPackage_PublishesAssemblyResolutionEntry()
+    {
+        var installPath = CreateInstallDir("Nuplane.Loading.Tests.Fixtures");
+        var catalog = new HostIntegratedAssemblyResolutionCatalog();
+        var options = Options.Create(new LoadingOptions { DefaultLoadMode = PackageLoadMode.HostIntegrated });
+        var loader = new PackageLoader(options: options, hostIntegratedResolutionCatalog: catalog);
+        var package = Pkg("Nuplane.Loading.Tests.Fixtures", "1.0.0", installPath);
+
+        await loader.EnsureGraphLoadedAsync([[package]], [], CancellationToken.None);
+
+        var assemblyName = new AssemblyName(typeof(FixtureMarker).Assembly.FullName!);
+        Assert.True(catalog.TryResolve(assemblyName, out var assembly, out var diagnostic));
+        Assert.NotNull(assembly);
+        Assert.Equal("success", diagnostic.Outcome);
+    }
+
+    private string CreateInstallDir(string packageId)
+    {
+        var dir = tempDir.CreateSubdirectory(packageId);
+        File.Copy(typeof(FixtureMarker).Assembly.Location, Path.Combine(dir.FullName, $"{packageId}.dll"));
+        return dir.FullName;
+    }
+
+    private static ResolvedPackage Pkg(string id, string version, string installPath) =>
+        new(id, version, "feed-a", installPath, DateTimeOffset.UtcNow, id);
+}

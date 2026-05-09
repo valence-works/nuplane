@@ -26,6 +26,31 @@ public sealed class LoadingOptionsValidator
             errors.Add("Loading deactivation timeout must be greater than zero.");
         }
 
+        if (!Enum.IsDefined(options.DefaultLoadMode))
+        {
+            errors.Add($"Loading default load mode '{options.DefaultLoadMode}' is not supported.");
+        }
+
+        var seenPackageOverrides = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var packageOverride in options.PackageLoadModes)
+        {
+            if (string.IsNullOrWhiteSpace(packageOverride.PackageId))
+            {
+                errors.Add("Package load mode override package ID is required.");
+                continue;
+            }
+
+            if (!Enum.IsDefined(packageOverride.LoadMode))
+            {
+                errors.Add($"Package load mode override for '{packageOverride.PackageId}' uses unsupported load mode '{packageOverride.LoadMode}'.");
+            }
+
+            if (!seenPackageOverrides.Add(packageOverride.PackageId))
+            {
+                errors.Add($"Duplicate package load mode override '{packageOverride.PackageId}'.");
+            }
+        }
+
         var seenIdentities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var identity in options.SharedAssemblies)

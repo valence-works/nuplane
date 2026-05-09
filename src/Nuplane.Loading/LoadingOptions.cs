@@ -22,6 +22,16 @@ public sealed class LoadingOptions
     public string? ActiveStoreRoot { get; set; }
 
     /// <summary>
+    /// Gets or sets the default load mode used for autoloaded packages.
+    /// </summary>
+    public PackageLoadMode DefaultLoadMode { get; set; } = PackageLoadMode.Collectible;
+
+    /// <summary>
+    /// Gets the package-specific load mode overrides keyed by package identifier.
+    /// </summary>
+    public ICollection<PackageLoadModeOverrideOptions> PackageLoadModes { get; } = new List<PackageLoadModeOverrideOptions>();
+
+    /// <summary>
     /// Gets the collection of shared assembly identities whose assemblies are loaded from
     /// the host's default context rather than package-specific contexts.
     /// </summary>

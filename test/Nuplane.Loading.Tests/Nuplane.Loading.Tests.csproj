@@ -14,6 +14,9 @@
     <ProjectReference Include="..\Nuplane.Loading.Tests.Fixtures.BrokenCandidate\Nuplane.Loading.Tests.Fixtures.BrokenCandidate.csproj"
                       ReferenceOutputAssembly="false"
                       PrivateAssets="all" />
+    <ProjectReference Include="..\Nuplane.Loading.Tests.Fixtures.Conflict\Nuplane.Loading.Tests.Fixtures.Conflict.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

@@ -104,6 +104,13 @@ The sample `Program.cs` is the best concrete repository anchor for this path.
 - The loading module is opt-in, and it does not change the rule that the host owns plugin or activation semantics.
 - If the loading module is absent or disabled, that is still a valid Nuplane integration.
 
+#### Choosing a package load mode
+
+- Use `Collectible` for isolated plugin discovery, scan-only packages, and scenarios where unloadability matters. It is the default to preserve existing loading behavior.
+- Use `HostIntegrated` for packages that contribute application-lifetime framework types such as DI registrations, endpoints, hosted services, options, validators, or database migrations. Host-integrated package assemblies may remain loaded for the process lifetime.
+- Configure shared assemblies separately from load mode. Shared assemblies preserve contract/type identity; load mode controls package lifetime and whether active package assemblies are made visible to framework by-name resolution.
+- Prefer explicit default and package-specific load mode configuration over auto-detection.
+
 ## Sample-backed next steps
 
 For the maintained end-to-end walkthrough, use:
@@ -138,4 +145,3 @@ For those topics, continue to repository-owned sources.
 - [`samples/Nuplane.Sample.AspNetCore/Program.cs`](../../samples/Nuplane.Sample.AspNetCore/Program.cs)
 - [`samples/Nuplane.Sample.AspNetCore/appsettings.json`](../../samples/Nuplane.Sample.AspNetCore/appsettings.json)
 - [`specs/014-query-package-catalog/quickstart.md`](../../specs/014-query-package-catalog/quickstart.md)
-

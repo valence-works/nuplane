@@ -80,13 +80,13 @@ internal sealed class LoadingCatalog(
                 if (session.IsLoaded)
                 {
                     var candidates = _candidateProjector.Project(package);
-                    descriptors.Add(CreateDescriptor(package, PackageLoadStatus.Loaded, session.LoadedAt, [], candidates));
+                    descriptors.Add(CreateDescriptor(package, PackageLoadStatus.Loaded, session.LoadedAt, [], candidates, session));
                     continue;
                 }
 
                 issueCount++;
                 divergenceCount++;
-                descriptors.Add(CreateDescriptor(package, PackageLoadStatus.Failed, session.LoadedAt, BuildDiagnostics(session.LastError), []));
+                descriptors.Add(CreateDescriptor(package, PackageLoadStatus.Failed, session.LoadedAt, BuildDiagnostics(session.LastError), [], session));
                 continue;
             }
 
@@ -141,7 +141,9 @@ internal sealed class LoadingCatalog(
                 package.LoadedAtUtc,
                 package.Diagnostics,
                 package.AssemblyReferences.Select(static reference => reference.ToCandidate()).ToArray(),
-                null)).ToArray(),
+                null,
+                package.LoadMode,
+                package.FrameworkIntegrationSafe)).ToArray(),
             snapshot.Reason,
             snapshot.CorrelationId);
     }
@@ -151,7 +153,8 @@ internal sealed class LoadingCatalog(
         PackageLoadStatus status,
         DateTimeOffset? loadedAtUtc,
         IReadOnlyList<string> diagnostics,
-        IReadOnlyList<PackageAssemblyReference> assemblyReferences) =>
+        IReadOnlyList<PackageAssemblyReference> assemblyReferences,
+        PackageLoadSession? session = null) =>
         new(
             package.PackageId,
             package.Version,
@@ -160,7 +163,9 @@ internal sealed class LoadingCatalog(
             loadedAtUtc,
             diagnostics,
             assemblyReferences.ToArray(),
-            package.Discoverable);
+            package.Discoverable,
+            session?.LoadMode ?? PackageLoadMode.Collectible,
+            session?.FrameworkIntegrationSafe ?? false);
 
     private static IReadOnlyList<string> BuildDiagnostics(string? message)
     {

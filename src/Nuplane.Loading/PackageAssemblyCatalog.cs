@@ -59,5 +59,7 @@ internal sealed class PackageAssemblyCatalog(
             package.PackageId,
             package.Version,
             _packageAssemblyProvider.GetAssemblies(package.PackageId, package.Version),
-            package.AssemblyReferences.ToArray());
+            package.AssemblyReferences.ToArray(),
+            package.LoadMode,
+            package.FrameworkIntegrationSafe);
 }
