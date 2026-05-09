@@ -39,6 +39,74 @@ public sealed class HostIntegratedAssemblyResolutionCatalogTests
         Assert.Equal("success", diagnostic.Outcome);
     }
 
+    [Fact]
+    public void PublishGraph_WhenPublishingDifferentGraphs_PreservesPreviouslyPublishedEntries()
+    {
+        var sut = new HostIntegratedAssemblyResolutionCatalog();
+        var firstAssembly = typeof(FixtureMarker).Assembly;
+        var secondAssembly = typeof(HostIntegratedAssemblyResolutionCatalogTests).Assembly;
+
+        sut.PublishGraph(
+            "graph:first",
+            [new PackageLoadModeSelection("pkg-a", "1.0.0", PackageLoadMode.HostIntegrated, "default", "graph:first")],
+            new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pkg-a@1.0.0"] = [firstAssembly]
+            });
+        sut.PublishGraph(
+            "graph:second",
+            [new PackageLoadModeSelection("pkg-b", "1.0.0", PackageLoadMode.HostIntegrated, "default", "graph:second")],
+            new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pkg-b@1.0.0"] = [secondAssembly]
+            });
+
+        Assert.True(sut.TryResolve(firstAssembly.GetName(), out var resolvedFirst, out _));
+        Assert.True(sut.TryResolve(secondAssembly.GetName(), out var resolvedSecond, out _));
+        Assert.Same(firstAssembly, resolvedFirst);
+        Assert.Same(secondAssembly, resolvedSecond);
+    }
+
+    [Fact]
+    public void RemovePackage_WhenEntryExists_IncrementsGeneration()
+    {
+        var sut = new HostIntegratedAssemblyResolutionCatalog();
+        var assembly = typeof(FixtureMarker).Assembly;
+        sut.PublishGraph(
+            "graph:first",
+            [new PackageLoadModeSelection("pkg-a", "1.0.0", PackageLoadMode.HostIntegrated, "default", "graph:first")],
+            new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pkg-a@1.0.0"] = [assembly]
+            });
+        var generation = sut.Generation;
+
+        sut.RemovePackage("pkg-a", "1.0.0");
+
+        Assert.True(sut.Generation > generation);
+        Assert.False(sut.TryResolve(assembly.GetName(), out _, out _));
+    }
+
+    [Fact]
+    public void ValidateCanPublishGraph_WhenCandidateConflictsWithExistingEntry_FailsBeforeLoad()
+    {
+        var sut = new HostIntegratedAssemblyResolutionCatalog();
+        var assembly = typeof(FixtureMarker).Assembly;
+        sut.PublishGraph(
+            "graph:first",
+            [new PackageLoadModeSelection("pkg-a", "1.0.0", PackageLoadMode.HostIntegrated, "default", "graph:first")],
+            new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pkg-a@1.0.0"] = [assembly]
+            });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => sut.ValidateCanPublishGraph(
+            "graph:second",
+            [new HostIntegratedAssemblyResolutionCandidate(assembly.GetName().Name!, new Version(99, 0, 0, 0), "pkg-b", "2.0.0", "graph:second")]));
+
+        Assert.Contains("Host-integrated assembly conflict", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string GetConflictAssemblyPath()
     {
         var path = Path.GetFullPath(Path.Combine(

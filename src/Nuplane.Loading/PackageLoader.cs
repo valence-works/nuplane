@@ -224,7 +224,8 @@ internal sealed class PackageLoader : IPackageLoader
                 .ToArray();
             if (graphLoadMode == PackageLoadMode.HostIntegrated)
             {
-                ValidateHostIntegratedAssemblyConflicts(packages);
+                var candidates = BuildHostIntegratedResolutionCandidates(graphKey, packages);
+                _hostIntegratedResolutionCatalog.ValidateCanPublishGraph(graphKey, candidates);
             }
 
             context = graphLoadMode == PackageLoadMode.HostIntegrated
@@ -406,9 +407,11 @@ internal sealed class PackageLoader : IPackageLoader
         return result;
     }
 
-    private void ValidateHostIntegratedAssemblyConflicts(IReadOnlyList<ResolvedPackage> packages)
+    private IReadOnlyList<HostIntegratedAssemblyResolutionCandidate> BuildHostIntegratedResolutionCandidates(
+        string graphKey,
+        IReadOnlyList<ResolvedPackage> packages)
     {
-        var entries = new List<(string SimpleName, Version? Version, string PackageId, string PackageVersion)>();
+        var entries = new List<HostIntegratedAssemblyResolutionCandidate>();
         foreach (var package in packages)
         {
             foreach (var candidate in BuildScanCandidates(package.Id, package.InstallPath))
@@ -416,7 +419,12 @@ internal sealed class PackageLoader : IPackageLoader
                 try
                 {
                     var assemblyName = AssemblyName.GetAssemblyName(candidate.AssemblyPath);
-                    entries.Add((assemblyName.Name ?? Path.GetFileNameWithoutExtension(candidate.AssemblyPath), assemblyName.Version, package.Id, package.Version));
+                    entries.Add(new(
+                        assemblyName.Name ?? Path.GetFileNameWithoutExtension(candidate.AssemblyPath),
+                        assemblyName.Version,
+                        package.Id,
+                        package.Version,
+                        graphKey));
                 }
                 catch (BadImageFormatException)
                 {
@@ -424,26 +432,7 @@ internal sealed class PackageLoader : IPackageLoader
             }
         }
 
-        var conflict = entries
-            .GroupBy(static entry => entry.SimpleName, StringComparer.OrdinalIgnoreCase)
-            .Select(static group => new
-            {
-                SimpleName = group.Key,
-                Versions = group.Select(static entry => entry.Version?.ToString() ?? string.Empty).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
-                Entries = group.ToArray()
-            })
-            .FirstOrDefault(static group => group.Versions.Length > 1);
-
-        if (conflict is null)
-        {
-            return;
-        }
-
-        var packagesText = string.Join(", ", conflict.Entries
-            .OrderBy(static entry => entry.PackageId, StringComparer.OrdinalIgnoreCase)
-            .Select(static entry => $"{entry.PackageId}@{entry.PackageVersion} ({entry.Version})"));
-        throw new InvalidOperationException(
-            $"Host-integrated assembly conflict for '{conflict.SimpleName}': active packages expose multiple versions. Candidates: {packagesText}.");
+        return entries;
     }
 
     private static string? TryResolveTargetFrameworkMoniker(string assemblyPath, string installPath)

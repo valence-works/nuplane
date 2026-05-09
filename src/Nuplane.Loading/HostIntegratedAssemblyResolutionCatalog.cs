@@ -37,20 +37,7 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
         ArgumentNullException.ThrowIfNull(selections);
         ArgumentNullException.ThrowIfNull(assembliesByPackageKey);
 
-        long nextGeneration;
-        lock (gate)
-        {
-            nextGeneration = generation + 1;
-        }
-        IReadOnlyList<HostIntegratedAssemblyResolutionEntry> snapshot;
-        lock (gate)
-        {
-            snapshot = entries;
-        }
-
-        var retained = snapshot
-            .Where(entry => !string.Equals(entry.GraphKey, graphKey, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        var additions = new List<HostIntegratedAssemblyResolutionEntry>();
 
         foreach (var selection in selections.Where(static selection => selection.LoadMode == PackageLoadMode.HostIntegrated))
         {
@@ -63,7 +50,7 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
             foreach (var assembly in assemblies.Where(static assembly => !string.IsNullOrWhiteSpace(assembly.Location)))
             {
                 var name = assembly.GetName();
-                retained.Add(new(
+                additions.Add(new(
                     name.Name ?? Path.GetFileNameWithoutExtension(assembly.Location),
                     assembly.FullName ?? name.FullName,
                     name.Version,
@@ -71,15 +58,21 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
                     selection.PackageId,
                     selection.Version,
                     graphKey,
-                    nextGeneration,
+                    0,
                     assembly));
             }
         }
 
-        ValidateNoConflicts(retained);
-
         lock (gate)
         {
+            var nextGeneration = generation + 1;
+            var retained = entries
+                .Where(entry => !string.Equals(entry.GraphKey, graphKey, StringComparison.OrdinalIgnoreCase))
+                .Concat(additions.Select(entry => entry with { Generation = nextGeneration }))
+                .ToArray();
+
+            ValidateNoConflicts(retained);
+
             entries = retained
                 .OrderBy(static entry => entry.AssemblySimpleName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static entry => entry.Version?.ToString(), StringComparer.OrdinalIgnoreCase)
@@ -91,16 +84,51 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
     }
 
     /// <summary>
+    /// Validates that the specified graph can be published without conflicting with active entries.
+    /// </summary>
+    public void ValidateCanPublishGraph(
+        string graphKey,
+        IReadOnlyList<HostIntegratedAssemblyResolutionCandidate> candidates)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(graphKey);
+        ArgumentNullException.ThrowIfNull(candidates);
+
+        lock (gate)
+        {
+            var proposedEntries = entries
+                .Where(entry => !string.Equals(entry.GraphKey, graphKey, StringComparison.OrdinalIgnoreCase))
+                .Select(static entry => new ConflictCandidate(
+                    entry.AssemblySimpleName,
+                    entry.Version,
+                    entry.PackageId,
+                    entry.PackageVersion))
+                .Concat(candidates.Select(static candidate => new ConflictCandidate(
+                    candidate.AssemblySimpleName,
+                    candidate.Version,
+                    candidate.PackageId,
+                    candidate.PackageVersion)))
+                .ToArray();
+
+            ValidateNoConflicts(proposedEntries);
+        }
+    }
+
+    /// <summary>
     /// Removes all entries associated with the specified package version.
     /// </summary>
     public void RemovePackage(string packageId, string version)
     {
         lock (gate)
         {
-            entries = entries
+            var retained = entries
                 .Where(entry => !string.Equals(entry.PackageId, packageId, StringComparison.OrdinalIgnoreCase)
                     || !string.Equals(entry.PackageVersion, version, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
+            if (retained.Length != entries.Count)
+            {
+                entries = retained;
+                generation++;
+            }
         }
     }
 
@@ -154,7 +182,14 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
         return false;
     }
 
-    private static void ValidateNoConflicts(IEnumerable<HostIntegratedAssemblyResolutionEntry> proposedEntries)
+    private static void ValidateNoConflicts(IEnumerable<HostIntegratedAssemblyResolutionEntry> proposedEntries) =>
+        ValidateNoConflicts(proposedEntries.Select(static entry => new ConflictCandidate(
+            entry.AssemblySimpleName,
+            entry.Version,
+            entry.PackageId,
+            entry.PackageVersion)));
+
+    private static void ValidateNoConflicts(IEnumerable<ConflictCandidate> proposedEntries)
     {
         var conflict = proposedEntries
             .GroupBy(static entry => entry.AssemblySimpleName, StringComparer.OrdinalIgnoreCase)
@@ -185,4 +220,10 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
         $"{entry.AssemblyFullName} from {entry.PackageId}@{entry.PackageVersion} at {entry.AssemblyPath}";
 
     private static string BuildPackageKey(string packageId, string version) => $"{packageId}@{version}";
+
+    private sealed record ConflictCandidate(
+        string AssemblySimpleName,
+        Version? Version,
+        string PackageId,
+        string PackageVersion);
 }
