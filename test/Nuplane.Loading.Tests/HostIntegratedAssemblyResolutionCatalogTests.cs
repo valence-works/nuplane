@@ -107,6 +107,65 @@ public sealed class HostIntegratedAssemblyResolutionCatalogTests
         Assert.Contains("Host-integrated assembly conflict", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ValidateCanPublishGraph_WhenSameAssemblyNameAndVersionComesFromDifferentPackage_FailsBeforeLoad()
+    {
+        var sut = new HostIntegratedAssemblyResolutionCatalog();
+        var assemblyName = typeof(FixtureMarker).Assembly.GetName();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => sut.ValidateCanPublishGraph(
+            "graph:ambiguous",
+            [
+                new HostIntegratedAssemblyResolutionCandidate(assemblyName.Name!, assemblyName.Version, "pkg-a", "1.0.0", "graph:ambiguous"),
+                new HostIntegratedAssemblyResolutionCandidate(assemblyName.Name!, assemblyName.Version, "pkg-b", "1.0.0", "graph:ambiguous")
+            ]));
+
+        Assert.Contains("Host-integrated assembly conflict", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PublishGraph_WhenSameAssemblyNameAndVersionComesFromDifferentPackage_KeepsLastKnownGoodGenerationVisible()
+    {
+        var sut = new HostIntegratedAssemblyResolutionCatalog();
+        var assembly = typeof(FixtureMarker).Assembly;
+
+        var ex = Assert.Throws<InvalidOperationException>(() => sut.PublishGraph(
+            "graph:ambiguous",
+            [
+                new PackageLoadModeSelection("pkg-a", "1.0.0", PackageLoadMode.HostIntegrated, "default", "graph:ambiguous"),
+                new PackageLoadModeSelection("pkg-b", "1.0.0", PackageLoadMode.HostIntegrated, "default", "graph:ambiguous")
+            ],
+            new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pkg-a@1.0.0"] = [assembly],
+                ["pkg-b@1.0.0"] = [assembly]
+            }));
+
+        Assert.Contains("Host-integrated assembly conflict", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, sut.Generation);
+        Assert.False(sut.TryResolve(assembly.GetName(), out _, out _));
+    }
+
+    [Fact]
+    public void TryResolve_WhenFullIdentityDoesNotMatch_ReturnsNotFound()
+    {
+        var sut = new HostIntegratedAssemblyResolutionCatalog();
+        var assembly = typeof(FixtureMarker).Assembly;
+        sut.PublishGraph(
+            "graph:first",
+            [new PackageLoadModeSelection("pkg-a", "1.0.0", PackageLoadMode.HostIntegrated, "default", "graph:first")],
+            new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pkg-a@1.0.0"] = [assembly]
+            });
+        var requestedName = assembly.GetName();
+        requestedName.CultureName = "fr-FR";
+
+        Assert.False(sut.TryResolve(requestedName, out var resolvedAssembly, out var diagnostic));
+        Assert.Null(resolvedAssembly);
+        Assert.Equal("not-found", diagnostic.Outcome);
+    }
+
     private static string GetConflictAssemblyPath()
     {
         var path = Path.GetFullPath(Path.Combine(

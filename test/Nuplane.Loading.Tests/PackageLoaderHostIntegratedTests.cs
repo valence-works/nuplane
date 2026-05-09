@@ -49,10 +49,40 @@ public sealed class PackageLoaderHostIntegratedTests : IDisposable
         Assert.Equal("success", diagnostic.Outcome);
     }
 
-    private string CreateInstallDir(string packageId)
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_WhenAnyPackageIsHostIntegrated_PromotesDependencyClosure()
+    {
+        var firstInstallPath = CreateInstallDir("pkg-a", typeof(FixtureMarker).Assembly);
+        var secondInstallPath = CreateInstallDir("pkg-b", typeof(PackageLoaderHostIntegratedTests).Assembly);
+        var catalog = new HostIntegratedAssemblyResolutionCatalog();
+        var loadingOptions = new LoadingOptions();
+        loadingOptions.PackageLoadModes.Add(new() { PackageId = "pkg-a", LoadMode = PackageLoadMode.HostIntegrated });
+        var options = Options.Create(loadingOptions);
+        var loader = new PackageLoader(options: options, hostIntegratedResolutionCatalog: catalog);
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[Pkg("pkg-a", "1.0.0", firstInstallPath), Pkg("pkg-b", "1.0.0", secondInstallPath)]],
+            [],
+            CancellationToken.None);
+
+        Assert.Empty(result.FailedByPackageId);
+        Assert.Equal(2, result.Loaded.Count);
+        Assert.All(result.Loaded, session =>
+        {
+            Assert.Equal(PackageLoadMode.HostIntegrated, session.LoadMode);
+            Assert.True(session.FrameworkIntegrationSafe);
+        });
+        Assert.True(catalog.TryResolve(typeof(FixtureMarker).Assembly.GetName(), out _, out _));
+        Assert.True(catalog.TryResolve(typeof(PackageLoaderHostIntegratedTests).Assembly.GetName(), out _, out _));
+    }
+
+    private string CreateInstallDir(string packageId) =>
+        CreateInstallDir(packageId, typeof(FixtureMarker).Assembly);
+
+    private string CreateInstallDir(string packageId, Assembly assembly)
     {
         var dir = tempDir.CreateSubdirectory(packageId);
-        File.Copy(typeof(FixtureMarker).Assembly.Location, Path.Combine(dir.FullName, $"{packageId}.dll"));
+        File.Copy(assembly.Location, Path.Combine(dir.FullName, $"{packageId}.dll"));
         return dir.FullName;
     }
 

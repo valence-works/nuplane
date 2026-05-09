@@ -111,9 +111,10 @@ internal sealed class PackageLoader : IPackageLoader
             cancellationToken.ThrowIfCancellationRequested();
 
             var graphKey = BuildGraphKey(packageGraph);
-            var selections = packageGraph
+            var selectedModes = packageGraph
                 .Select(package => _loadModeSelector.Select(package, _options, graphKey))
                 .ToArray();
+            var selections = PromoteHostIntegratedGraphSelections(selectedModes);
 
             if (packageGraph.Count <= 1 && selections.All(static selection => selection.LoadMode == PackageLoadMode.Collectible))
             {
@@ -365,21 +366,39 @@ internal sealed class PackageLoader : IPackageLoader
             .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
             .Select(static package => BuildKey(package.Id, package.Version)));
 
+    private static IReadOnlyList<PackageLoadModeSelection> PromoteHostIntegratedGraphSelections(
+        IReadOnlyList<PackageLoadModeSelection> selections)
+    {
+        if (selections.All(static selection => selection.LoadMode == PackageLoadMode.Collectible))
+        {
+            return selections;
+        }
+
+        return selections
+            .Select(static selection => selection.LoadMode == PackageLoadMode.HostIntegrated
+                ? selection
+                : selection with
+                {
+                    LoadMode = PackageLoadMode.HostIntegrated,
+                    SelectionReason = "dependency-closure"
+                })
+            .ToArray();
+    }
+
     private IReadOnlyDictionary<string, IReadOnlyList<Assembly>> MaterializeHostIntegratedAssemblies(
         AssemblyLoadContext context,
         IReadOnlyList<ResolvedPackage> packages)
     {
         var result = new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase);
+        var assembliesByPath = context.Assemblies
+            .Where(static assembly => !string.IsNullOrWhiteSpace(assembly.Location))
+            .GroupBy(static assembly => assembly.Location, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
+
         foreach (var package in packages)
         {
-            var assembliesByPath = context.Assemblies
-                .Where(static assembly => !string.IsNullOrWhiteSpace(assembly.Location))
-                .GroupBy(static assembly => assembly.Location, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
-
             var packageAssemblies = new List<Assembly>();
-            foreach (var candidate in BuildScanCandidates(package.Id, package.InstallPath)
-                .OrderBy(static candidate => candidate.AssemblyPath, StringComparer.OrdinalIgnoreCase))
+            foreach (var candidate in BuildScanCandidates(package.Id, package.InstallPath))
             {
                 if (assembliesByPath.TryGetValue(candidate.AssemblyPath, out var existingAssembly))
                 {

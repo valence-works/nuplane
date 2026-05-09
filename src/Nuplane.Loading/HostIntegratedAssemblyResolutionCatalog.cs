@@ -159,7 +159,7 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
         if (assemblyName.Version is not null)
         {
             candidates = candidates
-                .Where(entry => Equals(entry.Version, assemblyName.Version))
+                .Where(entry => AssemblyNamesMatch(assemblyName, entry.Assembly.GetName()))
                 .ToArray();
         }
 
@@ -200,9 +200,13 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
                     .Select(static entry => entry.Version?.ToString() ?? string.Empty)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray(),
+                PackageKeys = group
+                    .Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
                 Entries = group.ToArray()
             })
-            .FirstOrDefault(group => group.Versions.Length > 1);
+            .FirstOrDefault(group => group.Versions.Length > 1 || group.PackageKeys.Length > 1);
 
         if (conflict is null)
         {
@@ -213,13 +217,24 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
             .OrderBy(static entry => entry.PackageId, StringComparer.OrdinalIgnoreCase)
             .Select(static entry => $"{entry.PackageId}@{entry.PackageVersion} ({entry.Version})"));
         throw new InvalidOperationException(
-            $"Host-integrated assembly conflict for '{conflict.SimpleName}': active packages expose multiple versions. Candidates: {packages}.");
+            $"Host-integrated assembly conflict for '{conflict.SimpleName}': active packages expose ambiguous assembly identities. Candidates: {packages}.");
     }
 
     private static string FormatCandidate(HostIntegratedAssemblyResolutionEntry entry) =>
         $"{entry.AssemblyFullName} from {entry.PackageId}@{entry.PackageVersion} at {entry.AssemblyPath}";
 
     private static string BuildPackageKey(string packageId, string version) => $"{packageId}@{version}";
+
+    private static bool AssemblyNamesMatch(AssemblyName requested, AssemblyName definition) =>
+        string.Equals(requested.Name, definition.Name, StringComparison.OrdinalIgnoreCase)
+        && Equals(requested.Version, definition.Version)
+        && string.Equals(NormalizeCultureName(requested.CultureName), NormalizeCultureName(definition.CultureName), StringComparison.OrdinalIgnoreCase)
+        && requested.GetPublicKeyToken().AsSpan().SequenceEqual(definition.GetPublicKeyToken());
+
+    private static string NormalizeCultureName(string? cultureName) =>
+        string.IsNullOrWhiteSpace(cultureName) || string.Equals(cultureName, "neutral", StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : cultureName;
 
     private sealed record ConflictCandidate(
         string AssemblySimpleName,
