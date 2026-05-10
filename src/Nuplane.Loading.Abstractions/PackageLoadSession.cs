@@ -11,6 +11,8 @@ namespace Nuplane.Loading;
 /// <param name="LoadedAt">The time at which the package was loaded.</param>
 /// <param name="IsLoaded">Whether the package was successfully loaded into an assembly context.</param>
 /// <param name="LastError">The error message from the last failed load attempt, if any.</param>
+/// <param name="LoadMode">The effective load mode used for the package.</param>
+/// <param name="FrameworkIntegrationSafe">Whether the loaded package assemblies are safe for framework integration.</param>
 internal sealed record PackageLoadSession(
     string PackageId,
     string Version,
@@ -18,4 +20,6 @@ internal sealed record PackageLoadSession(
     string ContextKey,
     DateTimeOffset LoadedAt,
     bool IsLoaded,
-    string? LastError);
+    string? LastError,
+    PackageLoadMode LoadMode = PackageLoadMode.Collectible,
+    bool FrameworkIntegrationSafe = false);

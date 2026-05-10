@@ -37,6 +37,9 @@ public static class LoadingRegistrationServices
         ReplaceSingleton<LoadingEventDispatcher, LoadingEventDispatcher>(services);
         services.TryAddSingleton<LoadingCatalogRefreshTracker>();
         services.TryAddSingleton<SharedAssemblyPolicyMatcher>();
+        services.TryAddSingleton<PackageLoadModeSelector>();
+        services.TryAddSingleton<HostIntegratedAssemblyResolutionCatalog>();
+        services.TryAddSingleton<HostIntegratedAssemblyResolver>();
         services.TryAddSingleton<PackageLoader>();
         services.TryAddSingleton<AssemblyScanCandidateProjector>();
         services.TryAddSingleton<PackageAssemblyProvider>();

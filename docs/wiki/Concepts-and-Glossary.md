@@ -93,6 +93,23 @@ A higher-level loading-aware surface for hosts that want the currently active lo
 - Applied in: [Usage Guide](Usage-Guide.md)
 - Canonical anchors: `README.md`, `src/Nuplane.Loading.Abstractions/IPackageAssemblyCatalog.cs`
 
+### Package load mode
+
+The loading setting that controls package assembly lifetime and framework integration behavior.
+`Collectible` keeps the existing unloadable/isolation-oriented behavior, while `HostIntegrated` makes active package assemblies safe for application-lifetime framework integration and by-name resolution.
+
+- **Applicability:** `Optional Module`
+- Applied in: [Usage Guide](Usage-Guide.md)
+- Canonical anchors: `README.md`, `src/Nuplane.Loading.Abstractions/PackageLoadMode.cs`
+
+### Host-integrated assembly
+
+An active package assembly loaded in `HostIntegrated` mode so framework code can safely hold references to it and resolve it by assembly name without host-owned resolver plumbing.
+
+- **Applicability:** `Optional Module`
+- Applied in: [Usage Guide](Usage-Guide.md)
+- Canonical anchors: `README.md`, `src/Nuplane.Loading/HostIntegratedAssemblyResolver.cs`
+
 ## Documentation-governance terms
 
 ### Hybrid hub
@@ -117,4 +134,3 @@ A visible label that tells the reader whether a capability is `Core`, `Optional 
 - [Usage Guide](Usage-Guide.md)
 - [Architecture Guide](Architecture-Guide.md)
 - [Source References](_Source-References.md)
-

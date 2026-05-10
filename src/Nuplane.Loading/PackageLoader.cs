@@ -2,6 +2,9 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Runtime.Versioning;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 
 namespace Nuplane.Loading;
@@ -14,15 +17,31 @@ namespace Nuplane.Loading;
 internal sealed class PackageLoader : IPackageLoader
 {
     private readonly SharedAssemblyPolicyMatcher _matcher;
+    private readonly HostIntegratedAssemblyResolutionCatalog _hostIntegratedResolutionCatalog;
+    private readonly PackageLoadModeSelector _loadModeSelector;
+    private readonly LoadingOptions _options;
+    private readonly ILogger<PackageLoader> _logger;
+    private readonly HostIntegratedAssemblyResolver? _hostIntegratedAssemblyResolver;
     private readonly ConcurrentDictionary<string, AssemblyLoadContext> _contexts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, PackageLoadSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Initializes a new instance of <see cref="PackageLoader"/> with an optional shared assembly policy matcher.
     /// </summary>
-    public PackageLoader(SharedAssemblyPolicyMatcher? matcher = null)
+    public PackageLoader(
+        SharedAssemblyPolicyMatcher? matcher = null,
+        HostIntegratedAssemblyResolutionCatalog? hostIntegratedResolutionCatalog = null,
+        PackageLoadModeSelector? loadModeSelector = null,
+        IOptions<LoadingOptions>? options = null,
+        ILogger<PackageLoader>? logger = null,
+        HostIntegratedAssemblyResolver? hostIntegratedAssemblyResolver = null)
     {
         _matcher = matcher ?? new SharedAssemblyPolicyMatcher();
+        _hostIntegratedResolutionCatalog = hostIntegratedResolutionCatalog ?? new HostIntegratedAssemblyResolutionCatalog();
+        _loadModeSelector = loadModeSelector ?? new PackageLoadModeSelector();
+        _options = options?.Value ?? new LoadingOptions();
+        _logger = logger ?? NullLogger<PackageLoader>.Instance;
+        _hostIntegratedAssemblyResolver = hostIntegratedAssemblyResolver;
     }
 
     /// <summary>
@@ -91,13 +110,19 @@ internal sealed class PackageLoader : IPackageLoader
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (packageGraph.Count <= 1)
+            var graphKey = BuildGraphKey(packageGraph);
+            var selectedModes = packageGraph
+                .Select(package => _loadModeSelector.Select(package, _options, graphKey))
+                .ToArray();
+            var selections = PromoteHostIntegratedGraphSelections(selectedModes);
+
+            if (packageGraph.Count <= 1 && selections.All(static selection => selection.LoadMode == PackageLoadMode.Collectible))
             {
                 EnsurePackagesLoaded(packageGraph, sharedPolicy, cancellationToken, loaded, failed);
                 continue;
             }
 
-            EnsureGraphLoaded(packageGraph, sharedPolicy, loaded, failed);
+            EnsureGraphLoaded(packageGraph, selections, sharedPolicy, loaded, failed);
         }
 
         return Task.FromResult<PackageLoadResult>(new(loaded, failed));
@@ -137,7 +162,9 @@ internal sealed class PackageLoader : IPackageLoader
                     key,
                     DateTimeOffset.UtcNow,
                     IsLoaded: true,
-                    LastError: null);
+                    LastError: null,
+                    PackageLoadMode.Collectible,
+                    FrameworkIntegrationSafe: false);
 
                 _sessions[key] = session;
                 loaded.Add(session);
@@ -152,25 +179,31 @@ internal sealed class PackageLoader : IPackageLoader
                     key,
                     DateTimeOffset.UtcNow,
                     IsLoaded: false,
-                    LastError: ex.Message);
+                    LastError: ex.Message,
+                    PackageLoadMode.Collectible,
+                    FrameworkIntegrationSafe: false);
             }
         }
     }
 
     private PackageLoadResult EnsureGraphLoaded(
         IReadOnlyList<ResolvedPackage> packages,
+        IReadOnlyList<PackageLoadModeSelection> selections,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         List<PackageLoadSession> loaded,
         Dictionary<string, string> failed)
     {
-        var graphKey = "graph:" + string.Join('|', packages
-            .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
-            .Select(static package => BuildKey(package.Id, package.Version)));
+        var graphKey = BuildGraphKey(packages);
+        var graphLoadMode = selections.Any(static selection => selection.LoadMode == PackageLoadMode.HostIntegrated)
+            ? PackageLoadMode.HostIntegrated
+            : PackageLoadMode.Collectible;
 
         var existingGraphSessions = packages
             .Select(package => _sessions.TryGetValue(BuildKey(package.Id, package.Version), out var session) ? session : null)
-            .Where(session => session is not null && session.IsLoaded && string.Equals(session.ContextKey, graphKey, StringComparison.OrdinalIgnoreCase))
+            .Where(session => session is not null
+                && session.IsLoaded
+                && string.Equals(session.ContextKey, graphKey, StringComparison.OrdinalIgnoreCase)
+                && session.LoadMode == graphLoadMode)
             .Cast<PackageLoadSession>()
             .ToArray();
 
@@ -180,8 +213,9 @@ internal sealed class PackageLoader : IPackageLoader
             return new(loaded, failed);
         }
 
-        PackageGraphLoadContext? context = null;
+        AssemblyLoadContext? context = null;
         var replacedContexts = new List<AssemblyLoadContext>();
+        var catalogPublished = false;
 
         try
         {
@@ -190,11 +224,29 @@ internal sealed class PackageLoader : IPackageLoader
                 .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
                 .Select(static package => ResolveMainAssemblyPath(package.InstallPath, package.Id))
                 .ToArray();
-            context = new PackageGraphLoadContext(graphKey, mainAssemblyPaths, sharedPolicy, _matcher);
+            if (graphLoadMode == PackageLoadMode.HostIntegrated)
+            {
+                var candidates = BuildHostIntegratedResolutionCandidates(graphKey, packages);
+                _hostIntegratedResolutionCatalog.ValidateCanPublishGraph(graphKey, candidates);
+            }
+
+            context = graphLoadMode == PackageLoadMode.HostIntegrated
+                ? new HostIntegratedPackageGraphLoadContext(graphKey, mainAssemblyPaths, sharedPolicy, _matcher)
+                : new PackageGraphLoadContext(graphKey, mainAssemblyPaths, sharedPolicy, _matcher);
 
             foreach (var mainAssemblyPath in mainAssemblyPaths)
             {
                 context.LoadFromAssemblyName(AssemblyName.GetAssemblyName(mainAssemblyPath));
+            }
+
+            var assembliesByPackageKey = graphLoadMode == PackageLoadMode.HostIntegrated
+                ? MaterializeHostIntegratedAssemblies(context, packages)
+                : new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase);
+
+            if (graphLoadMode == PackageLoadMode.HostIntegrated)
+            {
+                _hostIntegratedResolutionCatalog.PublishGraph(graphKey, selections, assembliesByPackageKey);
+                catalogPublished = true;
             }
 
             foreach (var package in packages)
@@ -215,17 +267,29 @@ internal sealed class PackageLoader : IPackageLoader
                     graphKey,
                     DateTimeOffset.UtcNow,
                     IsLoaded: true,
-                    LastError: null);
+                    LastError: null,
+                    graphLoadMode,
+                    FrameworkIntegrationSafe: graphLoadMode == PackageLoadMode.HostIntegrated);
 
                 _sessions[key] = session;
                 loaded.Add(session);
+
+                _logger.LogInformation(
+                    "Loaded package {PackageId}@{Version} with LoadMode={LoadMode} ContextKey={ContextKey}.",
+                    package.Id,
+                    package.Version,
+                    graphLoadMode,
+                    graphKey);
             }
 
             UnloadUnreferencedContexts(replacedContexts);
         }
         catch (Exception ex)
         {
-            context?.Unload();
+            if (context?.IsCollectible == true)
+            {
+                context.Unload();
+            }
 
             foreach (var package in packages)
             {
@@ -237,6 +301,11 @@ internal sealed class PackageLoader : IPackageLoader
                     _contexts.TryRemove(key, out _);
                 }
 
+                if (catalogPublished)
+                {
+                    _hostIntegratedResolutionCatalog.RemovePackage(package.Id, package.Version);
+                }
+
                 failed[package.Id] = ex.Message;
                 _sessions[key] = new(
                     package.Id,
@@ -245,7 +314,9 @@ internal sealed class PackageLoader : IPackageLoader
                     graphKey,
                     DateTimeOffset.UtcNow,
                     IsLoaded: false,
-                    LastError: ex.Message);
+                    LastError: ex.Message,
+                    graphLoadMode,
+                    FrameworkIntegrationSafe: false);
             }
         }
 
@@ -256,7 +327,7 @@ internal sealed class PackageLoader : IPackageLoader
     {
         foreach (var context in contexts.Distinct())
         {
-            if (!_contexts.Values.Any(existing => ReferenceEquals(existing, context)))
+            if (context.IsCollectible && !_contexts.Values.Any(existing => ReferenceEquals(existing, context)))
             {
                 context.Unload();
             }
@@ -272,6 +343,7 @@ internal sealed class PackageLoader : IPackageLoader
         if (_contexts.TryRemove(key, out var removed))
         {
             context = new(key, removed);
+            _hostIntegratedResolutionCatalog.RemovePackage(packageId, version);
             return true;
         }
 
@@ -294,6 +366,100 @@ internal sealed class PackageLoader : IPackageLoader
     }
 
     private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";
+
+    private static string BuildGraphKey(IReadOnlyList<ResolvedPackage> packages) =>
+        "graph:" + string.Join('|', packages
+            .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
+            .Select(static package => BuildKey(package.Id, package.Version)));
+
+    private static IReadOnlyList<PackageLoadModeSelection> PromoteHostIntegratedGraphSelections(
+        IReadOnlyList<PackageLoadModeSelection> selections)
+    {
+        if (selections.All(static selection => selection.LoadMode == PackageLoadMode.Collectible))
+        {
+            return selections;
+        }
+
+        return selections
+            .Select(static selection => selection.LoadMode == PackageLoadMode.HostIntegrated
+                ? selection
+                : selection with
+                {
+                    LoadMode = PackageLoadMode.HostIntegrated,
+                    SelectionReason = "dependency-closure"
+                })
+            .ToArray();
+    }
+
+    private IReadOnlyDictionary<string, IReadOnlyList<Assembly>> MaterializeHostIntegratedAssemblies(
+        AssemblyLoadContext context,
+        IReadOnlyList<ResolvedPackage> packages)
+    {
+        var result = new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase);
+        var assembliesByPath = context.Assemblies
+            .Where(static assembly => !string.IsNullOrWhiteSpace(assembly.Location))
+            .GroupBy(static assembly => assembly.Location, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var package in packages)
+        {
+            var packageAssemblies = new List<Assembly>();
+            foreach (var candidate in BuildScanCandidates(package.Id, package.InstallPath))
+            {
+                if (assembliesByPath.TryGetValue(candidate.AssemblyPath, out var existingAssembly))
+                {
+                    packageAssemblies.Add(existingAssembly);
+                    continue;
+                }
+
+                try
+                {
+                    AssemblyName.GetAssemblyName(candidate.AssemblyPath);
+                    var loadedAssembly = context.LoadFromAssemblyPath(candidate.AssemblyPath);
+                    assembliesByPath[candidate.AssemblyPath] = loadedAssembly;
+                    packageAssemblies.Add(loadedAssembly);
+                }
+                catch (BadImageFormatException)
+                {
+                }
+            }
+
+            result[BuildKey(package.Id, package.Version)] = packageAssemblies
+                .OrderBy(static assembly => assembly.Location, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        return result;
+    }
+
+    private IReadOnlyList<HostIntegratedAssemblyResolutionCandidate> BuildHostIntegratedResolutionCandidates(
+        string graphKey,
+        IReadOnlyList<ResolvedPackage> packages)
+    {
+        var entries = new List<HostIntegratedAssemblyResolutionCandidate>();
+        foreach (var package in packages)
+        {
+            foreach (var candidate in BuildScanCandidates(package.Id, package.InstallPath))
+            {
+                try
+                {
+                    var assemblyName = AssemblyName.GetAssemblyName(candidate.AssemblyPath);
+                    entries.Add(new(
+                        assemblyName.Name ?? Path.GetFileNameWithoutExtension(candidate.AssemblyPath),
+                        assemblyName.Version,
+                        package.Id,
+                        package.Version,
+                        graphKey));
+                }
+                catch (BadImageFormatException)
+                {
+                }
+            }
+        }
+
+        return entries;
+    }
 
     private static string? TryResolveTargetFrameworkMoniker(string assemblyPath, string installPath)
     {

@@ -3,7 +3,7 @@ using System.Runtime.Loader;
 
 namespace Nuplane.Loading;
 
-internal sealed class PackageGraphLoadContext : AssemblyLoadContext
+internal class PackageGraphLoadContext : AssemblyLoadContext
 {
     private readonly IReadOnlyDictionary<string, string> assemblyPathsByName;
     private readonly IReadOnlyList<AssemblyDependencyResolver> dependencyResolvers;
@@ -15,7 +15,17 @@ internal sealed class PackageGraphLoadContext : AssemblyLoadContext
         IReadOnlyList<string> mainAssemblyPaths,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         SharedAssemblyPolicyMatcher matcher)
-        : base(contextName, isCollectible: true)
+        : this(contextName, mainAssemblyPaths, sharedPolicy, matcher, isCollectible: true)
+    {
+    }
+
+    protected PackageGraphLoadContext(
+        string contextName,
+        IReadOnlyList<string> mainAssemblyPaths,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        SharedAssemblyPolicyMatcher matcher,
+        bool isCollectible)
+        : base(contextName, isCollectible)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(contextName);
         ArgumentNullException.ThrowIfNull(mainAssemblyPaths);

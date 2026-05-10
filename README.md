@@ -139,8 +139,14 @@ Nuplane emits events such as package-change completion or package-loading comple
 
 ### Optional loading
 
-An opt-in subsystem that loads resolved packages into isolated assembly load contexts.
-Nuplane can manage shared contract assemblies, deactivation timeout, and unload coordination, but your host still decides what to do with loaded types.
+An opt-in subsystem that loads resolved packages into assembly load contexts.
+Nuplane supports two package load modes:
+
+- `Collectible` is the default mode for isolated or scan-only plugin scenarios where package assemblies should remain unloadable when references drain.
+- `HostIntegrated` is for packages that contribute application-lifetime framework types such as DI registrations, endpoints, hosted services, options, validators, or database migrations.
+
+Shared assemblies remain a separate policy: they solve contract/type identity by resolving selected abstractions from the host/default context, but they do not by themselves make package assemblies framework-integrated or resolvable by name.
+Nuplane can manage shared contract assemblies, deactivation timeout, unload coordination for collectible packages, and host-integrated assembly-name resolution, but your host still decides what loaded types mean.
 
 ### Module registration
 
@@ -207,6 +213,13 @@ builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
     },
     "Loading": {
       "Enabled": true,
+      "DefaultLoadMode": "Collectible",
+      "PackageLoadModes": [
+        {
+          "PackageId": "Elsa.Persistence.EFCore.PostgreSql",
+          "LoadMode": "HostIntegrated"
+        }
+      ],
       "SharedAssemblies": [
         {
           "Name": "Nuplane.Abstractions",
@@ -271,6 +284,8 @@ Nuplane has two configuration layers:
   - `Enabled`
   - `DeactivationTimeout`
   - `ActiveStoreRoot`
+  - `DefaultLoadMode`
+  - `PackageLoadModes`
   - `SharedAssemblies`
 
 For unrestricted feeds, prefer one of these explicit forms:
