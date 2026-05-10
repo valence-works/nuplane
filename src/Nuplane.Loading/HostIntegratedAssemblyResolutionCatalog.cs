@@ -65,9 +65,13 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
 
         lock (gate)
         {
+            var replacementPackageKeys = additions
+                .Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var nextGeneration = generation + 1;
             var retained = entries
-                .Where(entry => !string.Equals(entry.GraphKey, graphKey, StringComparison.OrdinalIgnoreCase))
+                .Where(entry => !string.Equals(entry.GraphKey, graphKey, StringComparison.OrdinalIgnoreCase)
+                    && !replacementPackageKeys.Contains(BuildPackageKey(entry.PackageId, entry.PackageVersion)))
                 .Concat(additions.Select(entry => entry with { Generation = nextGeneration }))
                 .ToArray();
 
@@ -95,8 +99,12 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
 
         lock (gate)
         {
+            var replacementPackageKeys = candidates
+                .Select(static candidate => BuildPackageKey(candidate.PackageId, candidate.PackageVersion))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var proposedEntries = entries
-                .Where(entry => !string.Equals(entry.GraphKey, graphKey, StringComparison.OrdinalIgnoreCase))
+                .Where(entry => !string.Equals(entry.GraphKey, graphKey, StringComparison.OrdinalIgnoreCase)
+                    && !replacementPackageKeys.Contains(BuildPackageKey(entry.PackageId, entry.PackageVersion)))
                 .Select(static entry => new ConflictCandidate(
                     entry.AssemblySimpleName,
                     entry.Version,
@@ -229,7 +237,10 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
         string.Equals(requested.Name, definition.Name, StringComparison.OrdinalIgnoreCase)
         && Equals(requested.Version, definition.Version)
         && string.Equals(NormalizeCultureName(requested.CultureName), NormalizeCultureName(definition.CultureName), StringComparison.OrdinalIgnoreCase)
-        && requested.GetPublicKeyToken().AsSpan().SequenceEqual(definition.GetPublicKeyToken());
+        && PublicKeyTokensMatch(requested.GetPublicKeyToken(), definition.GetPublicKeyToken());
+
+    private static bool PublicKeyTokensMatch(byte[]? requested, byte[]? definition) =>
+        (requested ?? []).AsSpan().SequenceEqual(definition ?? []);
 
     private static string NormalizeCultureName(string? cultureName) =>
         string.IsNullOrWhiteSpace(cultureName) || string.Equals(cultureName, "neutral", StringComparison.OrdinalIgnoreCase)

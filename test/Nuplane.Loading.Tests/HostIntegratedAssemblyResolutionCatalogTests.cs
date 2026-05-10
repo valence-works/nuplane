@@ -166,6 +166,24 @@ public sealed class HostIntegratedAssemblyResolutionCatalogTests
         Assert.Equal("not-found", diagnostic.Outcome);
     }
 
+    [Fact]
+    public void TryResolve_WhenUnsignedFullIdentityMatches_Resolves()
+    {
+        var sut = new HostIntegratedAssemblyResolutionCatalog();
+        var assembly = typeof(FixtureMarker).Assembly;
+        sut.PublishGraph(
+            "graph:first",
+            [new PackageLoadModeSelection("pkg-a", "1.0.0", PackageLoadMode.HostIntegrated, "default", "graph:first")],
+            new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pkg-a@1.0.0"] = [assembly]
+            });
+
+        Assert.True(sut.TryResolve(new AssemblyName(assembly.FullName!), out var resolvedAssembly, out var diagnostic));
+        Assert.Same(assembly, resolvedAssembly);
+        Assert.Equal("success", diagnostic.Outcome);
+    }
+
     private static string GetConflictAssemblyPath()
     {
         var path = Path.GetFullPath(Path.Combine(

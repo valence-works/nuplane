@@ -76,6 +76,26 @@ public sealed class PackageLoaderHostIntegratedTests : IDisposable
         Assert.True(catalog.TryResolve(typeof(PackageLoaderHostIntegratedTests).Assembly.GetName(), out _, out _));
     }
 
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_WhenPackageMovesToDifferentHostIntegratedGraph_ReplacesCatalogEntries()
+    {
+        var firstInstallPath = CreateInstallDir("pkg-a", typeof(FixtureMarker).Assembly);
+        var secondInstallPath = CreateInstallDir("pkg-b", typeof(PackageLoaderHostIntegratedTests).Assembly);
+        var catalog = new HostIntegratedAssemblyResolutionCatalog();
+        var options = Options.Create(new LoadingOptions { DefaultLoadMode = PackageLoadMode.HostIntegrated });
+        var loader = new PackageLoader(options: options, hostIntegratedResolutionCatalog: catalog);
+        var firstPackage = Pkg("pkg-a", "1.0.0", firstInstallPath);
+        var secondPackage = Pkg("pkg-b", "1.0.0", secondInstallPath);
+
+        await loader.EnsureGraphLoadedAsync([[firstPackage]], [], CancellationToken.None);
+        var result = await loader.EnsureGraphLoadedAsync([[firstPackage, secondPackage]], [], CancellationToken.None);
+
+        Assert.Empty(result.FailedByPackageId);
+        Assert.True(catalog.TryResolve(typeof(FixtureMarker).Assembly.GetName(), out var resolvedAssembly, out var diagnostic));
+        Assert.NotNull(resolvedAssembly);
+        Assert.Equal("success", diagnostic.Outcome);
+    }
+
     private string CreateInstallDir(string packageId) =>
         CreateInstallDir(packageId, typeof(FixtureMarker).Assembly);
 
