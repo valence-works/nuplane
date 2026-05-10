@@ -38,4 +38,16 @@ public sealed class LoadingOptionsValidatorTests
 
         Assert.Contains(errors, error => error.Contains("Duplicate package load mode override", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public void Validate_PackageLoadModeOverrideWithSurroundingWhitespace_ReturnsError()
+    {
+        var sut = new LoadingOptionsValidator();
+        var options = new LoadingOptions();
+        options.PackageLoadModes.Add(new() { PackageId = "pkg-a ", LoadMode = PackageLoadMode.HostIntegrated });
+
+        var errors = sut.Validate(options);
+
+        Assert.Contains(errors, error => error.Contains("leading or trailing whitespace", StringComparison.OrdinalIgnoreCase));
+    }
 }

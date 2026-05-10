@@ -99,7 +99,7 @@ public sealed class LoadingRegistrationDeterminismTests
         services.AddOptions();
         var builder = new NuplaneLoadingBuilder(services);
 
-        builder.PackageLoadMode("pkg-a", PackageLoadMode.HostIntegrated);
+        builder.PackageLoadMode(" pkg-a ", PackageLoadMode.HostIntegrated);
 
         using var provider = services.BuildServiceProvider();
         var packageOverride = Assert.Single(provider.GetRequiredService<IOptions<LoadingOptions>>().Value.PackageLoadModes);

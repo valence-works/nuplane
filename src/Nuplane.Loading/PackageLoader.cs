@@ -215,6 +215,7 @@ internal sealed class PackageLoader : IPackageLoader
 
         AssemblyLoadContext? context = null;
         var replacedContexts = new List<AssemblyLoadContext>();
+        var catalogPublished = false;
 
         try
         {
@@ -245,6 +246,7 @@ internal sealed class PackageLoader : IPackageLoader
             if (graphLoadMode == PackageLoadMode.HostIntegrated)
             {
                 _hostIntegratedResolutionCatalog.PublishGraph(graphKey, selections, assembliesByPackageKey);
+                catalogPublished = true;
             }
 
             foreach (var package in packages)
@@ -297,6 +299,11 @@ internal sealed class PackageLoader : IPackageLoader
                     ReferenceEquals(existingContext, context))
                 {
                     _contexts.TryRemove(key, out _);
+                }
+
+                if (catalogPublished)
+                {
+                    _hostIntegratedResolutionCatalog.RemovePackage(package.Id, package.Version);
                 }
 
                 failed[package.Id] = ex.Message;

@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.Loader;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Loading.Tests.Fixtures;
@@ -10,7 +11,19 @@ public sealed class PackageLoaderHostIntegratedTests : IDisposable
 {
     private readonly DirectoryInfo tempDir = Directory.CreateTempSubdirectory("nuplane-host-integrated-test-");
 
-    public void Dispose() => tempDir.Delete(recursive: true);
+    public void Dispose()
+    {
+        try
+        {
+            tempDir.Delete(recursive: true);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
 
     [Fact]
     public async Task EnsureGraphLoadedAsync_HostIntegratedPackage_RegistersNonCollectibleFrameworkSafeSession()
@@ -96,6 +109,25 @@ public sealed class PackageLoaderHostIntegratedTests : IDisposable
         Assert.Equal("success", diagnostic.Outcome);
     }
 
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_WhenExceptionOccursAfterPublishingHostIntegratedGraph_RemovesCatalogEntries()
+    {
+        var installPath = CreateInstallDir("pkg-a", typeof(FixtureMarker).Assembly);
+        var catalog = new HostIntegratedAssemblyResolutionCatalog();
+        var options = Options.Create(new LoadingOptions { DefaultLoadMode = PackageLoadMode.HostIntegrated });
+        var loader = new PackageLoader(
+            options: options,
+            hostIntegratedResolutionCatalog: catalog,
+            logger: new ThrowingPackageLoaderLogger());
+        var package = Pkg("pkg-a", "1.0.0", installPath);
+
+        var result = await loader.EnsureGraphLoadedAsync([[package]], [], CancellationToken.None);
+
+        Assert.Contains("pkg-a", result.FailedByPackageId.Keys);
+        Assert.False(catalog.TryResolve(typeof(FixtureMarker).Assembly.GetName(), out _, out var diagnostic));
+        Assert.Equal("not-found", diagnostic.Outcome);
+    }
+
     private string CreateInstallDir(string packageId) =>
         CreateInstallDir(packageId, typeof(FixtureMarker).Assembly);
 
@@ -108,4 +140,30 @@ public sealed class PackageLoaderHostIntegratedTests : IDisposable
 
     private static ResolvedPackage Pkg(string id, string version, string installPath) =>
         new(id, version, "feed-a", installPath, DateTimeOffset.UtcNow, id);
+
+    private sealed class ThrowingPackageLoaderLogger : ILogger<PackageLoader>
+    {
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull =>
+            NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            throw new InvalidOperationException("Logger failure after catalog publish.");
+    }
+
+    private sealed class NullScope : IDisposable
+    {
+        public static readonly NullScope Instance = new();
+
+        public void Dispose()
+        {
+        }
+    }
 }

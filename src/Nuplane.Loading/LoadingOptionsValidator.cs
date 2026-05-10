@@ -40,14 +40,21 @@ public sealed class LoadingOptionsValidator
                 continue;
             }
 
-            if (!Enum.IsDefined(packageOverride.LoadMode))
+            var packageId = packageOverride.PackageId.Trim();
+            if (!string.Equals(packageOverride.PackageId, packageId, StringComparison.Ordinal))
             {
-                errors.Add($"Package load mode override for '{packageOverride.PackageId}' uses unsupported load mode '{packageOverride.LoadMode}'.");
+                errors.Add($"Package load mode override package ID '{packageOverride.PackageId}' must not contain leading or trailing whitespace.");
+                continue;
             }
 
-            if (!seenPackageOverrides.Add(packageOverride.PackageId))
+            if (!Enum.IsDefined(packageOverride.LoadMode))
             {
-                errors.Add($"Duplicate package load mode override '{packageOverride.PackageId}'.");
+                errors.Add($"Package load mode override for '{packageId}' uses unsupported load mode '{packageOverride.LoadMode}'.");
+            }
+
+            if (!seenPackageOverrides.Add(packageId))
+            {
+                errors.Add($"Duplicate package load mode override '{packageId}'.");
             }
         }
 

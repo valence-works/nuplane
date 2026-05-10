@@ -27,7 +27,7 @@ public sealed class LoadingOptions
     public PackageLoadMode DefaultLoadMode { get; set; } = PackageLoadMode.Collectible;
 
     /// <summary>
-    /// Gets the package-specific load mode overrides keyed by package identifier.
+    /// Gets the collection of package-specific load mode overrides.
     /// </summary>
     public ICollection<PackageLoadModeOverrideOptions> PackageLoadModes { get; } = new List<PackageLoadModeOverrideOptions>();
 

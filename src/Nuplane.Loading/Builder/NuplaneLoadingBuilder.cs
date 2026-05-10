@@ -73,6 +73,7 @@ public sealed class NuplaneLoadingBuilder
     public NuplaneLoadingBuilder PackageLoadMode(string packageId, PackageLoadMode loadMode)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        packageId = packageId.Trim();
 
         Services.Configure<LoadingOptions>(options =>
         {
