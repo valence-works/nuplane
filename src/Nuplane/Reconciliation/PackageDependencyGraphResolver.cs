@@ -1,9 +1,14 @@
 using System.Runtime.Versioning;
 using System.Text.Json;
 using System.Xml.Linq;
+using NuGet.Common;
+using NuGet.Configuration;
+using NuGet.Packaging.Core;
+using NuGet.Protocol.Core.Types;
+using NuGet.Resolver;
+using NuGet.Versioning;
 using Nuplane.Abstractions;
 using Nuplane.Reconciliation.Models;
-using NuGet.Versioning;
 
 namespace Nuplane.Reconciliation;
 
@@ -31,7 +36,8 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
         ArgumentNullException.ThrowIfNull(resolveRootAsync);
 
         var resolvedPackages = new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase);
-        var graphs = new List<ResolvedPackageGraph>();
+        var rootPackages = new List<ResolvedPackage>();
+        var discoveredEdges = new List<DiscoveredDependencyEdge>();
         var generationId = Guid.NewGuid().ToString("N");
 
         foreach (var request in desiredRequests.OrderBy(static request => request.Id, StringComparer.OrdinalIgnoreCase))
@@ -40,29 +46,36 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
 
             var rootPackage = await resolveRootAsync(request, cancellationToken);
             resolvedPackages[BuildPackageKey(rootPackage.Id, rootPackage.Version)] = rootPackage;
+            rootPackages.Add(rootPackage);
+        }
 
-            var rootNode = CreateNode(rootPackage, PackageNodeRole.Root);
-            var nodes = new Dictionary<string, ResolvedPackageNode>(StringComparer.OrdinalIgnoreCase)
-            {
-                [BuildPackageKey(rootPackage.Id, rootPackage.Version)] = rootNode
-            };
-            var edges = new List<DependencyEdge>();
-            var queue = new Queue<(ResolvedPackage Parent, PackageDependencyMetadata Dependency, IReadOnlyList<string> Path)>();
+        if (rootPackages.Count == 0)
+        {
+            return new([], []);
+        }
+
+        var queue = new Queue<(ResolvedPackage Parent, PackageDependencyMetadata Dependency, IReadOnlyList<string> Path)>();
+        var expandedPackageKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var rootPackage in rootPackages)
+        {
             var rootKey = BuildPackageKey(rootPackage.Id, rootPackage.Version);
-
             foreach (var dependency in ReadDependencyMetadata(rootPackage))
             {
                 queue.Enqueue((rootPackage, dependency, [rootKey]));
             }
+        }
 
-            while (queue.Count > 0)
+        while (queue.Count > 0)
+        {
+            var (parent, dependency, path) = queue.Dequeue();
+            if (IsHostProvidedDependency(dependency.PackageId, dependency.VersionRange))
             {
-                var (parent, dependency, path) = queue.Dequeue();
-                if (IsHostProvidedDependency(dependency.PackageId, dependency.VersionRange))
-                {
-                    continue;
-                }
+                continue;
+            }
 
+            var dependencyPackage = FindExistingSatisfyingPackage(resolvedPackages.Values, dependency);
+            if (dependencyPackage is null)
+            {
                 var dependencyRequest = new PackageRequest(
                     dependency.PackageId,
                     dependency.VersionRange,
@@ -70,72 +83,213 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
                     PackageUpdatePolicy.Exact,
                     $"dependency-of:{parent.Id}");
 
-                var dependencyPackage = await retryPolicy.ExecuteAsync(
+                dependencyPackage = await retryPolicy.ExecuteAsync(
                     ct => packageResolver.ResolveAsync(dependencyRequest, ct),
                     cancellationToken);
-                var dependencyKey = BuildPackageKey(dependencyPackage.Id, dependencyPackage.Version);
-                resolvedPackages[dependencyKey] = dependencyPackage;
-
-                if (path.Contains(dependencyKey, StringComparer.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException($"Dependency cycle detected: {FormatCyclePath(path, dependencyKey)}.");
-                }
-
-                edges.Add(new DependencyEdge(
-                    parent.Id,
-                    parent.Version,
-                    dependencyPackage.Id,
-                    dependency.VersionRange,
-                    dependencyPackage.Version,
-                    dependency.TargetFramework ?? string.Empty,
-                    Optional: false));
-
-                if (nodes.ContainsKey(dependencyKey))
-                {
-                    continue;
-                }
-
-                nodes[dependencyKey] = CreateNode(dependencyPackage, PackageNodeRole.Dependency);
-
-                foreach (var transitiveDependency in ReadDependencyMetadata(dependencyPackage))
-                {
-                    queue.Enqueue((dependencyPackage, transitiveDependency, path.Concat([dependencyKey]).ToArray()));
-                }
+                resolvedPackages[BuildPackageKey(dependencyPackage.Id, dependencyPackage.Version)] = dependencyPackage;
             }
 
-            var orderedNodes = nodes.Values
-                .OrderBy(static node => node.PackageId, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static node => node.Version, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            var orderedEdges = edges
-                .OrderBy(static edge => edge.FromPackageId, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static edge => edge.ToPackageId, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static edge => edge.SelectedVersion, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            var graphId = ResolvedPackageGraph.CreateGraphId(
-                TargetFrameworkMonikerProvider.Current,
-                [rootNode],
-                orderedNodes,
-                orderedEdges,
-                []);
+            var dependencyKey = BuildPackageKey(dependencyPackage.Id, dependencyPackage.Version);
+            if (path.Contains(dependencyKey, StringComparer.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"Dependency cycle detected: {FormatCyclePath(path, dependencyKey)}.");
+            }
 
-            graphs.Add(new ResolvedPackageGraph(
-                graphId,
-                generationId,
-                TargetFrameworkMonikerProvider.Current,
-                [rootNode],
-                orderedNodes,
-                orderedEdges,
-                [],
-                DateTimeOffset.UtcNow));
+            discoveredEdges.Add(new(parent, dependency));
+
+            if (!expandedPackageKeys.Add(dependencyKey))
+            {
+                continue;
+            }
+
+            foreach (var transitiveDependency in ReadDependencyMetadata(dependencyPackage))
+            {
+                queue.Enqueue((dependencyPackage, transitiveDependency, path.Concat([dependencyKey]).ToArray()));
+            }
         }
 
+        var selectedPackages = SelectNuGetResolvedPackages(rootPackages, resolvedPackages.Values, cancellationToken);
+        var selectedKeys = selectedPackages
+            .Select(package => BuildPackageKey(package.Id, package.Version))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var rootKeys = rootPackages
+            .Select(package => BuildPackageKey(package.Id, package.Version))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var nodes = selectedPackages
+            .Select(package => CreateNode(package, DetermineNodeRole(package, rootKeys, selectedKeys, discoveredEdges)))
+            .OrderBy(static node => node.PackageId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static node => node.Version, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var rootNodes = nodes
+            .Where(static node => node.Role is PackageNodeRole.Root or PackageNodeRole.RootAndDependency)
+            .OrderBy(static node => node.PackageId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static node => node.Version, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var orderedEdges = discoveredEdges
+            .Where(edge => selectedKeys.Contains(BuildPackageKey(edge.Parent.Id, edge.Parent.Version)))
+            .Select(edge => CreateSelectedDependencyEdge(edge, selectedPackages))
+            .Distinct()
+            .OrderBy(static edge => edge.FromPackageId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static edge => edge.ToPackageId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static edge => edge.SelectedVersion, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var graphId = ResolvedPackageGraph.CreateGraphId(
+            TargetFrameworkMonikerProvider.Current,
+            rootNodes,
+            nodes,
+            orderedEdges,
+            []);
+        var graph = new ResolvedPackageGraph(
+            graphId,
+            generationId,
+            TargetFrameworkMonikerProvider.Current,
+            rootNodes,
+            nodes,
+            orderedEdges,
+            [],
+            DateTimeOffset.UtcNow);
+
         return new PackageDependencyGraphResolutionResult(
-            resolvedPackages.Values
+            selectedPackages
                 .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
-            graphs);
+            [graph]);
+    }
+
+    private static IReadOnlyList<ResolvedPackage> SelectNuGetResolvedPackages(
+        IReadOnlyList<ResolvedPackage> rootPackages,
+        IEnumerable<ResolvedPackage> candidatePackages,
+        CancellationToken cancellationToken)
+    {
+        var source = new SourceRepository(
+            new PackageSource("https://nuplane.local/aggregate", "nuplane-aggregate"),
+            Enumerable.Empty<INuGetResourceProvider>());
+        var orderedCandidatePackages = candidatePackages
+            .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static package => TryParsePackageVersion(package.Version, out var version) ? version : NuGetVersion.Parse("0.0.0"))
+            .ThenBy(static package => package.FeedName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static package => package.SourceName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static package => package.InstallPath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var packagesByKey = orderedCandidatePackages
+            .GroupBy(static package => BuildNormalizedPackageKey(package.Id, package.Version), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var availablePackages = orderedCandidatePackages
+            .GroupBy(static package => BuildNormalizedPackageKey(package.Id, package.Version), StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .Select(package => new SourcePackageDependencyInfo(
+                package.Id,
+                ParsePackageVersion(package),
+                ReadDependencyMetadata(package)
+                    .Where(static dependency => !IsHostProvidedDependency(dependency.PackageId, dependency.VersionRange))
+                    .Select(static dependency => TryCreatePackageDependency(dependency))
+                    .OfType<PackageDependency>()
+                    .ToArray(),
+                listed: true,
+                source))
+            .ToArray();
+        var targetIds = rootPackages
+            .Select(static package => package.Id)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var preferredVersions = rootPackages
+            .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static package => TryParsePackageVersion(package.Version, out var version) ? version : NuGetVersion.Parse("0.0.0"))
+            .Select(static package => new PackageIdentity(package.Id, ParsePackageVersion(package)))
+            .ToArray();
+        var context = new PackageResolverContext(
+            DependencyBehavior.Lowest,
+            targetIds,
+            requiredPackageIds: targetIds,
+            packagesConfig: [],
+            preferredVersions,
+            availablePackages,
+            [source.PackageSource],
+            NullLogger.Instance);
+
+        return new PackageResolver()
+            .Resolve(context, cancellationToken)
+            .Select(identity => packagesByKey.TryGetValue(BuildNormalizedPackageKey(identity.Id, identity.Version.ToNormalizedString()), out var package)
+                ? package
+                : throw new InvalidOperationException($"NuGet selected package '{identity.Id}@{identity.Version.ToNormalizedString()}' but no resolved package candidate was available."))
+            .ToArray();
+    }
+
+    private static NuGetVersion ParsePackageVersion(ResolvedPackage package) =>
+        TryParsePackageVersion(package.Version, out var version)
+            ? version
+            : throw new InvalidOperationException($"Resolved package '{package.Id}' has invalid NuGet version '{package.Version}'.");
+
+    private static bool TryParsePackageVersion(string version, out NuGetVersion parsedVersion) =>
+        NuGetVersion.TryParse(version, out parsedVersion!);
+
+    private static string BuildNormalizedPackageKey(string packageId, string version) =>
+        BuildPackageKey(packageId, TryParsePackageVersion(version, out var parsedVersion) ? parsedVersion.ToNormalizedString() : version);
+
+    private static PackageDependency? TryCreatePackageDependency(PackageDependencyMetadata dependency) =>
+        VersionRange.TryParse(dependency.VersionRange, out var range)
+            ? new PackageDependency(dependency.PackageId, range)
+            : null;
+
+    private static PackageNodeRole DetermineNodeRole(
+        ResolvedPackage package,
+        ISet<string> rootKeys,
+        ISet<string> selectedKeys,
+        IReadOnlyList<DiscoveredDependencyEdge> discoveredEdges)
+    {
+        var key = BuildPackageKey(package.Id, package.Version);
+        var root = rootKeys.Contains(key);
+        var dependency = discoveredEdges.Any(edge =>
+            selectedKeys.Contains(BuildPackageKey(edge.Parent.Id, edge.Parent.Version)) &&
+            string.Equals(edge.Dependency.PackageId, package.Id, StringComparison.OrdinalIgnoreCase) &&
+            VersionSatisfiesRange(package.Version, edge.Dependency.VersionRange));
+
+        return root && dependency
+            ? PackageNodeRole.RootAndDependency
+            : root
+                ? PackageNodeRole.Root
+                : PackageNodeRole.Dependency;
+    }
+
+    private static DependencyEdge CreateSelectedDependencyEdge(
+        DiscoveredDependencyEdge edge,
+        IReadOnlyList<ResolvedPackage> selectedPackages)
+    {
+        if (!VersionRange.TryParse(edge.Dependency.VersionRange, out var requestedRange))
+        {
+            throw new InvalidOperationException(
+                $"Dependency '{edge.Parent.Id}@{edge.Parent.Version}' declares invalid version range '{edge.Dependency.VersionRange}' for '{edge.Dependency.PackageId}'.");
+        }
+
+        var selectedDependency = selectedPackages
+            .Where(package => string.Equals(package.Id, edge.Dependency.PackageId, StringComparison.OrdinalIgnoreCase))
+            .Select(package => new
+            {
+                Package = package,
+                Version = NuGetVersion.Parse(package.Version)
+            })
+            .Where(candidate => requestedRange.Satisfies(candidate.Version))
+            .OrderBy(static candidate => candidate.Version)
+            .FirstOrDefault();
+
+        if (selectedDependency is null)
+        {
+            throw new InvalidOperationException(
+                $"Resolved graph did not contain a selected package for dependency '{edge.Parent.Id}@{edge.Parent.Version}' -> '{edge.Dependency.PackageId} {edge.Dependency.VersionRange}'.");
+        }
+
+        return new DependencyEdge(
+            edge.Parent.Id,
+            edge.Parent.Version,
+            selectedDependency.Package.Id,
+            edge.Dependency.VersionRange,
+            selectedDependency.Package.Version,
+            edge.Dependency.TargetFramework ?? string.Empty,
+            Optional: false);
     }
 
     private static ResolvedPackageNode CreateNode(
@@ -241,6 +395,21 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
         return NuGetVersion.TryParse(trimmed, out var version)
             ? $"[{version.ToNormalizedString()},)"
             : trimmed;
+    }
+
+    private static ResolvedPackage? FindExistingSatisfyingPackage(
+        IEnumerable<ResolvedPackage> packages,
+        PackageDependencyMetadata dependency)
+    {
+        foreach (var package in packages.Where(package => string.Equals(package.Id, dependency.PackageId, StringComparison.OrdinalIgnoreCase)))
+        {
+            if (VersionSatisfiesRange(package.Version, dependency.VersionRange))
+            {
+                return package;
+            }
+        }
+
+        return null;
     }
 
     private static IReadOnlyList<DependencyGroupMetadata> SelectDependencyGroups(IReadOnlyList<DependencyGroupMetadata> groups)
@@ -376,14 +545,9 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
         packageId.Equals("Elsa.Workflows.Runtime", StringComparison.OrdinalIgnoreCase) ||
         packageId.StartsWith("Microsoft.Extensions.", StringComparison.OrdinalIgnoreCase);
 
-    private static bool VersionSatisfiesRange(string hostVersion, string versionRange)
+    private static bool VersionSatisfiesRange(string version, string versionRange)
     {
-        if (!NuGetVersion.TryParse(hostVersion, out var parsedHostVersion))
-        {
-            return false;
-        }
-
-        if (string.IsNullOrWhiteSpace(versionRange))
+        if (!NuGetVersion.TryParse(version, out var parsedVersion))
         {
             return false;
         }
@@ -395,7 +559,7 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
             versionRange = $"[{versionRange}]";
         }
 
-        return VersionRange.TryParse(versionRange, out var range) && range.Satisfies(parsedHostVersion);
+        return VersionRange.TryParse(versionRange, out var range) && range.Satisfies(parsedVersion);
     }
 
     private static IReadOnlyDictionary<string, string> LoadHostPackageVersions()
@@ -437,6 +601,8 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
 
         return packageVersions;
     }
+
+    private sealed record DiscoveredDependencyEdge(ResolvedPackage Parent, PackageDependencyMetadata Dependency);
 
     private sealed record DependencyGroupMetadata(string? TargetFramework, IReadOnlyList<PackageDependencyMetadata> Dependencies);
 

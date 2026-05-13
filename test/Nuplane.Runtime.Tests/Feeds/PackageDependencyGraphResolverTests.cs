@@ -87,6 +87,129 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveAsync_WhenHigherDirectDependencySatisfiesTransitiveBaseline_ReusesSelectedDependency()
+    {
+        var root = CreateInstalledPackage(
+            "Plugin.Root",
+            "1.0.0",
+            dependenciesXml: """
+                <dependencies>
+                  <dependency id="Plugin.Direct" version="10.0.3" />
+                  <dependency id="Plugin.Transitive" version="[1.0.0]" />
+                </dependencies>
+                """);
+        var direct = CreateInstalledPackage("Plugin.Direct", "10.0.3");
+        var transitive = CreateInstalledPackage("Plugin.Transitive", "1.0.0", dependencyId: "Plugin.Direct", dependencyVersionRange: "8.0.2");
+        var resolver = new VersionRangePackageResolver(
+            new Dictionary<string, IReadOnlyList<ResolvedPackage>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Plugin.Direct"] = [direct],
+                ["Plugin.Transitive"] = [transitive]
+            });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Single(graph.Nodes, static node => node.PackageId == "Plugin.Direct");
+        Assert.Equal(2, graph.Edges.Count(static edge => edge.ToPackageId == "Plugin.Direct"));
+        Assert.Single(resolver.Requests, static request => request.Id == "Plugin.Direct");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_MultipleRoots_UnifiesSharedDependencyWithNuGetLowestApplicableVersion()
+    {
+        var leftRoot = CreateInstalledPackage("Plugin.Left", "1.0.0", dependencyId: "Plugin.Shared", dependencyVersionRange: "1.0.0");
+        var rightRoot = CreateInstalledPackage("Plugin.Right", "1.0.0", dependencyId: "Plugin.Shared", dependencyVersionRange: "2.0.0");
+        var resolver = new VersionRangePackageResolver(
+            new Dictionary<string, IReadOnlyList<ResolvedPackage>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Plugin.Shared"] =
+                [
+                    CreateInstalledPackage("Plugin.Shared", "1.0.0"),
+                    CreateInstalledPackage("Plugin.Shared", "2.0.0"),
+                    CreateInstalledPackage("Plugin.Shared", "3.0.0")
+                ]
+            });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [
+                new PackageRequest("Plugin.Left", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source"),
+                new PackageRequest("Plugin.Right", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")
+            ],
+            (request, _) => Task.FromResult(request.Id == "Plugin.Left" ? leftRoot : rightRoot),
+            CancellationToken.None);
+
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Equal(["Plugin.Left", "Plugin.Right"], graph.Roots.Select(static node => node.PackageId).Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Single(graph.Nodes, static node => node.PackageId == "Plugin.Shared");
+        Assert.Contains(graph.Nodes, static node => node.PackageId == "Plugin.Shared" && node.Version == "2.0.0");
+        Assert.DoesNotContain(graph.Nodes, static node => node.PackageId == "Plugin.Shared" && node.Version == "3.0.0");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WhenCancelledBeforeNuGetSolve_ThrowsOperationCanceledException()
+    {
+        using var cts = new CancellationTokenSource();
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) =>
+            {
+                cts.Cancel();
+                return Task.FromResult(root);
+            },
+            cts.Token));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WithNonNormalizedPackageVersion_MapsNuGetSelectedIdentityBackToResolvedPackage()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        var package = Assert.Single(result.ResolvedPackages);
+        Assert.Equal("Plugin.Root", package.Id);
+        Assert.Equal("1.0", package.Version);
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Contains(graph.Nodes, static node => node.PackageId == "Plugin.Root" && node.Version == "1.0");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WithMalformedDependencyVersionRange_ThrowsNamedInvalidRangeDiagnostic()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Plugin.Dependency", dependencyVersionRange: "latest");
+        var dependency = CreateInstalledPackage("Plugin.Dependency", "1.0.0");
+        var resolver = new StubPackageResolver(
+            new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Plugin.Dependency"] = dependency
+            });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None));
+
+        Assert.Contains("invalid version range 'latest'", exception.Message);
+        Assert.Contains("Plugin.Dependency", exception.Message);
+    }
+
+    [Fact]
     public async Task ResolveAsync_DependencyProvidedByHost_DoesNotAcquireDependencyNode()
     {
         var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Nuplane.Abstractions", dependencyVersionRange: "[1.0.0]");

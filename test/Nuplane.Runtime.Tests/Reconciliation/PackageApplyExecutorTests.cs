@@ -69,11 +69,9 @@ public sealed class PackageApplyExecutorTests : IDisposable
 
         Assert.Empty(recorder.Records);
         Assert.Contains(result.ResolvedPackages, static package => package.Id == "Shared.Dependency" && package.Version == "10.0.3");
-        Assert.Equal(2, result.ResolvedGraphs.Count);
-        Assert.All(result.ResolvedGraphs, graph =>
-        {
-            Assert.Contains(graph.Nodes, static node => node.PackageId == "Shared.Dependency" && node.Version == "10.0.3");
-        });
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Equal(["Root.Baseline", "Root.Current"], graph.Roots.Select(static root => root.PackageId).Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Contains(graph.Nodes, static node => node.PackageId == "Shared.Dependency" && node.Version == "10.0.3");
     }
 
     public void Dispose()

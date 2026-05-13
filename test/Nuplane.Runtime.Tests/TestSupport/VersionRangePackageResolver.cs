@@ -35,7 +35,7 @@ internal sealed class VersionRangePackageResolver(IReadOnlyDictionary<string, IR
                 Version = NuGetVersion.Parse(package.Version)
             })
             .Where(candidate => range.Satisfies(candidate.Version))
-            .OrderByDescending(candidate => candidate.Version)
+            .OrderBy(candidate => candidate.Version)
             .FirstOrDefault();
 
         return match is null

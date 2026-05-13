@@ -10,6 +10,7 @@ using Nuplane.Feeds.Versioning;
 using Nuplane.Observability;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Versioning;
+using NuGet.Versioning;
 
 namespace Nuplane.Feeds;
 
@@ -202,7 +203,9 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         try
         {
             var versionList = await _versionEnumerator.EnumerateVersionsAsync(feed, request.Id, cancellationToken);
-            var result = _versionRangeEvaluator.SelectBestMatch(request.VersionRange, versionList.Versions);
+            var result = IsDependencyRequest(request)
+                ? SelectLowestDependencyMatch(request.VersionRange, versionList.Versions)
+                : _versionRangeEvaluator.SelectBestMatch(request.VersionRange, versionList.Versions);
             stopwatch.Stop();
 
             _logger.LogDebug(
@@ -316,6 +319,40 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
 
     private static bool IsLocalDirectoryFeed(FeedDefinition feed) =>
         feed.ServiceIndex.Scheme.Equals("file", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsDependencyRequest(PackageRequest request) =>
+        request.SourceName.StartsWith("dependency-of:", StringComparison.OrdinalIgnoreCase);
+
+    private static VersionResolutionResult SelectLowestDependencyMatch(string versionRange, IReadOnlyList<string> availableVersions)
+    {
+        var parsedVersions = new List<(string OriginalVersion, NuGetVersion ParsedVersion)>();
+        foreach (var version in availableVersions)
+        {
+            if (NuGetVersion.TryParse(version, out var parsedVersion))
+            {
+                parsedVersions.Add((version, parsedVersion));
+            }
+        }
+
+        if (parsedVersions.Count == 0)
+        {
+            return new(false, null, availableVersions.Count, "Resolution failed: no versions available.");
+        }
+
+        if (!VersionRange.TryParse(versionRange, out var range))
+        {
+            return new(false, null, availableVersions.Count, $"Resolution failed: invalid version range '{versionRange}'.");
+        }
+
+        var selectedVersion = parsedVersions
+            .Where(candidate => range.Satisfies(candidate.ParsedVersion))
+            .OrderBy(candidate => candidate.ParsedVersion)
+            .FirstOrDefault();
+
+        return string.IsNullOrEmpty(selectedVersion.OriginalVersion)
+            ? new(false, null, availableVersions.Count, $"Resolution failed: no version matched range '{versionRange}'.")
+            : new(true, selectedVersion.OriginalVersion, availableVersions.Count, null);
+    }
 
     /// <summary>
     /// Tries to retrieve the feed resolution decision for the specified package.
