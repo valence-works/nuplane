@@ -90,6 +90,32 @@ public sealed class PackageLoaderHostIntegratedTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureGraphLoadedAsync_HostIntegratedGraphWithNoAssemblyDependency_SkipsDependencyWithoutCatalogEntry()
+    {
+        var rootInstallPath = CreateInstallDir("Nuplane.Loading.Tests.Fixtures");
+        var facadeInstallPath = CreateNoAssemblyInstallDir("Microsoft.Data.Sqlite");
+        var catalog = new HostIntegratedAssemblyResolutionCatalog();
+        var options = Options.Create(new LoadingOptions { DefaultLoadMode = PackageLoadMode.HostIntegrated });
+        var loader = new PackageLoader(options: options, hostIntegratedResolutionCatalog: catalog);
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[
+                Pkg("Nuplane.Loading.Tests.Fixtures", "1.0.0", rootInstallPath),
+                Pkg("Microsoft.Data.Sqlite", "10.0.3", facadeInstallPath)
+            ]],
+            [],
+            CancellationToken.None);
+
+        var loaded = Assert.Single(result.Loaded);
+        Assert.Equal("Nuplane.Loading.Tests.Fixtures", loaded.PackageId);
+        Assert.Empty(result.FailedByPackageId);
+        Assert.True(loader.TryGetContext("Nuplane.Loading.Tests.Fixtures", "1.0.0", out _));
+        Assert.False(loader.TryGetContext("Microsoft.Data.Sqlite", "10.0.3", out _));
+        Assert.True(catalog.TryResolve(typeof(FixtureMarker).Assembly.GetName(), out _, out var diagnostic));
+        Assert.Equal("success", diagnostic.Outcome);
+    }
+
+    [Fact]
     public async Task EnsureGraphLoadedAsync_WhenPackageMovesToDifferentHostIntegratedGraph_ReplacesCatalogEntries()
     {
         var firstInstallPath = CreateInstallDir("pkg-a", typeof(FixtureMarker).Assembly);
@@ -135,6 +161,14 @@ public sealed class PackageLoaderHostIntegratedTests : IDisposable
     {
         var dir = tempDir.CreateSubdirectory(packageId);
         File.Copy(assembly.Location, Path.Combine(dir.FullName, $"{packageId}.dll"));
+        return dir.FullName;
+    }
+
+    private string CreateNoAssemblyInstallDir(string packageId)
+    {
+        var dir = tempDir.CreateSubdirectory(packageId);
+        var frameworkDir = Directory.CreateDirectory(Path.Combine(dir.FullName, "lib", "netstandard2.0"));
+        File.WriteAllText(Path.Combine(frameworkDir.FullName, "_._"), string.Empty);
         return dir.FullName;
     }
 

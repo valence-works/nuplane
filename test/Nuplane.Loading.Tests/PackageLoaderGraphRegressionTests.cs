@@ -56,6 +56,45 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
         Assert.Equal(2, result.Loaded.Count);
     }
 
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_LoadablePackageWithNoAssemblyDependency_SkipsDependencyWithoutFailure()
+    {
+        var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");
+        var facadeInstall = CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[
+                new ResolvedPackage("Plugin.Root", "1.0.0", "test-feed", rootInstall, DateTimeOffset.UtcNow, "test-source"),
+                new ResolvedPackage("Microsoft.Data.Sqlite", "10.0.3", "test-feed", facadeInstall, DateTimeOffset.UtcNow, "test-source")
+            ]],
+            [],
+            CancellationToken.None);
+
+        var loaded = Assert.Single(result.Loaded);
+        Assert.Equal("Plugin.Root", loaded.PackageId);
+        Assert.Empty(result.FailedByPackageId);
+        Assert.True(loader.TryGetContext("Plugin.Root", "1.0.0", out _));
+        Assert.False(loader.TryGetContext("Microsoft.Data.Sqlite", "10.0.3", out _));
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_GraphWithOnlyNoAssemblyPackages_FailsGraph()
+    {
+        var facadeInstall = CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[new ResolvedPackage("Microsoft.Data.Sqlite", "10.0.3", "test-feed", facadeInstall, DateTimeOffset.UtcNow, "test-source")]],
+            [],
+            CancellationToken.None);
+
+        Assert.Empty(result.Loaded);
+        var failure = Assert.Single(result.FailedByPackageId);
+        Assert.Equal("Microsoft.Data.Sqlite", failure.Key);
+        Assert.Contains("No loadable assembly", failure.Value, StringComparison.OrdinalIgnoreCase);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))
@@ -78,6 +117,15 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
         var installPath = Path.Combine(tempRoot, packageId, "1.0.0");
         Directory.CreateDirectory(installPath);
         File.Copy(FindFixtureAssembly(assemblyFileName), Path.Combine(installPath, assemblyFileName), overwrite: true);
+        return installPath;
+    }
+
+    private string CreateNoAssemblyPackageInstall(string packageId)
+    {
+        var installPath = Path.Combine(tempRoot, packageId, "1.0.0");
+        var libPath = Path.Combine(installPath, "lib", "netstandard2.0");
+        Directory.CreateDirectory(libPath);
+        File.WriteAllText(Path.Combine(libPath, "_._"), string.Empty);
         return installPath;
     }
 

@@ -219,14 +219,20 @@ internal sealed class PackageLoader : IPackageLoader
 
         try
         {
-            var mainAssemblyPaths = packages
+            var loadablePackages = ResolveLoadableGraphPackages(packages);
+            if (loadablePackages.Count == 0)
+            {
+                throw new FileNotFoundException($"No loadable package assemblies were found in graph '{graphKey}'.");
+            }
+
+            var mainAssemblyPaths = loadablePackages
                 .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
-                .Select(static package => ResolveMainAssemblyPath(package.InstallPath, package.Id))
+                .Select(static package => package.MainAssemblyPath)
                 .ToArray();
             if (graphLoadMode == PackageLoadMode.HostIntegrated)
             {
-                var candidates = BuildHostIntegratedResolutionCandidates(graphKey, packages);
+                var candidates = BuildHostIntegratedResolutionCandidates(graphKey, loadablePackages);
                 _hostIntegratedResolutionCatalog.ValidateCanPublishGraph(graphKey, candidates);
             }
 
@@ -240,7 +246,7 @@ internal sealed class PackageLoader : IPackageLoader
             }
 
             var assembliesByPackageKey = graphLoadMode == PackageLoadMode.HostIntegrated
-                ? MaterializeHostIntegratedAssemblies(context, packages)
+                ? MaterializeHostIntegratedAssemblies(context, loadablePackages)
                 : new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase);
 
             if (graphLoadMode == PackageLoadMode.HostIntegrated)
@@ -249,7 +255,7 @@ internal sealed class PackageLoader : IPackageLoader
                 catalogPublished = true;
             }
 
-            foreach (var package in packages)
+            foreach (var package in loadablePackages)
             {
                 var key = BuildKey(package.Id, package.Version);
                 if (_contexts.TryGetValue(key, out var previousContext) &&
@@ -323,6 +329,34 @@ internal sealed class PackageLoader : IPackageLoader
         return new(loaded, failed);
     }
 
+    private IReadOnlyList<LoadableGraphPackage> ResolveLoadableGraphPackages(IReadOnlyList<ResolvedPackage> packages)
+    {
+        var loadablePackages = new List<LoadableGraphPackage>(packages.Count);
+
+        foreach (var package in packages)
+        {
+            try
+            {
+                loadablePackages.Add(new(
+                    package.Id,
+                    package.Version,
+                    package.InstallPath,
+                    ResolveMainAssemblyPath(package.InstallPath, package.Id)));
+            }
+            catch (NoLoadableAssemblyException ex)
+            {
+                _logger.LogInformation(
+                    "Skipped package {PackageId}@{Version} in graph because it contains no loadable assemblies under {InstallPath}. Reason={Reason}",
+                    package.Id,
+                    package.Version,
+                    package.InstallPath,
+                    ex.Message);
+            }
+        }
+
+        return loadablePackages;
+    }
+
     private void UnloadUnreferencedContexts(IEnumerable<AssemblyLoadContext> contexts)
     {
         foreach (var context in contexts.Distinct())
@@ -394,7 +428,7 @@ internal sealed class PackageLoader : IPackageLoader
 
     private IReadOnlyDictionary<string, IReadOnlyList<Assembly>> MaterializeHostIntegratedAssemblies(
         AssemblyLoadContext context,
-        IReadOnlyList<ResolvedPackage> packages)
+        IReadOnlyList<LoadableGraphPackage> packages)
     {
         var result = new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase);
         var assembliesByPath = context.Assemblies
@@ -435,7 +469,7 @@ internal sealed class PackageLoader : IPackageLoader
 
     private IReadOnlyList<HostIntegratedAssemblyResolutionCandidate> BuildHostIntegratedResolutionCandidates(
         string graphKey,
-        IReadOnlyList<ResolvedPackage> packages)
+        IReadOnlyList<LoadableGraphPackage> packages)
     {
         var entries = new List<HostIntegratedAssemblyResolutionCandidate>();
         foreach (var package in packages)
@@ -565,7 +599,7 @@ internal sealed class PackageLoader : IPackageLoader
 
         if (assemblies.Length == 0)
         {
-            throw new FileNotFoundException($"No loadable assembly found under '{installPath}'.");
+            throw new NoLoadableAssemblyException($"No loadable assembly found under '{installPath}'.");
         }
 
         if (assemblies.Length == 1)
@@ -675,6 +709,14 @@ internal sealed class PackageLoader : IPackageLoader
     private sealed record FrameworkTarget(FrameworkKind Kind, Version Version, string DisplayName);
 
     private sealed record AssemblyAssetSelection(string MainAssemblyPath, string CandidateSearchRoot);
+
+    private sealed record LoadableGraphPackage(
+        string Id,
+        string Version,
+        string InstallPath,
+        string MainAssemblyPath);
+
+    private sealed class NoLoadableAssemblyException(string message) : FileNotFoundException(message);
 
     private sealed record FrameworkDirectory(string Path, string FolderName, FrameworkTarget Target)
     {
