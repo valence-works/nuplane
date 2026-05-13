@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
+using NuGet.RuntimeModel;
 
 namespace Nuplane.Loading;
 
@@ -11,6 +12,7 @@ internal class PackageGraphLoadContext : AssemblyLoadContext
     private readonly IReadOnlyList<string> packageInstallPaths;
     private readonly IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy;
     private readonly SharedAssemblyPolicyMatcher matcher;
+    private static readonly Lazy<RuntimeGraph> RuntimeGraphProvider = new(LoadRuntimeGraph);
 
     public PackageGraphLoadContext(
         string contextName,
@@ -107,7 +109,8 @@ internal class PackageGraphLoadContext : AssemblyLoadContext
         }
 
         var fileNames = BuildNativeLibraryFileNames(unmanagedDllName).ToArray();
-        foreach (var directory in packageInstallPaths.SelectMany(path => ResolveNativeSearchDirectories(path, runtimeIdentifier)))
+        var runtimeIdentifiers = ExpandRuntimeIdentifiers(runtimeIdentifier);
+        foreach (var directory in packageInstallPaths.SelectMany(path => ResolveNativeSearchDirectories(path, runtimeIdentifiers)))
         {
             foreach (var fileName in fileNames)
             {
@@ -122,7 +125,20 @@ internal class PackageGraphLoadContext : AssemblyLoadContext
         return null;
     }
 
-    private static IEnumerable<string> ResolveNativeSearchDirectories(string packageInstallPath, string runtimeIdentifier)
+    internal static IReadOnlyList<string> ExpandRuntimeIdentifiers(string runtimeIdentifier) =>
+        RuntimeGraphProvider.Value
+            .ExpandRuntime(runtimeIdentifier)
+            .Prepend(runtimeIdentifier)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static RuntimeGraph LoadRuntimeGraph()
+    {
+        using var stream = typeof(PackageGraphLoadContext).Assembly.GetManifestResourceStream("Nuplane.Loading.RuntimeIdentifierGraph.json");
+        return stream is null ? RuntimeGraph.Empty : JsonRuntimeFormat.ReadRuntimeGraph(stream);
+    }
+
+    private static IEnumerable<string> ResolveNativeSearchDirectories(string packageInstallPath, IReadOnlyList<string> runtimeIdentifiers)
     {
         if (string.IsNullOrWhiteSpace(packageInstallPath) || !Directory.Exists(packageInstallPath))
         {
@@ -131,10 +147,13 @@ internal class PackageGraphLoadContext : AssemblyLoadContext
 
         yield return packageInstallPath;
 
-        var nativeDirectory = Path.Combine(packageInstallPath, "runtimes", runtimeIdentifier, "native");
-        if (Directory.Exists(nativeDirectory))
+        foreach (var runtimeIdentifier in runtimeIdentifiers)
         {
-            yield return nativeDirectory;
+            var nativeDirectory = Path.Combine(packageInstallPath, "runtimes", runtimeIdentifier, "native");
+            if (Directory.Exists(nativeDirectory))
+            {
+                yield return nativeDirectory;
+            }
         }
     }
 
