@@ -152,6 +152,45 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveAsync_WhenCancelledBeforeNuGetSolve_ThrowsOperationCanceledException()
+    {
+        using var cts = new CancellationTokenSource();
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) =>
+            {
+                cts.Cancel();
+                return Task.FromResult(root);
+            },
+            cts.Token));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WithMalformedDependencyVersionRange_ThrowsNamedInvalidRangeDiagnostic()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Plugin.Dependency", dependencyVersionRange: "latest");
+        var dependency = CreateInstalledPackage("Plugin.Dependency", "1.0.0");
+        var resolver = new StubPackageResolver(
+            new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Plugin.Dependency"] = dependency
+            });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None));
+
+        Assert.Contains("invalid version range 'latest'", exception.Message);
+        Assert.Contains("Plugin.Dependency", exception.Message);
+    }
+
+    [Fact]
     public async Task ResolveAsync_DependencyProvidedByHost_DoesNotAcquireDependencyNode()
     {
         var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Nuplane.Abstractions", dependencyVersionRange: "[1.0.0]");

@@ -55,6 +55,7 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
         }
 
         var queue = new Queue<(ResolvedPackage Parent, PackageDependencyMetadata Dependency, IReadOnlyList<string> Path)>();
+        var expandedPackageKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var rootPackage in rootPackages)
         {
             var rootKey = BuildPackageKey(rootPackage.Id, rootPackage.Version);
@@ -96,13 +97,18 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
 
             discoveredEdges.Add(new(parent, dependency));
 
+            if (!expandedPackageKeys.Add(dependencyKey))
+            {
+                continue;
+            }
+
             foreach (var transitiveDependency in ReadDependencyMetadata(dependencyPackage))
             {
                 queue.Enqueue((dependencyPackage, transitiveDependency, path.Concat([dependencyKey]).ToArray()));
             }
         }
 
-        var selectedPackages = SelectNuGetResolvedPackages(rootPackages, resolvedPackages.Values);
+        var selectedPackages = SelectNuGetResolvedPackages(rootPackages, resolvedPackages.Values, cancellationToken);
         var selectedKeys = selectedPackages
             .Select(package => BuildPackageKey(package.Id, package.Version))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -155,23 +161,32 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
 
     private static IReadOnlyList<ResolvedPackage> SelectNuGetResolvedPackages(
         IReadOnlyList<ResolvedPackage> rootPackages,
-        IEnumerable<ResolvedPackage> candidatePackages)
+        IEnumerable<ResolvedPackage> candidatePackages,
+        CancellationToken cancellationToken)
     {
         var source = new SourceRepository(
             new PackageSource("https://nuplane.local/aggregate", "nuplane-aggregate"),
             Enumerable.Empty<INuGetResourceProvider>());
-        var packagesByKey = candidatePackages
+        var orderedCandidatePackages = candidatePackages
+            .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static package => NuGetVersion.Parse(package.Version))
+            .ThenBy(static package => package.FeedName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static package => package.SourceName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static package => package.InstallPath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var packagesByKey = orderedCandidatePackages
             .GroupBy(package => BuildPackageKey(package.Id, package.Version), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
-        var availablePackages = packagesByKey.Values
+        var availablePackages = orderedCandidatePackages
+            .GroupBy(package => BuildPackageKey(package.Id, package.Version), StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
             .Select(package => new SourcePackageDependencyInfo(
                 package.Id,
                 NuGetVersion.Parse(package.Version),
                 ReadDependencyMetadata(package)
                     .Where(static dependency => !IsHostProvidedDependency(dependency.PackageId, dependency.VersionRange))
-                    .Select(static dependency => new PackageDependency(
-                        dependency.PackageId,
-                        VersionRange.Parse(dependency.VersionRange)))
+                    .Select(static dependency => TryCreatePackageDependency(dependency))
+                    .OfType<PackageDependency>()
                     .ToArray(),
                 listed: true,
                 source))
@@ -179,24 +194,35 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
         var targetIds = rootPackages
             .Select(static package => package.Id)
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var preferredVersions = rootPackages
+            .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static package => NuGetVersion.Parse(package.Version))
+            .Select(static package => new PackageIdentity(package.Id, NuGetVersion.Parse(package.Version)))
             .ToArray();
         var context = new PackageResolverContext(
             DependencyBehavior.Lowest,
             targetIds,
             requiredPackageIds: targetIds,
             packagesConfig: [],
-            preferredVersions: rootPackages.Select(static package => new PackageIdentity(package.Id, NuGetVersion.Parse(package.Version))).ToArray(),
+            preferredVersions,
             availablePackages,
             [source.PackageSource],
             NullLogger.Instance);
 
         return new PackageResolver()
-            .Resolve(context, CancellationToken.None)
+            .Resolve(context, cancellationToken)
             .Select(identity => packagesByKey.TryGetValue(BuildPackageKey(identity.Id, identity.Version.ToNormalizedString()), out var package)
                 ? package
                 : throw new InvalidOperationException($"NuGet selected package '{identity.Id}@{identity.Version.ToNormalizedString()}' but no resolved package candidate was available."))
             .ToArray();
     }
+
+    private static PackageDependency? TryCreatePackageDependency(PackageDependencyMetadata dependency) =>
+        VersionRange.TryParse(dependency.VersionRange, out var range)
+            ? new PackageDependency(dependency.PackageId, range)
+            : null;
 
     private static PackageNodeRole DetermineNodeRole(
         ResolvedPackage package,
@@ -222,6 +248,12 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
         DiscoveredDependencyEdge edge,
         IReadOnlyList<ResolvedPackage> selectedPackages)
     {
+        if (!VersionRange.TryParse(edge.Dependency.VersionRange, out var requestedRange))
+        {
+            throw new InvalidOperationException(
+                $"Dependency '{edge.Parent.Id}@{edge.Parent.Version}' declares invalid version range '{edge.Dependency.VersionRange}' for '{edge.Dependency.PackageId}'.");
+        }
+
         var selectedDependency = selectedPackages
             .Where(package => string.Equals(package.Id, edge.Dependency.PackageId, StringComparison.OrdinalIgnoreCase))
             .Select(package => new
@@ -229,7 +261,7 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
                 Package = package,
                 Version = NuGetVersion.Parse(package.Version)
             })
-            .Where(candidate => VersionRange.Parse(edge.Dependency.VersionRange).Satisfies(candidate.Version))
+            .Where(candidate => requestedRange.Satisfies(candidate.Version))
             .OrderBy(static candidate => candidate.Version)
             .FirstOrDefault();
 
