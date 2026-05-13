@@ -1,6 +1,7 @@
 using Nuplane.Abstractions;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Models;
+using Nuplane.Runtime.Tests.TestSupport;
 using System.Reflection;
 using System.Reflection.Emit;
 
@@ -58,6 +59,31 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
         Assert.Equal("Plugin.Dependency", dependencyRequest.Id);
         Assert.Null(dependencyRequest.FeedName);
         Assert.Equal("dependency-of:Plugin.Root", dependencyRequest.SourceName);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_BareDependencyVersion_TreatsVersionAsInclusiveMinimum()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Plugin.Dependency", dependencyVersionRange: "8.0.2");
+        var dependency = CreateInstalledPackage("Plugin.Dependency", "10.0.3");
+        var resolver = new VersionRangePackageResolver(
+            new Dictionary<string, IReadOnlyList<ResolvedPackage>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Plugin.Dependency"] = [dependency]
+            });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Contains(graph.Nodes, static node => node.PackageId == "Plugin.Dependency" && node.Version == "10.0.3");
+        var edge = Assert.Single(graph.Edges);
+        Assert.Equal("[8.0.2,)", edge.RequestedVersionRange);
+        var request = Assert.Single(resolver.Requests);
+        Assert.Equal("[8.0.2,)", request.VersionRange);
     }
 
     [Fact]
