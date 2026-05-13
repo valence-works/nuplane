@@ -125,7 +125,7 @@ jobs:
       - name: Push preview packages to feedz.io
         shell: bash
         env:
-          FEEDZ_PREVIEW_SOURCE_URL: ${{ secrets.FEEDZ_PREVIEW_SOURCE_URL }}
+          FEEDZ_PREVIEW_SOURCE_URL: ${{ vars.FEEDZ_PREVIEW_SOURCE_URL }}
           FEEDZ_PREVIEW_API_KEY: ${{ secrets.FEEDZ_PREVIEW_API_KEY }}
         run: |
           set -euo pipefail
