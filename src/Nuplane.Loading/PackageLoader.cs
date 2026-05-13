@@ -210,10 +210,16 @@ internal sealed class PackageLoader : IPackageLoader
         AssemblyLoadContext? context = null;
         var replacedContexts = new List<AssemblyLoadContext>();
         var catalogPublished = false;
+        GraphPackageResolution? graphPackages = null;
 
         try
         {
-            var graphPackages = ResolveGraphPackages(packages);
+            graphPackages = ResolveGraphPackages(packages);
+            if (graphPackages.ResolutionFailure is not null)
+            {
+                throw graphPackages.ResolutionFailure;
+            }
+
             if (graphPackages.LoadablePackages.Count == 0)
             {
                 throw new NoLoadableAssemblyException(
@@ -299,7 +305,7 @@ internal sealed class PackageLoader : IPackageLoader
                 context.Unload();
             }
 
-            foreach (var package in packages)
+            foreach (var package in ResolveFailedGraphPackages(packages, graphPackages))
             {
                 var key = BuildKey(package.Id, package.Version);
                 if (context is not null &&
@@ -359,7 +365,9 @@ internal sealed class PackageLoader : IPackageLoader
     private GraphPackageResolution ResolveGraphPackages(IReadOnlyList<ResolvedPackage> packages)
     {
         var loadablePackages = new List<LoadableGraphPackage>(packages.Count);
-        var skippedInstallPaths = new List<string>();
+        var skippedPackages = new List<GraphPackage>();
+        var failedPackages = new List<GraphPackage>();
+        Exception? resolutionFailure = null;
 
         foreach (var package in packages)
         {
@@ -373,7 +381,7 @@ internal sealed class PackageLoader : IPackageLoader
             }
             catch (NoLoadableAssemblyException ex)
             {
-                skippedInstallPaths.Add(package.InstallPath);
+                skippedPackages.Add(new(package.Id, package.Version, package.InstallPath));
                 _logger.LogInformation(
                     "Skipped package {PackageId}@{Version} in graph because it contains no loadable assemblies under {InstallPath}. Reason={Reason}",
                     package.Id,
@@ -381,9 +389,14 @@ internal sealed class PackageLoader : IPackageLoader
                     package.InstallPath,
                     ex.Message);
             }
+            catch (Exception ex)
+            {
+                failedPackages.Add(new(package.Id, package.Version, package.InstallPath));
+                resolutionFailure ??= ex;
+            }
         }
 
-        return new(loadablePackages, skippedInstallPaths);
+        return new(loadablePackages, skippedPackages, failedPackages, resolutionFailure);
     }
 
     private void UnloadUnreferencedContexts(IEnumerable<AssemblyLoadContext> contexts)
@@ -434,6 +447,30 @@ internal sealed class PackageLoader : IPackageLoader
         values.Count == 0
             ? "<none>"
             : string.Join(", ", values.Select(static value => $"'{value}'"));
+
+    private static IReadOnlyList<GraphPackage> ResolveFailedGraphPackages(
+        IReadOnlyList<ResolvedPackage> packages,
+        GraphPackageResolution? graphPackages)
+    {
+        if (graphPackages is null)
+        {
+            return packages
+                .Select(static package => new GraphPackage(package.Id, package.Version, package.InstallPath))
+                .ToArray();
+        }
+
+        if (graphPackages.LoadablePackages.Count == 0 && graphPackages.FailedPackages.Count == 0)
+        {
+            return graphPackages.SkippedPackages;
+        }
+
+        return graphPackages.LoadablePackages
+            .Select(static package => new GraphPackage(package.Id, package.Version, package.InstallPath))
+            .Concat(graphPackages.FailedPackages)
+            .GroupBy(static package => BuildKey(package.Id, package.Version), StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .ToArray();
+    }
 
     private static string BuildGraphKey(IReadOnlyList<ResolvedPackage> packages) =>
         "graph:" + string.Join('|', packages
@@ -750,9 +787,19 @@ internal sealed class PackageLoader : IPackageLoader
         string InstallPath,
         string MainAssemblyPath);
 
+    private sealed record GraphPackage(
+        string Id,
+        string Version,
+        string InstallPath);
+
     private sealed record GraphPackageResolution(
         IReadOnlyList<LoadableGraphPackage> LoadablePackages,
-        IReadOnlyList<string> SkippedInstallPaths);
+        IReadOnlyList<GraphPackage> SkippedPackages,
+        IReadOnlyList<GraphPackage> FailedPackages,
+        Exception? ResolutionFailure)
+    {
+        public IReadOnlyList<string> SkippedInstallPaths => SkippedPackages.Select(static package => package.InstallPath).ToArray();
+    }
 
     private sealed record LoadedGraphCacheEntry(
         PackageLoadMode LoadMode,

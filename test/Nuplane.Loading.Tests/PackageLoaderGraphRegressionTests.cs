@@ -136,6 +136,30 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
         Assert.Contains("No loadable assembly", failure.Value, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_NoAssemblyDependencyWithRealPackageFailure_DoesNotFailSkippedDependency()
+    {
+        var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");
+        var ambiguousInstall = CreateAmbiguousPackageInstall("Plugin.Ambiguous");
+        var facadeInstall = CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[
+                new ResolvedPackage("Plugin.Root", "1.0.0", "test-feed", rootInstall, DateTimeOffset.UtcNow, "test-source"),
+                new ResolvedPackage("Plugin.Ambiguous", "1.0.0", "test-feed", ambiguousInstall, DateTimeOffset.UtcNow, "test-source"),
+                new ResolvedPackage("Microsoft.Data.Sqlite", "10.0.3", "test-feed", facadeInstall, DateTimeOffset.UtcNow, "test-source")
+            ]],
+            [],
+            CancellationToken.None);
+
+        Assert.Empty(result.Loaded);
+        Assert.Equal(["Plugin.Ambiguous", "Plugin.Root"], result.FailedByPackageId.Keys.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.DoesNotContain("Microsoft.Data.Sqlite", loader.Sessions.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.False(loader.TryGetContext("Plugin.Root", "1.0.0", out _));
+        Assert.False(loader.TryGetContext("Microsoft.Data.Sqlite", "10.0.3", out _));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))
@@ -167,6 +191,16 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
         var libPath = Path.Combine(installPath, "lib", "netstandard2.0");
         Directory.CreateDirectory(libPath);
         File.WriteAllText(Path.Combine(libPath, "_._"), string.Empty);
+        return installPath;
+    }
+
+    private string CreateAmbiguousPackageInstall(string packageId)
+    {
+        var installPath = Path.Combine(tempRoot, packageId, "1.0.0");
+        var libPath = Path.Combine(installPath, "lib", "net10.0");
+        Directory.CreateDirectory(libPath);
+        File.Copy(FindFixtureAssembly("Plugin.Root.dll"), Path.Combine(libPath, "First.dll"), overwrite: true);
+        File.Copy(FindFixtureAssembly("Plugin.Dependency.dll"), Path.Combine(libPath, "Second.dll"), overwrite: true);
         return installPath;
     }
 
