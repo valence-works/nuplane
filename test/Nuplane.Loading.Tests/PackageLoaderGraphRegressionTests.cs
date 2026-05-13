@@ -79,6 +79,47 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureGraphLoadedAsync_LoadablePackageWithNoAssemblyDependency_ReusesExistingGraphSession()
+    {
+        var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");
+        var facadeInstall = CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite");
+        var loader = new PackageLoader();
+        var graph =
+            new[]
+            {
+                new ResolvedPackage("Plugin.Root", "1.0.0", "test-feed", rootInstall, DateTimeOffset.UtcNow, "test-source"),
+                new ResolvedPackage("Microsoft.Data.Sqlite", "10.0.3", "test-feed", facadeInstall, DateTimeOffset.UtcNow, "test-source")
+            };
+
+        var first = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
+        Assert.True(loader.TryGetContext("Plugin.Root", "1.0.0", out var firstContext));
+
+        var second = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
+
+        var loaded = Assert.Single(second.Loaded);
+        Assert.Equal(Assert.Single(first.Loaded).ContextKey, loaded.ContextKey);
+        Assert.Empty(second.FailedByPackageId);
+        Assert.True(loader.TryGetContext("Plugin.Root", "1.0.0", out var secondContext));
+        Assert.Same(firstContext!.Context, secondContext!.Context);
+        Assert.Single(loader.Sessions);
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_GraphWithOnlyNoAssemblyPackages_ReportsScannedInstallPath()
+    {
+        var facadeInstall = CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[new ResolvedPackage("Microsoft.Data.Sqlite", "10.0.3", "test-feed", facadeInstall, DateTimeOffset.UtcNow, "test-source")]],
+            [],
+            CancellationToken.None);
+
+        var failure = Assert.Single(result.FailedByPackageId);
+        Assert.Contains(facadeInstall, failure.Value, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task EnsureGraphLoadedAsync_GraphWithOnlyNoAssemblyPackages_FailsGraph()
     {
         var facadeInstall = CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite");

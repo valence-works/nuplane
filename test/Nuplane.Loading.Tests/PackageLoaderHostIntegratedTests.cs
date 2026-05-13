@@ -116,6 +116,35 @@ public sealed class PackageLoaderHostIntegratedTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureGraphLoadedAsync_HostIntegratedGraphWithNoAssemblyDependency_ReusesPublishedGraph()
+    {
+        var rootInstallPath = CreateInstallDir("Nuplane.Loading.Tests.Fixtures");
+        var facadeInstallPath = CreateNoAssemblyInstallDir("Microsoft.Data.Sqlite");
+        var catalog = new HostIntegratedAssemblyResolutionCatalog();
+        var options = Options.Create(new LoadingOptions { DefaultLoadMode = PackageLoadMode.HostIntegrated });
+        var loader = new PackageLoader(options: options, hostIntegratedResolutionCatalog: catalog);
+        var graph =
+            new[]
+            {
+                Pkg("Nuplane.Loading.Tests.Fixtures", "1.0.0", rootInstallPath),
+                Pkg("Microsoft.Data.Sqlite", "10.0.3", facadeInstallPath)
+            };
+
+        await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
+        var generation = catalog.Generation;
+        Assert.True(loader.TryGetContext("Nuplane.Loading.Tests.Fixtures", "1.0.0", out var firstContext));
+
+        var result = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
+
+        var loaded = Assert.Single(result.Loaded);
+        Assert.Equal("Nuplane.Loading.Tests.Fixtures", loaded.PackageId);
+        Assert.Empty(result.FailedByPackageId);
+        Assert.True(loader.TryGetContext("Nuplane.Loading.Tests.Fixtures", "1.0.0", out var secondContext));
+        Assert.Same(firstContext!.Context, secondContext!.Context);
+        Assert.Equal(generation, catalog.Generation);
+    }
+
+    [Fact]
     public async Task EnsureGraphLoadedAsync_WhenPackageMovesToDifferentHostIntegratedGraph_ReplacesCatalogEntries()
     {
         var firstInstallPath = CreateInstallDir("pkg-a", typeof(FixtureMarker).Assembly);
