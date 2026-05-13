@@ -5,6 +5,7 @@ using Nuplane.Reconciliation.Models;
 using Nuplane.Store.State;
 using Nuplane.Store.Transactions;
 using Nuplane.Versioning;
+using NuGet.Resolver;
 
 namespace Nuplane.Reconciliation;
 
@@ -39,13 +40,43 @@ public sealed class PackageApplyExecutor(
         var decisions = new List<FeedResolutionDecision>();
         var graphs = new List<ResolvedPackageGraph>();
 
+        var resolvedRootsById = new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase);
+        var resolvableRequests = new List<PackageRequest>();
+
         foreach (var request in desiredRequests)
         {
             try
             {
+                var root = await ResolveRootAsync(request, cancellationToken);
+                resolvedRootsById[request.Id] = root;
+                resolvableRequests.Add(request);
+            }
+            catch (Exception ex)
+            {
+                failed.Add(request.Id);
+                var stage = ex switch
+                {
+                    FeedUnavailableException => "resolve-feed-unavailable",
+                    NoEligibleFeedException => "resolve-no-eligible-feed",
+                    _ => "resolve"
+                };
+                await _failureRecorder.RecordAsync(request.Id, stage, ex.Message, correlationId, cancellationToken);
+
+                if (_packageResolver is MultiFeedPackageResolver multiFeedResolver &&
+                    multiFeedResolver.TryGetDecision(request.Id, out var decision))
+                {
+                    decisions.Add(decision with { CorrelationId = correlationId });
+                }
+            }
+        }
+
+        if (resolvableRequests.Count > 0)
+        {
+            try
+            {
                 var graphResult = await _graphResolver.ResolveAsync(
-                    [request],
-                    ResolveRootAsync,
+                    resolvableRequests,
+                    ResolveCachedRootAsync,
                     cancellationToken);
                 resolved.AddRange(graphResult.ResolvedPackages);
                 graphs.AddRange(graphResult.ResolvedGraphs);
@@ -63,19 +94,24 @@ public sealed class PackageApplyExecutor(
             }
             catch (Exception ex)
             {
-                failed.Add(request.Id);
                 var stage = ex switch
                 {
                     FeedUnavailableException => "resolve-feed-unavailable",
                     NoEligibleFeedException => "resolve-no-eligible-feed",
+                    NuGetResolverException => "resolve-graph-conflict",
                     _ => "resolve"
                 };
-                await _failureRecorder.RecordAsync(request.Id, stage, ex.Message, correlationId, cancellationToken);
 
-                if (_packageResolver is MultiFeedPackageResolver multiFeedResolver &&
-                    multiFeedResolver.TryGetDecision(request.Id, out var decision))
+                foreach (var request in resolvableRequests)
                 {
-                    decisions.Add(decision with { CorrelationId = correlationId });
+                    failed.Add(request.Id);
+                    await _failureRecorder.RecordAsync(request.Id, stage, ex.Message, correlationId, cancellationToken);
+
+                    if (_packageResolver is MultiFeedPackageResolver multiFeedResolver &&
+                        multiFeedResolver.TryGetDecision(request.Id, out var decision))
+                    {
+                        decisions.Add(decision with { CorrelationId = correlationId });
+                    }
                 }
             }
         }
@@ -139,6 +175,11 @@ public sealed class PackageApplyExecutor(
             _retryPolicy.ExecuteAsync(
                 token => _packageResolver.ResolveAsync(packageRequest, token),
                 ct);
+
+        Task<ResolvedPackage> ResolveCachedRootAsync(PackageRequest packageRequest, CancellationToken ct) =>
+            resolvedRootsById.TryGetValue(packageRequest.Id, out var root)
+                ? Task.FromResult(root)
+                : ResolveRootAsync(packageRequest, ct);
     }
 
     /// <inheritdoc />

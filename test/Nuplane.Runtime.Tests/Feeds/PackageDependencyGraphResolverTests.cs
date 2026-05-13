@@ -120,6 +120,38 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveAsync_MultipleRoots_UnifiesSharedDependencyWithNuGetLowestApplicableVersion()
+    {
+        var leftRoot = CreateInstalledPackage("Plugin.Left", "1.0.0", dependencyId: "Plugin.Shared", dependencyVersionRange: "1.0.0");
+        var rightRoot = CreateInstalledPackage("Plugin.Right", "1.0.0", dependencyId: "Plugin.Shared", dependencyVersionRange: "2.0.0");
+        var resolver = new VersionRangePackageResolver(
+            new Dictionary<string, IReadOnlyList<ResolvedPackage>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Plugin.Shared"] =
+                [
+                    CreateInstalledPackage("Plugin.Shared", "1.0.0"),
+                    CreateInstalledPackage("Plugin.Shared", "2.0.0"),
+                    CreateInstalledPackage("Plugin.Shared", "3.0.0")
+                ]
+            });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [
+                new PackageRequest("Plugin.Left", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source"),
+                new PackageRequest("Plugin.Right", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")
+            ],
+            (request, _) => Task.FromResult(request.Id == "Plugin.Left" ? leftRoot : rightRoot),
+            CancellationToken.None);
+
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Equal(["Plugin.Left", "Plugin.Right"], graph.Roots.Select(static node => node.PackageId).Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Single(graph.Nodes, static node => node.PackageId == "Plugin.Shared");
+        Assert.Contains(graph.Nodes, static node => node.PackageId == "Plugin.Shared" && node.Version == "2.0.0");
+        Assert.DoesNotContain(graph.Nodes, static node => node.PackageId == "Plugin.Shared" && node.Version == "3.0.0");
+    }
+
+    [Fact]
     public async Task ResolveAsync_DependencyProvidedByHost_DoesNotAcquireDependencyNode()
     {
         var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Nuplane.Abstractions", dependencyVersionRange: "[1.0.0]");

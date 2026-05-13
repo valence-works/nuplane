@@ -18,6 +18,7 @@
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.Extensions.Resilience" />
     <PackageReference Include="NuGet.Protocol" />
+    <PackageReference Include="NuGet.Resolver" />
     <PackageReference Include="NuGet.Versioning" />
     <PackageReference Include="Polly.Extensions" />
     <ProjectReference Include="..\Nuplane.Abstractions\Nuplane.Abstractions.csproj" />

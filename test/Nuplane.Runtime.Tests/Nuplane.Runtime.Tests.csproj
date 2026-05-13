@@ -4,6 +4,7 @@
     <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="NuGet.Resolver" />
     <ProjectReference Include="..\..\src\Nuplane.Sources.Directory\Nuplane.Sources.Directory.csproj" />
     <ProjectReference Include="..\..\src\Nuplane\Nuplane.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Admin\Nuplane.Admin.csproj" />
