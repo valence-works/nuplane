@@ -63,6 +63,27 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
                     continue;
                 }
 
+                var existingDependencyPackage = FindExistingSatisfyingPackage(nodes.Values, resolvedPackages, dependency);
+                if (existingDependencyPackage is not null)
+                {
+                    var existingDependencyKey = BuildPackageKey(existingDependencyPackage.Id, existingDependencyPackage.Version);
+                    if (path.Contains(existingDependencyKey, StringComparer.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException($"Dependency cycle detected: {FormatCyclePath(path, existingDependencyKey)}.");
+                    }
+
+                    edges.Add(new DependencyEdge(
+                        parent.Id,
+                        parent.Version,
+                        existingDependencyPackage.Id,
+                        dependency.VersionRange,
+                        existingDependencyPackage.Version,
+                        dependency.TargetFramework ?? string.Empty,
+                        Optional: false));
+
+                    continue;
+                }
+
                 var dependencyRequest = new PackageRequest(
                     dependency.PackageId,
                     dependency.VersionRange,
@@ -241,6 +262,27 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
         return NuGetVersion.TryParse(trimmed, out var version)
             ? $"[{version.ToNormalizedString()},)"
             : trimmed;
+    }
+
+    private static ResolvedPackage? FindExistingSatisfyingPackage(
+        IEnumerable<ResolvedPackageNode> nodes,
+        IReadOnlyDictionary<string, ResolvedPackage> resolvedPackages,
+        PackageDependencyMetadata dependency)
+    {
+        foreach (var node in nodes.Where(node => string.Equals(node.PackageId, dependency.PackageId, StringComparison.OrdinalIgnoreCase)))
+        {
+            if (!VersionSatisfiesRange(node.Version, dependency.VersionRange))
+            {
+                continue;
+            }
+
+            if (resolvedPackages.TryGetValue(BuildPackageKey(node.PackageId, node.Version), out var package))
+            {
+                return package;
+            }
+        }
+
+        return null;
     }
 
     private static IReadOnlyList<DependencyGroupMetadata> SelectDependencyGroups(IReadOnlyList<DependencyGroupMetadata> groups)

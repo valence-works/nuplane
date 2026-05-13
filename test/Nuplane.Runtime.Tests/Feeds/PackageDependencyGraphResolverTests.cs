@@ -87,6 +87,39 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveAsync_WhenHigherDirectDependencySatisfiesTransitiveBaseline_ReusesSelectedDependency()
+    {
+        var root = CreateInstalledPackage(
+            "Plugin.Root",
+            "1.0.0",
+            dependenciesXml: """
+                <dependencies>
+                  <dependency id="Plugin.Direct" version="10.0.3" />
+                  <dependency id="Plugin.Transitive" version="[1.0.0]" />
+                </dependencies>
+                """);
+        var direct = CreateInstalledPackage("Plugin.Direct", "10.0.3");
+        var transitive = CreateInstalledPackage("Plugin.Transitive", "1.0.0", dependencyId: "Plugin.Direct", dependencyVersionRange: "8.0.2");
+        var resolver = new VersionRangePackageResolver(
+            new Dictionary<string, IReadOnlyList<ResolvedPackage>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Plugin.Direct"] = [direct],
+                ["Plugin.Transitive"] = [transitive]
+            });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Single(graph.Nodes, static node => node.PackageId == "Plugin.Direct");
+        Assert.Equal(2, graph.Edges.Count(static edge => edge.ToPackageId == "Plugin.Direct"));
+        Assert.Single(resolver.Requests, static request => request.Id == "Plugin.Direct");
+    }
+
+    [Fact]
     public async Task ResolveAsync_DependencyProvidedByHost_DoesNotAcquireDependencyNode()
     {
         var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Nuplane.Abstractions", dependencyVersionRange: "[1.0.0]");

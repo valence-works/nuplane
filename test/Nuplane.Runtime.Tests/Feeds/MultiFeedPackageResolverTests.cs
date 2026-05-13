@@ -194,6 +194,39 @@ public sealed class MultiFeedPackageResolverTests
     }
 
     [Fact]
+    public async Task ResolveAsync_DependencyRequest_SelectsLowestSatisfyingVersion()
+    {
+        var options = new FeedResolutionOptions();
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
+        var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
+        var policy = new FeedResolutionPolicy(wrappedOptions);
+
+        var enumerator = Substitute.For<IFeedVersionEnumerator>();
+        enumerator.EnumerateVersionsAsync(Arg.Any<FeedDefinition>(), "Microsoft.EntityFrameworkCore", Arg.Any<CancellationToken>())
+            .Returns(new PackageVersionList(
+                "Microsoft.EntityFrameworkCore",
+                "remote",
+                ["10.0.3", "10.0.4", "11.0.0-preview.4.26230.115"],
+                DateTimeOffset.UtcNow));
+
+        var evaluator = Substitute.For<IVersionRangeEvaluator>();
+
+        var acquirer = Substitute.For<IRemotePackageAcquirer>();
+        acquirer.AcquireAsync(Arg.Any<FeedDefinition>(), "Microsoft.EntityFrameworkCore", "10.0.3", Arg.Any<CancellationToken>())
+            .Returns("/installed/Microsoft.EntityFrameworkCore/10.0.3");
+
+        var resolver = new MultiFeedPackageResolver(
+            wrappedOptions, policy, acquirer, enumerator, evaluator,
+            NullLogger<MultiFeedPackageResolver>.Instance);
+
+        var request = new PackageRequest("Microsoft.EntityFrameworkCore", "[10.0.3,)", "remote", PackageUpdatePolicy.Exact, "dependency-of:Plugin.Root");
+        var result = await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal("10.0.3", result.Version);
+        evaluator.DidNotReceiveWithAnyArgs().SelectBestMatch(default!, default!);
+    }
+
+    [Fact]
     public async Task ResolveAsync_NoMatch_DecisionContainsDiagnostic()
     {
         var options = new FeedResolutionOptions();
