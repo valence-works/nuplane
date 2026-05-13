@@ -169,20 +169,20 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
             Enumerable.Empty<INuGetResourceProvider>());
         var orderedCandidatePackages = candidatePackages
             .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static package => NuGetVersion.Parse(package.Version))
+            .ThenBy(static package => TryParsePackageVersion(package.Version, out var version) ? version : NuGetVersion.Parse("0.0.0"))
             .ThenBy(static package => package.FeedName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static package => package.SourceName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static package => package.InstallPath, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var packagesByKey = orderedCandidatePackages
-            .GroupBy(package => BuildPackageKey(package.Id, package.Version), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(static package => BuildNormalizedPackageKey(package.Id, package.Version), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
         var availablePackages = orderedCandidatePackages
-            .GroupBy(package => BuildPackageKey(package.Id, package.Version), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(static package => BuildNormalizedPackageKey(package.Id, package.Version), StringComparer.OrdinalIgnoreCase)
             .Select(static group => group.First())
             .Select(package => new SourcePackageDependencyInfo(
                 package.Id,
-                NuGetVersion.Parse(package.Version),
+                ParsePackageVersion(package),
                 ReadDependencyMetadata(package)
                     .Where(static dependency => !IsHostProvidedDependency(dependency.PackageId, dependency.VersionRange))
                     .Select(static dependency => TryCreatePackageDependency(dependency))
@@ -198,8 +198,8 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
             .ToArray();
         var preferredVersions = rootPackages
             .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static package => NuGetVersion.Parse(package.Version))
-            .Select(static package => new PackageIdentity(package.Id, NuGetVersion.Parse(package.Version)))
+            .ThenBy(static package => TryParsePackageVersion(package.Version, out var version) ? version : NuGetVersion.Parse("0.0.0"))
+            .Select(static package => new PackageIdentity(package.Id, ParsePackageVersion(package)))
             .ToArray();
         var context = new PackageResolverContext(
             DependencyBehavior.Lowest,
@@ -213,11 +213,22 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
 
         return new PackageResolver()
             .Resolve(context, cancellationToken)
-            .Select(identity => packagesByKey.TryGetValue(BuildPackageKey(identity.Id, identity.Version.ToNormalizedString()), out var package)
+            .Select(identity => packagesByKey.TryGetValue(BuildNormalizedPackageKey(identity.Id, identity.Version.ToNormalizedString()), out var package)
                 ? package
                 : throw new InvalidOperationException($"NuGet selected package '{identity.Id}@{identity.Version.ToNormalizedString()}' but no resolved package candidate was available."))
             .ToArray();
     }
+
+    private static NuGetVersion ParsePackageVersion(ResolvedPackage package) =>
+        TryParsePackageVersion(package.Version, out var version)
+            ? version
+            : throw new InvalidOperationException($"Resolved package '{package.Id}' has invalid NuGet version '{package.Version}'.");
+
+    private static bool TryParsePackageVersion(string version, out NuGetVersion parsedVersion) =>
+        NuGetVersion.TryParse(version, out parsedVersion!);
+
+    private static string BuildNormalizedPackageKey(string packageId, string version) =>
+        BuildPackageKey(packageId, TryParsePackageVersion(version, out var parsedVersion) ? parsedVersion.ToNormalizedString() : version);
 
     private static PackageDependency? TryCreatePackageDependency(PackageDependencyMetadata dependency) =>
         VersionRange.TryParse(dependency.VersionRange, out var range)

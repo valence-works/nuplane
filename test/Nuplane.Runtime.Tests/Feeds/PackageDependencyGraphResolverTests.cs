@@ -170,6 +170,25 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveAsync_WithNonNormalizedPackageVersion_MapsNuGetSelectedIdentityBackToResolvedPackage()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        var package = Assert.Single(result.ResolvedPackages);
+        Assert.Equal("Plugin.Root", package.Id);
+        Assert.Equal("1.0", package.Version);
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Contains(graph.Nodes, static node => node.PackageId == "Plugin.Root" && node.Version == "1.0");
+    }
+
+    [Fact]
     public async Task ResolveAsync_WithMalformedDependencyVersionRange_ThrowsNamedInvalidRangeDiagnostic()
     {
         var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Plugin.Dependency", dependencyVersionRange: "latest");
