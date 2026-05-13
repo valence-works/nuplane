@@ -83,3 +83,4 @@ Run focused tests first for the area changed, then run the full solution when pr
 ## Recent Changes
 - 017-dependency-closure-loading: Added C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0` + Microsoft.Extensions.DependencyInjection/Options/Logging/Hosting, NuGet.Protocol and NuGet.Versioning already used by feed version resolution, System.Runtime.Loader, xUnit, NSubstitute
 - 018-host-integrated-loading: Added host-integrated package loading using non-collectible assembly load contexts and framework-visible resolution catalog metadata.
+- 019-tolerate-facade-packages: Added graph loading tolerance for no-assembly facade/support packages while preserving real loader failures.

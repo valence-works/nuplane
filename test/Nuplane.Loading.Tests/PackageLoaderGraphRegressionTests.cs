@@ -56,6 +56,110 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
         Assert.Equal(2, result.Loaded.Count);
     }
 
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_LoadablePackageWithNoAssemblyDependency_SkipsDependencyWithoutFailure()
+    {
+        var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");
+        var facadeInstall = CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[
+                new ResolvedPackage("Plugin.Root", "1.0.0", "test-feed", rootInstall, DateTimeOffset.UtcNow, "test-source"),
+                new ResolvedPackage("Microsoft.Data.Sqlite", "10.0.3", "test-feed", facadeInstall, DateTimeOffset.UtcNow, "test-source")
+            ]],
+            [],
+            CancellationToken.None);
+
+        var loaded = Assert.Single(result.Loaded);
+        Assert.Equal("Plugin.Root", loaded.PackageId);
+        Assert.Empty(result.FailedByPackageId);
+        Assert.True(loader.TryGetContext("Plugin.Root", "1.0.0", out _));
+        Assert.False(loader.TryGetContext("Microsoft.Data.Sqlite", "10.0.3", out _));
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_LoadablePackageWithNoAssemblyDependency_ReusesExistingGraphSession()
+    {
+        var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");
+        var facadeInstall = CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite");
+        var loader = new PackageLoader();
+        var graph =
+            new[]
+            {
+                new ResolvedPackage("Plugin.Root", "1.0.0", "test-feed", rootInstall, DateTimeOffset.UtcNow, "test-source"),
+                new ResolvedPackage("Microsoft.Data.Sqlite", "10.0.3", "test-feed", facadeInstall, DateTimeOffset.UtcNow, "test-source")
+            };
+
+        var first = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
+        Assert.True(loader.TryGetContext("Plugin.Root", "1.0.0", out var firstContext));
+
+        var second = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
+
+        var loaded = Assert.Single(second.Loaded);
+        Assert.Equal(Assert.Single(first.Loaded).ContextKey, loaded.ContextKey);
+        Assert.Empty(second.FailedByPackageId);
+        Assert.True(loader.TryGetContext("Plugin.Root", "1.0.0", out var secondContext));
+        Assert.Same(firstContext!.Context, secondContext!.Context);
+        Assert.Single(loader.Sessions);
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_GraphWithOnlyNoAssemblyPackages_ReportsScannedInstallPath()
+    {
+        var facadeInstall = CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[new ResolvedPackage("Microsoft.Data.Sqlite", "10.0.3", "test-feed", facadeInstall, DateTimeOffset.UtcNow, "test-source")]],
+            [],
+            CancellationToken.None);
+
+        var failure = Assert.Single(result.FailedByPackageId);
+        Assert.Contains(facadeInstall, failure.Value, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_GraphWithOnlyNoAssemblyPackages_FailsGraph()
+    {
+        var facadeInstall = CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[new ResolvedPackage("Microsoft.Data.Sqlite", "10.0.3", "test-feed", facadeInstall, DateTimeOffset.UtcNow, "test-source")]],
+            [],
+            CancellationToken.None);
+
+        Assert.Empty(result.Loaded);
+        var failure = Assert.Single(result.FailedByPackageId);
+        Assert.Equal("Microsoft.Data.Sqlite", failure.Key);
+        Assert.Contains("No loadable assembly", failure.Value, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_NoAssemblyDependencyWithRealPackageFailure_DoesNotFailSkippedDependency()
+    {
+        var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");
+        var ambiguousInstall = CreateAmbiguousPackageInstall("Plugin.Ambiguous");
+        var facadeInstall = CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[
+                new ResolvedPackage("Plugin.Root", "1.0.0", "test-feed", rootInstall, DateTimeOffset.UtcNow, "test-source"),
+                new ResolvedPackage("Plugin.Ambiguous", "1.0.0", "test-feed", ambiguousInstall, DateTimeOffset.UtcNow, "test-source"),
+                new ResolvedPackage("Microsoft.Data.Sqlite", "10.0.3", "test-feed", facadeInstall, DateTimeOffset.UtcNow, "test-source")
+            ]],
+            [],
+            CancellationToken.None);
+
+        Assert.Empty(result.Loaded);
+        Assert.Equal(["Plugin.Ambiguous", "Plugin.Root"], result.FailedByPackageId.Keys.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.DoesNotContain("Microsoft.Data.Sqlite", loader.Sessions.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.False(loader.TryGetContext("Plugin.Root", "1.0.0", out _));
+        Assert.False(loader.TryGetContext("Microsoft.Data.Sqlite", "10.0.3", out _));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempRoot))
@@ -78,6 +182,25 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
         var installPath = Path.Combine(tempRoot, packageId, "1.0.0");
         Directory.CreateDirectory(installPath);
         File.Copy(FindFixtureAssembly(assemblyFileName), Path.Combine(installPath, assemblyFileName), overwrite: true);
+        return installPath;
+    }
+
+    private string CreateNoAssemblyPackageInstall(string packageId)
+    {
+        var installPath = Path.Combine(tempRoot, packageId, "1.0.0");
+        var libPath = Path.Combine(installPath, "lib", "netstandard2.0");
+        Directory.CreateDirectory(libPath);
+        File.WriteAllText(Path.Combine(libPath, "_._"), string.Empty);
+        return installPath;
+    }
+
+    private string CreateAmbiguousPackageInstall(string packageId)
+    {
+        var installPath = Path.Combine(tempRoot, packageId, "1.0.0");
+        var libPath = Path.Combine(installPath, "lib", "net10.0");
+        Directory.CreateDirectory(libPath);
+        File.Copy(FindFixtureAssembly("Plugin.Root.dll"), Path.Combine(libPath, "First.dll"), overwrite: true);
+        File.Copy(FindFixtureAssembly("Plugin.Dependency.dll"), Path.Combine(libPath, "Second.dll"), overwrite: true);
         return installPath;
     }
 

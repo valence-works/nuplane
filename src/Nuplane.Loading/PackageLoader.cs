@@ -24,6 +24,7 @@ internal sealed class PackageLoader : IPackageLoader
     private readonly HostIntegratedAssemblyResolver? _hostIntegratedAssemblyResolver;
     private readonly ConcurrentDictionary<string, AssemblyLoadContext> _contexts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, PackageLoadSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, LoadedGraphCacheEntry> _loadedGraphs = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Initializes a new instance of <see cref="PackageLoader"/> with an optional shared assembly policy matcher.
@@ -198,16 +199,9 @@ internal sealed class PackageLoader : IPackageLoader
             ? PackageLoadMode.HostIntegrated
             : PackageLoadMode.Collectible;
 
-        var existingGraphSessions = packages
-            .Select(package => _sessions.TryGetValue(BuildKey(package.Id, package.Version), out var session) ? session : null)
-            .Where(session => session is not null
-                && session.IsLoaded
-                && string.Equals(session.ContextKey, graphKey, StringComparison.OrdinalIgnoreCase)
-                && session.LoadMode == graphLoadMode)
-            .Cast<PackageLoadSession>()
-            .ToArray();
-
-        if (existingGraphSessions.Length == packages.Count)
+        if (_loadedGraphs.TryGetValue(graphKey, out var cachedGraph)
+            && cachedGraph.LoadMode == graphLoadMode
+            && TryGetLoadedGraphSessions(cachedGraph, graphKey, graphLoadMode, out var existingGraphSessions))
         {
             loaded.AddRange(existingGraphSessions);
             return new(loaded, failed);
@@ -216,17 +210,30 @@ internal sealed class PackageLoader : IPackageLoader
         AssemblyLoadContext? context = null;
         var replacedContexts = new List<AssemblyLoadContext>();
         var catalogPublished = false;
+        GraphPackageResolution? graphPackages = null;
 
         try
         {
-            var mainAssemblyPaths = packages
+            graphPackages = ResolveGraphPackages(packages);
+            if (graphPackages.ResolutionFailure is not null)
+            {
+                throw graphPackages.ResolutionFailure;
+            }
+
+            if (graphPackages.LoadablePackages.Count == 0)
+            {
+                throw new NoLoadableAssemblyException(
+                    $"No loadable assembly found in graph '{graphKey}'. Scanned install paths: {FormatQuotedList(graphPackages.SkippedInstallPaths)}.");
+            }
+
+            var mainAssemblyPaths = graphPackages.LoadablePackages
                 .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
-                .Select(static package => ResolveMainAssemblyPath(package.InstallPath, package.Id))
+                .Select(static package => package.MainAssemblyPath)
                 .ToArray();
             if (graphLoadMode == PackageLoadMode.HostIntegrated)
             {
-                var candidates = BuildHostIntegratedResolutionCandidates(graphKey, packages);
+                var candidates = BuildHostIntegratedResolutionCandidates(graphKey, graphPackages.LoadablePackages);
                 _hostIntegratedResolutionCatalog.ValidateCanPublishGraph(graphKey, candidates);
             }
 
@@ -240,7 +247,7 @@ internal sealed class PackageLoader : IPackageLoader
             }
 
             var assembliesByPackageKey = graphLoadMode == PackageLoadMode.HostIntegrated
-                ? MaterializeHostIntegratedAssemblies(context, packages)
+                ? MaterializeHostIntegratedAssemblies(context, graphPackages.LoadablePackages)
                 : new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase);
 
             if (graphLoadMode == PackageLoadMode.HostIntegrated)
@@ -249,7 +256,7 @@ internal sealed class PackageLoader : IPackageLoader
                 catalogPublished = true;
             }
 
-            foreach (var package in packages)
+            foreach (var package in graphPackages.LoadablePackages)
             {
                 var key = BuildKey(package.Id, package.Version);
                 if (_contexts.TryGetValue(key, out var previousContext) &&
@@ -282,6 +289,13 @@ internal sealed class PackageLoader : IPackageLoader
                     graphKey);
             }
 
+            _loadedGraphs[graphKey] = new(
+                graphLoadMode,
+                graphPackages.LoadablePackages
+                    .Select(static package => BuildKey(package.Id, package.Version))
+                    .OrderBy(static key => key, StringComparer.OrdinalIgnoreCase)
+                    .ToArray());
+
             UnloadUnreferencedContexts(replacedContexts);
         }
         catch (Exception ex)
@@ -291,7 +305,7 @@ internal sealed class PackageLoader : IPackageLoader
                 context.Unload();
             }
 
-            foreach (var package in packages)
+            foreach (var package in ResolveFailedGraphPackages(packages, graphPackages))
             {
                 var key = BuildKey(package.Id, package.Version);
                 if (context is not null &&
@@ -321,6 +335,68 @@ internal sealed class PackageLoader : IPackageLoader
         }
 
         return new(loaded, failed);
+    }
+
+    private bool TryGetLoadedGraphSessions(
+        LoadedGraphCacheEntry cachedGraph,
+        string graphKey,
+        PackageLoadMode graphLoadMode,
+        out IReadOnlyList<PackageLoadSession> existingGraphSessions)
+    {
+        var sessions = new List<PackageLoadSession>(cachedGraph.LoadablePackageKeys.Count);
+        foreach (var key in cachedGraph.LoadablePackageKeys)
+        {
+            if (!_sessions.TryGetValue(key, out var session)
+                || !session.IsLoaded
+                || !string.Equals(session.ContextKey, graphKey, StringComparison.OrdinalIgnoreCase)
+                || session.LoadMode != graphLoadMode)
+            {
+                existingGraphSessions = [];
+                return false;
+            }
+
+            sessions.Add(session);
+        }
+
+        existingGraphSessions = sessions;
+        return true;
+    }
+
+    private GraphPackageResolution ResolveGraphPackages(IReadOnlyList<ResolvedPackage> packages)
+    {
+        var loadablePackages = new List<LoadableGraphPackage>(packages.Count);
+        var skippedPackages = new List<GraphPackage>();
+        var failedPackages = new List<GraphPackage>();
+        Exception? resolutionFailure = null;
+
+        foreach (var package in packages)
+        {
+            try
+            {
+                loadablePackages.Add(new(
+                    package.Id,
+                    package.Version,
+                    package.InstallPath,
+                    ResolveMainAssemblyPath(package.InstallPath, package.Id)));
+            }
+            catch (NoLoadableAssemblyException ex)
+            {
+                skippedPackages.Add(new(package.Id, package.Version, package.InstallPath));
+                _logger.LogInformation(
+                    "Skipped package {PackageId}@{Version} in graph because it contains no loadable assemblies under {InstallPath}. Reason={Reason}",
+                    package.Id,
+                    package.Version,
+                    package.InstallPath,
+                    ex.Message);
+            }
+            catch (Exception ex)
+            {
+                failedPackages.Add(new(package.Id, package.Version, package.InstallPath));
+                resolutionFailure ??= ex;
+            }
+        }
+
+        return new(loadablePackages, skippedPackages, failedPackages, resolutionFailure);
     }
 
     private void UnloadUnreferencedContexts(IEnumerable<AssemblyLoadContext> contexts)
@@ -367,6 +443,35 @@ internal sealed class PackageLoader : IPackageLoader
 
     private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";
 
+    private static string FormatQuotedList(IReadOnlyCollection<string> values) =>
+        values.Count == 0
+            ? "<none>"
+            : string.Join(", ", values.Select(static value => $"'{value}'"));
+
+    private static IReadOnlyList<GraphPackage> ResolveFailedGraphPackages(
+        IReadOnlyList<ResolvedPackage> packages,
+        GraphPackageResolution? graphPackages)
+    {
+        if (graphPackages is null)
+        {
+            return packages
+                .Select(static package => new GraphPackage(package.Id, package.Version, package.InstallPath))
+                .ToArray();
+        }
+
+        if (graphPackages.LoadablePackages.Count == 0 && graphPackages.FailedPackages.Count == 0)
+        {
+            return graphPackages.SkippedPackages;
+        }
+
+        return graphPackages.LoadablePackages
+            .Select(static package => new GraphPackage(package.Id, package.Version, package.InstallPath))
+            .Concat(graphPackages.FailedPackages)
+            .GroupBy(static package => BuildKey(package.Id, package.Version), StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .ToArray();
+    }
+
     private static string BuildGraphKey(IReadOnlyList<ResolvedPackage> packages) =>
         "graph:" + string.Join('|', packages
             .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
@@ -394,7 +499,7 @@ internal sealed class PackageLoader : IPackageLoader
 
     private IReadOnlyDictionary<string, IReadOnlyList<Assembly>> MaterializeHostIntegratedAssemblies(
         AssemblyLoadContext context,
-        IReadOnlyList<ResolvedPackage> packages)
+        IReadOnlyList<LoadableGraphPackage> packages)
     {
         var result = new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase);
         var assembliesByPath = context.Assemblies
@@ -435,7 +540,7 @@ internal sealed class PackageLoader : IPackageLoader
 
     private IReadOnlyList<HostIntegratedAssemblyResolutionCandidate> BuildHostIntegratedResolutionCandidates(
         string graphKey,
-        IReadOnlyList<ResolvedPackage> packages)
+        IReadOnlyList<LoadableGraphPackage> packages)
     {
         var entries = new List<HostIntegratedAssemblyResolutionCandidate>();
         foreach (var package in packages)
@@ -565,7 +670,7 @@ internal sealed class PackageLoader : IPackageLoader
 
         if (assemblies.Length == 0)
         {
-            throw new FileNotFoundException($"No loadable assembly found under '{installPath}'.");
+            throw new NoLoadableAssemblyException($"No loadable assembly found under '{installPath}'.");
         }
 
         if (assemblies.Length == 1)
@@ -675,6 +780,32 @@ internal sealed class PackageLoader : IPackageLoader
     private sealed record FrameworkTarget(FrameworkKind Kind, Version Version, string DisplayName);
 
     private sealed record AssemblyAssetSelection(string MainAssemblyPath, string CandidateSearchRoot);
+
+    private sealed record LoadableGraphPackage(
+        string Id,
+        string Version,
+        string InstallPath,
+        string MainAssemblyPath);
+
+    private sealed record GraphPackage(
+        string Id,
+        string Version,
+        string InstallPath);
+
+    private sealed record GraphPackageResolution(
+        IReadOnlyList<LoadableGraphPackage> LoadablePackages,
+        IReadOnlyList<GraphPackage> SkippedPackages,
+        IReadOnlyList<GraphPackage> FailedPackages,
+        Exception? ResolutionFailure)
+    {
+        public IReadOnlyList<string> SkippedInstallPaths => SkippedPackages.Select(static package => package.InstallPath).ToArray();
+    }
+
+    private sealed record LoadedGraphCacheEntry(
+        PackageLoadMode LoadMode,
+        IReadOnlyList<string> LoadablePackageKeys);
+
+    private sealed class NoLoadableAssemblyException(string message) : FileNotFoundException(message);
 
     private sealed record FrameworkDirectory(string Path, string FolderName, FrameworkTarget Target)
     {
