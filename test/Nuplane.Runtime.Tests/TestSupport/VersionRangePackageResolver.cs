@@ -15,15 +15,15 @@ internal sealed class VersionRangePackageResolver(IReadOnlyDictionary<string, IR
             return Task.FromException<ResolvedPackage>(new InvalidOperationException($"Package '{request.Id}' was not configured."));
         }
 
-        var normalizedRange = request.VersionRange;
-        if (NuGetVersion.TryParse(normalizedRange, out _) &&
-            !normalizedRange.StartsWith('[') &&
-            !normalizedRange.StartsWith('('))
+        if (NuGetVersion.TryParse(request.VersionRange, out _) &&
+            !request.VersionRange.StartsWith('[') &&
+            !request.VersionRange.StartsWith('('))
         {
-            normalizedRange = $"[{normalizedRange}]";
+            return Task.FromException<ResolvedPackage>(new InvalidOperationException(
+                $"Version range '{request.VersionRange}' must be normalized by the caller before using {nameof(VersionRangePackageResolver)}."));
         }
 
-        if (!VersionRange.TryParse(normalizedRange, out var range))
+        if (!VersionRange.TryParse(request.VersionRange, out var range))
         {
             return Task.FromException<ResolvedPackage>(new InvalidOperationException($"Version range '{request.VersionRange}' is invalid."));
         }
