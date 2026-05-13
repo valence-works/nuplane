@@ -196,7 +196,7 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
                     .Where(static element => element.Name.LocalName == "dependency")
                     .Select(element => new PackageDependencyMetadata(
                         element.Attribute("id")?.Value ?? string.Empty,
-                        element.Attribute("version")?.Value ?? string.Empty,
+                        NormalizeDependencyVersionRange(element.Attribute("version")?.Value ?? string.Empty),
                         group.Attribute("targetFramework")?.Value))
                     .ToArray()))
             .ToArray();
@@ -217,12 +217,30 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
             .Where(static element => element.Name.LocalName == "dependency" && element.Parent?.Name.LocalName == "dependencies")
             .Select(static element => new PackageDependencyMetadata(
                 element.Attribute("id")?.Value ?? string.Empty,
-                element.Attribute("version")?.Value ?? string.Empty,
+                NormalizeDependencyVersionRange(element.Attribute("version")?.Value ?? string.Empty),
                 TargetFramework: null))
             .Where(static dependency => !string.IsNullOrWhiteSpace(dependency.PackageId)
                 && !string.IsNullOrWhiteSpace(dependency.VersionRange))
             .OrderBy(static dependency => dependency.PackageId, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static string NormalizeDependencyVersionRange(string versionRange)
+    {
+        if (string.IsNullOrWhiteSpace(versionRange))
+        {
+            return versionRange;
+        }
+
+        var trimmed = versionRange.Trim();
+        if (trimmed.StartsWith('[') || trimmed.StartsWith('('))
+        {
+            return trimmed;
+        }
+
+        return NuGetVersion.TryParse(trimmed, out var version)
+            ? $"[{version.ToNormalizedString()},)"
+            : trimmed;
     }
 
     private static IReadOnlyList<DependencyGroupMetadata> SelectDependencyGroups(IReadOnlyList<DependencyGroupMetadata> groups)

@@ -1,5 +1,6 @@
 using Nuplane.Abstractions;
 using Nuplane.Reconciliation;
+using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Store.Activation;
 using Nuplane.Store.State;
 using Nuplane.Store.Transactions;
@@ -40,6 +41,39 @@ public sealed class PackageApplyExecutorTests : IDisposable
         Assert.DoesNotContain(recorder.Records, static record => record.PackageId == "Missing.Root" && record.Stage == "resolve-graph-conflict");
         Assert.Contains(recorder.Records, static record => record.PackageId == "Root.A" && record.Stage == "resolve-graph-conflict");
         Assert.Contains(recorder.Records, static record => record.PackageId == "Root.B" && record.Stage == "resolve-graph-conflict");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WhenCompatibleBareDependencyBaseline_DoesNotRecordGraphConflict()
+    {
+        var resolver = new VersionRangePackageResolver(new Dictionary<string, IReadOnlyList<ResolvedPackage>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Root.Current"] = [CreateInstalledPackage("Root.Current", "1.0.0", "Shared.Dependency", "[10.0.3]")],
+            ["Root.Baseline"] = [CreateInstalledPackage("Root.Baseline", "1.0.0", "Shared.Dependency", "8.0.2")],
+            ["Shared.Dependency"] = [CreateInstalledPackage("Shared.Dependency", "10.0.3")]
+        });
+        var recorder = new RecordingFailureRecorder();
+        var sut = new PackageApplyExecutor(
+            resolver,
+            new PackageTransactionCoordinator(new AtomicPointerSwitcher(), recorder),
+            new PassthroughRetryPolicy(),
+            recorder);
+
+        var result = await sut.ResolveAsync(
+            [
+                new PackageRequest("Root.Current", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source"),
+                new PackageRequest("Root.Baseline", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")
+            ],
+            "corr-1",
+            CancellationToken.None);
+
+        Assert.Empty(recorder.Records);
+        Assert.Contains(result.ResolvedPackages, static package => package.Id == "Shared.Dependency" && package.Version == "10.0.3");
+        Assert.Equal(2, result.ResolvedGraphs.Count);
+        Assert.All(result.ResolvedGraphs, graph =>
+        {
+            Assert.Contains(graph.Nodes, static node => node.PackageId == "Shared.Dependency" && node.Version == "10.0.3");
+        });
     }
 
     public void Dispose()
