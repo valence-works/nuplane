@@ -356,6 +356,44 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
         Assert.Equal("Plugin.Compatible", edge.ToPackageId);
     }
 
+    [Theory]
+    [InlineData(".NETStandard2.0")]
+    [InlineData(".NETStandard,Version=v2.0")]
+    public async Task ResolveAsync_WithNuspecNetStandardDependencyGroup_SelectsCompatibleGroup(string targetFramework)
+    {
+        var root = CreateInstalledPackage(
+            "SQLitePCLRaw.bundle_e_sqlite3",
+            "2.1.11",
+            dependenciesXml: $$"""
+                <dependencies>
+                  <group targetFramework="{{targetFramework}}">
+                    <dependency id="SQLitePCLRaw.provider.e_sqlite3" version="2.1.11" />
+                    <dependency id="SQLitePCLRaw.lib.e_sqlite3" version="2.1.11" />
+                  </group>
+                </dependencies>
+                """);
+        var provider = CreateInstalledPackage("SQLitePCLRaw.provider.e_sqlite3", "2.1.11");
+        var nativeLibrary = CreateInstalledPackage("SQLitePCLRaw.lib.e_sqlite3", "2.1.11");
+        var resolver = new StubPackageResolver(
+            new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SQLitePCLRaw.provider.e_sqlite3"] = provider,
+                ["SQLitePCLRaw.lib.e_sqlite3"] = nativeLibrary
+            });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("SQLitePCLRaw.bundle_e_sqlite3", "[2.1.11]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Contains(graph.Nodes, static node => node.PackageId == "SQLitePCLRaw.provider.e_sqlite3");
+        Assert.Contains(graph.Nodes, static node => node.PackageId == "SQLitePCLRaw.lib.e_sqlite3");
+        Assert.Contains(graph.Edges, static edge => edge.ToPackageId == "SQLitePCLRaw.provider.e_sqlite3");
+        Assert.Contains(graph.Edges, static edge => edge.ToPackageId == "SQLitePCLRaw.lib.e_sqlite3");
+    }
+
     [Fact]
     public async Task ResolveAsync_WithDependencyCycle_ThrowsCycleDiagnostic()
     {

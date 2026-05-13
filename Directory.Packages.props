@@ -18,6 +18,7 @@
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
     <PackageVersion Include="NuGet.Protocol" Version="6.13.1" />
+    <PackageVersion Include="NuGet.Frameworks" Version="6.13.1" />
     <PackageVersion Include="NuGet.Resolver" Version="6.13.1" />
     <PackageVersion Include="NuGet.Versioning" Version="6.13.1" />
     <PackageVersion Include="Polly.Extensions" Version="8.6.5" />

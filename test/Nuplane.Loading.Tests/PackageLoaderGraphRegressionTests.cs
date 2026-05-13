@@ -57,6 +57,23 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
     }
 
     [Fact]
+    public void ResolveNativeLibraryPath_WithRuntimeNativeAsset_ResolvesPlatformSpecificName()
+    {
+        var nativePackageInstall = Path.Combine(tempRoot, "SQLitePCLRaw.lib.e_sqlite3", "2.1.11");
+        var nativeDirectory = Path.Combine(nativePackageInstall, "runtimes", "osx-arm64", "native");
+        var nativePath = Path.Combine(nativeDirectory, "libe_sqlite3.dylib");
+        Directory.CreateDirectory(nativeDirectory);
+        File.WriteAllText(nativePath, string.Empty);
+
+        var result = PackageGraphLoadContext.ResolveNativeLibraryPath(
+            [nativePackageInstall],
+            "e_sqlite3",
+            "osx-arm64");
+
+        Assert.Equal(nativePath, result);
+    }
+
+    [Fact]
     public async Task EnsureGraphLoadedAsync_LoadablePackageWithNoAssemblyDependency_SkipsDependencyWithoutFailure()
     {
         var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");

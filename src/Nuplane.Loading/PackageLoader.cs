@@ -238,8 +238,8 @@ internal sealed class PackageLoader : IPackageLoader
             }
 
             context = graphLoadMode == PackageLoadMode.HostIntegrated
-                ? new HostIntegratedPackageGraphLoadContext(graphKey, mainAssemblyPaths, sharedPolicy, _matcher)
-                : new PackageGraphLoadContext(graphKey, mainAssemblyPaths, sharedPolicy, _matcher);
+                ? new HostIntegratedPackageGraphLoadContext(graphKey, mainAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher)
+                : new PackageGraphLoadContext(graphKey, mainAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher);
 
             foreach (var mainAssemblyPath in mainAssemblyPaths)
             {
