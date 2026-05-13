@@ -325,12 +325,16 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
 
     private static VersionResolutionResult SelectLowestDependencyMatch(string versionRange, IReadOnlyList<string> availableVersions)
     {
-        var parsedVersions = availableVersions
-            .Select(static version => NuGetVersion.TryParse(version, out var parsed) ? parsed : null)
-            .OfType<NuGetVersion>()
-            .ToArray();
+        var parsedVersions = new List<(string OriginalVersion, NuGetVersion ParsedVersion)>();
+        foreach (var version in availableVersions)
+        {
+            if (NuGetVersion.TryParse(version, out var parsedVersion))
+            {
+                parsedVersions.Add((version, parsedVersion));
+            }
+        }
 
-        if (parsedVersions.Length == 0)
+        if (parsedVersions.Count == 0)
         {
             return new(false, null, availableVersions.Count, "Resolution failed: no versions available.");
         }
@@ -341,13 +345,13 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         }
 
         var selectedVersion = parsedVersions
-            .Where(range.Satisfies)
-            .Order()
+            .Where(candidate => range.Satisfies(candidate.ParsedVersion))
+            .OrderBy(candidate => candidate.ParsedVersion)
             .FirstOrDefault();
 
-        return selectedVersion is null
+        return string.IsNullOrEmpty(selectedVersion.OriginalVersion)
             ? new(false, null, availableVersions.Count, $"Resolution failed: no version matched range '{versionRange}'.")
-            : new(true, selectedVersion.ToNormalizedString(), availableVersions.Count, null);
+            : new(true, selectedVersion.OriginalVersion, availableVersions.Count, null);
     }
 
     /// <summary>

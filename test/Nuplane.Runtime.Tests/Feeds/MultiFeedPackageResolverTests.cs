@@ -227,6 +227,40 @@ public sealed class MultiFeedPackageResolverTests
     }
 
     [Fact]
+    public async Task ResolveAsync_DependencyRequest_PreservesFeedAdvertisedVersionString()
+    {
+        var options = new FeedResolutionOptions();
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
+        var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
+        var policy = new FeedResolutionPolicy(wrappedOptions);
+
+        var enumerator = Substitute.For<IFeedVersionEnumerator>();
+        enumerator.EnumerateVersionsAsync(Arg.Any<FeedDefinition>(), "Plugin.Dependency", Arg.Any<CancellationToken>())
+            .Returns(new PackageVersionList(
+                "Plugin.Dependency",
+                "remote",
+                ["1.0", "1.0.1"],
+                DateTimeOffset.UtcNow));
+
+        var evaluator = Substitute.For<IVersionRangeEvaluator>();
+
+        var acquirer = Substitute.For<IRemotePackageAcquirer>();
+        acquirer.AcquireAsync(Arg.Any<FeedDefinition>(), "Plugin.Dependency", "1.0", Arg.Any<CancellationToken>())
+            .Returns("/installed/Plugin.Dependency/1.0");
+
+        var resolver = new MultiFeedPackageResolver(
+            wrappedOptions, policy, acquirer, enumerator, evaluator,
+            NullLogger<MultiFeedPackageResolver>.Instance);
+
+        var request = new PackageRequest("Plugin.Dependency", "[1.0.0,)", "remote", PackageUpdatePolicy.Exact, "dependency-of:Plugin.Root");
+        var result = await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal("1.0", result.Version);
+        await acquirer.Received(1).AcquireAsync(Arg.Any<FeedDefinition>(), "Plugin.Dependency", "1.0", Arg.Any<CancellationToken>());
+        evaluator.DidNotReceiveWithAnyArgs().SelectBestMatch(default!, default!);
+    }
+
+    [Fact]
     public async Task ResolveAsync_NoMatch_DecisionContainsDiagnostic()
     {
         var options = new FeedResolutionOptions();
