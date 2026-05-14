@@ -176,7 +176,7 @@ public sealed class PackageTypeScannerTests : IDisposable
     }
 
     private static string GetBuiltFixtureAssemblyPath(string assemblyName) =>
-        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, $"../../../../{assemblyName}/bin/Debug/net10.0/{assemblyName}.dll"));
+        TestFixtureAssemblyPaths.FindProjectAssembly(assemblyName, $"{assemblyName}.dll");
 
     private string CopyBrokenCandidateAssembly(string subdirectory)
     {
