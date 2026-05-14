@@ -115,6 +115,29 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureGraphLoadedAsync_HostRuntimeAssemblyPackage_SkipsDependencyWithoutLoadingRuntimeFacade()
+    {
+        var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");
+        var systemMemoryInstall = CreateHostRuntimeAssemblyPackageInstall("System.Memory");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[
+                new ResolvedPackage("Plugin.Root", "1.0.0", "test-feed", rootInstall, DateTimeOffset.UtcNow, "test-source"),
+                new ResolvedPackage("System.Memory", "4.5.3", "test-feed", systemMemoryInstall, DateTimeOffset.UtcNow, "dependency-of:Plugin.Root")
+            ]],
+            [],
+            CancellationToken.None);
+
+        var loaded = Assert.Single(result.Loaded);
+        Assert.Equal("Plugin.Root", loaded.PackageId);
+        Assert.Empty(result.FailedByPackageId);
+        Assert.True(loader.TryGetContext("Plugin.Root", "1.0.0", out _));
+        Assert.False(loader.TryGetContext("System.Memory", "4.5.3", out _));
+        Assert.DoesNotContain("System.Memory@4.5.3", loader.Sessions.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task EnsureGraphLoadedAsync_LoadablePackageWithNoAssemblyDependency_ReusesExistingGraphSession()
     {
         var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");
@@ -211,6 +234,31 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
         Directory.CreateDirectory(libPath);
         File.Copy(FindFixtureAssembly(assemblyFileName), Path.Combine(libPath, assemblyFileName), overwrite: true);
         return installPath;
+    }
+
+    private string CreatePackageInstall(string packageId, string assemblyFileName, string sourceAssembly)
+    {
+        var installPath = Path.Combine(tempRoot, packageId, "1.0.0");
+        var libPath = Path.Combine(installPath, "lib", "net10.0");
+        Directory.CreateDirectory(libPath);
+        File.Copy(sourceAssembly, Path.Combine(libPath, assemblyFileName), overwrite: true);
+        return installPath;
+    }
+
+    private string CreateHostRuntimeAssemblyPackageInstall(string assemblyName) =>
+        CreatePackageInstall(assemblyName, $"{assemblyName}.dll", FindHostRuntimeAssembly(assemblyName));
+
+    private static string FindHostRuntimeAssembly(string assemblyName)
+    {
+        var trustedPlatformAssemblies = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
+        Assert.False(string.IsNullOrWhiteSpace(trustedPlatformAssemblies));
+
+        var path = trustedPlatformAssemblies
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault(path => string.Equals(Path.GetFileNameWithoutExtension(path), assemblyName, StringComparison.OrdinalIgnoreCase));
+
+        Assert.False(string.IsNullOrWhiteSpace(path));
+        return path!;
     }
 
     private string CreateFlatPackageInstall(string packageId, string assemblyFileName)
