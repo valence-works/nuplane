@@ -45,15 +45,7 @@ internal static class ActivePackageCatalogMapper
                 continue;
             }
 
-            if (!changedPackageIds.Contains(package.Id) &&
-                descriptors.TryGetValue(package.Id, out var existing) &&
-                string.Equals(existing.Version, package.Version, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(existing.InstallPath, package.InstallPath, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            descriptors[package.Id] = CreateDescriptor(
+            var nextDescriptor = CreateDescriptor(
                 package.Id,
                 package.Version,
                 Sanitize(package.FeedName),
@@ -62,6 +54,15 @@ internal static class ActivePackageCatalogMapper
                 activatedAtUtc,
                 correlationId,
                 graphNodesByPackageId);
+
+            if (!changedPackageIds.Contains(package.Id) &&
+                descriptors.TryGetValue(package.Id, out var existing) &&
+                HasSameActivationShape(existing, nextDescriptor))
+            {
+                continue;
+            }
+
+            descriptors[package.Id] = nextDescriptor;
         }
 
         foreach (var packageId in nextActiveVersions.Keys)
@@ -108,11 +109,17 @@ internal static class ActivePackageCatalogMapper
             currentState.ActiveGraphsByIdNormalized,
             StringComparer.OrdinalIgnoreCase);
 
+        var activatedGraphIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var activatedRootKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var graph in resolvedGraphs)
         {
             if (graph.Nodes.All(node => nextActiveVersions.TryGetValue(node.PackageId, out var version)
                     && string.Equals(version, node.Version, StringComparison.OrdinalIgnoreCase)))
             {
+                activatedGraphIds.Add(graph.GraphId);
+                activatedRootKeys.Add(BuildRootSetKey(graph.Roots.Select(static node => node.PackageId)));
+
                 records[graph.GraphId] = new GraphActivationRecord(
                     graph.GraphId,
                     graph.GenerationId,
@@ -127,7 +134,11 @@ internal static class ActivePackageCatalogMapper
 
         foreach (var graphId in records.Keys.ToArray())
         {
-            if (!IsGraphStillActive(records[graphId], nextActiveVersions))
+            var record = records[graphId];
+            var supersededByResolvedGraph = activatedRootKeys.Contains(BuildRootSetKey(record.RootPackageIds)) &&
+                !activatedGraphIds.Contains(record.GraphId);
+
+            if (supersededByResolvedGraph || !IsGraphStillActive(record, nextActiveVersions))
             {
                 records.Remove(graphId);
             }
@@ -149,6 +160,35 @@ internal static class ActivePackageCatalogMapper
             graph.NodeVersionsByPackageId.All(node => nextActiveVersions.TryGetValue(node.Key, out var activeVersion)
                 && string.Equals(activeVersion, node.Value, StringComparison.OrdinalIgnoreCase));
     }
+
+    private static string BuildRootSetKey(IEnumerable<string> rootPackageIds) =>
+        string.Join('\u001f', rootPackageIds
+            .OrderBy(static id => id, StringComparer.OrdinalIgnoreCase));
+
+    private static bool HasSameActivationShape(ActivePackageDescriptor existing, ActivePackageDescriptor next) =>
+        string.Equals(existing.Version, next.Version, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(existing.FeedName, next.FeedName, StringComparison.Ordinal) &&
+        string.Equals(existing.SourceName, next.SourceName, StringComparison.Ordinal) &&
+        string.Equals(existing.InstallPath, next.InstallPath, StringComparison.Ordinal) &&
+        string.Equals(existing.GraphId, next.GraphId, StringComparison.OrdinalIgnoreCase) &&
+        HasSameGraphGeneration(existing, next) &&
+        existing.PackageRole == next.PackageRole &&
+        existing.Discoverable == next.Discoverable &&
+        SetEquals(existing.RootPackageIds, next.RootPackageIds) &&
+        SetEquals(existing.DependencyOfPackageIds, next.DependencyOfPackageIds);
+
+    private static bool HasSameGraphGeneration(ActivePackageDescriptor existing, ActivePackageDescriptor next) =>
+        IsLegacyRootDescriptor(existing) && IsLegacyRootDescriptor(next) ||
+        string.Equals(existing.GraphGenerationId, next.GraphGenerationId, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsLegacyRootDescriptor(ActivePackageDescriptor descriptor) =>
+        string.Equals(descriptor.GraphId, descriptor.PackageId, StringComparison.OrdinalIgnoreCase) &&
+        descriptor.PackageRole == ActivePackageRole.Root &&
+        SetEquals(descriptor.RootPackageIds, [descriptor.PackageId]) &&
+        !descriptor.DependencyOfPackageIds.Any();
+
+    private static bool SetEquals(IEnumerable<string> left, IEnumerable<string> right) =>
+        left.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(right);
 
     public static ActivePackagesSnapshot MapSnapshot(StoreStateRecord state, string correlationId)
     {
@@ -207,7 +247,7 @@ internal static class ActivePackageCatalogMapper
             graphNode.Role,
             graphNode.RootPackageIds,
             graphNode.DependencyOfPackageIds,
-            Discoverable: true);
+            Discoverable: graphNode.Role is not ActivePackageRole.Dependency);
     }
 
     private static IReadOnlyDictionary<string, GraphNodeProjection> BuildGraphNodesByPackageId(IReadOnlyList<ResolvedPackageGraph> graphs)
