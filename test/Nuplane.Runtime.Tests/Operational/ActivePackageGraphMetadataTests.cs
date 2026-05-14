@@ -170,6 +170,56 @@ public sealed class ActivePackageGraphMetadataTests
     }
 
     [Fact]
+    public void BuildNextDescriptors_WhenExistingDescriptorHasSameMetadataInDifferentOrder_PreservesExistingActivation()
+    {
+        var activatedAtUtc = DateTimeOffset.Parse("2026-05-05T10:00:00Z");
+        var rootA = new ResolvedPackage("Plugin.RootA", "1.0.0", "feed-a", "/packages/root-a", activatedAtUtc, "source-a");
+        var rootB = new ResolvedPackage("Plugin.RootB", "1.0.0", "feed-a", "/packages/root-b", activatedAtUtc, "source-a");
+        var dependency = new ResolvedPackage("Plugin.Dependency", "1.0.0", "feed-a", "/packages/dependency", activatedAtUtc, "source-a");
+        var dependencyNode = Node(dependency, PackageNodeRole.Dependency);
+        var graphA = Graph("graph-a", "generation-a", rootA, dependency, dependencyNode);
+        var graphB = Graph("graph-b", "generation-b", rootB, dependency, dependencyNode);
+        var currentState = StoreStateRecord.Empty() with
+        {
+            ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase)
+            {
+                [dependency.Id] = new(
+                    dependency.Id,
+                    dependency.Version,
+                    "feed-a",
+                    "source-a",
+                    dependency.InstallPath,
+                    activatedAtUtc,
+                    "corr-old",
+                    "graph-a",
+                    "generation-a",
+                    ActivePackageRole.Dependency,
+                    [rootB.Id, rootA.Id],
+                    [rootB.Id, rootA.Id],
+                    Discoverable: false)
+            }
+        };
+
+        var descriptors = ActivePackageCatalogMapper.BuildNextDescriptors(
+            currentState,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [rootA.Id] = rootA.Version,
+                [rootB.Id] = rootB.Version,
+                [dependency.Id] = dependency.Version
+            },
+            [rootA, rootB, dependency],
+            new PackageChangeSet([], [], [], "corr-new", activatedAtUtc.AddMinutes(1)),
+            "corr-new",
+            activatedAtUtc.AddMinutes(1),
+            [graphA, graphB]);
+
+        var descriptor = descriptors[dependency.Id];
+        Assert.Equal("corr-old", descriptor.ActivationCorrelationId);
+        Assert.Equal(activatedAtUtc, descriptor.ActivatedAtUtc);
+    }
+
+    [Fact]
     public void BuildNextDescriptors_WithSharedDependency_PreservesFirstGraphAndMergesParents()
     {
         var activatedAtUtc = DateTimeOffset.Parse("2026-05-05T10:00:00Z");

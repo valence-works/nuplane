@@ -174,8 +174,11 @@ internal static class ActivePackageCatalogMapper
         string.Equals(existing.GraphGenerationId, next.GraphGenerationId, StringComparison.OrdinalIgnoreCase) &&
         existing.PackageRole == next.PackageRole &&
         existing.Discoverable == next.Discoverable &&
-        existing.RootPackageIds.SequenceEqual(next.RootPackageIds, StringComparer.OrdinalIgnoreCase) &&
-        existing.DependencyOfPackageIds.SequenceEqual(next.DependencyOfPackageIds, StringComparer.OrdinalIgnoreCase);
+        SetEquals(existing.RootPackageIds, next.RootPackageIds) &&
+        SetEquals(existing.DependencyOfPackageIds, next.DependencyOfPackageIds);
+
+    private static bool SetEquals(IEnumerable<string> left, IEnumerable<string> right) =>
+        left.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(right);
 
     public static ActivePackagesSnapshot MapSnapshot(StoreStateRecord state, string correlationId)
     {
