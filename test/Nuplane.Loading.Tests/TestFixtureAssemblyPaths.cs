@@ -31,6 +31,7 @@ internal static class TestFixtureAssemblyPaths
         return new[] { currentConfiguration, "Debug", "Release" }
             .Where(static configuration => !string.IsNullOrWhiteSpace(configuration))
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray()!;
+            .OfType<string>()
+            .ToArray();
     }
 }
