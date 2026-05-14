@@ -75,7 +75,7 @@ public sealed class ActivePackageGraphMetadataTests
     }
 
     [Fact]
-    public void BuildNextDescriptors_WithDependencyGraph_KeepsDependencyNodesDiscoverable()
+    public void BuildNextDescriptors_WithDependencyGraph_MarksDependencyNodesSupportOnly()
     {
         var activatedAtUtc = DateTimeOffset.Parse("2026-05-05T10:00:00Z");
         var state = new StoreStateRecord(
@@ -114,7 +114,59 @@ public sealed class ActivePackageGraphMetadataTests
 
         var dependencyDescriptor = descriptors["Plugin.Dependency"];
         Assert.Equal(ActivePackageRole.Dependency, dependencyDescriptor.PackageRole);
-        Assert.True(dependencyDescriptor.Discoverable);
+        Assert.False(dependencyDescriptor.Discoverable);
+    }
+
+    [Fact]
+    public void BuildNextDescriptors_WhenExistingDescriptorHasStaleDiscoverability_UpdatesGraphMetadata()
+    {
+        var activatedAtUtc = DateTimeOffset.Parse("2026-05-05T10:00:00Z");
+        var root = new ResolvedPackage("Plugin.Root", "1.0.0", "feed-a", "/packages/root", activatedAtUtc, "source-a");
+        var dependency = new ResolvedPackage("Plugin.Dependency", "1.0.0", "feed-a", "/packages/dependency", activatedAtUtc, "dependency-of:Plugin.Root");
+        var currentState = StoreStateRecord.Empty() with
+        {
+            ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase)
+            {
+                [dependency.Id] = new(
+                    dependency.Id,
+                    dependency.Version,
+                    "feed-a",
+                    "dependency-of:Plugin.Root",
+                    dependency.InstallPath,
+                    activatedAtUtc,
+                    "corr-old",
+                    "graph-old",
+                    "generation-old",
+                    ActivePackageRole.Dependency,
+                    [root.Id],
+                    [root.Id],
+                    Discoverable: true)
+            }
+        };
+        var graph = Graph(
+            "graph-new",
+            "generation-new",
+            root,
+            dependency,
+            Node(dependency, PackageNodeRole.Dependency));
+
+        var descriptors = ActivePackageCatalogMapper.BuildNextDescriptors(
+            currentState,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [root.Id] = root.Version,
+                [dependency.Id] = dependency.Version
+            },
+            [root, dependency],
+            new PackageChangeSet([], [], [], "corr-new", activatedAtUtc),
+            "corr-new",
+            activatedAtUtc,
+            [graph]);
+
+        var descriptor = descriptors[dependency.Id];
+        Assert.Equal("graph-new", descriptor.GraphId);
+        Assert.Equal("generation-new", descriptor.GraphGenerationId);
+        Assert.False(descriptor.Discoverable);
     }
 
     [Fact]
@@ -197,6 +249,60 @@ public sealed class ActivePackageGraphMetadataTests
         Assert.Equal("2.0.0", record.NodeVersionsByPackageId!["Plugin.Dependency"]);
     }
 
+    [Fact]
+    public void BuildActiveGraphRecords_WhenSameRootSetResolvesExpandedGraph_ReplacesStaleGraphRecord()
+    {
+        var activatedAtUtc = DateTimeOffset.Parse("2026-05-05T10:00:00Z");
+        var root = new ResolvedPackage("Plugin.Root", "1.0.0", "feed-a", "/packages/root", activatedAtUtc, "source-a");
+        var dependency = new ResolvedPackage("Plugin.Dependency", "1.0.0", "feed-a", "/packages/dependency", activatedAtUtc, "source-a");
+        var support = new ResolvedPackage("Plugin.Support", "1.0.0", "feed-a", "/packages/support", activatedAtUtc, "source-a");
+        var oldGraph = Graph("graph-old", "generation-old", root, [dependency]);
+        var newGraph = Graph("graph-new", "generation-new", root, [dependency, support]);
+        var currentState = StateWithActiveGraph(oldGraph, activatedAtUtc);
+
+        var records = ActivePackageCatalogMapper.BuildActiveGraphRecords(
+            currentState,
+            [newGraph],
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [root.Id] = root.Version,
+                [dependency.Id] = dependency.Version,
+                [support.Id] = support.Version
+            },
+            "corr-new",
+            activatedAtUtc);
+
+        var record = Assert.Single(records).Value;
+        Assert.Equal("graph-new", record.GraphId);
+        Assert.Equal([root.Id, dependency.Id, support.Id], record.NodePackageIds);
+    }
+
+    [Fact]
+    public void BuildActiveGraphRecords_WhenSameRootSetResolvedGraphIsNotActive_PreservesLastKnownGoodGraphRecord()
+    {
+        var activatedAtUtc = DateTimeOffset.Parse("2026-05-05T10:00:00Z");
+        var root = new ResolvedPackage("Plugin.Root", "1.0.0", "feed-a", "/packages/root", activatedAtUtc, "source-a");
+        var dependency = new ResolvedPackage("Plugin.Dependency", "1.0.0", "feed-a", "/packages/dependency", activatedAtUtc, "source-a");
+        var support = new ResolvedPackage("Plugin.Support", "1.0.0", "feed-a", "/packages/support", activatedAtUtc, "source-a");
+        var oldGraph = Graph("graph-old", "generation-old", root, [dependency]);
+        var newGraph = Graph("graph-new", "generation-new", root, [dependency, support]);
+        var currentState = StateWithActiveGraph(oldGraph, activatedAtUtc);
+
+        var records = ActivePackageCatalogMapper.BuildActiveGraphRecords(
+            currentState,
+            [newGraph],
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [root.Id] = root.Version,
+                [dependency.Id] = dependency.Version
+            },
+            "corr-new",
+            activatedAtUtc);
+
+        var record = Assert.Single(records).Value;
+        Assert.Equal("graph-old", record.GraphId);
+    }
+
     private static ResolvedPackageNode Node(ResolvedPackage package, PackageNodeRole role) =>
         new(
             package.Id,
@@ -228,4 +334,53 @@ public sealed class ActivePackageGraphMetadataTests
             [],
             DateTimeOffset.Parse("2026-05-05T10:00:00Z"));
     }
+
+    private static ResolvedPackageGraph Graph(
+        string graphId,
+        string generationId,
+        ResolvedPackage root,
+        IReadOnlyList<ResolvedPackage> dependencies)
+    {
+        var rootNode = Node(root, PackageNodeRole.Root);
+        var dependencyNodes = dependencies
+            .Select(static package => Node(package, PackageNodeRole.Dependency))
+            .ToArray();
+        var nodes = new[] { rootNode }
+            .Concat(dependencyNodes)
+            .ToArray();
+        var edges = dependencies
+            .Select((dependency, index) =>
+            {
+                var parent = index == 0 ? root : dependencies[index - 1];
+                return new DependencyEdge(parent.Id, parent.Version, dependency.Id, "[1.0.0, )", dependency.Version, "net10.0", Optional: false);
+            })
+            .ToArray();
+
+        return new(
+            graphId,
+            generationId,
+            "net10.0",
+            [rootNode],
+            nodes,
+            edges,
+            [],
+            DateTimeOffset.Parse("2026-05-05T10:00:00Z"));
+    }
+
+    private static StoreStateRecord StateWithActiveGraph(ResolvedPackageGraph graph, DateTimeOffset activatedAtUtc) =>
+        StoreStateRecord.Empty() with
+        {
+            ActiveGraphsById = new(StringComparer.OrdinalIgnoreCase)
+            {
+                [graph.GraphId] = new(
+                    graph.GraphId,
+                    graph.GenerationId,
+                    graph.Roots.Select(static node => node.PackageId).ToArray(),
+                    graph.Nodes.Select(static node => node.PackageId).ToArray(),
+                    activatedAtUtc,
+                    "corr-old",
+                    GraphActivationStatus.Active,
+                    NodeVersionsByPackageId: graph.Nodes.ToDictionary(static node => node.PackageId, static node => node.Version, StringComparer.OrdinalIgnoreCase))
+            }
+        };
 }
