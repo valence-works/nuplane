@@ -57,6 +57,40 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
     }
 
     [Fact]
+    public void ResolveNativeLibraryPath_WithRuntimeNativeAsset_ResolvesPlatformSpecificName()
+    {
+        var nativePackageInstall = Path.Combine(tempRoot, "SQLitePCLRaw.lib.e_sqlite3", "2.1.11");
+        var nativeDirectory = Path.Combine(nativePackageInstall, "runtimes", "osx-arm64", "native");
+        var nativePath = Path.Combine(nativeDirectory, "libe_sqlite3.dylib");
+        Directory.CreateDirectory(nativeDirectory);
+        File.WriteAllText(nativePath, string.Empty);
+
+        var result = PackageGraphLoadContext.ResolveNativeLibraryPath(
+            [nativePackageInstall],
+            "e_sqlite3",
+            "osx-arm64");
+
+        Assert.Equal(nativePath, result);
+    }
+
+    [Fact]
+    public void ResolveNativeLibraryPath_WithRuntimeGraphFallback_ResolvesCompatibleRidAsset()
+    {
+        var nativePackageInstall = Path.Combine(tempRoot, "Native.Package", "1.0.0");
+        var nativeDirectory = Path.Combine(nativePackageInstall, "runtimes", "linux-x64", "native");
+        var nativePath = Path.Combine(nativeDirectory, "e_sqlite3");
+        Directory.CreateDirectory(nativeDirectory);
+        File.WriteAllText(nativePath, string.Empty);
+
+        var result = PackageGraphLoadContext.ResolveNativeLibraryPath(
+            [nativePackageInstall],
+            "e_sqlite3",
+            "linux-musl-x64");
+
+        Assert.Equal(nativePath, result);
+    }
+
+    [Fact]
     public async Task EnsureGraphLoadedAsync_LoadablePackageWithNoAssemblyDependency_SkipsDependencyWithoutFailure()
     {
         var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");

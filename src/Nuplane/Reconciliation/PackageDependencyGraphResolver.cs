@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Xml.Linq;
 using NuGet.Common;
 using NuGet.Configuration;
+using NuGet.Frameworks;
 using NuGet.Packaging.Core;
 using NuGet.Protocol.Core.Types;
 using NuGet.Resolver;
@@ -419,79 +420,65 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
             return [];
         }
 
-        if (!TryParseFramework(TargetFrameworkMonikerProvider.Current, out var hostTarget))
+        if (!TryParseNuGetFramework(TargetFrameworkMonikerProvider.Current, out var hostTarget))
         {
             return groups.Where(static group => string.IsNullOrWhiteSpace(group.TargetFramework)).ToArray();
         }
 
-        var compatibleGroups = groups
+        var parsedGroups = groups
             .Select(group => new
             {
                 Group = group,
-                Parsed = TryParseFramework(group.TargetFramework, out var target) ? target : null
+                Parsed = TryParseNuGetFramework(group.TargetFramework, out var target) ? target : null
             })
-            .Where(candidate => candidate.Parsed is not null && IsCompatible(hostTarget, candidate.Parsed))
-            .OrderByDescending(candidate => candidate.Parsed!.Kind == hostTarget.Kind ? 1 : 0)
-            .ThenByDescending(candidate => candidate.Parsed!.Version)
-            .Select(candidate => candidate.Group)
+            .Where(static candidate => candidate.Parsed is not null)
             .ToArray();
 
-        if (compatibleGroups.Length > 0)
+        var nearest = new FrameworkReducer().GetNearest(hostTarget, parsedGroups.Select(static candidate => candidate.Parsed!));
+        if (nearest is not null)
         {
-            return [compatibleGroups[0]];
+            return parsedGroups
+                .Where(candidate => NuGetFrameworkFullComparer.Instance.Equals(candidate.Parsed, nearest))
+                .Select(static candidate => candidate.Group)
+                .Take(1)
+                .ToArray();
         }
 
         return groups.Where(static group => string.IsNullOrWhiteSpace(group.TargetFramework)).ToArray();
     }
 
-    private static bool IsCompatible(FrameworkTarget host, FrameworkTarget candidate)
-    {
-        if (candidate.Kind == FrameworkKind.NetStandard)
-        {
-            return candidate.Version <= new Version(2, 1);
-        }
-
-        return candidate.Kind == host.Kind && candidate.Version <= host.Version;
-    }
-
-    private static bool TryParseFramework(string? value, out FrameworkTarget target)
+    private static bool TryParseNuGetFramework(string? value, out NuGetFramework framework)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            target = null!;
+            framework = null!;
             return false;
         }
 
         var normalized = value.Trim();
-        if (normalized.StartsWith(".NETCoreApp,Version=v", StringComparison.OrdinalIgnoreCase))
+        if (normalized.Contains(",Version=", StringComparison.OrdinalIgnoreCase))
         {
-            return TryParseVersion(normalized[21..], FrameworkKind.NetCoreApp, out target);
+            framework = NuGetFramework.ParseFrameworkName(normalized, DefaultFrameworkNameProvider.Instance);
+            return !framework.IsUnsupported;
         }
 
-        if (normalized.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase))
-        {
-            return TryParseVersion(normalized[11..], FrameworkKind.NetStandard, out target);
-        }
-
-        if (normalized.StartsWith("net", StringComparison.OrdinalIgnoreCase) && normalized.Contains('.'))
-        {
-            return TryParseVersion(normalized[3..], FrameworkKind.NetCoreApp, out target);
-        }
-
-        target = null!;
-        return false;
+        framework = NuGetFramework.ParseFolder(NormalizeFrameworkFolderName(normalized));
+        return !framework.IsUnsupported;
     }
 
-    private static bool TryParseVersion(string value, FrameworkKind kind, out FrameworkTarget target)
+    private static string NormalizeFrameworkFolderName(string value)
     {
-        if (Version.TryParse(value, out var version))
+        if (value.StartsWith(".NETStandard", StringComparison.OrdinalIgnoreCase))
         {
-            target = new FrameworkTarget(kind, new Version(version.Major, version.Minor));
-            return true;
+            return "netstandard" + value[".NETStandard".Length..];
         }
 
-        target = null!;
-        return false;
+        if (value.StartsWith(".NETCoreApp", StringComparison.OrdinalIgnoreCase))
+        {
+            return "netcoreapp" + value[".NETCoreApp".Length..];
+        }
+
+        return value;
     }
 
     private static string BuildPackageKey(string packageId, string version) => $"{packageId}@{version}";
@@ -608,13 +595,6 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
 
     private sealed record PackageDependencyMetadata(string PackageId, string VersionRange, string? TargetFramework);
 
-    private sealed record FrameworkTarget(FrameworkKind Kind, Version Version);
-
-    private enum FrameworkKind
-    {
-        NetCoreApp,
-        NetStandard
-    }
 }
 
 /// <summary>

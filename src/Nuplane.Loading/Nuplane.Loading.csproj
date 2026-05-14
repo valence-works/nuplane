@@ -17,8 +17,13 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.NETCore.Platforms" GeneratePathProperty="true" PrivateAssets="all" />
     <ProjectReference Include="..\Nuplane.Abstractions\Nuplane.Abstractions.csproj" />
     <ProjectReference Include="..\Nuplane.Loading.Abstractions\Nuplane.Loading.Abstractions.csproj" />
     <ProjectReference Include="..\Nuplane\Nuplane.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="$(PkgMicrosoft_NETCore_Platforms)\runtime.json" LogicalName="Nuplane.Loading.RuntimeIdentifierGraph.json" />
   </ItemGroup>
 </Project>
