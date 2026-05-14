@@ -150,6 +150,16 @@ internal sealed class PackageLoader : IPackageLoader
             try
             {
                 var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath, package.Id);
+                if (HostRuntimeAssemblyCatalog.Contains(mainAssemblyPath))
+                {
+                    _logger.LogInformation(
+                        "Skipped package {PackageId}@{Version} because assembly {AssemblyPath} is provided by the host runtime.",
+                        package.Id,
+                        package.Version,
+                        mainAssemblyPath);
+                    continue;
+                }
+
                 var context = new PackageAssemblyLoadContext(mainAssemblyPath, sharedPolicy, _matcher);
                 var assemblyName = AssemblyName.GetAssemblyName(mainAssemblyPath);
                 context.LoadFromAssemblyName(assemblyName);
@@ -222,6 +232,11 @@ internal sealed class PackageLoader : IPackageLoader
 
             if (graphPackages.LoadablePackages.Count == 0)
             {
+                if (graphPackages.SkippedPackages.Count == 0 && graphPackages.HostRuntimePackages.Count > 0)
+                {
+                    return new(loaded, failed);
+                }
+
                 throw new NoLoadableAssemblyException(
                     $"No loadable assembly found in graph '{graphKey}'. Scanned install paths: {FormatQuotedList(graphPackages.SkippedInstallPaths)}.");
             }
@@ -366,6 +381,7 @@ internal sealed class PackageLoader : IPackageLoader
     {
         var loadablePackages = new List<LoadableGraphPackage>(packages.Count);
         var skippedPackages = new List<GraphPackage>();
+        var hostRuntimePackages = new List<GraphPackage>();
         var failedPackages = new List<GraphPackage>();
         Exception? resolutionFailure = null;
 
@@ -373,11 +389,23 @@ internal sealed class PackageLoader : IPackageLoader
         {
             try
             {
+                var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath, package.Id);
+                if (HostRuntimeAssemblyCatalog.Contains(mainAssemblyPath))
+                {
+                    hostRuntimePackages.Add(new(package.Id, package.Version, package.InstallPath));
+                    _logger.LogInformation(
+                        "Skipped package {PackageId}@{Version} in graph because assembly {AssemblyPath} is provided by the host runtime.",
+                        package.Id,
+                        package.Version,
+                        mainAssemblyPath);
+                    continue;
+                }
+
                 loadablePackages.Add(new(
                     package.Id,
                     package.Version,
                     package.InstallPath,
-                    ResolveMainAssemblyPath(package.InstallPath, package.Id)));
+                    mainAssemblyPath));
             }
             catch (NoLoadableAssemblyException ex)
             {
@@ -396,7 +424,7 @@ internal sealed class PackageLoader : IPackageLoader
             }
         }
 
-        return new(loadablePackages, skippedPackages, failedPackages, resolutionFailure);
+        return new(loadablePackages, skippedPackages, hostRuntimePackages, failedPackages, resolutionFailure);
     }
 
     private void UnloadUnreferencedContexts(IEnumerable<AssemblyLoadContext> contexts)
@@ -795,6 +823,7 @@ internal sealed class PackageLoader : IPackageLoader
     private sealed record GraphPackageResolution(
         IReadOnlyList<LoadableGraphPackage> LoadablePackages,
         IReadOnlyList<GraphPackage> SkippedPackages,
+        IReadOnlyList<GraphPackage> HostRuntimePackages,
         IReadOnlyList<GraphPackage> FailedPackages,
         Exception? ResolutionFailure)
     {
@@ -804,6 +833,61 @@ internal sealed class PackageLoader : IPackageLoader
     private sealed record LoadedGraphCacheEntry(
         PackageLoadMode LoadMode,
         IReadOnlyList<string> LoadablePackageKeys);
+
+    private static class HostRuntimeAssemblyCatalog
+    {
+        private static readonly Lazy<IReadOnlySet<string>> AssemblyNames = new(LoadAssemblyNames);
+
+        public static bool Contains(string assemblyPath)
+        {
+            try
+            {
+                var assemblyName = AssemblyName.GetAssemblyName(assemblyPath).Name;
+                return !string.IsNullOrWhiteSpace(assemblyName) &&
+                    IsHostFrameworkAssemblyName(assemblyName) &&
+                    AssemblyNames.Value.Contains(assemblyName);
+            }
+            catch (Exception ex) when (ex is BadImageFormatException or FileNotFoundException or FileLoadException)
+            {
+                return false;
+            }
+        }
+
+        private static bool IsHostFrameworkAssemblyName(string? assemblyName) =>
+            !string.IsNullOrWhiteSpace(assemblyName) &&
+            (assemblyName.StartsWith("System.", StringComparison.OrdinalIgnoreCase) ||
+                assemblyName.StartsWith("Microsoft.Extensions.", StringComparison.OrdinalIgnoreCase) ||
+                assemblyName.Equals("Microsoft.CSharp", StringComparison.OrdinalIgnoreCase) ||
+                assemblyName.Equals("mscorlib", StringComparison.OrdinalIgnoreCase) ||
+                assemblyName.Equals("netstandard", StringComparison.OrdinalIgnoreCase));
+
+        private static IReadOnlySet<string> LoadAssemblyNames()
+        {
+            var assemblyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var trustedPlatformAssemblies = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
+            if (string.IsNullOrWhiteSpace(trustedPlatformAssemblies))
+            {
+                return assemblyNames;
+            }
+
+            foreach (var path in trustedPlatformAssemblies.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                try
+                {
+                    var assemblyName = AssemblyName.GetAssemblyName(path).Name;
+                    if (!string.IsNullOrWhiteSpace(assemblyName))
+                    {
+                        assemblyNames.Add(assemblyName);
+                    }
+                }
+                catch (Exception ex) when (ex is BadImageFormatException or FileNotFoundException or FileLoadException)
+                {
+                }
+            }
+
+            return assemblyNames;
+        }
+    }
 
     private sealed class NoLoadableAssemblyException(string message) : FileNotFoundException(message);
 
