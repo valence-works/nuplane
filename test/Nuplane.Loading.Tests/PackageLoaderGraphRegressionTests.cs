@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Nuplane.Abstractions;
 
 namespace Nuplane.Loading.Tests;
@@ -60,15 +61,16 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
     public void ResolveNativeLibraryPath_WithRuntimeNativeAsset_ResolvesPlatformSpecificName()
     {
         var nativePackageInstall = Path.Combine(tempRoot, "SQLitePCLRaw.lib.e_sqlite3", "2.1.11");
-        var nativeDirectory = Path.Combine(nativePackageInstall, "runtimes", "osx-arm64", "native");
-        var nativePath = Path.Combine(nativeDirectory, "libe_sqlite3.dylib");
+        var runtimeIdentifier = RuntimeInformation.RuntimeIdentifier;
+        var nativeDirectory = Path.Combine(nativePackageInstall, "runtimes", runtimeIdentifier, "native");
+        var nativePath = Path.Combine(nativeDirectory, ResolveCurrentPlatformNativeLibraryFileName("e_sqlite3"));
         Directory.CreateDirectory(nativeDirectory);
         File.WriteAllText(nativePath, string.Empty);
 
         var result = PackageGraphLoadContext.ResolveNativeLibraryPath(
             [nativePackageInstall],
             "e_sqlite3",
-            "osx-arm64");
+            runtimeIdentifier);
 
         Assert.Equal(nativePath, result);
     }
@@ -261,4 +263,19 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
         "Plugin.Dependency.dll" => "Nuplane.Loading.Tests.Fixtures.Dependency",
         _ => throw new ArgumentOutOfRangeException(nameof(assemblyFileName))
     };
+
+    private static string ResolveCurrentPlatformNativeLibraryFileName(string libraryName)
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return $"{libraryName}.dll";
+        }
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return $"lib{libraryName}.dylib";
+        }
+
+        return $"lib{libraryName}.so";
+    }
 }
