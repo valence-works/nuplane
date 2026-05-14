@@ -47,6 +47,49 @@ public sealed class ActivePackageGraphMetadataTests
     }
 
     [Fact]
+    public void BuildNextDescriptors_WhenLegacyRootPackageIsUnchanged_PreservesExistingActivation()
+    {
+        var activatedAtUtc = DateTimeOffset.Parse("2026-05-05T10:00:00Z");
+        var resolvedPackage = new ResolvedPackage(
+            "Plugin.Root",
+            "1.0.0",
+            "feed-a",
+            "/packages/root",
+            activatedAtUtc,
+            "source-a");
+        var currentState = StoreStateRecord.Empty() with
+        {
+            ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase)
+            {
+                [resolvedPackage.Id] = new(
+                    resolvedPackage.Id,
+                    resolvedPackage.Version,
+                    resolvedPackage.FeedName,
+                    resolvedPackage.SourceName,
+                    resolvedPackage.InstallPath,
+                    activatedAtUtc,
+                    "corr-old")
+            }
+        };
+
+        var descriptors = ActivePackageCatalogMapper.BuildNextDescriptors(
+            currentState,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [resolvedPackage.Id] = resolvedPackage.Version
+            },
+            [resolvedPackage],
+            new PackageChangeSet([], [], [], "corr-new", activatedAtUtc.AddMinutes(1)),
+            "corr-new",
+            activatedAtUtc.AddMinutes(1));
+
+        var descriptor = Assert.Single(descriptors).Value;
+        Assert.Equal("corr-old", descriptor.ActivationCorrelationId);
+        Assert.Equal("corr-old", descriptor.GraphGenerationId);
+        Assert.Equal(activatedAtUtc, descriptor.ActivatedAtUtc);
+    }
+
+    [Fact]
     public void ToActivePackage_WithDependencyDescriptor_PreservesGraphMetadata()
     {
         var descriptor = new ActivePackageDescriptor(

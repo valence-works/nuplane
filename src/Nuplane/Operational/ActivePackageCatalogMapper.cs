@@ -171,11 +171,21 @@ internal static class ActivePackageCatalogMapper
         string.Equals(existing.SourceName, next.SourceName, StringComparison.Ordinal) &&
         string.Equals(existing.InstallPath, next.InstallPath, StringComparison.Ordinal) &&
         string.Equals(existing.GraphId, next.GraphId, StringComparison.OrdinalIgnoreCase) &&
-        string.Equals(existing.GraphGenerationId, next.GraphGenerationId, StringComparison.OrdinalIgnoreCase) &&
+        HasSameGraphGeneration(existing, next) &&
         existing.PackageRole == next.PackageRole &&
         existing.Discoverable == next.Discoverable &&
         SetEquals(existing.RootPackageIds, next.RootPackageIds) &&
         SetEquals(existing.DependencyOfPackageIds, next.DependencyOfPackageIds);
+
+    private static bool HasSameGraphGeneration(ActivePackageDescriptor existing, ActivePackageDescriptor next) =>
+        IsLegacyRootDescriptor(existing) && IsLegacyRootDescriptor(next) ||
+        string.Equals(existing.GraphGenerationId, next.GraphGenerationId, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsLegacyRootDescriptor(ActivePackageDescriptor descriptor) =>
+        string.Equals(descriptor.GraphId, descriptor.PackageId, StringComparison.OrdinalIgnoreCase) &&
+        descriptor.PackageRole == ActivePackageRole.Root &&
+        SetEquals(descriptor.RootPackageIds, [descriptor.PackageId]) &&
+        !descriptor.DependencyOfPackageIds.Any();
 
     private static bool SetEquals(IEnumerable<string> left, IEnumerable<string> right) =>
         left.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(right);
