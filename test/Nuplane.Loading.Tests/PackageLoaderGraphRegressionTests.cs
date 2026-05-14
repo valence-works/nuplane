@@ -241,21 +241,7 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
     }
 
     private static string FindFixtureAssembly(string assemblyFileName)
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        while (current is not null)
-        {
-            var candidate = Path.Combine(current.FullName, "test", ResolveFixtureProjectDirectory(assemblyFileName), "bin", "Debug", "net10.0", assemblyFileName);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            current = current.Parent;
-        }
-
-        throw new FileNotFoundException($"Fixture assembly '{assemblyFileName}' was not found.", assemblyFileName);
-    }
+        => TestFixtureAssemblyPaths.FindProjectAssembly(ResolveFixtureProjectDirectory(assemblyFileName), assemblyFileName);
 
     private static string ResolveFixtureProjectDirectory(string assemblyFileName) => assemblyFileName switch
     {
