@@ -232,6 +232,11 @@ internal sealed class PackageLoader : IPackageLoader
 
             if (graphPackages.LoadablePackages.Count == 0)
             {
+                if (graphPackages.SkippedPackages.Count == 0 && graphPackages.HostRuntimePackages.Count > 0)
+                {
+                    return new(loaded, failed);
+                }
+
                 throw new NoLoadableAssemblyException(
                     $"No loadable assembly found in graph '{graphKey}'. Scanned install paths: {FormatQuotedList(graphPackages.SkippedInstallPaths)}.");
             }
@@ -376,6 +381,7 @@ internal sealed class PackageLoader : IPackageLoader
     {
         var loadablePackages = new List<LoadableGraphPackage>(packages.Count);
         var skippedPackages = new List<GraphPackage>();
+        var hostRuntimePackages = new List<GraphPackage>();
         var failedPackages = new List<GraphPackage>();
         Exception? resolutionFailure = null;
 
@@ -386,7 +392,7 @@ internal sealed class PackageLoader : IPackageLoader
                 var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath, package.Id);
                 if (HostRuntimeAssemblyCatalog.Contains(mainAssemblyPath))
                 {
-                    skippedPackages.Add(new(package.Id, package.Version, package.InstallPath));
+                    hostRuntimePackages.Add(new(package.Id, package.Version, package.InstallPath));
                     _logger.LogInformation(
                         "Skipped package {PackageId}@{Version} in graph because assembly {AssemblyPath} is provided by the host runtime.",
                         package.Id,
@@ -418,7 +424,7 @@ internal sealed class PackageLoader : IPackageLoader
             }
         }
 
-        return new(loadablePackages, skippedPackages, failedPackages, resolutionFailure);
+        return new(loadablePackages, skippedPackages, hostRuntimePackages, failedPackages, resolutionFailure);
     }
 
     private void UnloadUnreferencedContexts(IEnumerable<AssemblyLoadContext> contexts)
@@ -817,6 +823,7 @@ internal sealed class PackageLoader : IPackageLoader
     private sealed record GraphPackageResolution(
         IReadOnlyList<LoadableGraphPackage> LoadablePackages,
         IReadOnlyList<GraphPackage> SkippedPackages,
+        IReadOnlyList<GraphPackage> HostRuntimePackages,
         IReadOnlyList<GraphPackage> FailedPackages,
         Exception? ResolutionFailure)
     {

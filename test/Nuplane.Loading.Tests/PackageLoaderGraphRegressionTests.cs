@@ -138,6 +138,22 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureGraphLoadedAsync_GraphWithOnlyHostRuntimeAssemblies_DoesNotReportFailures()
+    {
+        var systemMemoryInstall = CreateHostRuntimeAssemblyPackageInstall("System.Memory");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[new ResolvedPackage("System.Memory", "4.5.3", "test-feed", systemMemoryInstall, DateTimeOffset.UtcNow, "test-source")]],
+            [],
+            CancellationToken.None);
+
+        Assert.Empty(result.Loaded);
+        Assert.Empty(result.FailedByPackageId);
+        Assert.Empty(loader.Sessions);
+    }
+
+    [Fact]
     public async Task EnsureGraphLoadedAsync_LoadablePackageWithNoAssemblyDependency_ReusesExistingGraphSession()
     {
         var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");
