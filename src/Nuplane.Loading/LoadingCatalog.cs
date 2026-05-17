@@ -156,7 +156,7 @@ internal sealed class LoadingCatalog(
         IReadOnlyList<string> diagnostics,
         IReadOnlyList<PackageAssemblyReference> assemblyReferences,
         PackageLoadSession? session = null) =>
-        new(
+        new PackageLoadState(
             package.PackageId,
             package.Version,
             status,
@@ -166,8 +166,10 @@ internal sealed class LoadingCatalog(
             assemblyReferences.ToArray(),
             package.Discoverable,
             session?.LoadMode ?? PackageLoadMode.Collectible,
-            session?.FrameworkIntegrationSafe ?? false,
-            session?.LoadModeDiagnostics ?? []);
+            session?.FrameworkIntegrationSafe ?? false)
+        {
+            LoadModeDiagnostics = session?.LoadModeDiagnostics ?? []
+        };
 
     private static IReadOnlyList<string> BuildDiagnostics(string? message)
     {
