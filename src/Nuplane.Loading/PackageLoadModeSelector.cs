@@ -110,8 +110,18 @@ internal sealed class PackageLoadModeSelector
             logger.PackageLoadMetadataConflict(graphKey, graphLoadMode);
         }
 
+        IReadOnlySet<string> conflictingMetadataKeys = metadataConflict
+            ? decisions
+                .Where(static decision => decision.Diagnostics.Any(static diagnostic =>
+                    diagnostic.ReasonCode == LoadModeReasonCodes.PackageMetadata
+                    && (diagnostic.EffectivePackageLoadMode == PackageLoadMode.HostIntegrated
+                        || diagnostic.EffectivePackageLoadMode == PackageLoadMode.Collectible)))
+                .Select(static decision => BuildKey(decision.Selection.PackageId, decision.Selection.Version))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : [];
+
         var promotedDecisions = decisions
-            .Select(decision => PromoteDecision(decision, graphKey, graphLoadMode, metadataConflict))
+            .Select(decision => PromoteDecision(decision, graphKey, graphLoadMode, conflictingMetadataKeys))
             .ToArray();
 
         logger.GraphLoadModeSelected(graphKey, graphLoadMode);
@@ -239,7 +249,7 @@ internal sealed class PackageLoadModeSelector
         PackageLoadModeDecision decision,
         string graphKey,
         PackageLoadMode graphLoadMode,
-        bool metadataConflict)
+        IReadOnlySet<string> conflictingMetadataKeys)
     {
         var diagnostics = decision.Diagnostics.ToList();
         var selection = decision.Selection;
@@ -261,7 +271,7 @@ internal sealed class PackageLoadModeSelector
                 Message: "Package was promoted because another package in the graph required host-integrated loading."));
         }
 
-        if (metadataConflict)
+        if (conflictingMetadataKeys.Contains(BuildKey(selection.PackageId, selection.Version)))
         {
             diagnostics.Add(new(
                 graphKey,
