@@ -193,7 +193,7 @@ internal sealed class PackageLoadModeSelector
         {
             diagnostics.Add(CreateAdvisorDiagnostic(graphKey, PackageLoadMode.HostIntegrated, PackageLoadMode.HostIntegrated, hostIntegratedRequirement));
             return new(
-                new(package.Id, package.Version, PackageLoadMode.HostIntegrated, LoadModeReasonCodes.PackageMetadata, graphKey),
+                new(package.Id, package.Version, PackageLoadMode.HostIntegrated, hostIntegratedRequirement.ReasonCode, graphKey),
                 diagnostics);
         }
 
@@ -204,7 +204,7 @@ internal sealed class PackageLoadModeSelector
             {
                 diagnostics.Add(CreateAdvisorDiagnostic(graphKey, PackageLoadMode.Collectible, PackageLoadMode.Collectible, collectiblePreference));
                 return new(
-                    new(package.Id, package.Version, PackageLoadMode.Collectible, LoadModeReasonCodes.PackageMetadata, graphKey),
+                    new(package.Id, package.Version, PackageLoadMode.Collectible, collectiblePreference.ReasonCode, graphKey),
                     diagnostics);
             }
 

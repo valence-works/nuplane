@@ -90,6 +90,56 @@ public sealed class PackageLoadModeSelectorTests
             diagnostic.ReasonCode == LoadModeReasonCodes.MetadataSuppressed);
     }
 
+    [Fact]
+    public async Task SelectGraphAsync_WhenCustomAdvisorSelectsLoadMode_PreservesAdvisorReasonCode()
+    {
+        var sut = new PackageLoadModeSelector(
+        [
+            new StaticPackageLoadModeAdvisor(
+                "custom-advisor",
+                new LoadModeAdvisorResult(
+                    "custom-advisor",
+                    "pkg-a",
+                    "1.0.0",
+                    PackageLoadMode.HostIntegrated,
+                    LoadModeScopes.DependencyClosure,
+                    "custom-host-requirement",
+                    "custom advisor"))
+        ]);
+        var options = new LoadingOptions { DefaultLoadMode = PackageLoadMode.Collectible };
+
+        var decision = await sut.SelectGraphAsync([Pkg("pkg-a")], options, "graph:test", CancellationToken.None);
+
+        var selection = Assert.Single(decision.Selections);
+        Assert.Equal(PackageLoadMode.HostIntegrated, selection.LoadMode);
+        Assert.Equal("custom-host-requirement", selection.SelectionReason);
+    }
+
+    [Fact]
+    public async Task SelectGraphAsync_WhenCustomAdvisorSelectsCollectible_PreservesAdvisorReasonCode()
+    {
+        var sut = new PackageLoadModeSelector(
+        [
+            new StaticPackageLoadModeAdvisor(
+                "custom-advisor",
+                new LoadModeAdvisorResult(
+                    "custom-advisor",
+                    "pkg-a",
+                    "1.0.0",
+                    PackageLoadMode.Collectible,
+                    LoadModeScopes.PackageOnly,
+                    "custom-collectible-preference",
+                    "custom advisor"))
+        ]);
+        var options = new LoadingOptions { DefaultLoadMode = PackageLoadMode.Collectible };
+
+        var decision = await sut.SelectGraphAsync([Pkg("pkg-a")], options, "graph:test", CancellationToken.None);
+
+        var selection = Assert.Single(decision.Selections);
+        Assert.Equal(PackageLoadMode.Collectible, selection.LoadMode);
+        Assert.Equal("custom-collectible-preference", selection.SelectionReason);
+    }
+
     private static ResolvedPackage Pkg(string id) => new(id, "1.0.0", "feed-a", "/tmp/pkg", DateTimeOffset.UtcNow, id);
 
     internal static LoadModeAdvisorResult MetadataResult(
