@@ -17,8 +17,8 @@ internal static partial class LoadingLogger
     [LoggerMessage(
         EventId = 2102,
         Level = LogLevel.Warning,
-        Message = "Ignored invalid package load metadata for {PackageId}@{Version} in graph {GraphKey}: {Diagnostic}")]
-    public static partial void InvalidPackageLoadMetadata(
+        Message = "Ignored invalid package load-mode advisor result for {PackageId}@{Version} in graph {GraphKey}: {Diagnostic}")]
+    public static partial void InvalidPackageLoadModeAdvisorResult(
         this ILogger logger,
         string packageId,
         string version,
@@ -28,8 +28,8 @@ internal static partial class LoadingLogger
     [LoggerMessage(
         EventId = 2103,
         Level = LogLevel.Information,
-        Message = "Suppressed package load metadata for {PackageId}@{Version} in graph {GraphKey} because an explicit package override was configured.")]
-    public static partial void PackageLoadMetadataSuppressed(
+        Message = "Suppressed package load-mode advisor result for {PackageId}@{Version} in graph {GraphKey} because a higher-precedence load-mode policy was configured.")]
+    public static partial void PackageLoadModeAdvisorResultSuppressed(
         this ILogger logger,
         string packageId,
         string version,

@@ -149,21 +149,17 @@ internal sealed class PackageLoadModeSelector
             if (!result.IsValid)
             {
                 diagnostics.Add(CreateAdvisorDiagnostic(graphKey, loadMode, loadMode, result));
-                logger.InvalidPackageLoadMetadata(package.Id, package.Version, graphKey, result.Diagnostic ?? "Package metadata is invalid.");
+                logger.InvalidPackageLoadModeAdvisorResult(package.Id, package.Version, graphKey, result.Diagnostic ?? "Package load-mode advisor result is invalid.");
                 continue;
             }
 
-            diagnostics.Add(new(
+            diagnostics.Add(CreateSuppressedAdvisorDiagnostic(
                 graphKey,
                 loadMode,
                 loadMode,
-                LoadModeReasonCodes.MetadataSuppressed,
-                result.PackageId,
-                result.Version,
-                result.Scope,
-                result.AdvisorName,
-                "Package metadata was suppressed by an explicit package load mode override."));
-            logger.PackageLoadMetadataSuppressed(package.Id, package.Version, graphKey);
+                result,
+                "Package load-mode advisor result was suppressed by an explicit package load mode override."));
+            logger.PackageLoadModeAdvisorResultSuppressed(package.Id, package.Version, graphKey);
         }
 
         return new(new(package.Id, package.Version, loadMode, LoadModeReasonCodes.PackageOverride, graphKey), diagnostics);
@@ -179,7 +175,7 @@ internal sealed class PackageLoadModeSelector
         foreach (var invalidResult in packageResults.Where(static result => !result.IsValid))
         {
             diagnostics.Add(CreateAdvisorDiagnostic(graphKey, options.DefaultLoadMode, options.DefaultLoadMode, invalidResult));
-            logger.InvalidPackageLoadMetadata(package.Id, package.Version, graphKey, invalidResult.Diagnostic ?? "Package metadata is invalid.");
+            logger.InvalidPackageLoadModeAdvisorResult(package.Id, package.Version, graphKey, invalidResult.Diagnostic ?? "Package load-mode advisor result is invalid.");
         }
 
         var validResults = packageResults
@@ -212,17 +208,13 @@ internal sealed class PackageLoadModeSelector
                     diagnostics);
             }
 
-            diagnostics.Add(new(
+            diagnostics.Add(CreateSuppressedAdvisorDiagnostic(
                 graphKey,
                 options.DefaultLoadMode,
                 options.DefaultLoadMode,
-                LoadModeReasonCodes.MetadataSuppressed,
-                collectiblePreference.PackageId,
-                collectiblePreference.Version,
-                collectiblePreference.Scope,
-                collectiblePreference.AdvisorName,
+                collectiblePreference,
                 "Package metadata requested Collectible but the configured default load mode takes precedence."));
-            logger.PackageLoadMetadataSuppressed(package.Id, package.Version, graphKey);
+            logger.PackageLoadModeAdvisorResultSuppressed(package.Id, package.Version, graphKey);
         }
 
         diagnostics.Add(new(
@@ -309,6 +301,27 @@ internal sealed class PackageLoadModeSelector
             result.Scope,
             result.AdvisorName,
             result.Diagnostic ?? result.Reason);
+
+    private static LoadModeDecisionDiagnostic CreateSuppressedAdvisorDiagnostic(
+        string graphKey,
+        PackageLoadMode graphLoadMode,
+        PackageLoadMode packageLoadMode,
+        LoadModeAdvisorResult result,
+        string message) =>
+        new(
+            graphKey,
+            graphLoadMode,
+            packageLoadMode,
+            result.ReasonCode == LoadModeReasonCodes.PackageMetadata
+                ? LoadModeReasonCodes.MetadataSuppressed
+                : LoadModeReasonCodes.AdvisorSuppressed,
+            result.PackageId,
+            result.Version,
+            result.Scope,
+            result.AdvisorName,
+            result.ReasonCode == LoadModeReasonCodes.PackageMetadata
+                ? message
+                : "Package load-mode advisor result was suppressed by a higher-precedence load-mode policy.");
 
     private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";
 }

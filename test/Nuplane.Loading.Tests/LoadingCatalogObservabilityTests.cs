@@ -150,7 +150,7 @@ public sealed class LoadingCatalogObservabilityTests
             CancellationToken.None);
 
         Assert.Contains(messages, message =>
-            message.Contains("Ignored invalid package load metadata", StringComparison.Ordinal)
+            message.Contains("Ignored invalid package load-mode advisor result", StringComparison.Ordinal)
             && message.Contains("metadata was not valid", StringComparison.Ordinal));
     }
 

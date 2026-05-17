@@ -48,5 +48,33 @@ public sealed class PackageLoadModeSelectorOverrideTests
             Assert.DoesNotContain(diagnostics, diagnostic => diagnostic.ReasonCode == LoadModeReasonCodes.MetadataConflict));
     }
 
+    [Fact]
+    public async Task SelectGraphAsync_WhenExplicitOverrideSuppressesCustomAdvisor_UsesAdvisorSuppressedDiagnostic()
+    {
+        var sut = new PackageLoadModeSelector(
+        [
+            new StaticPackageLoadModeAdvisor(
+                "custom-advisor",
+                new LoadModeAdvisorResult(
+                    "custom-advisor",
+                    "pkg-a",
+                    "1.0.0",
+                    PackageLoadMode.HostIntegrated,
+                    LoadModeScopes.DependencyClosure,
+                    "custom-reason",
+                    "custom advisor"))
+        ]);
+        var options = new LoadingOptions { DefaultLoadMode = PackageLoadMode.Collectible };
+        options.PackageLoadModes.Add(new() { PackageId = "pkg-a", LoadMode = PackageLoadMode.Collectible });
+
+        var decision = await sut.SelectGraphAsync([Pkg("pkg-a")], options, "graph:test", CancellationToken.None);
+
+        var diagnostic = Assert.Single(
+            decision.DiagnosticsByPackageKey["pkg-a@1.0.0"],
+            diagnostic => diagnostic.AdvisorName == "custom-advisor");
+        Assert.Equal(LoadModeReasonCodes.AdvisorSuppressed, diagnostic.ReasonCode);
+        Assert.Equal("Package load-mode advisor result was suppressed by a higher-precedence load-mode policy.", diagnostic.Message);
+    }
+
     private static ResolvedPackage Pkg(string id) => new(id, "1.0.0", "feed-a", "/tmp/pkg", DateTimeOffset.UtcNow, id);
 }

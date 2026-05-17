@@ -8,6 +8,7 @@ internal static class LoadModeReasonCodes
     public const string DependencyClosure = "dependency-closure";
     public const string MetadataInvalid = "metadata-invalid";
     public const string MetadataSuppressed = "metadata-suppressed";
+    public const string AdvisorSuppressed = "advisor-suppressed";
     public const string MetadataConflict = "metadata-conflict";
     public const string AdvisorsDisabled = "advisors-disabled";
 }
