@@ -1,7 +1,23 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace Nuplane.Loading;
 
-internal sealed class PackageMetadataLoadModeAdvisor(PackageMetadataLoadModeReader reader) : IPackageLoadModeAdvisor
+internal sealed class PackageMetadataLoadModeAdvisor : IPackageLoadModeAdvisor
 {
+    private readonly PackageMetadataLoadModeReader reader;
+    private readonly ILogger<PackageMetadataLoadModeAdvisor> logger;
+
+    public PackageMetadataLoadModeAdvisor(
+        PackageMetadataLoadModeReader reader,
+        ILogger<PackageMetadataLoadModeAdvisor>? logger = null)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+
+        this.reader = reader;
+        this.logger = logger ?? NullLogger<PackageMetadataLoadModeAdvisor>.Instance;
+    }
+
     public string Name => "package-metadata";
 
     public ValueTask<IReadOnlyList<LoadModeAdvisorResult>> EvaluateAsync(
@@ -38,6 +54,12 @@ internal sealed class PackageMetadataLoadModeAdvisor(PackageMetadataLoadModeRead
                 continue;
             }
 
+            logger.PackageLoadMetadataDiscovered(
+                package.Id,
+                package.Version,
+                context.GraphKey,
+                result.Metadata.Loading.LoadMode,
+                result.Metadata.Loading.Scope);
             results.Add(new(
                 Name,
                 package.Id,

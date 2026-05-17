@@ -52,4 +52,16 @@ internal static partial class LoadingLogger
         this ILogger logger,
         string graphKey,
         PackageLoadMode loadMode);
+
+    [LoggerMessage(
+        EventId = 2106,
+        Level = LogLevel.Information,
+        Message = "Discovered package load metadata for {PackageId}@{Version} in graph {GraphKey}: LoadMode={LoadMode}, Scope={Scope}.")]
+    public static partial void PackageLoadMetadataDiscovered(
+        this ILogger logger,
+        string packageId,
+        string version,
+        string graphKey,
+        PackageLoadMode loadMode,
+        string scope);
 }
