@@ -89,6 +89,11 @@ public sealed class LoadingRegistrationDeterminismTests
         Assert.Single(services, d => d.ServiceType == typeof(IPackageLoadModeAdvisor));
         Assert.Single(services, d => d.ServiceType == typeof(PackageMetadataLoadModeReader));
         Assert.Single(services, d => d.ServiceType == typeof(PackageMetadataLoadModeAdvisor));
+
+        using var provider = services.BuildServiceProvider();
+        var concreteAdvisor = provider.GetRequiredService<PackageMetadataLoadModeAdvisor>();
+        var interfaceAdvisor = Assert.Single(provider.GetRequiredService<IEnumerable<IPackageLoadModeAdvisor>>());
+        Assert.Same(concreteAdvisor, interfaceAdvisor);
     }
 
     [Fact]

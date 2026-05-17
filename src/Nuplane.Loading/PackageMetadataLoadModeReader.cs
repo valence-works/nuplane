@@ -29,13 +29,12 @@ internal sealed class PackageMetadataLoadModeReader
 
         try
         {
-            var fileInfo = new FileInfo(metadataPath);
-            if (fileInfo.Length > MaxMetadataBytes)
+            using var stream = File.OpenRead(metadataPath);
+            if (stream.Length > MaxMetadataBytes)
             {
                 return PackageMetadataLoadModeReadResult.Invalid($"Package metadata for '{packageId}@{version}' exceeds the {MaxMetadataBytes} byte limit.");
             }
 
-            using var stream = File.OpenRead(metadataPath);
             var document = JsonSerializer.Deserialize<NuplanePackageMetadataDocument>(stream, JsonOptions);
             if (document is null)
             {
@@ -57,8 +56,9 @@ internal sealed class PackageMetadataLoadModeReader
                 return PackageMetadataLoadModeReadResult.Invalid($"Package metadata for '{packageId}@{version}' is missing loading.loadMode.");
             }
 
-            if (!Enum.TryParse<PackageLoadMode>(document.Loading.LoadMode, ignoreCase: true, out var loadMode)
-                || !Enum.IsDefined(loadMode))
+            var loadModeName = document.Loading.LoadMode.Trim();
+            if (!Enum.GetNames<PackageLoadMode>().Any(name => string.Equals(name, loadModeName, StringComparison.OrdinalIgnoreCase))
+                || !Enum.TryParse<PackageLoadMode>(loadModeName, ignoreCase: true, out var loadMode))
             {
                 return PackageMetadataLoadModeReadResult.Invalid($"Package metadata for '{packageId}@{version}' uses unsupported loading.loadMode '{document.Loading.LoadMode}'.");
             }

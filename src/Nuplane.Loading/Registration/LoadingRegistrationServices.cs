@@ -39,7 +39,11 @@ public static class LoadingRegistrationServices
         services.TryAddSingleton<SharedAssemblyPolicyMatcher>();
         services.TryAddSingleton<PackageMetadataLoadModeReader>();
         services.TryAddSingleton<PackageMetadataLoadModeAdvisor>();
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IPackageLoadModeAdvisor, PackageMetadataLoadModeAdvisor>());
+        if (!services.Any(IsPackageMetadataLoadModeAdvisorRegistration))
+        {
+            services.AddSingleton<IPackageLoadModeAdvisor>(ResolvePackageMetadataLoadModeAdvisor);
+        }
+
         services.TryAddSingleton<PackageLoadModeSelector>();
         services.TryAddSingleton<HostIntegratedAssemblyResolutionCatalog>();
         services.TryAddSingleton<HostIntegratedAssemblyResolver>();
@@ -93,4 +97,11 @@ public static class LoadingRegistrationServices
             services.AddSingleton(implementationFactory);
         }
     }
+
+    private static bool IsPackageMetadataLoadModeAdvisorRegistration(ServiceDescriptor descriptor) =>
+        descriptor.ServiceType == typeof(IPackageLoadModeAdvisor)
+        && descriptor.ImplementationFactory?.Method == ResolvePackageMetadataLoadModeAdvisor.Method;
+
+    private static readonly Func<IServiceProvider, IPackageLoadModeAdvisor> ResolvePackageMetadataLoadModeAdvisor =
+        static sp => sp.GetRequiredService<PackageMetadataLoadModeAdvisor>();
 }

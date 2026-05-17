@@ -189,6 +189,9 @@ internal sealed class PackageLoadModeSelector
             .ThenBy(static result => result.Scope, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
+        // Nuplane currently loads a resolved graph in one mode. Scope is preserved in
+        // diagnostics for future policy expansion, while any HostIntegrated metadata
+        // requirement promotes the graph to keep activation deterministic.
         var hostIntegratedRequirement = validResults.FirstOrDefault(static result => result.RequestedLoadMode == PackageLoadMode.HostIntegrated);
         if (hostIntegratedRequirement is not null)
         {
@@ -199,12 +202,27 @@ internal sealed class PackageLoadModeSelector
         }
 
         var collectiblePreference = validResults.FirstOrDefault(static result => result.RequestedLoadMode == PackageLoadMode.Collectible);
-        if (collectiblePreference is not null && options.DefaultLoadMode == PackageLoadMode.Collectible)
+        if (collectiblePreference is not null)
         {
-            diagnostics.Add(CreateAdvisorDiagnostic(graphKey, PackageLoadMode.Collectible, PackageLoadMode.Collectible, collectiblePreference));
-            return new(
-                new(package.Id, package.Version, PackageLoadMode.Collectible, LoadModeReasonCodes.PackageMetadata, graphKey),
-                diagnostics);
+            if (options.DefaultLoadMode == PackageLoadMode.Collectible)
+            {
+                diagnostics.Add(CreateAdvisorDiagnostic(graphKey, PackageLoadMode.Collectible, PackageLoadMode.Collectible, collectiblePreference));
+                return new(
+                    new(package.Id, package.Version, PackageLoadMode.Collectible, LoadModeReasonCodes.PackageMetadata, graphKey),
+                    diagnostics);
+            }
+
+            diagnostics.Add(new(
+                graphKey,
+                options.DefaultLoadMode,
+                options.DefaultLoadMode,
+                LoadModeReasonCodes.MetadataSuppressed,
+                collectiblePreference.PackageId,
+                collectiblePreference.Version,
+                collectiblePreference.Scope,
+                collectiblePreference.AdvisorName,
+                "Package metadata requested Collectible but the configured default load mode takes precedence."));
+            logger.PackageLoadMetadataSuppressed(package.Id, package.Version, graphKey);
         }
 
         diagnostics.Add(new(

@@ -21,6 +21,10 @@ public sealed class PackageLoadModeSelectorPolicyTests
         var selection = Assert.Single(decision.Selections);
         Assert.Equal(PackageLoadMode.HostIntegrated, selection.LoadMode);
         Assert.Equal(LoadModeReasonCodes.Default, selection.SelectionReason);
+        Assert.Contains(decision.DiagnosticsByPackageKey["pkg-a@1.0.0"], diagnostic =>
+            diagnostic.ReasonCode == LoadModeReasonCodes.MetadataSuppressed
+            && diagnostic.AdvisorName == "package-metadata"
+            && diagnostic.RequestedScope == LoadModeScopes.DependencyClosure);
     }
 
     [Fact]

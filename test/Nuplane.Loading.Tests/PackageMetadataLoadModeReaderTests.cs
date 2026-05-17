@@ -34,6 +34,7 @@ public sealed class PackageMetadataLoadModeReaderTests : IDisposable
     [InlineData("{")]
     [InlineData("""{"schemaVersion":2,"loading":{"loadMode":"HostIntegrated","scope":"DependencyClosure"}}""")]
     [InlineData("""{"schemaVersion":1,"loading":{"loadMode":"PluginOnly","scope":"DependencyClosure"}}""")]
+    [InlineData("""{"schemaVersion":1,"loading":{"loadMode":"1","scope":"DependencyClosure"}}""")]
     [InlineData("""{"schemaVersion":1,"loading":{"loadMode":"HostIntegrated","scope":"WholeUniverse"}}""")]
     [InlineData("""{"schemaVersion":1}""")]
     [InlineData("""{"schemaVersion":1,"loading":{"scope":"DependencyClosure"}}""")]
