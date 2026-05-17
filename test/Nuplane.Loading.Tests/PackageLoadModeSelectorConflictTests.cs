@@ -21,7 +21,14 @@ public sealed class PackageLoadModeSelectorConflictTests
         Assert.Equal(PackageLoadMode.HostIntegrated, decision.LoadMode);
         Assert.All(decision.Selections, selection => Assert.Equal(PackageLoadMode.HostIntegrated, selection.LoadMode));
         Assert.All(decision.DiagnosticsByPackageKey.Values, diagnostics =>
-            Assert.Contains(diagnostics, diagnostic => diagnostic.ReasonCode == LoadModeReasonCodes.MetadataConflict));
+        {
+            Assert.Contains(diagnostics, diagnostic => diagnostic.ReasonCode == LoadModeReasonCodes.MetadataConflict);
+            Assert.All(diagnostics, diagnostic =>
+            {
+                Assert.Equal(PackageLoadMode.HostIntegrated, diagnostic.EffectiveGraphLoadMode);
+                Assert.Equal(PackageLoadMode.HostIntegrated, diagnostic.EffectivePackageLoadMode);
+            });
+        });
     }
 
     private static ResolvedPackage Pkg(string id) => new(id, "1.0.0", "feed-a", "/tmp/pkg", DateTimeOffset.UtcNow, id);

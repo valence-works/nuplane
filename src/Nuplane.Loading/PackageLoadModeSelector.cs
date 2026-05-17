@@ -90,14 +90,14 @@ internal sealed class PackageLoadModeSelector
                 : SelectFromAdvisorsOrDefault(package, graphKey, options, packageResults));
         }
 
-        var hasHostMetadata = advisorResults.Any(static result =>
-            result.IsValid
-            && result.RequestedLoadMode == PackageLoadMode.HostIntegrated
-            && string.Equals(result.ReasonCode, LoadModeReasonCodes.PackageMetadata, StringComparison.Ordinal));
-        var hasCollectibleMetadata = advisorResults.Any(static result =>
-            result.IsValid
-            && result.RequestedLoadMode == PackageLoadMode.Collectible
-            && string.Equals(result.ReasonCode, LoadModeReasonCodes.PackageMetadata, StringComparison.Ordinal));
+        var hasHostMetadata = decisions.Any(static decision =>
+            decision.Diagnostics.Any(static diagnostic =>
+                diagnostic.ReasonCode == LoadModeReasonCodes.PackageMetadata
+                && diagnostic.EffectivePackageLoadMode == PackageLoadMode.HostIntegrated));
+        var hasCollectibleMetadata = decisions.Any(static decision =>
+            decision.Diagnostics.Any(static diagnostic =>
+                diagnostic.ReasonCode == LoadModeReasonCodes.PackageMetadata
+                && diagnostic.EffectivePackageLoadMode == PackageLoadMode.Collectible));
         var metadataConflict = hasHostMetadata && hasCollectibleMetadata;
 
         var graphLoadMode = decisions.Any(static decision => decision.Selection.LoadMode == PackageLoadMode.HostIntegrated)
@@ -267,6 +267,12 @@ internal sealed class PackageLoadModeSelector
         {
             Selection = selection,
             Diagnostics = diagnostics
+                .Select(diagnostic => diagnostic with
+                {
+                    EffectiveGraphLoadMode = graphLoadMode,
+                    EffectivePackageLoadMode = selection.LoadMode
+                })
+                .ToList()
         };
     }
 
