@@ -13,6 +13,7 @@ namespace Nuplane.Loading;
 /// <param name="Discoverable">Whether this loaded package should be exposed by default discovery surfaces.</param>
 /// <param name="LoadMode">The effective load mode used for the package.</param>
 /// <param name="FrameworkIntegrationSafe">Whether the loaded package assemblies are safe for framework integration.</param>
+/// <param name="LoadModeDiagnostics">Secret-safe diagnostics explaining the effective load mode.</param>
 public sealed record PackageLoadState(
     string PackageId,
     string Version,
@@ -23,7 +24,8 @@ public sealed record PackageLoadState(
     IReadOnlyList<PackageAssemblyReference> AssemblyReferences,
     bool Discoverable = true,
     PackageLoadMode LoadMode = PackageLoadMode.Collectible,
-    bool FrameworkIntegrationSafe = false)
+    bool FrameworkIntegrationSafe = false,
+    IReadOnlyList<LoadModeDecisionDiagnostic>? LoadModeDiagnostics = null)
 {
     /// <summary>
     /// Creates a canonical package load-state record from the legacy loading descriptor model.
@@ -49,6 +51,7 @@ public sealed record PackageLoadState(
             descriptor.ScanCandidates.Select(static candidate => PackageAssemblyReference.FromCandidate(candidate)).ToArray(),
             Discoverable: true,
             descriptor.LoadMode,
-            descriptor.FrameworkIntegrationSafe);
+            descriptor.FrameworkIntegrationSafe,
+            descriptor.LoadModeDiagnostics);
     }
 }

@@ -27,6 +27,20 @@ public sealed class LoadingOptionsValidatorTests
     }
 
     [Fact]
+    public void Validate_InvalidLoadModeSelectionPolicy_ReturnsError()
+    {
+        var sut = new LoadingOptionsValidator();
+        var options = new LoadingOptions
+        {
+            LoadModeSelectionPolicy = (PackageLoadModeSelectionPolicy)42
+        };
+
+        var errors = sut.Validate(options);
+
+        Assert.Contains(errors, error => error.Contains("selection policy", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Validate_DuplicatePackageLoadModeOverrides_ReturnsError()
     {
         var sut = new LoadingOptionsValidator();

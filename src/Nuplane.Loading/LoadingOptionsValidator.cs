@@ -31,6 +31,11 @@ public sealed class LoadingOptionsValidator
             errors.Add($"Loading default load mode '{options.DefaultLoadMode}' is not supported.");
         }
 
+        if (!Enum.IsDefined(options.LoadModeSelectionPolicy))
+        {
+            errors.Add($"Loading load mode selection policy '{options.LoadModeSelectionPolicy}' is not supported.");
+        }
+
         var seenPackageOverrides = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var packageOverride in options.PackageLoadModes)
         {

@@ -148,6 +148,23 @@ Nuplane supports two package load modes:
 Shared assemblies remain a separate policy: they solve contract/type identity by resolving selected abstractions from the host/default context, but they do not by themselves make package assemblies framework-integrated or resolvable by name.
 Nuplane can manage shared contract assemblies, deactivation timeout, unload coordination for collectible packages, and host-integrated assembly-name resolution, but your host still decides what loaded types mean.
 
+Load mode can be selected automatically. Nuplane resolves package graphs first, evaluates load-mode advisors, and promotes a graph to `HostIntegrated` when a package declares a host-integration requirement. Explicit `PackageLoadModes` overrides remain authoritative, and packages without overrides or metadata keep using `DefaultLoadMode`.
+
+Package authors can declare Nuplane loading metadata once in package-root `nuplane.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "loading": {
+    "loadMode": "HostIntegrated",
+    "scope": "DependencyClosure",
+    "reason": "Uses framework type resolution and runtime scheduler integration."
+  }
+}
+```
+
+Nuplane reads this metadata only from packages that have already been resolved and installed through the configured source and integrity paths. Metadata is trusted only as much as the package itself; it does not bypass source trust, package validation, or host-owned activation decisions.
+
 ### Module registration
 
 Each optional Nuplane module (loading, directory-source) provides its own direct `IServiceCollection` registration extension.
@@ -214,6 +231,7 @@ builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
     "Loading": {
       "Enabled": true,
       "DefaultLoadMode": "Collectible",
+      "LoadModeSelectionPolicy": "Automatic",
       "PackageLoadModes": [
         {
           "PackageId": "Elsa.Persistence.EFCore.PostgreSql",
@@ -285,6 +303,7 @@ Nuplane has two configuration layers:
   - `DeactivationTimeout`
   - `ActiveStoreRoot`
   - `DefaultLoadMode`
+  - `LoadModeSelectionPolicy`
   - `PackageLoadModes`
   - `SharedAssemblies`
 

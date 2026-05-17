@@ -109,7 +109,24 @@ The sample `Program.cs` is the best concrete repository anchor for this path.
 - Use `Collectible` for isolated plugin discovery, scan-only packages, and scenarios where unloadability matters. It is the default to preserve existing loading behavior.
 - Use `HostIntegrated` for packages that contribute application-lifetime framework types such as DI registrations, endpoints, hosted services, options, validators, or database migrations. Host-integrated package assemblies may remain loaded for the process lifetime.
 - Configure shared assemblies separately from load mode. Shared assemblies preserve contract/type identity; load mode controls package lifetime and whether active package assemblies are made visible to framework by-name resolution.
-- Prefer explicit default and package-specific load mode configuration over auto-detection.
+- Keep `LoadModeSelectionPolicy` at `Automatic` when you want Nuplane to evaluate package-declared metadata before falling back to `DefaultLoadMode`.
+- Use package-specific `PackageLoadModes` overrides when the application must force a package to `HostIntegrated` or `Collectible`; these overrides win over package metadata for the same package.
+- Use `ExplicitOnly` only when you want to ignore package metadata and rely on `DefaultLoadMode` plus explicit package overrides.
+
+Package-authored metadata lives at package-root `nuplane.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "loading": {
+    "loadMode": "HostIntegrated",
+    "scope": "DependencyClosure",
+    "reason": "Uses framework type resolution and runtime scheduler integration."
+  }
+}
+```
+
+`HostIntegrated` metadata is treated as a requirement and promotes the loadable dependency closure. `Collectible` metadata is only a preference; it never forces a graph down from a host-configured `HostIntegrated` default or another host-integrated requirement.
 
 ## Sample-backed next steps
 

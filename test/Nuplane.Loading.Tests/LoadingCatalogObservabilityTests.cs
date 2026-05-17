@@ -100,6 +100,60 @@ public sealed class LoadingCatalogObservabilityTests
             && string.Equals(reasonCode, "loading-divergence", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task PackageLoadModeSelector_WhenMetadataIsEvaluated_EmitsDecisionLogs()
+    {
+        var messages = new List<string>();
+        using var loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(new CapturingLoggerProvider(messages)));
+        var result = PackageLoadModeSelectorTests.MetadataResult("pkg-a", PackageLoadMode.HostIntegrated);
+        var sut = new PackageLoadModeSelector(
+            [new StaticPackageLoadModeAdvisor("package-metadata", result)],
+            loggerFactory.CreateLogger<PackageLoadModeSelector>());
+
+        await sut.SelectGraphAsync(
+            [new ResolvedPackage("pkg-a", "1.0.0", "feed-a", "/tmp/pkg", DateTimeOffset.UtcNow, "source-a")],
+            new LoadingOptions(),
+            "graph:pkg-a@1.0.0",
+            CancellationToken.None);
+
+        Assert.Contains(messages, message =>
+            message.Contains("load mode advisor", StringComparison.OrdinalIgnoreCase)
+            && message.Contains("package-metadata", StringComparison.Ordinal));
+        Assert.Contains(messages, message =>
+            message.Contains("Selected graph load mode", StringComparison.Ordinal)
+            && message.Contains("HostIntegrated", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PackageLoadModeSelector_WhenMetadataIsInvalid_EmitsDiagnosticLog()
+    {
+        var messages = new List<string>();
+        using var loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(new CapturingLoggerProvider(messages)));
+        var result = new LoadModeAdvisorResult(
+            "package-metadata",
+            "pkg-a",
+            "1.0.0",
+            PackageLoadMode.Collectible,
+            LoadModeScopes.PackageOnly,
+            LoadModeReasonCodes.MetadataInvalid,
+            Reason: null,
+            IsValid: false,
+            "metadata was not valid");
+        var sut = new PackageLoadModeSelector(
+            [new StaticPackageLoadModeAdvisor("package-metadata", result)],
+            loggerFactory.CreateLogger<PackageLoadModeSelector>());
+
+        await sut.SelectGraphAsync(
+            [new ResolvedPackage("pkg-a", "1.0.0", "feed-a", "/tmp/pkg", DateTimeOffset.UtcNow, "source-a")],
+            new LoadingOptions(),
+            "graph:pkg-a@1.0.0",
+            CancellationToken.None);
+
+        Assert.Contains(messages, message =>
+            message.Contains("Ignored invalid package load metadata", StringComparison.Ordinal)
+            && message.Contains("metadata was not valid", StringComparison.Ordinal));
+    }
+
     private static ActivePackageCatalogSnapshot CreateSnapshot(string packageId, string installPath, string version = "1.0.0") =>
         new(
             DateTimeOffset.UtcNow,
@@ -183,4 +237,3 @@ public sealed class LoadingCatalogObservabilityTests
 
     private sealed record MeasurementRecord(string InstrumentName, long Value, IReadOnlyDictionary<string, string?> Tags);
 }
-

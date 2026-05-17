@@ -90,6 +90,66 @@ public sealed class PackageLoaderHostIntegratedTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureGraphLoadedAsync_WhenPackageMetadataRequiresHostIntegrated_PromotesDependencyClosure()
+    {
+        var catalog = new HostIntegratedAssemblyResolutionCatalog();
+        var loader = new PackageLoader(
+            hostIntegratedResolutionCatalog: catalog,
+            loadModeAdvisors: [new PackageMetadataLoadModeAdvisor(new PackageMetadataLoadModeReader())]);
+        var graph = PackageLoaderGraphRegressionTests.CreateProviderStyleGraph(tempDir);
+
+        var result = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
+
+        Assert.Empty(result.FailedByPackageId);
+        Assert.Equal(2, result.Loaded.Count);
+        Assert.All(result.Loaded, session =>
+        {
+            Assert.Equal(PackageLoadMode.HostIntegrated, session.LoadMode);
+            Assert.True(session.FrameworkIntegrationSafe);
+            Assert.Contains(session.LoadModeDiagnostics ?? [], diagnostic =>
+                diagnostic.ReasonCode is LoadModeReasonCodes.PackageMetadata or LoadModeReasonCodes.DependencyClosure);
+        });
+        Assert.True(catalog.TryResolve(typeof(FixtureMarker).Assembly.GetName(), out _, out _));
+        Assert.True(catalog.TryResolve(typeof(PackageLoaderGraphRegressionTests).Assembly.GetName(), out _, out _));
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_WhenExplicitOverridePromotesGraph_RecordsDependencyClosureDiagnostic()
+    {
+        var firstInstallPath = CreateInstallDir("pkg-a", typeof(FixtureMarker).Assembly);
+        var secondInstallPath = CreateInstallDir("pkg-b", typeof(PackageLoaderHostIntegratedTests).Assembly);
+        var loadingOptions = new LoadingOptions();
+        loadingOptions.PackageLoadModes.Add(new() { PackageId = "pkg-a", LoadMode = PackageLoadMode.HostIntegrated });
+        var loader = new PackageLoader(options: Options.Create(loadingOptions));
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[Pkg("pkg-a", "1.0.0", firstInstallPath), Pkg("pkg-b", "1.0.0", secondInstallPath)]],
+            [],
+            CancellationToken.None);
+
+        Assert.Empty(result.FailedByPackageId);
+        var promoted = Assert.Single(result.Loaded, session => session.PackageId == "pkg-b");
+        Assert.Equal(PackageLoadMode.HostIntegrated, promoted.LoadMode);
+        Assert.Contains(promoted.LoadModeDiagnostics ?? [], diagnostic =>
+            diagnostic.ReasonCode == LoadModeReasonCodes.DependencyClosure);
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_WhenGraphRemainsCollectible_DoesNotPublishResolutionEntry()
+    {
+        var installPath = CreateInstallDir("pkg-a", typeof(FixtureMarker).Assembly);
+        var catalog = new HostIntegratedAssemblyResolutionCatalog();
+        var loader = new PackageLoader(hostIntegratedResolutionCatalog: catalog);
+
+        var result = await loader.EnsureGraphLoadedAsync([[Pkg("pkg-a", "1.0.0", installPath)]], [], CancellationToken.None);
+
+        var loaded = Assert.Single(result.Loaded);
+        Assert.Equal(PackageLoadMode.Collectible, loaded.LoadMode);
+        Assert.False(catalog.TryResolve(typeof(FixtureMarker).Assembly.GetName(), out _, out var diagnostic));
+        Assert.Equal("not-found", diagnostic.Outcome);
+    }
+
+    [Fact]
     public async Task EnsureGraphLoadedAsync_HostIntegratedGraphWithNoAssemblyDependency_SkipsDependencyWithoutCatalogEntry()
     {
         var rootInstallPath = CreateInstallDir("Nuplane.Loading.Tests.Fixtures");
