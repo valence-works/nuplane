@@ -26,6 +26,11 @@ public sealed record PackageLoadState(
     bool FrameworkIntegrationSafe = false)
 {
     /// <summary>
+    /// Gets secret-safe diagnostics explaining the effective load mode.
+    /// </summary>
+    public IReadOnlyList<LoadModeDecisionDiagnostic>? LoadModeDiagnostics { get; init; }
+
+    /// <summary>
     /// Creates a canonical package load-state record from the legacy loading descriptor model.
     /// </summary>
     internal static PackageLoadState FromLegacy(LoadingPackageDescriptor descriptor)
@@ -49,6 +54,9 @@ public sealed record PackageLoadState(
             descriptor.ScanCandidates.Select(static candidate => PackageAssemblyReference.FromCandidate(candidate)).ToArray(),
             Discoverable: true,
             descriptor.LoadMode,
-            descriptor.FrameworkIntegrationSafe);
+            descriptor.FrameworkIntegrationSafe)
+        {
+            LoadModeDiagnostics = descriptor.LoadModeDiagnostics
+        };
     }
 }

@@ -99,8 +99,36 @@ The loading setting that controls package assembly lifetime and framework integr
 `Collectible` keeps the existing unloadable/isolation-oriented behavior, while `HostIntegrated` makes active package assemblies safe for application-lifetime framework integration and by-name resolution.
 
 - **Applicability:** `Optional Module`
-- Applied in: [Usage Guide](Usage-Guide.md)
+- Applied in: [Usage Guide](Usage-Guide.md), [Package Authoring](Package-Authoring.md)
 - Canonical anchors: `README.md`, `src/Nuplane.Loading.Abstractions/PackageLoadMode.cs`
+
+### Automatic load-mode selection
+
+The loading policy that evaluates resolved package graphs through load-mode advisors before falling back to `DefaultLoadMode`.
+Automatic selection keeps effective runtime modes concrete: packages still load as `Collectible` or `HostIntegrated`, never as an `Auto` runtime mode.
+
+- **Applicability:** `Optional Module`
+- Applied in: [Usage Guide](Usage-Guide.md), [Package Authoring](Package-Authoring.md)
+- Canonical anchors: `src/Nuplane.Loading.Abstractions/PackageLoadModeSelectionPolicy.cs`, `src/Nuplane.Loading/PackageLoadModeSelector.cs`
+
+### Package load-mode advisor
+
+An extension point that inspects an already-resolved package graph and returns deterministic, secret-safe load-mode requirements or diagnostics.
+The built-in advisor reads Nuplane package metadata; future advisors can inspect other package or runtime metadata without hard-coding package IDs in core loading logic.
+
+- **Applicability:** `Optional Module`
+- Applied in: [Usage Guide](Usage-Guide.md), [Package Authoring](Package-Authoring.md)
+- Canonical anchors: `src/Nuplane.Loading.Abstractions/IPackageLoadModeAdvisor.cs`
+
+### Nuplane package metadata
+
+Package-authored metadata stored in package-root `nuplane.json`.
+For loading, the v1 schema supports `schemaVersion`, `loading.loadMode`, `loading.scope`, and optional `loading.reason`.
+Metadata is trusted only as much as the package itself and does not bypass source trust, integrity validation, or host-owned activation semantics.
+
+- **Applicability:** `Optional Module`
+- Applied in: [Usage Guide](Usage-Guide.md), [Package Authoring](Package-Authoring.md)
+- Canonical anchors: `README.md`, `specs/027-auto-load-mode-selection/spec.md`
 
 ### Host-integrated assembly
 

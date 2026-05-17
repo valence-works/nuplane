@@ -79,6 +79,24 @@ public sealed class LoadingRegistrationDeterminismTests
     }
 
     [Fact]
+    public void Register_CalledTwice_DoesNotDuplicatePackageLoadModeAdvisor()
+    {
+        var services = new ServiceCollection();
+
+        LoadingRegistrationServices.Register(services);
+        LoadingRegistrationServices.Register(services);
+
+        Assert.Single(services, d => d.ServiceType == typeof(IPackageLoadModeAdvisor));
+        Assert.Single(services, d => d.ServiceType == typeof(PackageMetadataLoadModeReader));
+        Assert.Single(services, d => d.ServiceType == typeof(PackageMetadataLoadModeAdvisor));
+
+        using var provider = services.BuildServiceProvider();
+        var concreteAdvisor = provider.GetRequiredService<PackageMetadataLoadModeAdvisor>();
+        var interfaceAdvisor = Assert.Single(provider.GetRequiredService<IEnumerable<IPackageLoadModeAdvisor>>());
+        Assert.Same(concreteAdvisor, interfaceAdvisor);
+    }
+
+    [Fact]
     public void NuplaneLoadingBuilder_WithDefaultLoadMode_ConfiguresOptions()
     {
         var services = new ServiceCollection();
@@ -90,6 +108,20 @@ public sealed class LoadingRegistrationDeterminismTests
         using var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptions<LoadingOptions>>().Value;
         Assert.Equal(PackageLoadMode.HostIntegrated, options.DefaultLoadMode);
+    }
+
+    [Fact]
+    public void NuplaneLoadingBuilder_WithLoadModeSelectionPolicy_ConfiguresOptions()
+    {
+        var services = new ServiceCollection();
+        services.AddOptions();
+        var builder = new NuplaneLoadingBuilder(services);
+
+        builder.WithLoadModeSelectionPolicy(PackageLoadModeSelectionPolicy.ExplicitOnly);
+
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<LoadingOptions>>().Value;
+        Assert.Equal(PackageLoadModeSelectionPolicy.ExplicitOnly, options.LoadModeSelectionPolicy);
     }
 
     [Fact]

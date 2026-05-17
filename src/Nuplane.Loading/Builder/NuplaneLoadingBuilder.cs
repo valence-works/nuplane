@@ -66,6 +66,20 @@ public sealed class NuplaneLoadingBuilder
     }
 
     /// <summary>
+    /// Sets the package load-mode selection policy used before falling back to the default load mode.
+    /// </summary>
+    /// <param name="selectionPolicy">The selection policy to apply.</param>
+    public NuplaneLoadingBuilder WithLoadModeSelectionPolicy(PackageLoadModeSelectionPolicy selectionPolicy)
+    {
+        Services.Configure<LoadingOptions>(options =>
+        {
+            options.LoadModeSelectionPolicy = selectionPolicy;
+        });
+
+        return this;
+    }
+
+    /// <summary>
     /// Sets a package-specific load mode override.
     /// </summary>
     /// <param name="packageId">The package identifier to override.</param>

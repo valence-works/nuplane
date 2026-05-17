@@ -27,6 +27,11 @@ public sealed class LoadingOptions
     public PackageLoadMode DefaultLoadMode { get; set; } = PackageLoadMode.Collectible;
 
     /// <summary>
+    /// Gets or sets how Nuplane selects package load modes before applying the default load mode.
+    /// </summary>
+    public PackageLoadModeSelectionPolicy LoadModeSelectionPolicy { get; set; } = PackageLoadModeSelectionPolicy.Automatic;
+
+    /// <summary>
     /// Gets the collection of package-specific load mode overrides.
     /// </summary>
     public ICollection<PackageLoadModeOverrideOptions> PackageLoadModes { get; } = new List<PackageLoadModeOverrideOptions>();

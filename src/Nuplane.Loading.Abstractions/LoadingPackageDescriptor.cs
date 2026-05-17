@@ -13,6 +13,7 @@ namespace Nuplane.Loading;
 /// <param name="ContextKey">The current load-context key, when one exists.</param>
 /// <param name="LoadMode">The effective load mode used for the package.</param>
 /// <param name="FrameworkIntegrationSafe">Whether the loaded package assemblies are safe for framework integration.</param>
+/// <param name="LoadModeDiagnostics">Secret-safe diagnostics explaining the effective load mode.</param>
 internal sealed record LoadingPackageDescriptor(
     string PackageId,
     string Version,
@@ -23,4 +24,5 @@ internal sealed record LoadingPackageDescriptor(
     IReadOnlyList<AssemblyScanCandidate> ScanCandidates,
     string? ContextKey,
     PackageLoadMode LoadMode = PackageLoadMode.Collectible,
-    bool FrameworkIntegrationSafe = false);
+    bool FrameworkIntegrationSafe = false,
+    IReadOnlyList<LoadModeDecisionDiagnostic>? LoadModeDiagnostics = null);
