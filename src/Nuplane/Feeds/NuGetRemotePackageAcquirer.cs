@@ -161,10 +161,8 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
                 return entry.Uri;
             }
 
-            if (PackageBaseAddressCache.TryGetValue(key, out var current) && ReferenceEquals(current, pending))
-            {
-                PackageBaseAddressCache.TryRemove(key, out _);
-            }
+            ((ICollection<KeyValuePair<string, Lazy<Task<CachedPackageBaseAddress>>>>)PackageBaseAddressCache)
+                .Remove(new(key, pending));
         }
     }
 
