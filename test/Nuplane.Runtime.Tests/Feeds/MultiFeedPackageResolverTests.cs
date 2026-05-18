@@ -259,7 +259,9 @@ public sealed class MultiFeedPackageResolverTests
             () => resolver.ResolveAsync(request, CancellationToken.None));
 
         Assert.True(resolver.TryGetDecision("MyPlugin", out var decision));
-        Assert.Equal("remote-disabled-by-offline-mode", decision.DecisionPath);
+        Assert.Equal("exact-local-cache-miss+remote-disabled-by-offline-mode", decision.DecisionPath);
+        Assert.Contains("was not found in local directory feed", decision.FailureReason);
+        Assert.Contains("Offline mode is enabled", decision.FailureReason);
         await enumerator.DidNotReceiveWithAnyArgs().EnumerateVersionsAsync(default!, default!, default);
         await acquirer.DidNotReceiveWithAnyArgs().AcquireAsync(default!, default!, default!, default);
     }
@@ -293,7 +295,9 @@ public sealed class MultiFeedPackageResolverTests
             () => resolver.ResolveAsync(request, CancellationToken.None));
 
         Assert.True(resolver.TryGetDecision("MyPlugin", out var decision));
-        Assert.Equal("remote-disabled-by-policy", decision.DecisionPath);
+        Assert.Equal("exact-local-cache-miss+remote-disabled-by-policy", decision.DecisionPath);
+        Assert.Contains("was not found in local directory feed", decision.FailureReason);
+        Assert.Contains("Remote fallback mode is Never", decision.FailureReason);
         await enumerator.DidNotReceiveWithAnyArgs().EnumerateVersionsAsync(default!, default!, default);
         await acquirer.DidNotReceiveWithAnyArgs().AcquireAsync(default!, default!, default!, default);
     }

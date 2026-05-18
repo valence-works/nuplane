@@ -74,6 +74,15 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         {
             if (IsRemoteFeedDisabled(candidate, request, candidateNames, out var disabledDecision))
             {
+                if (lastFailure is not null)
+                {
+                    disabledDecision = disabledDecision with
+                    {
+                        DecisionPath = $"{lastFailure.DecisionPath}+{disabledDecision.DecisionPath}",
+                        FailureReason = $"{lastFailure.FailureReason} {disabledDecision.FailureReason}"
+                    };
+                }
+
                 lastFailure = disabledDecision;
                 _decisions[request.Id] = disabledDecision;
                 continue;
