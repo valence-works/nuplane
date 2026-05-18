@@ -147,6 +147,20 @@ public sealed class NuplaneSetupOptionsValidatorTests
     }
 
     [Fact]
+    public void Validate_RemoteFeedWithZeroDirectoryDebounceWindow_Succeeds()
+    {
+        var sut = CreateValidator(new Dictionary<string, string?>
+        {
+            ["Nuplane:Setup:Feeds:nuget.org:ServiceIndex"] = "https://api.nuget.org/v3/index.json",
+            ["Nuplane:Setup:Feeds:nuget.org:Directory:DebounceWindow"] = "00:00:00"
+        });
+
+        var result = sut.Validate(null, new NuplaneSetupOptions());
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
     public void Validate_KeyedFeedWithBlankDirectoryPath_Fails()
     {
         var sut = CreateValidator(new Dictionary<string, string?>

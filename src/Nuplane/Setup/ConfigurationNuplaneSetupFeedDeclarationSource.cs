@@ -6,13 +6,22 @@ namespace Nuplane.Setup;
 /// <summary>
 /// Reads setup feed declarations from an <see cref="IConfiguration"/> source.
 /// </summary>
-public sealed class ConfigurationNuplaneSetupFeedDeclarationSource(IConfiguration configuration)
-    : INuplaneSetupFeedDeclarationSource
+public sealed class ConfigurationNuplaneSetupFeedDeclarationSource : INuplaneSetupFeedDeclarationSource
 {
-    private readonly IConfiguration configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
-    private NuplaneFeedSetupReadResult? result;
+    private readonly Lazy<NuplaneFeedSetupReadResult> result;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ConfigurationNuplaneSetupFeedDeclarationSource"/> class.
+    /// </summary>
+    /// <param name="configuration">The configuration source to read setup feed declarations from.</param>
+    public ConfigurationNuplaneSetupFeedDeclarationSource(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        result = new(() => NuplaneFeedSetupDeclarationReader.Read(configuration));
+    }
 
     /// <inheritdoc />
     public NuplaneFeedSetupReadResult Read() =>
-        result ??= NuplaneFeedSetupDeclarationReader.Read(configuration);
+        result.Value;
 }

@@ -113,8 +113,7 @@ public static class NuplaneFeedSetupDeclarationReader
         var effective = new List<NuplaneFeedSetupDeclaration>();
 
         foreach (var group in declarations
-                     .GroupBy(static declaration => declaration.Name, StringComparer.OrdinalIgnoreCase)
-                     .OrderBy(static group => group.Key, StringComparer.OrdinalIgnoreCase))
+                     .GroupBy(static declaration => declaration.Name, StringComparer.OrdinalIgnoreCase))
         {
             var keyed = group
                 .Where(static declaration => declaration.SourceShape == NuplaneFeedSetupSourceShape.Keyed)

@@ -98,7 +98,7 @@ internal sealed class NuplaneSetupOptionsValidator : IValidateOptions<NuplaneSet
             errors.Add($"{label} has an invalid absolute ServiceIndex URI '{feed.ServiceIndex}'.");
         }
 
-        if (feed.Directory.DebounceWindow <= TimeSpan.Zero)
+        if (hasDirectoryPath && feed.Directory.DebounceWindow <= TimeSpan.Zero)
         {
             errors.Add($"{label} Directory.DebounceWindow must be greater than zero.");
         }
