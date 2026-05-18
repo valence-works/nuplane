@@ -47,6 +47,13 @@ internal sealed class NuplaneStartupHostedService(
                 logger.LogWarning(
                     "StartupFailurePolicy.UseLastKnownGood is not implemented; continuing with degraded startup reconciliation result");
             }
+
+            if (options.Value.StartupFailurePolicy == StartupFailurePolicy.StartDegraded)
+            {
+                logger.LogWarning(
+                    "Nuplane startup reconciliation completed in a degraded state [CorrelationId={CorrelationId}]; host is starting degraded as configured by StartupFailurePolicy.StartDegraded",
+                    correlationId);
+            }
         }
 
         logger.LogInformation("Nuplane startup reconciliation completed");
