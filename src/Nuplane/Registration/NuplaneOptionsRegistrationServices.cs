@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Reconciliation.Configuration;
@@ -59,6 +60,11 @@ internal static class NuplaneOptionsRegistrationServices
 
     internal static void BindConfiguredOptions(IServiceCollection services, IConfiguration configuration)
     {
+        var setupSection = GetNamedSectionOrSelf(configuration, SetupSectionName);
+        services.Replace(ServiceDescriptor.Singleton<INuplaneSetupFeedDeclarationSource>(
+            new ConfigurationNuplaneSetupFeedDeclarationSource(setupSection)));
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IPostConfigureOptions<NuplaneSetupOptions>, NuplaneSetupFeedDiagnosticReporter>());
+
         foreach (var bindOptions in ConfiguredOptionBinders)
         {
             bindOptions(services, configuration);

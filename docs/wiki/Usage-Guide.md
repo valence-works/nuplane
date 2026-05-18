@@ -75,6 +75,10 @@ Choose configuration-first setup when you want the host to declare:
 - optional loading settings when the loading module is installed.
 
 The sample `appsettings.json` is the best concrete repository anchor for this path.
+Prefer keyed feed setup under `Nuplane:Setup:Feeds`, where each feed key is the feed name.
+This avoids positional array merging when `appsettings.json`, environment variables, and mounted
+configuration files are layered. Feed object order is not semantic; configure feed priorities
+separately when resolution order matters.
 
 ## Code-driven adoption
 
