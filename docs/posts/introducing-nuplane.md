@@ -58,9 +58,8 @@ The configuration side of this declares the folder feed, the watcher behavior, a
     "Setup": {
       "AutomaticReconciliation": true,
       "PollInterval": "00:01:00",
-      "Feeds": [
-        {
-          "Name": "local-packages",
+      "Feeds": {
+        "local-packages": {
           "DirectoryPath": "packages",
           "IncludePatterns": ["*"],
           "Directory": {
@@ -68,7 +67,7 @@ The configuration side of this declares the folder feed, the watcher behavior, a
             "DebounceWindow": "00:00:01"
           }
         }
-      ]
+      }
     },
     "Loading": {
       "Enabled": true,
@@ -211,13 +210,12 @@ Or declaratively in configuration, using the full `Nuplane:Setup:Feeds` shape an
 {
   "Nuplane": {
     "Setup": {
-      "Feeds": [
-        {
-          "Name": "nuget.org",
+      "Feeds": {
+        "nuget.org": {
           "ServiceIndex": "https://api.nuget.org/v3/index.json",
           "IncludePatterns": ["MyCompany.Plugins.*"]
         }
-      ]
+      }
     }
   }
 }

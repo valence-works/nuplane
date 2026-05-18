@@ -190,9 +190,8 @@ builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
     "Setup": {
       "AutomaticReconciliation": true,
       "PollInterval": "00:01:00",
-      "Feeds": [
-        {
-          "Name": "local-packages",
+      "Feeds": {
+        "local-packages": {
           "DirectoryPath": "packages",
           "IncludePatterns": [
             "*"
@@ -202,14 +201,13 @@ builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
             "DebounceWindow": "00:00:01"
           }
         },
-        {
-          "Name": "nuget.org",
+        "nuget.org": {
           "ServiceIndex": "https://api.nuget.org/v3/index.json",
           "IncludePatterns": [
             "Elsa.*"
           ]
         }
-      ]
+      }
     },
     "Loading": {
       "Enabled": true,
@@ -294,6 +292,39 @@ For unrestricted feeds, prefer one of these explicit forms:
 - configuration alias: `"IncludeAll": true`
 - fluent API: `feed.IncludeAll()`
 
+For configuration-driven setup, prefer the keyed `Nuplane:Setup:Feeds` object shape:
+
+```json
+"Feeds": {
+  "feedz.io": {
+    "ServiceIndex": "https://new.example/nuget/index.json"
+  }
+}
+```
+
+The feed key is the feed name. This shape is preferred for layered .NET configuration because later providers can override `Feeds:feedz.io` by identity instead of merging array entries by numeric position. Feed resolution order is not based on object order; use the existing feed priority configuration when one feed should be preferred over another.
+
+Migration from the legacy array shape is mechanical:
+
+```json
+"Feeds": [
+  {
+    "Name": "feedz.io",
+    "ServiceIndex": "https://old.example/nuget/index.json"
+  }
+]
+```
+
+becomes:
+
+```json
+"Feeds": {
+  "feedz.io": {
+    "ServiceIndex": "https://new.example/nuget/index.json"
+  }
+}
+```
+
 ---
 
 ## Kubernetes And Restart Persistence
@@ -321,15 +352,14 @@ Example configuration:
       "StateFilePath": "/var/lib/nuplane/store-state.json",
       "AutomaticReconciliation": true,
       "PollInterval": "00:01:00",
-      "Feeds": [
-        {
-          "Name": "nuget.org",
+      "Feeds": {
+        "nuget.org": {
           "ServiceIndex": "https://api.nuget.org/v3/index.json",
           "IncludePatterns": [
             "*"
           ]
         }
-      ]
+      }
     },
     "FeedResolution": {
       "PackageInstallRoot": "/var/lib/nuplane/packages"
