@@ -143,7 +143,8 @@ internal sealed class LoadingCatalog(
                 package.AssemblyReferences.Select(static reference => reference.ToCandidate()).ToArray(),
                 null,
                 package.LoadMode,
-                package.FrameworkIntegrationSafe)).ToArray(),
+                package.FrameworkIntegrationSafe,
+                package.LoadModeDiagnostics)).ToArray(),
             snapshot.Reason,
             snapshot.CorrelationId);
     }
@@ -155,7 +156,7 @@ internal sealed class LoadingCatalog(
         IReadOnlyList<string> diagnostics,
         IReadOnlyList<PackageAssemblyReference> assemblyReferences,
         PackageLoadSession? session = null) =>
-        new(
+        new PackageLoadState(
             package.PackageId,
             package.Version,
             status,
@@ -165,7 +166,10 @@ internal sealed class LoadingCatalog(
             assemblyReferences.ToArray(),
             package.Discoverable,
             session?.LoadMode ?? PackageLoadMode.Collectible,
-            session?.FrameworkIntegrationSafe ?? false);
+            session?.FrameworkIntegrationSafe ?? false)
+        {
+            LoadModeDiagnostics = session?.LoadModeDiagnostics ?? []
+        };
 
     private static IReadOnlyList<string> BuildDiagnostics(string? message)
     {

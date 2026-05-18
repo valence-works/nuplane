@@ -124,6 +124,29 @@ public sealed class PackageLoaderTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureGraphLoadedAsync_WhenGraphHasNoMetadataOrOverride_UsesCollectibleFallback()
+    {
+        var firstPath = CreateInstallDir("pkg-a");
+        var secondPath = CreateInstallDir("pkg-b");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[Pkg("pkg-a", "1.0.0", firstPath), Pkg("pkg-b", "1.0.0", secondPath)]],
+            [],
+            CancellationToken.None);
+
+        Assert.Empty(result.FailedByPackageId);
+        Assert.Equal(2, result.Loaded.Count);
+        Assert.All(result.Loaded, session =>
+        {
+            Assert.Equal(PackageLoadMode.Collectible, session.LoadMode);
+            Assert.False(session.FrameworkIntegrationSafe);
+            Assert.Contains(session.LoadModeDiagnostics ?? [], diagnostic =>
+                diagnostic.ReasonCode == LoadModeReasonCodes.Default);
+        });
+    }
+
+    [Fact]
     public void ResolveMainAssemblyPath_MultiTargetPackage_PicksExactHostFrameworkAssembly()
     {
         var installPath = CreateMultiTargetInstallDir("Nuplane.Loading.Tests.Fixtures", GetHostFrameworkFolderName(), "net8.0", "net9.0");

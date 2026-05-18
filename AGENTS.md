@@ -78,7 +78,7 @@ Run focused tests first for the area changed, then run the full solution when pr
 ## Active Technologies
 - C# with SDK-style .NET libraries targeting `net8.0;net9.0;net10.0`; tests target `net10.0`.
 - Microsoft.Extensions.DependencyInjection/Options/Logging/Hosting, NuGet.Protocol, NuGet.Versioning, System.Runtime.Loader, xUnit, and NSubstitute.
-- File-backed Nuplane store state and package install directories under configured state/package roots; no database.
+- File-backed Nuplane store state and package install directories under configured state/package roots; package metadata is read from extracted package-root `nuplane.json`; no database.
 - C# / .NET 8.0, 9.0, 10.0 source libraries; tests target .NET 10.0 + Microsoft.Extensions.Configuration, Microsoft.Extensions.DependencyInjection, Microsoft.Extensions.Options, Microsoft.Extensions.Logging; existing Nuplane builder and feed registration APIs (027-keyed-feed-config)
 - N/A for this feature; configuration is translated into runtime options and desired-state sources (027-keyed-feed-config)
 

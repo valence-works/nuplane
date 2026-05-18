@@ -33,13 +33,14 @@ internal sealed class PackageLoader : IPackageLoader
         SharedAssemblyPolicyMatcher? matcher = null,
         HostIntegratedAssemblyResolutionCatalog? hostIntegratedResolutionCatalog = null,
         PackageLoadModeSelector? loadModeSelector = null,
+        IEnumerable<IPackageLoadModeAdvisor>? loadModeAdvisors = null,
         IOptions<LoadingOptions>? options = null,
         ILogger<PackageLoader>? logger = null,
         HostIntegratedAssemblyResolver? hostIntegratedAssemblyResolver = null)
     {
         _matcher = matcher ?? new SharedAssemblyPolicyMatcher();
         _hostIntegratedResolutionCatalog = hostIntegratedResolutionCatalog ?? new HostIntegratedAssemblyResolutionCatalog();
-        _loadModeSelector = loadModeSelector ?? new PackageLoadModeSelector();
+        _loadModeSelector = loadModeSelector ?? new PackageLoadModeSelector(loadModeAdvisors);
         _options = options?.Value ?? new LoadingOptions();
         _logger = logger ?? NullLogger<PackageLoader>.Instance;
         _hostIntegratedAssemblyResolver = hostIntegratedAssemblyResolver;
@@ -96,7 +97,7 @@ internal sealed class PackageLoader : IPackageLoader
     }
 
     /// <inheritdoc />
-    public Task<PackageLoadResult> EnsureGraphLoadedAsync(
+    public async Task<PackageLoadResult> EnsureGraphLoadedAsync(
         IReadOnlyList<IReadOnlyList<ResolvedPackage>> packageGraphs,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         CancellationToken cancellationToken)
@@ -112,21 +113,19 @@ internal sealed class PackageLoader : IPackageLoader
             cancellationToken.ThrowIfCancellationRequested();
 
             var graphKey = BuildGraphKey(packageGraph);
-            var selectedModes = packageGraph
-                .Select(package => _loadModeSelector.Select(package, _options, graphKey))
-                .ToArray();
-            var selections = PromoteHostIntegratedGraphSelections(selectedModes);
+            var graphDecision = await _loadModeSelector.SelectGraphAsync(packageGraph, _options, graphKey, cancellationToken).ConfigureAwait(false);
+            var selections = graphDecision.Selections;
 
             if (packageGraph.Count <= 1 && selections.All(static selection => selection.LoadMode == PackageLoadMode.Collectible))
             {
-                EnsurePackagesLoaded(packageGraph, sharedPolicy, cancellationToken, loaded, failed);
+                EnsurePackagesLoaded(packageGraph, sharedPolicy, cancellationToken, loaded, failed, graphDecision.DiagnosticsByPackageKey);
                 continue;
             }
 
-            EnsureGraphLoaded(packageGraph, selections, sharedPolicy, loaded, failed);
+            EnsureGraphLoaded(packageGraph, selections, sharedPolicy, loaded, failed, graphDecision.DiagnosticsByPackageKey);
         }
 
-        return Task.FromResult<PackageLoadResult>(new(loaded, failed));
+        return new(loaded, failed);
     }
 
     private void EnsurePackagesLoaded(
@@ -134,7 +133,8 @@ internal sealed class PackageLoader : IPackageLoader
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         CancellationToken cancellationToken,
         List<PackageLoadSession> loaded,
-        Dictionary<string, string> failed)
+        Dictionary<string, string> failed,
+        IReadOnlyDictionary<string, IReadOnlyList<LoadModeDecisionDiagnostic>>? diagnosticsByPackageKey = null)
     {
         foreach (var package in packages)
         {
@@ -175,7 +175,8 @@ internal sealed class PackageLoader : IPackageLoader
                     IsLoaded: true,
                     LastError: null,
                     PackageLoadMode.Collectible,
-                    FrameworkIntegrationSafe: false);
+                    FrameworkIntegrationSafe: false,
+                    LoadModeDiagnostics: ResolveLoadModeDiagnostics(diagnosticsByPackageKey, key));
 
                 _sessions[key] = session;
                 loaded.Add(session);
@@ -192,7 +193,8 @@ internal sealed class PackageLoader : IPackageLoader
                     IsLoaded: false,
                     LastError: ex.Message,
                     PackageLoadMode.Collectible,
-                    FrameworkIntegrationSafe: false);
+                    FrameworkIntegrationSafe: false,
+                    LoadModeDiagnostics: ResolveLoadModeDiagnostics(diagnosticsByPackageKey, key));
             }
         }
     }
@@ -202,7 +204,8 @@ internal sealed class PackageLoader : IPackageLoader
         IReadOnlyList<PackageLoadModeSelection> selections,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         List<PackageLoadSession> loaded,
-        Dictionary<string, string> failed)
+        Dictionary<string, string> failed,
+        IReadOnlyDictionary<string, IReadOnlyList<LoadModeDecisionDiagnostic>> diagnosticsByPackageKey)
     {
         var graphKey = BuildGraphKey(packages);
         var graphLoadMode = selections.Any(static selection => selection.LoadMode == PackageLoadMode.HostIntegrated)
@@ -291,7 +294,8 @@ internal sealed class PackageLoader : IPackageLoader
                     IsLoaded: true,
                     LastError: null,
                     graphLoadMode,
-                    FrameworkIntegrationSafe: graphLoadMode == PackageLoadMode.HostIntegrated);
+                    FrameworkIntegrationSafe: graphLoadMode == PackageLoadMode.HostIntegrated,
+                    LoadModeDiagnostics: ResolveLoadModeDiagnostics(diagnosticsByPackageKey, key));
 
                 _sessions[key] = session;
                 loaded.Add(session);
@@ -345,7 +349,8 @@ internal sealed class PackageLoader : IPackageLoader
                     IsLoaded: false,
                     LastError: ex.Message,
                     graphLoadMode,
-                    FrameworkIntegrationSafe: false);
+                    FrameworkIntegrationSafe: false,
+                    LoadModeDiagnostics: ResolveLoadModeDiagnostics(diagnosticsByPackageKey, key));
             }
         }
 
@@ -506,24 +511,12 @@ internal sealed class PackageLoader : IPackageLoader
             .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
             .Select(static package => BuildKey(package.Id, package.Version)));
 
-    private static IReadOnlyList<PackageLoadModeSelection> PromoteHostIntegratedGraphSelections(
-        IReadOnlyList<PackageLoadModeSelection> selections)
-    {
-        if (selections.All(static selection => selection.LoadMode == PackageLoadMode.Collectible))
-        {
-            return selections;
-        }
-
-        return selections
-            .Select(static selection => selection.LoadMode == PackageLoadMode.HostIntegrated
-                ? selection
-                : selection with
-                {
-                    LoadMode = PackageLoadMode.HostIntegrated,
-                    SelectionReason = "dependency-closure"
-                })
-            .ToArray();
-    }
+    private static IReadOnlyList<LoadModeDecisionDiagnostic> ResolveLoadModeDiagnostics(
+        IReadOnlyDictionary<string, IReadOnlyList<LoadModeDecisionDiagnostic>>? diagnosticsByPackageKey,
+        string packageKey) =>
+        diagnosticsByPackageKey is not null && diagnosticsByPackageKey.TryGetValue(packageKey, out var diagnostics)
+            ? diagnostics
+            : [];
 
     private IReadOnlyDictionary<string, IReadOnlyList<Assembly>> MaterializeHostIntegratedAssemblies(
         AssemblyLoadContext context,

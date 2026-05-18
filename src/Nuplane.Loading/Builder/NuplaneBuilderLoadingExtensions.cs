@@ -19,6 +19,8 @@ public static class NuplaneBuilderLoadingExtensions
     /// Installs the Nuplane assembly loading subsystem from configuration or the <c>Loading</c>
     /// subsection itself, then applies any additional builder customization.
     /// Configuration binds first; the optional builder callback runs afterward and can override it.
+    /// Load-mode selection uses package metadata advisors by default and can be changed through
+    /// <see cref="NuplaneLoadingBuilder.WithLoadModeSelectionPolicy(PackageLoadModeSelectionPolicy)"/>.
     /// </summary>
     /// <param name="builder">The Nuplane builder to extend.</param>
     /// <param name="configuration">The application configuration.</param>
@@ -41,7 +43,9 @@ public static class NuplaneBuilderLoadingExtensions
 
     /// <summary>
     /// Installs the Nuplane assembly loading subsystem, including its canonical public query services
-    /// and the internal auto-loading bridge that keeps load state current.
+    /// and the internal auto-loading bridge that keeps load state current. Automatic load-mode
+    /// selection is enabled by default and falls back to the configured default load mode when no
+    /// package metadata or explicit override applies.
     /// </summary>
     /// <param name="builder">The Nuplane builder to extend.</param>
     /// <param name="configure">An optional callback to configure loading options.</param>

@@ -1,11 +1,32 @@
 using System.Runtime.InteropServices;
 using Nuplane.Abstractions;
+using Nuplane.Loading.Tests.Fixtures;
 
 namespace Nuplane.Loading.Tests;
 
 public sealed class PackageLoaderGraphRegressionTests : IDisposable
 {
     private readonly string tempRoot = Path.Combine(Path.GetTempPath(), $"nuplane-graph-loader-{Guid.NewGuid():N}");
+
+    public static IReadOnlyList<ResolvedPackage> CreateProviderStyleGraph(DirectoryInfo tempDir)
+    {
+        var providerRootPath = PackageMetadataTestSupport.CreateInstallDir(tempDir, "Provider.Root", typeof(FixtureMarker).Assembly);
+        var providerRuntimePath = PackageMetadataTestSupport.CreateInstallDir(tempDir, "Provider.Runtime", typeof(PackageLoaderGraphRegressionTests).Assembly);
+        var facadePath = PackageMetadataTestSupport.CreateNoAssemblyInstallDir(tempDir, "Provider.Facade");
+
+        PackageMetadataTestSupport.WriteMetadata(
+            providerRootPath,
+            PackageLoadMode.HostIntegrated,
+            LoadModeScopes.DependencyClosure,
+            "Uses framework type resolution and provider runtime integration.");
+
+        return
+        [
+            PackageMetadataTestSupport.Package("Provider.Root", "1.0.0", providerRootPath),
+            PackageMetadataTestSupport.Package("Provider.Runtime", "1.0.0", providerRuntimePath),
+            PackageMetadataTestSupport.Package("Provider.Facade", "1.0.0", facadePath)
+        ];
+    }
 
     [Fact]
     public async Task EnsureLoadedAsync_RootAndDependencyGraph_ReflectsRootMetadataWithoutFileNotFoundException()
