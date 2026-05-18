@@ -152,7 +152,7 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
             }
             catch
             {
-                _packageBaseAddressCache.TryRemove(key, out _);
+                _packageBaseAddressCache.TryRemove(new KeyValuePair<string, Lazy<Task<CachedPackageBaseAddress>>>(key, pending));
                 throw;
             }
 
