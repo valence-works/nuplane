@@ -127,7 +127,7 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
             return await ResolvePackageBaseAddressAsync(serviceIndex, cancellationToken);
         }
 
-        var key = serviceIndex.AbsoluteUri;
+        var key = CreatePackageBaseAddressCacheKey(serviceIndex, cacheTtl);
         while (true)
         {
             var now = DateTimeOffset.UtcNow;
@@ -171,6 +171,9 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
         DateTimeOffset expiresAt,
         CancellationToken cancellationToken) =>
         new(await ResolvePackageBaseAddressAsync(serviceIndex, cancellationToken), expiresAt);
+
+    private static string CreatePackageBaseAddressCacheKey(Uri serviceIndex, TimeSpan cacheTtl) =>
+        $"{serviceIndex.AbsoluteUri}|ttl={cacheTtl.Ticks}";
 
     private static async Task<Uri> ResolvePackageBaseAddressAsync(Uri serviceIndex, CancellationToken cancellationToken)
     {
