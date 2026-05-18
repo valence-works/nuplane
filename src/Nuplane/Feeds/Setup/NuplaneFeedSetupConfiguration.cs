@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Configuration;
 using Nuplane.Builder;
-using Nuplane.Setup;
 
 namespace Nuplane.Feeds.Setup;
 
@@ -8,31 +7,31 @@ internal static class NuplaneFeedSetupConfiguration
 {
     internal static void ApplyConfiguredFeeds(NuplaneBuilder builder, IConfiguration configuration)
     {
-        foreach (var feedSection in configuration.GetSection(nameof(NuplaneSetupOptions.Feeds)).GetChildren())
+        foreach (var declaration in NuplaneFeedSetupDeclarationReader.Read(configuration).Declarations)
         {
             // Directory-backed feeds are handled by Nuplane.Sources.Directory.Hosting
-            var directoryPath = feedSection[nameof(NuplaneFeedSetupOptions.DirectoryPath)];
-            if (!string.IsNullOrWhiteSpace(directoryPath))
+            var feed = declaration.Options;
+            if (!string.IsNullOrWhiteSpace(feed.DirectoryPath))
             {
                 continue;
             }
 
-            builder.AddFeed(feedSection[nameof(NuplaneFeedSetupOptions.Name)]!, configuredFeed =>
+            if (!Uri.TryCreate(feed.ServiceIndex, UriKind.Absolute, out var serviceIndex))
             {
-                var credentials = feedSection[nameof(NuplaneFeedSetupOptions.Credentials)];
-                configuredFeed.FromUri(new(feedSection[nameof(NuplaneFeedSetupOptions.ServiceIndex)]!, UriKind.Absolute), credentials);
+                continue;
+            }
 
-                if (feedSection.GetValue<bool?>(nameof(NuplaneFeedSetupOptions.IncludeAll)) is true)
+            builder.AddFeed(declaration.Name, configuredFeed =>
+            {
+                configuredFeed.FromUri(serviceIndex, feed.Credentials);
+
+                if (feed.IncludeAll)
                 {
                     configuredFeed.IncludeAll();
                 }
                 else
                 {
-                    foreach (var pattern in DistinctNonBlank(
-                                 feedSection
-                                     .GetSection(nameof(NuplaneFeedSetupOptions.IncludePatterns))
-                                     .GetChildren()
-                                     .Select(static child => child.Value ?? string.Empty)))
+                    foreach (var pattern in DistinctNonBlank(feed.IncludePatterns))
                     {
                         configuredFeed.Include(pattern);
                     }
@@ -46,4 +45,3 @@ internal static class NuplaneFeedSetupConfiguration
         .Where(static value => !string.IsNullOrWhiteSpace(value))
         .Distinct(StringComparer.OrdinalIgnoreCase);
 }
-

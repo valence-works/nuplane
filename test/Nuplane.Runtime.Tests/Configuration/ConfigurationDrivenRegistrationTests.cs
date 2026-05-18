@@ -4,6 +4,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Feeds.Registration;
 using Nuplane.Hosting;
 using Nuplane.Loading;
 using Nuplane.Loading.Hosting.Builder;
@@ -17,6 +19,133 @@ namespace Nuplane.Runtime.Tests.Configuration;
 
 public sealed class ConfigurationDrivenRegistrationTests
 {
+    [Fact]
+    public void AddNuplane_FromConfiguration_KeyedRemoteFeed_RegistersFeedUsingKeyName()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Setup:Feeds:nuget.org:ServiceIndex"] = "https://api.nuget.org/v3/index.json",
+                ["Nuplane:Setup:Feeds:nuget.org:Credentials"] = "secrets://nuget",
+                ["Nuplane:Setup:Feeds:nuget.org:IncludePatterns:0"] = "Elsa.*"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+        var feed = Assert.Single(provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value.Feeds);
+        var registration = Assert.Single(provider.GetServices<NuplaneFeedRegistration>());
+
+        Assert.Equal("nuget.org", feed.Name);
+        Assert.Equal(new Uri("https://api.nuget.org/v3/index.json"), feed.ServiceIndex);
+        Assert.Equal("secrets://nuget", feed.Credentials);
+        Assert.Equal("nuget.org", registration.Name);
+        Assert.Equal("Elsa.*", Assert.Single(registration.IncludePatterns));
+    }
+
+    [Fact]
+    public void AddNuplane_FromConfiguration_LayeredKeyedRemoteFeed_RegistersEffectiveLaterValueOnce()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Setup:Feeds:feedz.io:ServiceIndex"] = "https://old.example/v3/index.json",
+                ["Nuplane:Setup:Feeds:feedz.io:IncludePatterns:0"] = "Elsa.*"
+            })
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Setup:Feeds:feedz.io:ServiceIndex"] = "https://new.example/v3/index.json",
+                ["Nuplane:Setup:Feeds:feedz.io:IncludePatterns:0"] = "Elsa.Persistence.*"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+        var feed = Assert.Single(provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value.Feeds);
+        var registration = Assert.Single(provider.GetServices<NuplaneFeedRegistration>());
+
+        Assert.Equal("feedz.io", feed.Name);
+        Assert.Equal(new Uri("https://new.example/v3/index.json"), feed.ServiceIndex);
+        Assert.Equal("Elsa.Persistence.*", Assert.Single(registration.IncludePatterns));
+    }
+
+    [Fact]
+    public void AddNuplane_FromConfiguration_MixedArrayAndKeyedSameName_RegistersKeyedFeedOnly()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Setup:Feeds:0:Name"] = "feedz.io",
+                ["Nuplane:Setup:Feeds:0:ServiceIndex"] = "https://old.example/v3/index.json",
+                ["Nuplane:Setup:Feeds:feedz.io:ServiceIndex"] = "https://new.example/v3/index.json"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+        var feed = Assert.Single(provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value.Feeds);
+
+        Assert.Equal("feedz.io", feed.Name);
+        Assert.Equal(new Uri("https://new.example/v3/index.json"), feed.ServiceIndex);
+    }
+
+    [Fact]
+    public void AddNuplane_FromConfiguration_MixedArrayAndKeyedSameName_LogsWarningDiagnostic()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Setup:Feeds:0:Name"] = "feedz.io",
+                ["Nuplane:Setup:Feeds:0:ServiceIndex"] = "https://old.example/v3/index.json",
+                ["Nuplane:Setup:Feeds:feedz.io:ServiceIndex"] = "https://new.example/v3/index.json"
+            })
+            .Build();
+        var logMessages = new List<string>();
+
+        var services = new ServiceCollection();
+        services.AddLogging(logging => logging.AddProvider(new CapturingLoggerProvider(logMessages)));
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+        _ = provider.GetRequiredService<IOptions<NuplaneSetupOptions>>().Value;
+
+        var message = Assert.Single(logMessages, message => message.Contains("NuplaneSetupFeedMixedShapeOverride", StringComparison.Ordinal));
+        Assert.Contains("feedz.io", message, StringComparison.Ordinal);
+        Assert.Contains("Nuplane:Setup:Feeds:0", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("https://old.example", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AddNuplane_FromConfiguration_ArrayRemoteFeed_RemainsSupported()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Setup:Feeds:0:Name"] = "nuget.org",
+                ["Nuplane:Setup:Feeds:0:ServiceIndex"] = "https://api.nuget.org/v3/index.json"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+        var feed = Assert.Single(provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value.Feeds);
+
+        Assert.Equal("nuget.org", feed.Name);
+        Assert.Equal(new Uri("https://api.nuget.org/v3/index.json"), feed.ServiceIndex);
+    }
+
     [Fact]
     public void AddNuplane_FromConfiguration_RegistersAutomaticSchedulerAndDispatcher()
     {
