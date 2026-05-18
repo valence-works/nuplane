@@ -34,25 +34,22 @@ internal sealed class NuplaneStartupHostedService(
 
         if (result is { IsDegraded: true })
         {
-            if (options.Value.StartupFailurePolicy == StartupFailurePolicy.FailHost)
+            switch (options.Value.StartupFailurePolicy)
             {
-                throw new NuplaneStartupReconciliationException(
-                    correlationId,
-                    result.FailedPackages,
-                    result);
-            }
+                case StartupFailurePolicy.FailHost:
+                    throw CreateStartupReconciliationException(correlationId, result);
 
-            if (options.Value.StartupFailurePolicy == StartupFailurePolicy.UseLastKnownGood)
-            {
-                logger.LogWarning(
-                    "StartupFailurePolicy.UseLastKnownGood is not implemented; continuing with degraded startup reconciliation result");
-            }
+                case StartupFailurePolicy.UseLastKnownGood:
+                    logger.LogError(
+                        "StartupFailurePolicy.UseLastKnownGood is not implemented [CorrelationId={CorrelationId}]; failing host startup instead of starting degraded",
+                        correlationId);
+                    throw CreateStartupReconciliationException(correlationId, result);
 
-            if (options.Value.StartupFailurePolicy == StartupFailurePolicy.StartDegraded)
-            {
-                logger.LogWarning(
-                    "Nuplane startup reconciliation completed in a degraded state [CorrelationId={CorrelationId}]; host is starting degraded as configured by StartupFailurePolicy.StartDegraded",
-                    correlationId);
+                case StartupFailurePolicy.StartDegraded:
+                    logger.LogWarning(
+                        "Nuplane startup reconciliation completed in a degraded state [CorrelationId={CorrelationId}]; host is starting degraded as configured by StartupFailurePolicy.StartDegraded",
+                        correlationId);
+                    break;
             }
         }
 
@@ -60,4 +57,9 @@ internal sealed class NuplaneStartupHostedService(
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    private static NuplaneStartupReconciliationException CreateStartupReconciliationException(
+        string correlationId,
+        ReconciliationRunResult result) =>
+        new(correlationId, result.FailedPackages, result);
 }

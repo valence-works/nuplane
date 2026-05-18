@@ -161,6 +161,31 @@ public sealed class StartupCycleTests
     }
 
     [Fact]
+    public async Task StartupCycleFailurePolicyUseLastKnownGood_WhenStartupCompletesDegraded_Throws()
+    {
+        var service = new DegradedStartupReconciliationService();
+        var options = new ReconciliationOptions
+        {
+            StartupFailurePolicy = StartupFailurePolicy.UseLastKnownGood
+        };
+        var (dispatcher, scheduler, startup) = CreateHostedServices(service, options);
+
+        await dispatcher.StartAsync(CancellationToken.None);
+
+        try
+        {
+            var exception = await Assert.ThrowsAsync<NuplaneStartupReconciliationException>(
+                () => startup.StartAsync(CancellationToken.None));
+
+            Assert.Contains("pkg-failed", exception.FailedPackageIds);
+        }
+        finally
+        {
+            await StopHostedServicesAsync(scheduler, dispatcher);
+        }
+    }
+
+    [Fact]
     public void NoStartupCycle_WhenAutomaticReconciliationDisabled()
     {
         var services = new ServiceCollection();
