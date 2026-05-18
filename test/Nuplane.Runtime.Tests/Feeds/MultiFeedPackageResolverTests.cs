@@ -6,6 +6,7 @@ using Nuplane.Feeds;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Policy;
 using Nuplane.Feeds.Versioning;
+using Nuplane.Runtime.Tests.TestSupport;
 
 namespace Nuplane.Runtime.Tests.Feeds;
 
@@ -161,6 +162,175 @@ public sealed class MultiFeedPackageResolverTests
         var result = await resolver.ResolveAsync(request, CancellationToken.None);
 
         Assert.Equal("2.0.0", result.Version);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ExactVersion_LocalFeedHit_DoesNotEnumerateRemote()
+    {
+        using var localPackages = new TempDirectory();
+        NupkgTestBuilder.Create("MyPlugin", "2.0.0").BuildTo(localPackages.Path);
+
+        var options = new FeedResolutionOptions();
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
+        options.Feeds.Add(new("local-cache", new Uri(localPackages.Path + Path.DirectorySeparatorChar)));
+        options.SetPriority("remote", 0);
+        options.SetPriority("local-cache", 100);
+        var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
+        var policy = new FeedResolutionPolicy(wrappedOptions);
+
+        var acquirer = Substitute.For<IRemotePackageAcquirer>();
+        var enumerator = Substitute.For<IFeedVersionEnumerator>();
+        var resolver = new MultiFeedPackageResolver(
+            wrappedOptions,
+            policy,
+            acquirer,
+            enumerator,
+            Substitute.For<IVersionRangeEvaluator>(),
+            NullLogger<MultiFeedPackageResolver>.Instance);
+
+        var request = new PackageRequest("MyPlugin", "[2.0.0]", null, PackageUpdatePolicy.Exact, "source");
+        var result = await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal("local-cache", result.FeedName);
+        Assert.Equal("2.0.0", result.Version);
+        Assert.True(Directory.Exists(result.InstallPath));
+        await enumerator.DidNotReceiveWithAnyArgs().EnumerateVersionsAsync(default!, default!, default);
+        await acquirer.DidNotReceiveWithAnyArgs().AcquireAsync(default!, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ExactVersion_RemoteDirectAcquire_DoesNotEnumerateVersions()
+    {
+        var options = new FeedResolutionOptions();
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
+        var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
+        var policy = new FeedResolutionPolicy(wrappedOptions);
+
+        var enumerator = Substitute.For<IFeedVersionEnumerator>();
+        var evaluator = Substitute.For<IVersionRangeEvaluator>();
+        var acquirer = Substitute.For<IRemotePackageAcquirer>();
+        acquirer.AcquireAsync(Arg.Any<FeedDefinition>(), "MyPlugin", "2.0.0", Arg.Any<CancellationToken>())
+            .Returns("/installed/MyPlugin/2.0.0");
+
+        var resolver = new MultiFeedPackageResolver(
+            wrappedOptions,
+            policy,
+            acquirer,
+            enumerator,
+            evaluator,
+            NullLogger<MultiFeedPackageResolver>.Instance);
+
+        var request = new PackageRequest("MyPlugin", "[2.0.0]", null, PackageUpdatePolicy.Exact, "source");
+        var result = await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal("remote", result.FeedName);
+        Assert.Equal("2.0.0", result.Version);
+        await acquirer.Received(1).AcquireAsync(Arg.Any<FeedDefinition>(), "MyPlugin", "2.0.0", Arg.Any<CancellationToken>());
+        await enumerator.DidNotReceiveWithAnyArgs().EnumerateVersionsAsync(default!, default!, default);
+        evaluator.DidNotReceiveWithAnyArgs().SelectBestMatch(default!, default!);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_OfflineMode_LocalMiss_DoesNotCallRemote()
+    {
+        using var localPackages = new TempDirectory();
+        var options = new FeedResolutionOptions
+        {
+            OfflineMode = true
+        };
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
+        options.Feeds.Add(new("local-cache", new Uri(localPackages.Path + Path.DirectorySeparatorChar)));
+        var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
+        var policy = new FeedResolutionPolicy(wrappedOptions);
+
+        var acquirer = Substitute.For<IRemotePackageAcquirer>();
+        var enumerator = Substitute.For<IFeedVersionEnumerator>();
+        var resolver = new MultiFeedPackageResolver(
+            wrappedOptions,
+            policy,
+            acquirer,
+            enumerator,
+            Substitute.For<IVersionRangeEvaluator>(),
+            NullLogger<MultiFeedPackageResolver>.Instance);
+
+        var request = new PackageRequest("MyPlugin", "[2.0.0]", null, PackageUpdatePolicy.Exact, "source");
+
+        await Assert.ThrowsAsync<NoEligibleFeedException>(
+            () => resolver.ResolveAsync(request, CancellationToken.None));
+
+        Assert.True(resolver.TryGetDecision("MyPlugin", out var decision));
+        Assert.Equal("remote-disabled-by-offline-mode", decision.DecisionPath);
+        await enumerator.DidNotReceiveWithAnyArgs().EnumerateVersionsAsync(default!, default!, default);
+        await acquirer.DidNotReceiveWithAnyArgs().AcquireAsync(default!, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_RemoteFallbackModeNever_LocalMiss_FailsWithPolicyDecision()
+    {
+        using var localPackages = new TempDirectory();
+        var options = new FeedResolutionOptions
+        {
+            RemoteFallbackMode = RemoteFallbackMode.Never
+        };
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
+        options.Feeds.Add(new("local-cache", new Uri(localPackages.Path + Path.DirectorySeparatorChar)));
+        var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
+        var policy = new FeedResolutionPolicy(wrappedOptions);
+
+        var acquirer = Substitute.For<IRemotePackageAcquirer>();
+        var enumerator = Substitute.For<IFeedVersionEnumerator>();
+        var resolver = new MultiFeedPackageResolver(
+            wrappedOptions,
+            policy,
+            acquirer,
+            enumerator,
+            Substitute.For<IVersionRangeEvaluator>(),
+            NullLogger<MultiFeedPackageResolver>.Instance);
+
+        var request = new PackageRequest("MyPlugin", "[2.0.0]", null, PackageUpdatePolicy.Exact, "source");
+
+        await Assert.ThrowsAsync<NoEligibleFeedException>(
+            () => resolver.ResolveAsync(request, CancellationToken.None));
+
+        Assert.True(resolver.TryGetDecision("MyPlugin", out var decision));
+        Assert.Equal("remote-disabled-by-policy", decision.DecisionPath);
+        await enumerator.DidNotReceiveWithAnyArgs().EnumerateVersionsAsync(default!, default!, default);
+        await acquirer.DidNotReceiveWithAnyArgs().AcquireAsync(default!, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_Range_RemoteStillEnumeratesVersions()
+    {
+        var options = new FeedResolutionOptions();
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
+        var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
+        var policy = new FeedResolutionPolicy(wrappedOptions);
+
+        var enumerator = Substitute.For<IFeedVersionEnumerator>();
+        enumerator.EnumerateVersionsAsync(Arg.Any<FeedDefinition>(), "MyPlugin", Arg.Any<CancellationToken>())
+            .Returns(new PackageVersionList("MyPlugin", "remote", ["1.0.0", "1.5.0", "2.0.0"], DateTimeOffset.UtcNow));
+
+        var evaluator = Substitute.For<IVersionRangeEvaluator>();
+        evaluator.SelectBestMatch("[1.0.0, 2.0.0)", Arg.Any<IReadOnlyList<string>>())
+            .Returns(new VersionResolutionResult(true, "1.5.0", 3, null));
+
+        var acquirer = Substitute.For<IRemotePackageAcquirer>();
+        acquirer.AcquireAsync(Arg.Any<FeedDefinition>(), "MyPlugin", "1.5.0", Arg.Any<CancellationToken>())
+            .Returns("/installed/MyPlugin/1.5.0");
+
+        var resolver = new MultiFeedPackageResolver(
+            wrappedOptions,
+            policy,
+            acquirer,
+            enumerator,
+            evaluator,
+            NullLogger<MultiFeedPackageResolver>.Instance);
+
+        var request = new PackageRequest("MyPlugin", "[1.0.0, 2.0.0)", null, PackageUpdatePolicy.Range, "source");
+        var result = await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal("1.5.0", result.Version);
+        await enumerator.Received(1).EnumerateVersionsAsync(Arg.Any<FeedDefinition>(), "MyPlugin", Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -64,6 +64,21 @@ public sealed class FeedResolutionOptions
     public bool DisableNuGetHttpCache { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether exact version requests prefer local directory feeds before remote feeds.
+    /// </summary>
+    public bool PreferLocalFeedsForExactVersions { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether remote feeds are disabled during package resolution and acquisition.
+    /// </summary>
+    public bool OfflineMode { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the policy for contacting remote feeds after local candidates miss.
+    /// </summary>
+    public RemoteFallbackMode RemoteFallbackMode { get; set; } = RemoteFallbackMode.WhenLocalMisses;
+
+    /// <summary>
     /// Sets the resolution priority for the specified feed.
     /// </summary>
     /// <param name="feedName">The feed name.</param>
@@ -85,4 +100,3 @@ public sealed class FeedResolutionOptions
         return FeedPriorities.GetValueOrDefault(feedName, int.MaxValue);
     }
 }
-

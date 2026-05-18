@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
@@ -11,6 +12,7 @@ namespace Nuplane.Feeds;
 public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> options) : IRemotePackageAcquirer
 {
     private static readonly HttpClient HttpClient = new();
+    private static readonly ConcurrentDictionary<string, Lazy<Task<Uri>>> PackageBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly FeedResolutionOptions _options = (options ?? throw new ArgumentNullException(nameof(options))).Value;
 
     /// <inheritdoc />
@@ -85,7 +87,7 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
         string destinationPath,
         CancellationToken cancellationToken)
     {
-        var packageBaseAddress = await ResolvePackageBaseAddressAsync(feed.ServiceIndex, cancellationToken);
+        var packageBaseAddress = await GetPackageBaseAddressAsync(feed.ServiceIndex, cancellationToken);
         var lowerPackageId = packageId.ToLowerInvariant();
         var lowerVersion = version.ToLowerInvariant();
         var packageUri = new Uri(packageBaseAddress, $"{lowerPackageId}/{lowerVersion}/{lowerPackageId}.{lowerVersion}.nupkg");
@@ -103,6 +105,27 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
         await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
         await using var destination = File.Create(destinationPath);
         await source.CopyToAsync(destination, cancellationToken);
+    }
+
+    private static async Task<Uri> GetPackageBaseAddressAsync(Uri serviceIndex, CancellationToken cancellationToken)
+    {
+        var key = serviceIndex.AbsoluteUri;
+        var pending = PackageBaseAddressCache.GetOrAdd(
+            key,
+            static (_, uri) => new(
+                () => ResolvePackageBaseAddressAsync(uri, CancellationToken.None),
+                LazyThreadSafetyMode.ExecutionAndPublication),
+            serviceIndex);
+
+        try
+        {
+            return await pending.Value.WaitAsync(cancellationToken);
+        }
+        catch
+        {
+            PackageBaseAddressCache.TryRemove(key, out _);
+            throw;
+        }
     }
 
     private static async Task<Uri> ResolvePackageBaseAddressAsync(Uri serviceIndex, CancellationToken cancellationToken)

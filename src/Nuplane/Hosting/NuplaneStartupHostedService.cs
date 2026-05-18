@@ -1,6 +1,9 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Nuplane.Observability;
 using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Hosting;
@@ -16,6 +19,7 @@ namespace Nuplane.Hosting;
 /// </remarks>
 internal sealed class NuplaneStartupHostedService(
     IReconciliationTriggerIngress triggerIngress,
+    IOptions<ReconciliationOptions> options,
     ILogger<NuplaneStartupHostedService> logger)
     : IHostedService
 {
@@ -23,9 +27,19 @@ internal sealed class NuplaneStartupHostedService(
     {
         logger.LogInformation("Nuplane startup reconciliation starting");
 
-        await triggerIngress.EnqueueAndWaitAsync(
-            ReconciliationTrigger.Startup(),
+        var correlationId = CorrelationContext.CreateNew();
+        var result = await triggerIngress.EnqueueAndWaitAsync(
+            ReconciliationTrigger.Startup(correlationId),
             cancellationToken);
+
+        if (options.Value.StartupFailurePolicy == StartupFailurePolicy.FailHost
+            && result is { IsDegraded: true })
+        {
+            throw new NuplaneStartupReconciliationException(
+                correlationId,
+                result.FailedPackages,
+                result);
+        }
 
         logger.LogInformation("Nuplane startup reconciliation completed");
     }

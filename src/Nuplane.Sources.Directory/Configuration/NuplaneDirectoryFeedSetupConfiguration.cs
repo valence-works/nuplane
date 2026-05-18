@@ -46,6 +46,8 @@ public static class NuplaneDirectoryFeedSetupConfiguration
 
             builder.AddDirectoryFeed(feedName, directoryPath, feed =>
             {
+                feed.Role = directorySection.GetValue<DirectoryFeedRole?>(nameof(NuplaneDirectoryFeedSetupOptions.Role))
+                    ?? DirectoryFeedRole.DesiredAndCache;
                 feed.Watch = directorySection.GetValue<bool?>(nameof(NuplaneDirectoryFeedSetupOptions.Watch)) ?? true;
                 feed.DebounceWindow = directorySection.GetValue<TimeSpan?>(nameof(NuplaneDirectoryFeedSetupOptions.DebounceWindow))
                     ?? TimeSpan.FromSeconds(1);

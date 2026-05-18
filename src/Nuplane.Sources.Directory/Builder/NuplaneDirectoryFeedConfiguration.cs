@@ -1,3 +1,5 @@
+using Nuplane.Feeds.Setup;
+
 namespace Nuplane.Sources.Directory.Builder;
 
 /// <summary>
@@ -6,6 +8,12 @@ namespace Nuplane.Sources.Directory.Builder;
 public sealed class NuplaneDirectoryFeedConfiguration
 {
     internal List<string> IncludePatterns { get; } = [];
+
+    /// <summary>
+    /// Gets or sets how the directory participates in resolution and desired-state discovery.
+    /// Defaults to <see cref="DirectoryFeedRole.DesiredAndCache"/> for backward compatibility.
+    /// </summary>
+    public DirectoryFeedRole Role { get; set; } = DirectoryFeedRole.DesiredAndCache;
 
     /// <summary>
     /// Gets or sets whether file system changes trigger an automatic reconciliation cycle.

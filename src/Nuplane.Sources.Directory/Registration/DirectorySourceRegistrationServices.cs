@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Nuplane.Abstractions;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Registration;
+using Nuplane.Feeds.Setup;
 using Nuplane.Health;
 using Nuplane.Reconciliation;
 using Nuplane.Sources.Directory.Builder;
@@ -32,6 +33,10 @@ public static class DirectorySourceRegistrationServices
         ArgumentException.ThrowIfNullOrWhiteSpace(feedName);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(includePatterns);
+        if (!Enum.IsDefined(options.Role))
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), options.Role, "Directory feed role must be valid.");
+        }
 
         // ── Replace prior registration for the same feed name ─────────────────────
         RemovePriorFeedRegistration(services, feedName);
@@ -48,20 +53,23 @@ public static class DirectorySourceRegistrationServices
         var marker = new DirectoryFeedRegistrationMarker(feedName);
 
         var capturedPatterns = DistinctNonBlank(includePatterns).ToArray();
-        var sourceDescriptor = ServiceDescriptor.Singleton<IDesiredPackageSource>(sp =>
+        if (ProducesDesiredRoots(options.Role))
         {
-            var probeLogger = sp.GetService<ILogger<NupkgFileStabilityProbe>>();
-            var probe = probeLogger is not null ? new NupkgFileStabilityProbe(probeLogger) : null;
-            return new DirectoryNupkgDesiredSource(
-                feedName,
-                normalizedPath,
-                capturedPatterns,
-                sp.GetService<ILogger<DirectoryNupkgDesiredSource>>(),
-                feedName,
-                probe);
-        });
-        services.Add(sourceDescriptor);
-        marker.Descriptors.Add(sourceDescriptor);
+            var sourceDescriptor = ServiceDescriptor.Singleton<IDesiredPackageSource>(sp =>
+            {
+                var probeLogger = sp.GetService<ILogger<NupkgFileStabilityProbe>>();
+                var probe = probeLogger is not null ? new NupkgFileStabilityProbe(probeLogger) : null;
+                return new DirectoryNupkgDesiredSource(
+                    feedName,
+                    normalizedPath,
+                    capturedPatterns,
+                    sp.GetService<ILogger<DirectoryNupkgDesiredSource>>(),
+                    feedName,
+                    probe);
+            });
+            services.Add(sourceDescriptor);
+            marker.Descriptors.Add(sourceDescriptor);
+        }
 
         if (options.Watch)
         {
@@ -133,6 +141,9 @@ public static class DirectorySourceRegistrationServices
         (values ?? [])
         .Where(static value => !string.IsNullOrWhiteSpace(value))
         .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    private static bool ProducesDesiredRoots(DirectoryFeedRole role) =>
+        role is DirectoryFeedRole.Desired or DirectoryFeedRole.DesiredAndCache;
 
     private sealed class DirectoryFeedRegistrationMarker(string feedName)
     {

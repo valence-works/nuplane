@@ -57,6 +57,11 @@ internal sealed class NuplaneSetupOptionsValidator : IValidateOptions<NuplaneSet
             {
                 errors.Add($"{label} Directory.DebounceWindow must be greater than zero.");
             }
+
+            if (!Enum.IsDefined(feed.Directory.Role))
+            {
+                errors.Add($"{label} Directory.Role must be a valid directory feed role.");
+            }
         }
 
 

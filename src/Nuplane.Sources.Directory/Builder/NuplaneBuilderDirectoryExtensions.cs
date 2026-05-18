@@ -33,6 +33,7 @@ public static class NuplaneBuilderDirectoryExtensions
         var dirOptions = new NuplaneDirectoryFeedOptions
         {
             DirectoryPath = path,
+            Role = config.Role,
             Watch = config.Watch,
             DebounceWindow = config.DebounceWindow,
         };

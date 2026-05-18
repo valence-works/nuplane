@@ -30,8 +30,23 @@ public sealed class FeedResolutionPolicy(IOptions<FeedResolutionOptions> options
             return explicitFeed is null ? [] : [explicitFeed];
         }
 
-        return _options.Feeds
+        var ordered = _options.Feeds
             .OrderBy(x => _options.GetPriority(x.Name))
+            .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var versionRequest = NuGetVersionRequestClassifier.Classify(request.VersionRange);
+        var localFirstForExact = _options.PreferLocalFeedsForExactVersions
+            || _options.OfflineMode
+            || _options.RemoteFallbackMode is RemoteFallbackMode.WhenLocalMisses or RemoteFallbackMode.Never;
+        if (!versionRequest.IsExact || !localFirstForExact)
+        {
+            return ordered;
+        }
+
+        return ordered
+            .OrderByDescending(IsLocalDirectoryFeed)
+            .ThenBy(x => _options.GetPriority(x.Name))
             .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -56,5 +71,6 @@ public sealed class FeedResolutionPolicy(IOptions<FeedResolutionOptions> options
             .First();
     }
 
+    private static bool IsLocalDirectoryFeed(FeedDefinition feed) =>
+        feed.ServiceIndex.Scheme.Equals("file", StringComparison.OrdinalIgnoreCase);
 }
-

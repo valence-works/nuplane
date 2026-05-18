@@ -15,6 +15,7 @@ internal sealed class TestNuGetFeedServer : IAsyncDisposable
     private readonly bool _omitPackageBaseTrailingSlash;
 
     public int PackageDownloads { get; private set; }
+    public int ServiceIndexRequests { get; private set; }
     public Uri ServiceIndexUri => new(new(_baseAddress), "v3/index.json");
 
     public TestNuGetFeedServer(string packageId, string version, byte[] packageBytes, bool omitPackageBaseTrailingSlash = false)
@@ -84,6 +85,7 @@ internal sealed class TestNuGetFeedServer : IAsyncDisposable
 
         if (requestPath.Equals("/v3/index.json", StringComparison.OrdinalIgnoreCase))
         {
+            ServiceIndexRequests++;
             await WriteJsonAsync(context.Response, $$"""
                 {
                   "version": "3.0.0",

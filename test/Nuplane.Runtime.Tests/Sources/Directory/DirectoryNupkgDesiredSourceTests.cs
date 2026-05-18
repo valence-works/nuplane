@@ -164,6 +164,20 @@ public sealed class DirectoryNupkgDesiredSourceTests : IDisposable
     }
 
     [Fact]
+    public async Task DesiredRole_EmitsHighestVersionOnly()
+    {
+        CreateNupkg("DesiredPlugin.1.0.0.nupkg");
+        CreateNupkg("DesiredPlugin.1.5.0.nupkg");
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], feedName: "local-drop");
+
+        var results = await source.GetDesiredAsync(CancellationToken.None);
+
+        var request = Assert.Single(results);
+        Assert.Equal("DesiredPlugin", request.Id);
+        Assert.Equal("1.5.0", request.VersionRange);
+    }
+
+    [Fact]
     public async Task GetDesiredAsync_MultipleVersionsOfDifferentPackages_ReturnsHighestVersionPerPackage()
     {
         CreateNupkg("PluginA.1.0.0.nupkg");
