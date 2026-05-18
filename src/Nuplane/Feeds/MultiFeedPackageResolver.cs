@@ -76,11 +76,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
             {
                 if (lastFailure is not null)
                 {
-                    disabledDecision = disabledDecision with
-                    {
-                        DecisionPath = $"{lastFailure.DecisionPath}+{disabledDecision.DecisionPath}",
-                        FailureReason = $"{lastFailure.FailureReason} {disabledDecision.FailureReason}"
-                    };
+                    disabledDecision = CombineFailureDiagnostics(lastFailure, disabledDecision);
                 }
 
                 lastFailure = disabledDecision;
@@ -398,6 +394,22 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
             selectedFeed: feed.Name);
 
         return true;
+    }
+
+    private static FeedResolutionDecision CombineFailureDiagnostics(
+        FeedResolutionDecision previous,
+        FeedResolutionDecision current)
+    {
+        if (previous.DecisionPath.Split('+').Contains(current.DecisionPath, StringComparer.Ordinal))
+        {
+            return previous;
+        }
+
+        return current with
+        {
+            DecisionPath = $"{previous.DecisionPath}+{current.DecisionPath}",
+            FailureReason = $"{previous.FailureReason} {current.FailureReason}"
+        };
     }
 
     private static bool IsDependencyRequest(PackageRequest request) =>

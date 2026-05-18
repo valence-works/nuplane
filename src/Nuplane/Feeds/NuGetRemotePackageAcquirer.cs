@@ -161,8 +161,7 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
                 return entry.Uri;
             }
 
-            ((ICollection<KeyValuePair<string, Lazy<Task<CachedPackageBaseAddress>>>>)_packageBaseAddressCache)
-                .Remove(new(key, pending));
+            _packageBaseAddressCache.TryRemove(new KeyValuePair<string, Lazy<Task<CachedPackageBaseAddress>>>(key, pending));
         }
     }
 

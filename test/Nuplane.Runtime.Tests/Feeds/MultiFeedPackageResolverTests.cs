@@ -239,6 +239,7 @@ public sealed class MultiFeedPackageResolverTests
             OfflineMode = true
         };
         options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
+        options.Feeds.Add(new("remote-secondary", new("https://secondary.example/v3/index.json")));
         options.Feeds.Add(new("local-cache", new Uri(localPackages.Path + Path.DirectorySeparatorChar)));
         var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
         var policy = new FeedResolutionPolicy(wrappedOptions);
@@ -262,6 +263,9 @@ public sealed class MultiFeedPackageResolverTests
         Assert.Equal("exact-local-cache-miss+remote-disabled-by-offline-mode", decision.DecisionPath);
         Assert.Contains("was not found in local directory feed", decision.FailureReason);
         Assert.Contains("Offline mode is enabled", decision.FailureReason);
+        Assert.Equal(
+            decision.FailureReason!.IndexOf("Offline mode is enabled", StringComparison.Ordinal),
+            decision.FailureReason.LastIndexOf("Offline mode is enabled", StringComparison.Ordinal));
         await enumerator.DidNotReceiveWithAnyArgs().EnumerateVersionsAsync(default!, default!, default);
         await acquirer.DidNotReceiveWithAnyArgs().AcquireAsync(default!, default!, default!, default);
     }
