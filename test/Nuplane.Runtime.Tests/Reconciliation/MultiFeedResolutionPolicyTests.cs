@@ -45,9 +45,12 @@ public sealed class MultiFeedResolutionPolicyTests
     }
 
     [Fact]
-    public void OrderCandidates_RangeRequest_PreservesPriority()
+    public void OrderCandidates_AlwaysFallbackRangeRequest_PreservesPriority()
     {
-        var options = new FeedResolutionOptions();
+        var options = new FeedResolutionOptions
+        {
+            RemoteFallbackMode = RemoteFallbackMode.Always
+        };
         options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
         options.Feeds.Add(new("local-cache", new("file:///packages/local/")));
         options.SetPriority("remote", 0);
@@ -59,6 +62,26 @@ public sealed class MultiFeedResolutionPolicyTests
         var ordered = policy.OrderCandidates(request).Select(x => x.Name).ToArray();
 
         Assert.Equal(new[] { "remote", "local-cache" }, ordered);
+    }
+
+    [Fact]
+    public void OrderCandidates_WhenLocalMissesRangeRequest_UsesLocalFirst()
+    {
+        var options = new FeedResolutionOptions
+        {
+            RemoteFallbackMode = RemoteFallbackMode.WhenLocalMisses
+        };
+        options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
+        options.Feeds.Add(new("local-cache", new("file:///packages/local/")));
+        options.SetPriority("remote", 0);
+        options.SetPriority("local-cache", 100);
+
+        var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
+        var request = new PackageRequest("pkg", "[1.0.0,2.0.0)", null, PackageUpdatePolicy.Range, "source");
+
+        var ordered = policy.OrderCandidates(request).Select(x => x.Name).ToArray();
+
+        Assert.Equal(new[] { "local-cache", "remote" }, ordered);
     }
 
     [Fact]

@@ -36,10 +36,10 @@ public sealed class FeedResolutionPolicy(IOptions<FeedResolutionOptions> options
             .ToArray();
 
         var versionRequest = NuGetVersionRequestClassifier.Classify(request.VersionRange);
-        var localFirstForExact = _options.PreferLocalFeedsForExactVersions
-            || _options.OfflineMode
+        var localFirst = _options.OfflineMode
             || _options.RemoteFallbackMode is RemoteFallbackMode.WhenLocalMisses or RemoteFallbackMode.Never;
-        if (!versionRequest.IsExact || !localFirstForExact)
+        localFirst = localFirst || (versionRequest.IsExact && _options.PreferLocalFeedsForExactVersions);
+        if (!localFirst)
         {
             return ordered;
         }

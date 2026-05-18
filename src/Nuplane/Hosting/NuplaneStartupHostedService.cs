@@ -32,13 +32,21 @@ internal sealed class NuplaneStartupHostedService(
             ReconciliationTrigger.Startup(correlationId),
             cancellationToken);
 
-        if (options.Value.StartupFailurePolicy == StartupFailurePolicy.FailHost
-            && result is { IsDegraded: true })
+        if (result is { IsDegraded: true })
         {
-            throw new NuplaneStartupReconciliationException(
-                correlationId,
-                result.FailedPackages,
-                result);
+            if (options.Value.StartupFailurePolicy == StartupFailurePolicy.FailHost)
+            {
+                throw new NuplaneStartupReconciliationException(
+                    correlationId,
+                    result.FailedPackages,
+                    result);
+            }
+
+            if (options.Value.StartupFailurePolicy == StartupFailurePolicy.UseLastKnownGood)
+            {
+                logger.LogWarning(
+                    "StartupFailurePolicy.UseLastKnownGood is not implemented; continuing with degraded startup reconciliation result");
+            }
         }
 
         logger.LogInformation("Nuplane startup reconciliation completed");

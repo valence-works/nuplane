@@ -334,7 +334,7 @@ public sealed class MultiFeedPackageResolverTests
     }
 
     [Fact]
-    public async Task ResolveAsync_BareVersion_ResolvesThroughEvaluator()
+    public async Task ResolveAsync_BareVersion_UsesRemoteDirectAcquireFastPath()
     {
         var options = new FeedResolutionOptions();
         options.Feeds.Add(new("remote", new("https://feed.example/v3/index.json")));
@@ -361,6 +361,13 @@ public sealed class MultiFeedPackageResolverTests
         var result = await resolver.ResolveAsync(request, CancellationToken.None);
 
         Assert.Equal("2.0.0", result.Version);
+        await enumerator.DidNotReceive().EnumerateVersionsAsync(
+            Arg.Any<FeedDefinition>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+        evaluator.DidNotReceive().SelectBestMatch(
+            Arg.Any<string>(),
+            Arg.Any<IReadOnlyList<string>>());
     }
 
     [Fact]

@@ -47,7 +47,10 @@ public static class DirectorySourceRegistrationServices
         services.PostConfigure<FeedResolutionOptions>(opts =>
         {
             opts.Feeds.RemoveAll(f => string.Equals(f.Name, feedName, StringComparison.OrdinalIgnoreCase));
-            opts.Feeds.Add(new(feedName, feedUri, credentials));
+            if (ResolvesPackages(options.Role))
+            {
+                opts.Feeds.Add(new(feedName, feedUri, credentials));
+            }
         });
 
         var marker = new DirectoryFeedRegistrationMarker(feedName);
@@ -144,6 +147,9 @@ public static class DirectorySourceRegistrationServices
 
     private static bool ProducesDesiredRoots(DirectoryFeedRole role) =>
         role is DirectoryFeedRole.Desired or DirectoryFeedRole.DesiredAndCache;
+
+    private static bool ResolvesPackages(DirectoryFeedRole role) =>
+        role is DirectoryFeedRole.Cache or DirectoryFeedRole.DesiredAndCache;
 
     private sealed class DirectoryFeedRegistrationMarker(string feedName)
     {

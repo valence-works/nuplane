@@ -121,6 +121,10 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
         {
             return await pending.Value.WaitAsync(cancellationToken);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch
         {
             PackageBaseAddressCache.TryRemove(key, out _);
