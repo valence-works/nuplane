@@ -186,6 +186,28 @@ public sealed class StartupCycleTests
     }
 
     [Fact]
+    public async Task StartupCycleFailurePolicyUnknownValue_WhenStartupCompletesDegraded_ThrowsNotSupported()
+    {
+        var service = new DegradedStartupReconciliationService();
+        var options = new ReconciliationOptions
+        {
+            StartupFailurePolicy = (StartupFailurePolicy)999
+        };
+        var (dispatcher, scheduler, startup) = CreateHostedServices(service, options);
+
+        await dispatcher.StartAsync(CancellationToken.None);
+
+        try
+        {
+            await Assert.ThrowsAsync<NotSupportedException>(() => startup.StartAsync(CancellationToken.None));
+        }
+        finally
+        {
+            await StopHostedServicesAsync(scheduler, dispatcher);
+        }
+    }
+
+    [Fact]
     public void NoStartupCycle_WhenAutomaticReconciliationDisabled()
     {
         var services = new ServiceCollection();

@@ -50,6 +50,10 @@ internal sealed class NuplaneStartupHostedService(
                         "Nuplane startup reconciliation completed in a degraded state [CorrelationId={CorrelationId}]; host is starting degraded as configured by StartupFailurePolicy.StartDegraded",
                         correlationId);
                     break;
+
+                default:
+                    throw new NotSupportedException(
+                        $"Unsupported startup failure policy '{options.Value.StartupFailurePolicy}'.");
             }
         }
 

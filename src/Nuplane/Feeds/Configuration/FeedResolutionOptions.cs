@@ -64,6 +64,12 @@ public sealed class FeedResolutionOptions
     public bool DisableNuGetHttpCache { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets the TTL for NuGet package base-address cache entries discovered from service indexes.
+    /// Default is 24 hours. Set to <see cref="TimeSpan.Zero"/> to disable caching.
+    /// </summary>
+    public TimeSpan PackageBaseAddressCacheTtl { get; set; } = TimeSpan.FromHours(24);
+
+    /// <summary>
     /// Gets or sets whether exact version requests prefer local directory feeds before remote feeds.
     /// </summary>
     public bool PreferLocalFeedsForExactVersions { get; set; } = true;
