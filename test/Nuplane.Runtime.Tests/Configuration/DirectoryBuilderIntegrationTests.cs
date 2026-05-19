@@ -1,7 +1,12 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Feeds.Setup;
 using Nuplane.Sources.Directory.Builder;
+using Nuplane.Sources.Directory.Configuration;
 
 namespace Nuplane.Runtime.Tests.Configuration;
 
@@ -27,6 +32,68 @@ public sealed class DirectoryBuilderIntegrationTests
                 {
                     feed.IncludeAll();
                 });
+            });
+
+            Assert.Contains(services, d => d.ServiceType == typeof(IDesiredPackageSource));
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void AddDirectoryFeed_CacheRole_RegistersFeedButNoDesiredSource()
+    {
+        var root = CreateTempDir("builder-cache-role");
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddNuplane(nuplane =>
+            {
+                nuplane.AddDirectoryFeed("cache-only", root, feed =>
+                {
+                    feed.Role = DirectoryFeedRole.Cache;
+                    feed.IncludeAll();
+                });
+            });
+
+            using var provider = services.BuildServiceProvider();
+            var feedOptions = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
+
+            var feed = Assert.Single(feedOptions.Feeds);
+            Assert.Equal("cache-only", feed.Name);
+            Assert.DoesNotContain(services, d => d.ServiceType == typeof(IDesiredPackageSource));
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void AddDirectoryFeedsFromConfiguration_WithoutRole_RegistersDesiredPackageSource()
+    {
+        var root = CreateTempDir("config-default-role");
+
+        try
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
+                    ["Nuplane:Setup:Feeds:0:DirectoryPath"] = root,
+                    ["Nuplane:Setup:Feeds:0:IncludeAll"] = "true"
+                })
+                .Build();
+
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
+            {
+                nuplane.AddDirectoryFeedsFromConfiguration(configuration.GetSection("Nuplane"));
             });
 
             Assert.Contains(services, d => d.ServiceType == typeof(IDesiredPackageSource));

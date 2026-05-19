@@ -11,14 +11,14 @@ Nuplane setup configuration currently reads `Nuplane:Setup:Feeds` as an array, w
 
 ## Technical Context
 
-**Language/Version**: C# / .NET 8.0, 9.0, 10.0 source libraries; tests target .NET 10.0  
-**Primary Dependencies**: Microsoft.Extensions.Configuration, Microsoft.Extensions.DependencyInjection, Microsoft.Extensions.Options, Microsoft.Extensions.Logging; existing Nuplane builder and feed registration APIs  
-**Storage**: N/A for this feature; configuration is translated into runtime options and desired-state sources  
-**Testing**: xUnit, Microsoft.Extensions.Configuration in-memory providers, Microsoft.Extensions.Options validation, existing service registration assertions  
-**Target Platform**: Cross-platform .NET libraries consumed by host applications  
-**Project Type**: Library/runtime infrastructure  
-**Performance Goals**: Setup feed parsing is startup-time work over the effective feed section and should be linear in feed declaration count; no reconciliation-cycle overhead after registration  
-**Constraints**: Preserve array-based compatibility; do not rely on JSON object order; keep directory-specific registration in `Nuplane.Sources.Directory`; keep validation in `IValidateOptions<T>` and startup fail-fast paths; do not log credential secret values  
+**Language/Version**: C# / .NET 8.0, 9.0, 10.0 source libraries; tests target .NET 10.0
+**Primary Dependencies**: Microsoft.Extensions.Configuration, Microsoft.Extensions.DependencyInjection, Microsoft.Extensions.Options, Microsoft.Extensions.Logging; existing Nuplane builder and feed registration APIs
+**Storage**: N/A for this feature; configuration is translated into runtime options and desired-state sources
+**Testing**: xUnit, Microsoft.Extensions.Configuration in-memory providers, Microsoft.Extensions.Options validation, existing service registration assertions
+**Target Platform**: Cross-platform .NET libraries consumed by host applications
+**Project Type**: Library/runtime infrastructure
+**Performance Goals**: Setup feed parsing is startup-time work over the effective feed section and should be linear in feed declaration count; no reconciliation-cycle overhead after registration
+**Constraints**: Preserve array-based compatibility; do not rely on JSON object order; keep directory-specific registration in `Nuplane.Sources.Directory`; keep validation in `IValidateOptions<T>` and startup fail-fast paths; do not log credential secret values
 **Scale/Scope**: Typically 0-20 configured feeds per host, with layered providers such as `appsettings.json`, environment variables, and mounted configuration files
 
 ## Constitution Check

@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
@@ -11,6 +12,7 @@ namespace Nuplane.Feeds;
 public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> options) : IRemotePackageAcquirer
 {
     private static readonly HttpClient HttpClient = new();
+    private readonly ConcurrentDictionary<string, Lazy<Task<CachedPackageBaseAddress>>> _packageBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly FeedResolutionOptions _options = (options ?? throw new ArgumentNullException(nameof(options))).Value;
 
     /// <inheritdoc />
@@ -54,7 +56,13 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
 
         try
         {
-            await DownloadPackageAsync(feed, packageId, version, tempNupkgPath, cancellationToken);
+            await DownloadPackageAsync(
+                feed,
+                packageId,
+                version,
+                tempNupkgPath,
+                _options.PackageBaseAddressCacheTtl,
+                cancellationToken);
 
             Directory.CreateDirectory(tempExtractDirectory);
             ZipFile.ExtractToDirectory(tempNupkgPath, tempExtractDirectory, overwriteFiles: true);
@@ -78,14 +86,18 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
         }
     }
 
-    private static async Task DownloadPackageAsync(
+    private async Task DownloadPackageAsync(
         FeedDefinition feed,
         string packageId,
         string version,
         string destinationPath,
+        TimeSpan packageBaseAddressCacheTtl,
         CancellationToken cancellationToken)
     {
-        var packageBaseAddress = await ResolvePackageBaseAddressAsync(feed.ServiceIndex, cancellationToken);
+        var packageBaseAddress = await GetPackageBaseAddressAsync(
+            feed.ServiceIndex,
+            packageBaseAddressCacheTtl,
+            cancellationToken);
         var lowerPackageId = packageId.ToLowerInvariant();
         var lowerVersion = version.ToLowerInvariant();
         var packageUri = new Uri(packageBaseAddress, $"{lowerPackageId}/{lowerVersion}/{lowerPackageId}.{lowerVersion}.nupkg");
@@ -104,6 +116,60 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
         await using var destination = File.Create(destinationPath);
         await source.CopyToAsync(destination, cancellationToken);
     }
+
+    private async Task<Uri> GetPackageBaseAddressAsync(
+        Uri serviceIndex,
+        TimeSpan cacheTtl,
+        CancellationToken cancellationToken)
+    {
+        if (cacheTtl == TimeSpan.Zero)
+        {
+            return await ResolvePackageBaseAddressAsync(serviceIndex, cancellationToken);
+        }
+
+        var key = serviceIndex.AbsoluteUri;
+        while (true)
+        {
+            var now = DateTimeOffset.UtcNow;
+            var pending = _packageBaseAddressCache.GetOrAdd(
+                key,
+                static (_, state) => new(
+                    () => ResolvePackageBaseAddressCacheEntryAsync(
+                        state.ServiceIndex,
+                        state.ExpiresAt,
+                        CancellationToken.None),
+                    LazyThreadSafetyMode.ExecutionAndPublication),
+                (ServiceIndex: serviceIndex, ExpiresAt: now.Add(cacheTtl)));
+
+            CachedPackageBaseAddress entry;
+            try
+            {
+                entry = await pending.Value.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                _packageBaseAddressCache.TryRemove(new KeyValuePair<string, Lazy<Task<CachedPackageBaseAddress>>>(key, pending));
+                throw;
+            }
+
+            if (entry.ExpiresAt > DateTimeOffset.UtcNow)
+            {
+                return entry.Uri;
+            }
+
+            _packageBaseAddressCache.TryRemove(new KeyValuePair<string, Lazy<Task<CachedPackageBaseAddress>>>(key, pending));
+        }
+    }
+
+    private static async Task<CachedPackageBaseAddress> ResolvePackageBaseAddressCacheEntryAsync(
+        Uri serviceIndex,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken) =>
+        new(await ResolvePackageBaseAddressAsync(serviceIndex, cancellationToken), expiresAt);
 
     private static async Task<Uri> ResolvePackageBaseAddressAsync(Uri serviceIndex, CancellationToken cancellationToken)
     {
@@ -163,4 +229,6 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
         var buffer = value.Select(ch => invalidCharacters.Contains(ch) ? '_' : ch).ToArray();
         return new(buffer);
     }
+
+    private sealed record CachedPackageBaseAddress(Uri Uri, DateTimeOffset ExpiresAt);
 }

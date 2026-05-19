@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Nuplane;
+using Nuplane.Abstractions;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Sources.Directory.Configuration;
 
@@ -23,6 +24,7 @@ public sealed class DirectoryFeedSetupConfigurationTests
                 {
                     ["Nuplane:Setup:Feeds:local-packages:DirectoryPath"] = root,
                     ["Nuplane:Setup:Feeds:local-packages:IncludePatterns:0"] = "*",
+                    ["Nuplane:Setup:Feeds:local-packages:Directory:Role"] = "Cache",
                     ["Nuplane:Setup:Feeds:local-packages:Directory:Watch"] = "false",
                     ["Nuplane:Setup:Feeds:local-packages:Directory:DebounceWindow"] = "00:00:02"
                 })
@@ -41,6 +43,7 @@ public sealed class DirectoryFeedSetupConfigurationTests
             var feed = Assert.Single(feeds);
             Assert.Equal("local-packages", feed.Name);
             Assert.Equal("file", feed.ServiceIndex.Scheme);
+            Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IDesiredPackageSource));
             Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IHostedService)
                 && descriptor.ImplementationFactory is not null);
         }

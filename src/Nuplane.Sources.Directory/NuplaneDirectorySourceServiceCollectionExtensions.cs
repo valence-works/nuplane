@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Nuplane.Feeds.Setup;
 using Nuplane.Sources.Directory.Builder;
 using Nuplane.Sources.Directory.Registration;
 
@@ -32,6 +33,7 @@ public static class NuplaneDirectorySourceServiceCollectionExtensions
         var feedOptions = new NuplaneDirectoryFeedOptions
         {
             DirectoryPath = options.DirectoryPath,
+            Role = DirectoryFeedRole.DesiredAndCache,
             Watch = options.TriggerReconciliationOnChange,
             DebounceWindow = options.DebounceWindow,
         };

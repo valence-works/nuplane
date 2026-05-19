@@ -175,6 +175,21 @@ public sealed class NuplaneSetupOptionsValidatorTests
     }
 
     [Fact]
+    public void Validate_KeyedDirectoryFeedWithInvalidRole_Fails()
+    {
+        var sut = CreateValidator(new Dictionary<string, string?>
+        {
+            ["Nuplane:Setup:Feeds:local-packages:DirectoryPath"] = "packages",
+            ["Nuplane:Setup:Feeds:local-packages:Directory:Role"] = "99"
+        });
+
+        var result = sut.Validate(null, new NuplaneSetupOptions());
+
+        Assert.True(result.Failed);
+        Assert.Contains("Directory.Role must be a valid directory feed role", result.FailureMessage);
+    }
+
+    [Fact]
     public void Validate_DuplicateArrayFeedNamesWithRawSource_Fails()
     {
         var sut = CreateValidator(new Dictionary<string, string?>

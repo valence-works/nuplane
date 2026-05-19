@@ -72,6 +72,18 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
 
         foreach (var candidate in candidates)
         {
+            if (IsRemoteFeedDisabled(candidate, request, candidateNames, out var disabledDecision))
+            {
+                if (lastFailure is not null)
+                {
+                    disabledDecision = CombineFailureDiagnostics(lastFailure, disabledDecision);
+                }
+
+                lastFailure = disabledDecision;
+                _decisions[request.Id] = disabledDecision;
+                continue;
+            }
+
             var unavailable = _options.UnavailableFeeds.Contains(candidate.Name);
             if (unavailable)
             {
@@ -151,7 +163,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                 candidateNames,
                 resolved,
                 correlationId: string.Empty,
-                decisionPath: "ordered-candidate-success",
+                decisionPath: selectedVersion.DecisionPath,
                 enumeratedVersionCount: selectedVersion.EnumeratedCount,
                 cacheHit: selectedVersion.CacheHit);
 
@@ -185,6 +197,8 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         PackageRequest request,
         CancellationToken cancellationToken)
     {
+        var versionRequest = NuGetVersionRequestClassifier.Classify(request.VersionRange);
+
         // Local directory feeds have exact versions already specified in the package request.
         if (IsLocalDirectoryFeed(feed))
         {
@@ -195,8 +209,26 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     $"Local directory feed '{feed.Name}' requires an explicit version for package '{request.Id}'; empty or whitespace version ranges are not supported.");
             }
 
+            if (versionRequest.IsExact)
+            {
+                var nupkgPath = GetLocalNupkgPath(feed, request.Id, versionRequest.ExactVersion!);
+                if (!File.Exists(nupkgPath))
+                {
+                    return VersionSelection.Failed(
+                        "exact-local-cache-miss",
+                        $"Exact package '{request.Id}' version '{versionRequest.ExactVersion}' was not found in local directory feed '{feed.Name}'.");
+                }
+
+                return VersionSelection.Succeeded(versionRequest.ExactVersion!, 0, cacheHit: true, "exact-local-cache-hit");
+            }
+
             var localVersion = NuGetVersionRangeParser.SelectVersion(request.VersionRange);
             return VersionSelection.Succeeded(localVersion, 0, cacheHit: false);
+        }
+
+        if (versionRequest.IsExact)
+        {
+            return VersionSelection.Succeeded(versionRequest.ExactVersion!, 0, cacheHit: false, "exact-remote-direct-acquire");
         }
 
         var stopwatch = Stopwatch.StartNew();
@@ -269,8 +301,12 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         string? FailureReason,
         string DecisionPath)
     {
-        public static VersionSelection Succeeded(string version, int enumeratedCount, bool cacheHit) =>
-            new(true, version, enumeratedCount, cacheHit, null, "ordered-candidate-success");
+        public static VersionSelection Succeeded(
+            string version,
+            int enumeratedCount,
+            bool cacheHit,
+            string decisionPath = "ordered-candidate-success") =>
+            new(true, version, enumeratedCount, cacheHit, null, decisionPath);
 
         public static VersionSelection Failed(string decisionPath, string? failureReason, int enumeratedCount = 0, bool cacheHit = false) =>
             new(false, null, enumeratedCount, cacheHit, failureReason, decisionPath);
@@ -289,11 +325,11 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         }
 
         var feedDirectoryPath = feed.ServiceIndex.LocalPath;
-        var nupkgFileName = $"{packageId}.{version}.nupkg";
-        var nupkgPath = Path.Combine(feedDirectoryPath, nupkgFileName);
+        var nupkgPath = GetLocalNupkgPath(feed, packageId, version);
 
         if (!File.Exists(nupkgPath))
         {
+            var nupkgFileName = Path.GetFileName(nupkgPath);
             throw new FileNotFoundException(
                 $"Expected nupkg '{nupkgFileName}' was not found in local directory feed '{feed.Name}' at '{feedDirectoryPath}'.",
                 nupkgPath);
@@ -319,6 +355,62 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
 
     private static bool IsLocalDirectoryFeed(FeedDefinition feed) =>
         feed.ServiceIndex.Scheme.Equals("file", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetLocalNupkgPath(FeedDefinition feed, string packageId, string version) =>
+        Path.Combine(feed.ServiceIndex.LocalPath, $"{packageId}.{version}.nupkg");
+
+    private bool IsRemoteFeedDisabled(
+        FeedDefinition feed,
+        PackageRequest request,
+        IReadOnlyList<string> candidateNames,
+        out FeedResolutionDecision decision)
+    {
+        decision = null!;
+        if (IsLocalDirectoryFeed(feed))
+        {
+            return false;
+        }
+
+        var decisionPath = _options.OfflineMode
+            ? "remote-disabled-by-offline-mode"
+            : _options.RemoteFallbackMode == RemoteFallbackMode.Never
+                ? "remote-disabled-by-policy"
+                : null;
+
+        if (decisionPath is null)
+        {
+            return false;
+        }
+
+        decision = FeedResolutionDecision.Failed(
+            request,
+            candidateNames,
+            correlationId: string.Empty,
+            decisionPath: decisionPath,
+            feedUnavailable: false,
+            failureReason: _options.OfflineMode
+                ? "Offline mode is enabled; remote feeds are not contacted."
+                : "Remote fallback mode is Never; remote feeds are not contacted.",
+            selectedFeed: feed.Name);
+
+        return true;
+    }
+
+    private static FeedResolutionDecision CombineFailureDiagnostics(
+        FeedResolutionDecision previous,
+        FeedResolutionDecision current)
+    {
+        if (previous.DecisionPath.Split('+').Contains(current.DecisionPath, StringComparer.Ordinal))
+        {
+            return previous;
+        }
+
+        return current with
+        {
+            DecisionPath = $"{previous.DecisionPath}+{current.DecisionPath}",
+            FailureReason = $"{previous.FailureReason} {current.FailureReason}"
+        };
+    }
 
     private static bool IsDependencyRequest(PackageRequest request) =>
         request.SourceName.StartsWith("dependency-of:", StringComparison.OrdinalIgnoreCase);

@@ -111,18 +111,18 @@ jobs:
       - name: Push preview packages to feedz.io
         shell: bash
         env:
-          FEEDZ_PREVIEW_SOURCE_URL: ${{ vars.FEEDZ_PREVIEW_SOURCE_URL }}
-          FEEDZ_PREVIEW_API_KEY: ${{ secrets.FEEDZ_PREVIEW_API_KEY }}
+          FEEDZ_SOURCE_URL: ${{ vars.FEEDZ_SOURCE_URL }}
+          FEEDZ_API_KEY: ${{ secrets.FEEDZ_API_KEY }}
         run: |
           set -euo pipefail
-          if [[ -z "${FEEDZ_PREVIEW_SOURCE_URL}" || -z "${FEEDZ_PREVIEW_API_KEY}" ]]; then
-            echo "Missing FEEDZ_PREVIEW_SOURCE_URL or FEEDZ_PREVIEW_API_KEY secret."
+          if [[ -z "${FEEDZ_SOURCE_URL}" || -z "${FEEDZ_API_KEY}" ]]; then
+            echo "Missing FEEDZ_SOURCE_URL or FEEDZ_API_KEY secret."
             exit 1
           fi
 
           dotnet nuget push "artifacts/packages/*.nupkg" \
-            --source "${FEEDZ_PREVIEW_SOURCE_URL}" \
-            --api-key "${FEEDZ_PREVIEW_API_KEY}" \
+            --source "${FEEDZ_SOURCE_URL}" \
+            --api-key "${FEEDZ_API_KEY}" \
             --skip-duplicate
 
   publish-nuget:

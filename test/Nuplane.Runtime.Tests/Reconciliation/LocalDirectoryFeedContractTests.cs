@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -5,7 +6,9 @@ using Nuplane.Abstractions;
 using Nuplane.Feeds;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Policy;
+using Nuplane.Feeds.Setup;
 using Nuplane.Feeds.Versioning;
+using Nuplane.Sources.Directory.Builder;
 using Nuplane.Runtime.Tests.TestSupport;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
@@ -76,6 +79,34 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
         Assert.Equal("local-drop", result.FeedName);
         Assert.True(Directory.Exists(result.InstallPath), $"Install path '{result.InstallPath}' should exist on disk.");
     }
+
+    [Fact]
+    public async Task CacheOnlyFeed_ResolvesExactPackage()
+    {
+        NupkgTestBuilder.Create("CachedPlugin", "1.2.3").BuildTo(_tempDir);
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(nuplane =>
+        {
+            nuplane.AddDirectoryFeed("local-cache", _tempDir, feed =>
+            {
+                feed.Role = DirectoryFeedRole.Cache;
+                feed.Watch = false;
+            });
+        });
+
+        using var provider = services.BuildServiceProvider();
+        var resolver = provider.GetRequiredService<IPackageResolver>();
+        var request = new PackageRequest("CachedPlugin", "1.2.3", "local-cache", PackageUpdatePolicy.Exact, "test-source");
+
+        var result = await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal("CachedPlugin", result.Id);
+        Assert.Equal("local-cache", result.FeedName);
+        Assert.True(Directory.Exists(result.InstallPath), $"Install path '{result.InstallPath}' should exist on disk.");
+    }
+
 
     [Fact]
     public async Task Resolve_WithNoFeeds_ThrowsForNoEligibleFeed()

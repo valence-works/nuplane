@@ -109,6 +109,50 @@ public sealed class RemoteFeedDownloadContractTests : IAsyncLifetime
         Assert.Equal(1, server.PackageDownloads);
     }
 
+    [Fact]
+    public async Task AcquireAsync_SameFeedAfterInstallDirectoryRemoved_ReusesServiceIndexResource()
+    {
+        var packageBytes = NupkgTestBuilder.Create("MyPlugin", "1.0.0").Build();
+        await using var server = new TestNuGetFeedServer("MyPlugin", "1.0.0", packageBytes);
+
+        var options = new FeedResolutionOptions { PackageInstallRoot = Path.Combine(_tempDir, "installed-cache") };
+        var acquirer = new NuGetRemotePackageAcquirer(new OptionsWrapper<FeedResolutionOptions>(options));
+        var feed = new FeedDefinition("remote-feed", server.ServiceIndexUri);
+
+        var first = await acquirer.AcquireAsync(feed, "MyPlugin", "1.0.0", CancellationToken.None);
+        Directory.Delete(first, recursive: true);
+
+        var second = await acquirer.AcquireAsync(feed, "MyPlugin", "1.0.0", CancellationToken.None);
+
+        Assert.True(File.Exists(Path.Combine(second, "MyPlugin.nuspec")));
+        Assert.Equal(1, server.ServiceIndexRequests);
+        Assert.Equal(2, server.PackageDownloads);
+    }
+
+    [Fact]
+    public async Task AcquireAsync_PackageBaseAddressCacheDisabled_RefetchesServiceIndex()
+    {
+        var packageBytes = NupkgTestBuilder.Create("MyPlugin", "1.0.0").Build();
+        await using var server = new TestNuGetFeedServer("MyPlugin", "1.0.0", packageBytes);
+
+        var options = new FeedResolutionOptions
+        {
+            PackageInstallRoot = Path.Combine(_tempDir, "installed-cache-disabled"),
+            PackageBaseAddressCacheTtl = TimeSpan.Zero
+        };
+        var acquirer = new NuGetRemotePackageAcquirer(new OptionsWrapper<FeedResolutionOptions>(options));
+        var feed = new FeedDefinition("remote-feed", server.ServiceIndexUri);
+
+        var first = await acquirer.AcquireAsync(feed, "MyPlugin", "1.0.0", CancellationToken.None);
+        Directory.Delete(first, recursive: true);
+
+        var second = await acquirer.AcquireAsync(feed, "MyPlugin", "1.0.0", CancellationToken.None);
+
+        Assert.True(File.Exists(Path.Combine(second, "MyPlugin.nuspec")));
+        Assert.Equal(2, server.ServiceIndexRequests);
+        Assert.Equal(2, server.PackageDownloads);
+    }
+
     private static IFeedVersionEnumerator StubVersionEnumerator(params string[] versions)
     {
         var enumerator = Substitute.For<IFeedVersionEnumerator>();

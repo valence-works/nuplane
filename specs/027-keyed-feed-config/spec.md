@@ -1,8 +1,8 @@
 # Feature Specification: Key-Based Feed Setup Configuration
 
-**Feature Branch**: `027-keyed-feed-config`  
-**Created**: 2026-05-18  
-**Status**: Draft  
+**Feature Branch**: `027-keyed-feed-config`
+**Created**: 2026-05-18
+**Status**: Draft
 **Input**: User description: "Change Nuplane feed setup configuration from array-based feeds to key-based feeds, while preserving backwards compatibility with the current array format."
 
 ## Problem

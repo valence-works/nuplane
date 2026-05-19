@@ -1,6 +1,6 @@
 # Research: Key-Based Feed Setup Configuration
 
-**Feature**: 027-keyed-feed-config  
+**Feature**: 027-keyed-feed-config
 **Date**: 2026-05-18
 
 ## R-001: Feed Section Shape Detection

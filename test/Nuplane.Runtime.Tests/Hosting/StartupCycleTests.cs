@@ -116,6 +116,98 @@ public sealed class StartupCycleTests
     }
 
     [Fact]
+    public async Task StartupCycleFailurePolicyFailHost_WhenStartupCompletesDegraded_ThrowsStartupException()
+    {
+        var service = new DegradedStartupReconciliationService();
+        var (dispatcher, scheduler, startup) = CreateHostedServices(service);
+
+        await dispatcher.StartAsync(CancellationToken.None);
+
+        try
+        {
+            var exception = await Assert.ThrowsAsync<NuplaneStartupReconciliationException>(
+                () => startup.StartAsync(CancellationToken.None));
+
+            Assert.Contains("pkg-failed", exception.FailedPackageIds);
+            Assert.False(string.IsNullOrWhiteSpace(exception.CorrelationId));
+            Assert.NotNull(exception.RunResult);
+        }
+        finally
+        {
+            await StopHostedServicesAsync(scheduler, dispatcher);
+        }
+    }
+
+    [Fact]
+    public async Task StartupCycleFailurePolicyStartDegraded_WhenStartupCompletesDegraded_DoesNotThrow()
+    {
+        var service = new DegradedStartupReconciliationService();
+        var options = new ReconciliationOptions
+        {
+            StartupFailurePolicy = StartupFailurePolicy.StartDegraded
+        };
+        var (dispatcher, scheduler, startup) = CreateHostedServices(service, options);
+
+        await dispatcher.StartAsync(CancellationToken.None);
+
+        try
+        {
+            await startup.StartAsync(CancellationToken.None);
+        }
+        finally
+        {
+            await StopHostedServicesAsync(scheduler, dispatcher);
+        }
+    }
+
+    [Fact]
+    public async Task StartupCycleFailurePolicyUseLastKnownGood_WhenStartupCompletesDegraded_Throws()
+    {
+        var service = new DegradedStartupReconciliationService();
+        var options = new ReconciliationOptions
+        {
+            StartupFailurePolicy = StartupFailurePolicy.UseLastKnownGood
+        };
+        var (dispatcher, scheduler, startup) = CreateHostedServices(service, options);
+
+        await dispatcher.StartAsync(CancellationToken.None);
+
+        try
+        {
+            var exception = await Assert.ThrowsAsync<NuplaneStartupReconciliationException>(
+                () => startup.StartAsync(CancellationToken.None));
+
+            Assert.Contains("pkg-failed", exception.FailedPackageIds);
+        }
+        finally
+        {
+            await StopHostedServicesAsync(scheduler, dispatcher);
+        }
+    }
+
+    [Fact]
+    public async Task StartupCycleFailurePolicyUnknownValue_WhenStartupCompletesDegraded_ThrowsNotSupported()
+    {
+        var service = new DegradedStartupReconciliationService();
+        var options = new ReconciliationOptions
+        {
+            StartupFailurePolicy = (StartupFailurePolicy)999
+        };
+        var (dispatcher, scheduler, startup) = CreateHostedServices(service, options);
+
+        await dispatcher.StartAsync(CancellationToken.None);
+
+        try
+        {
+            await Assert.ThrowsAsync<NotSupportedException>(() => startup.StartAsync(CancellationToken.None));
+        }
+        finally
+        {
+            await StopHostedServicesAsync(scheduler, dispatcher);
+        }
+    }
+
+    [Fact]
     public void NoStartupCycle_WhenAutomaticReconciliationDisabled()
     {
         var services = new ServiceCollection();
@@ -170,6 +262,7 @@ public sealed class StartupCycleTests
                 NullLogger<ReconciliationHostedService>.Instance),
             new(
                 queue,
+                new OptionsWrapper<ReconciliationOptions>(options),
                 NullLogger<NuplaneStartupHostedService>.Instance));
     }
 
@@ -238,6 +331,12 @@ public sealed class StartupCycleTests
 
             return new(false, EmptyChangeSet, [], false);
         }
+    }
+
+    private sealed class DegradedStartupReconciliationService : IReconciliationService
+    {
+        public Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken) =>
+            Task.FromResult(new ReconciliationRunResult(false, EmptyChangeSet, ["pkg-failed"], true));
     }
 
     private sealed class FailsFirstReconciliationService : IReconciliationService

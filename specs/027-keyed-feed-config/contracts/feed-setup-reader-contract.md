@@ -9,7 +9,7 @@ public static class NuplaneFeedSetupDeclarationReader
 }
 ```
 
-**Location**: `src/Nuplane/Feeds/Setup/`  
+**Location**: `src/Nuplane/Feeds/Setup/`
 **Consumers**:
 - `NuplaneFeedSetupConfiguration` for remote feeds
 - `NuplaneDirectoryFeedSetupConfiguration` for directory feeds

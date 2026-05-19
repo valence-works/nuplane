@@ -50,6 +50,15 @@ public sealed class FeedResolutionOptionsValidatorTests
     }
 
     [Fact]
+    public void Validate_PackageBaseAddressCacheTtl_Negative_Fails()
+    {
+        var options = new FeedResolutionOptions { PackageBaseAddressCacheTtl = TimeSpan.FromSeconds(-1) };
+        var result = _validator.Validate(null, options);
+        Assert.True(result.Failed);
+        Assert.Contains("PackageBaseAddressCacheTtl", result.FailureMessage);
+    }
+
+    [Fact]
     public void Validate_IncludePatterns_ValidNuGetRange_Succeeds()
     {
         var evaluator = Substitute.For<IVersionRangeEvaluator>();

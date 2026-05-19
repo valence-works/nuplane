@@ -24,6 +24,12 @@ public sealed class ReconciliationOptions
     public bool EnableSingleFlight { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets how startup reconciliation failures affect host startup.
+    /// Defaults to failing host startup when required startup reconciliation fails.
+    /// </summary>
+    public StartupFailurePolicy StartupFailurePolicy { get; set; } = StartupFailurePolicy.FailHost;
+
+    /// <summary>
     /// Gets or sets the maximum number of retry attempts for transient failures during reconciliation.
     /// </summary>
     public int MaxRetryAttempts { get; set; } = 3;

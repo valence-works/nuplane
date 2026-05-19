@@ -40,6 +40,7 @@ public static class NuplaneDirectoryFeedSetupConfiguration
 
             builder.AddDirectoryFeed(feedName, directoryPath, feed =>
             {
+                feed.Role = feedOptions.Directory.Role;
                 feed.Watch = feedOptions.Directory.Watch;
                 feed.DebounceWindow = feedOptions.Directory.DebounceWindow;
 

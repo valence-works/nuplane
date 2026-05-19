@@ -28,6 +28,11 @@ internal sealed class FeedResolutionOptionsValidator(
             errors.Add("FeedResolution VersionCacheTtl must be non-negative. Use TimeSpan.Zero to disable caching.");
         }
 
+        if (options.PackageBaseAddressCacheTtl < TimeSpan.Zero)
+        {
+            errors.Add("FeedResolution PackageBaseAddressCacheTtl must be non-negative. Use TimeSpan.Zero to disable caching.");
+        }
+
         ValidateIncludePatternVersionRanges(errors);
 
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
