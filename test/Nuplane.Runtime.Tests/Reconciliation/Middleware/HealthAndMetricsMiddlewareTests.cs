@@ -1,6 +1,7 @@
 using Nuplane.Abstractions;
 using Nuplane.Events;
 using Nuplane.Health;
+using Nuplane.Hosting;
 using Nuplane.Observability;
 using Nuplane.Reconciliation.Middleware;
 using Nuplane.Reconciliation.Models;
@@ -61,15 +62,30 @@ public sealed class HealthAndMetricsMiddlewareTests
         Assert.False(ctx.Result!.IsDegraded);
     }
 
+    [Fact]
+    public async Task InvokeAsync_HealthyCycle_ClearsStartupRecoveryState()
+    {
+        var changeSet = new PackageChangeSet([], [], [], "test", DateTimeOffset.UtcNow);
+        var startupRecoveryState = new StartupRecoveryState();
+        startupRecoveryState.MarkRecovered("startup-correlation", packageCount: 1);
+
+        var ctx = Ctx(changeSet);
+        await Build(startupRecoveryState: startupRecoveryState).InvokeAsync(ctx, () => Task.CompletedTask);
+
+        Assert.Empty(startupRecoveryState.GetContribution().DegradedReasons);
+    }
+
     private static HealthAndMetricsMiddleware Build(
         IObserverEventDispatcher? dispatcher = null,
-        IReconciliationHealthEvaluator? evaluator = null) =>
+        IReconciliationHealthEvaluator? evaluator = null,
+        StartupRecoveryState? startupRecoveryState = null) =>
         new(evaluator ?? new FakeHealthEvaluator(false),
             dispatcher ?? new NullDispatcher(),
             new NullLogger(),
             new(new()),
             new(), 
-            new());
+            new(),
+            startupRecoveryState: startupRecoveryState);
 
     private static ReconciliationCycleContext Ctx(PackageChangeSet changeSet)
     {

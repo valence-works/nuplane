@@ -20,7 +20,8 @@ namespace Nuplane.Hosting;
 internal sealed class NuplaneStartupHostedService(
     IReconciliationTriggerIngress triggerIngress,
     IOptions<ReconciliationOptions> options,
-    ILogger<NuplaneStartupHostedService> logger)
+    ILogger<NuplaneStartupHostedService> logger,
+    ILastKnownGoodStartupRecoveryService? lastKnownGoodStartupRecovery = null)
     : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -40,10 +41,25 @@ internal sealed class NuplaneStartupHostedService(
                     throw CreateStartupReconciliationException(correlationId, result);
 
                 case StartupFailurePolicy.UseLastKnownGood:
-                    logger.LogError(
-                        "StartupFailurePolicy.UseLastKnownGood is not implemented [CorrelationId={CorrelationId}]; failing host startup instead of starting degraded",
-                        correlationId);
-                    throw CreateStartupReconciliationException(correlationId, result);
+                    var recovery = lastKnownGoodStartupRecovery is null
+                        ? LastKnownGoodStartupRecoveryResult.Failed(result.FailedPackages, "last-known-good-recovery-unavailable")
+                        : await lastKnownGoodStartupRecovery.TryRecoverAsync(correlationId, cancellationToken);
+
+                    if (!recovery.Succeeded)
+                    {
+                        logger.LogError(
+                            "StartupFailurePolicy.UseLastKnownGood could not recover startup [CorrelationId={CorrelationId}, Reason={Reason}, FailedPackages={FailedPackages}]",
+                            correlationId,
+                            recovery.Reason,
+                            string.Join(", ", recovery.FailedPackageIds));
+                        throw CreateStartupReconciliationException(correlationId, result);
+                    }
+
+                    logger.LogWarning(
+                        "Startup reconciliation completed degraded, but recovered from last-known-good active packages [CorrelationId={CorrelationId}, RecoveredPackageCount={RecoveredPackageCount}]",
+                        correlationId,
+                        recovery.RecoveredPackages.Count);
+                    break;
 
                 case StartupFailurePolicy.StartDegraded:
                     logger.LogWarning(
