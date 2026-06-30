@@ -49,6 +49,22 @@ public sealed class PackageContentTests : IDisposable
     }
 
     [Fact]
+    public void TryReadFile_RejectsPathTraversalAndAbsolutePaths()
+    {
+        // A secret living next to (outside) the package root must never be reachable via traversal.
+        var secret = Path.Combine(_root, "outside-secret.txt");
+        File.WriteAllText(secret, "top-secret");
+        var packageDir = Path.Combine(_root, "package");
+        Directory.CreateDirectory(packageDir);
+        File.WriteAllText(Path.Combine(packageDir, "manifest.json"), "ok");
+
+        Assert.Equal("ok", AsText(PackageContent.TryReadFile(packageDir, "manifest.json")));
+        Assert.Null(PackageContent.TryReadFile(packageDir, "../outside-secret.txt"));
+        Assert.Null(PackageContent.TryReadFile(packageDir, "..\\outside-secret.txt"));
+        Assert.Null(PackageContent.TryReadFile(packageDir, secret));
+    }
+
+    [Fact]
     public void TryFindByExtension_FindsRootFileInDirectory()
     {
         File.WriteAllText(Path.Combine(_root, "Acme.Package.nuspec"), "<package/>");
