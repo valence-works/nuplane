@@ -14,18 +14,32 @@ public static class PackageContent
     /// installed at <paramref name="installPath"/>.
     /// </summary>
     /// <param name="installPath">The package install path — either an extracted directory or a <c>.nupkg</c> file.</param>
-    /// <param name="relativePath">The forward-slash or backslash separated path of the file within the package.</param>
-    /// <returns>The file bytes, or <see langword="null"/> when the file does not exist or the content cannot be read.</returns>
+    /// <param name="relativePath">
+    /// The forward-slash or backslash separated path of the file within the package. Absolute paths and
+    /// <c>..</c> traversal are rejected — only content inside the package can be read.
+    /// </param>
+    /// <returns>The file bytes, or <see langword="null"/> when the file does not exist, escapes the package root, or cannot be read.</returns>
     public static byte[]? TryReadFile(string installPath, string relativePath)
     {
         if (string.IsNullOrWhiteSpace(installPath) || string.IsNullOrWhiteSpace(relativePath))
+            return null;
+
+        // Defense in depth: never let a relative path escape the package root (absolute paths, drive roots,
+        // or ".." traversal). Reading a file "from a package" is only ever a read of content inside it.
+        if (EscapesRoot(relativePath))
             return null;
 
         try
         {
             if (Directory.Exists(installPath))
             {
-                var path = Path.Combine(installPath, ToOsRelativePath(relativePath));
+                var root = Path.GetFullPath(installPath);
+                var path = Path.GetFullPath(Path.Combine(root, ToOsRelativePath(relativePath)));
+
+                // Reject anything that resolves outside the package root even after normalization.
+                if (!path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                    return null;
+
                 return File.Exists(path) ? File.ReadAllBytes(path) : null;
             }
 
@@ -96,6 +110,13 @@ public static class PackageContent
         using var memory = new MemoryStream();
         entryStream.CopyTo(memory);
         return memory.ToArray();
+    }
+
+    private static bool EscapesRoot(string relativePath)
+    {
+        var normalized = relativePath.Replace('\\', '/');
+        return Path.IsPathRooted(normalized)
+            || normalized.Split('/').Any(segment => segment == "..");
     }
 
     private static bool IsNupkg(string path) =>
