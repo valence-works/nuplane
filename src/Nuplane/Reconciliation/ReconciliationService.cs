@@ -3,6 +3,7 @@ using Nuplane.Abstractions;
 using Nuplane.Events;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Health;
+using Nuplane.Hosting;
 using Nuplane.Observability;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Middleware;
@@ -48,6 +49,7 @@ public sealed class ReconciliationService : IReconciliationService
     /// <param name="failureRecorder">The failure recorder.</param>
     /// <param name="observationDegradationTracker">The observation degradation tracker.</param>
     /// <param name="cycleFailureContributor">Optional contributor of per-cycle failure information from external modules.</param>
+    /// <param name="startupRecoveryState">Optional startup recovery state to clear after a healthy cycle.</param>
     public ReconciliationService(
         IEnumerable<IDesiredPackageSource> sources,
         IDesiredStateAggregator desiredStateAggregator,
@@ -67,7 +69,8 @@ public sealed class ReconciliationService : IReconciliationService
         IPackageCleanupService packageCleanupService,
         IFailureRecorder failureRecorder,
         ObservationDegradationTracker observationDegradationTracker,
-        ICycleFailureContributor? cycleFailureContributor = null)
+        ICycleFailureContributor? cycleFailureContributor = null,
+        StartupRecoveryState? startupRecoveryState = null)
     {
         var sourcesList = (sources ?? throw new ArgumentNullException(nameof(sources))).ToArray();
         var reconciliationOpts = (reconciliationOptions ?? throw new ArgumentNullException(nameof(reconciliationOptions))).Value;
@@ -104,7 +107,7 @@ public sealed class ReconciliationService : IReconciliationService
         _pipeline.Use(new DiffAndChangeEventMiddleware(diffEngine, dryRun, retry, storeReg, eventDispatcher, metricsInstance));
         _pipeline.Use(new TransactionExecutionMiddleware(applyExecutor, diffEngine, eventDispatcher));
         _pipeline.Use(new CleanupMiddleware(diffEngine, storeReg, cleanupService, cleanupOpts, metricsInstance));
-        _pipeline.Use(new HealthAndMetricsMiddleware(healthEval, eventDispatcher, loggerInstance, metricsInstance, feedResOpts, observationDegradationTracker, cycleFailureContributor));
+        _pipeline.Use(new HealthAndMetricsMiddleware(healthEval, eventDispatcher, loggerInstance, metricsInstance, feedResOpts, observationDegradationTracker, cycleFailureContributor, startupRecoveryState));
     }
 
     /// <inheritdoc />

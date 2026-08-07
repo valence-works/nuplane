@@ -2,6 +2,7 @@ using Nuplane.Abstractions;
 using Nuplane.Events;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Health;
+using Nuplane.Hosting;
 using Nuplane.Observability;
 
 namespace Nuplane.Reconciliation.Middleware;
@@ -13,7 +14,8 @@ internal sealed class HealthAndMetricsMiddleware(
     ReconciliationMetrics metrics,
     FeedResolutionOptions feedResolutionOptions,
     ObservationDegradationTracker observationDegradationTracker,
-    ICycleFailureContributor? cycleFailureContributor = null) : IReconciliationMiddleware
+    ICycleFailureContributor? cycleFailureContributor = null,
+    StartupRecoveryState? startupRecoveryState = null) : IReconciliationMiddleware
 {
     private bool _previouslyIdle;
 
@@ -64,6 +66,11 @@ internal sealed class HealthAndMetricsMiddleware(
             context.LockFailureCount,
             context.CleanupFailureCount,
             SourceOutages: context.SourceOutageCount + (observationDegradationTracker?.DegradedCount ?? 0)));
+        if (!isDegraded)
+        {
+            startupRecoveryState?.Clear();
+        }
+
         var cycleDuration = DateTimeOffset.UtcNow - context.CycleStartedAt;
         var totalFailureCount = applyResult.FailedPackageIds.Count + loaderFailedIds.Count;
         metrics.RecordCycle(changeSet, totalFailureCount, cycleDuration, context.MergedActive!.Count);

@@ -16,7 +16,7 @@ public enum StartupFailurePolicy
     StartDegraded = 1,
 
     /// <summary>
-    /// Reserved for a future policy that starts from validated last-known-good state.
+    /// Start from validated last-known-good active package state when startup reconciliation is degraded.
     /// </summary>
     UseLastKnownGood = 2
 }

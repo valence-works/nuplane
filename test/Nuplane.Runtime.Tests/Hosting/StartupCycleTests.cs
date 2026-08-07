@@ -3,12 +3,15 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Events;
 using Nuplane.Hosting;
 using Nuplane.Observability;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Convergence;
 using Nuplane.Reconciliation.Models;
+using Nuplane.Runtime.Tests.TestSupport;
+using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Hosting;
 
@@ -186,6 +189,124 @@ public sealed class StartupCycleTests
     }
 
     [Fact]
+    public async Task StartupCycleFailurePolicyUseLastKnownGood_WhenValidActiveLkgExists_PublishesRecoveredPackages()
+    {
+        var service = new DegradedStartupReconciliationService();
+        var options = new ReconciliationOptions
+        {
+            StartupFailurePolicy = StartupFailurePolicy.UseLastKnownGood
+        };
+        using var installRoot = new TempDirectory();
+        var (store, packageInstallPath) = await CreateValidLastKnownGoodStoreAsync(installRoot);
+        var dispatcher = new RecordingObserverDispatcher();
+        var startupRecoveryState = new StartupRecoveryState();
+        var recovery = new LastKnownGoodStartupRecoveryService(store, dispatcher, startupRecoveryState);
+        var (queueDispatcher, scheduler, startup) = CreateHostedServices(service, options, recovery);
+
+        await queueDispatcher.StartAsync(CancellationToken.None);
+
+        try
+        {
+            await startup.StartAsync(CancellationToken.None);
+
+            var recovered = Assert.Single(dispatcher.ReconciledPackages);
+            Assert.Equal("pkg-a", recovered.Id);
+            Assert.Equal(packageInstallPath, recovered.InstallPath);
+
+            var contribution = startupRecoveryState.GetContribution();
+            Assert.Contains("startup-lkg-recovery-active:1", contribution.DegradedReasons);
+        }
+        finally
+        {
+            await StopHostedServicesAsync(scheduler, queueDispatcher);
+        }
+    }
+
+    [Fact]
+    public async Task LastKnownGoodRecovery_WhenRecoveredLoadFails_ReturnsFailure()
+    {
+        using var installRoot = new TempDirectory();
+        var (store, _) = await CreateValidLastKnownGoodStoreAsync(installRoot);
+        var loadFailures = new RecordingCycleFailureContributor();
+        var dispatcher = new RecordingObserverDispatcher((changeSet, packages) =>
+        {
+            foreach (var package in packages)
+            {
+                loadFailures.RecordFailure(changeSet.CorrelationId, package.Id);
+            }
+        });
+        var startupRecoveryState = new StartupRecoveryState();
+        var recovery = new LastKnownGoodStartupRecoveryService(store, dispatcher, startupRecoveryState, [loadFailures]);
+
+        var result = await recovery.TryRecoverAsync("corr-recovery", CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("last-known-good-load-failed", result.Reason);
+        Assert.Equal(["pkg-a"], result.FailedPackageIds);
+        Assert.Contains("startup-lkg-recovery-failed:last-known-good-load-failed", startupRecoveryState.GetContribution().DegradedReasons);
+    }
+
+    [Fact]
+    public async Task LastKnownGoodRecovery_WhenStaleGraphReferencesMissingPackage_IgnoresStaleGraph()
+    {
+        using var installRoot = new TempDirectory();
+        var staleGraph = new GraphActivationRecord(
+            "graph-a",
+            "gen-stale",
+            ["missing-pkg"],
+            ["missing-pkg"],
+            DateTimeOffset.UtcNow,
+            "corr-seed",
+            GraphActivationStatus.Stale,
+            NodeVersionsByPackageId: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["missing-pkg"] = "9.0.0"
+            });
+        var (store, _) = await CreateValidLastKnownGoodStoreAsync(
+            installRoot,
+            new Dictionary<string, GraphActivationRecord>(StringComparer.OrdinalIgnoreCase)
+            {
+                [staleGraph.GraphId] = staleGraph
+            });
+        var recovery = new LastKnownGoodStartupRecoveryService(store, new RecordingObserverDispatcher(), new StartupRecoveryState());
+
+        var result = await recovery.TryRecoverAsync("corr-recovery", CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task LastKnownGoodRecovery_WhenActiveGraphVersionMismatches_ReturnsFailure()
+    {
+        using var installRoot = new TempDirectory();
+        var activeGraph = new GraphActivationRecord(
+            "graph-a",
+            "gen-active",
+            ["pkg-a"],
+            ["pkg-a"],
+            DateTimeOffset.UtcNow,
+            "corr-seed",
+            GraphActivationStatus.Active,
+            NodeVersionsByPackageId: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pkg-a"] = "2.0.0"
+            });
+        var (store, _) = await CreateValidLastKnownGoodStoreAsync(
+            installRoot,
+            new Dictionary<string, GraphActivationRecord>(StringComparer.OrdinalIgnoreCase)
+            {
+                [activeGraph.GraphId] = activeGraph
+            });
+        var recovery = new LastKnownGoodStartupRecoveryService(store, new RecordingObserverDispatcher(), new StartupRecoveryState());
+
+        var result = await recovery.TryRecoverAsync("corr-recovery", CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("last-known-good-invalid", result.Reason);
+        Assert.Equal(["pkg-a"], result.FailedPackageIds);
+    }
+
+    [Fact]
     public async Task StartupCycleFailurePolicyUnknownValue_WhenStartupCompletesDegraded_ThrowsNotSupported()
     {
         var service = new DegradedStartupReconciliationService();
@@ -238,7 +359,8 @@ public sealed class StartupCycleTests
 
     private static (ReconciliationTriggerDispatcherHostedService Dispatcher, ReconciliationHostedService Scheduler, NuplaneStartupHostedService Startup) CreateHostedServices(
         IReconciliationService reconciliationService,
-        ReconciliationOptions? options = null)
+        ReconciliationOptions? options = null,
+        ILastKnownGoodStartupRecoveryService? lastKnownGoodStartupRecovery = null)
     {
         options ??= new()
         {
@@ -263,7 +385,43 @@ public sealed class StartupCycleTests
             new(
                 queue,
                 new OptionsWrapper<ReconciliationOptions>(options),
-                NullLogger<NuplaneStartupHostedService>.Instance));
+                NullLogger<NuplaneStartupHostedService>.Instance,
+                lastKnownGoodStartupRecovery));
+    }
+
+    private static async Task<(StoreRegistry Store, string PackageInstallPath)> CreateValidLastKnownGoodStoreAsync(
+        TempDirectory installRoot,
+        IReadOnlyDictionary<string, GraphActivationRecord>? activeGraphs = null)
+    {
+        var packageInstallPath = Path.Combine(installRoot.Path, "pkg-a", "1.0.0");
+        Directory.CreateDirectory(packageInstallPath);
+
+        var store = new StoreRegistry(new StoreStateSerializer(), stateFilePath: null);
+        await store.PersistActiveVersionsAsync(
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pkg-a"] = "1.0.0"
+            },
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pkg-a"] = "1.0.0"
+            },
+            "corr-seed",
+            CancellationToken.None,
+            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pkg-a"] = new(
+                    "pkg-a",
+                    "1.0.0",
+                    "local-cache",
+                    "desired-source",
+                    packageInstallPath,
+                    DateTimeOffset.UtcNow,
+                    "corr-seed")
+            },
+            activeGraphs);
+
+        return (store, packageInstallPath);
     }
 
     private static async Task StopHostedServicesAsync(ReconciliationHostedService scheduler, ReconciliationTriggerDispatcherHostedService dispatcher)
@@ -362,6 +520,61 @@ public sealed class StartupCycleTests
             }
 
             return Task.FromResult(new ReconciliationRunResult(false, EmptyChangeSet, [], false));
+        }
+    }
+
+    private sealed class RecordingCycleFailureContributor : ICycleFailureContributor
+    {
+        private readonly Dictionary<string, List<string>> _failedPackageIdsByCorrelation = new(StringComparer.OrdinalIgnoreCase);
+
+        public void RecordFailure(string correlationId, string packageId)
+        {
+            if (!_failedPackageIdsByCorrelation.TryGetValue(correlationId, out var packageIds))
+            {
+                packageIds = [];
+                _failedPackageIdsByCorrelation[correlationId] = packageIds;
+            }
+
+            packageIds.Add(packageId);
+        }
+
+        public IReadOnlyList<string> TakeFailedPackageIds(string correlationId)
+        {
+            if (!_failedPackageIdsByCorrelation.Remove(correlationId, out var packageIds))
+            {
+                return [];
+            }
+
+            return packageIds
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static id => id, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+    }
+
+    private sealed class RecordingObserverDispatcher(
+        Action<PackageChangeSet, IReadOnlyList<ResolvedPackage>>? onReconciled = null) : IObserverEventDispatcher
+    {
+        public List<ResolvedPackage> ReconciledPackages { get; } = [];
+
+        public Task PublishChangingAsync(PackageChangeSet changeSet, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task PublishChangedAsync(PackageChangeSet changeSet, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task NotifyPackageFailedAsync(
+            string packageId,
+            Exception exception,
+            string correlationId,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task PublishReconciledAsync(
+            PackageChangeSet changeSet,
+            IReadOnlyList<ResolvedPackage> appliedPackages,
+            CancellationToken cancellationToken)
+        {
+            onReconciled?.Invoke(changeSet, appliedPackages);
+            ReconciledPackages.AddRange(appliedPackages);
+            return Task.CompletedTask;
         }
     }
 

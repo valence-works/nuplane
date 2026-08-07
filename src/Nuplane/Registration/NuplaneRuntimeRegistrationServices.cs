@@ -52,9 +52,12 @@ public static class NuplaneRuntimeRegistrationServices
         services.AddSingleton<ReconciliationRetryPolicy>();
         services.AddSingleton<IReconciliationRetryPolicy>(sp => sp.GetRequiredService<ReconciliationRetryPolicy>());
         services.TryAddSingleton<ObservationDegradationTracker>();
+        services.TryAddSingleton<StartupRecoveryState>();
+        services.TryAddSingleton<ILastKnownGoodStartupRecoveryService, LastKnownGoodStartupRecoveryService>();
         services.AddSingleton<ActivePackageCatalog>();
         services.AddSingleton<IActivePackageCatalog>(sp => sp.GetRequiredService<ActivePackageCatalog>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, PackageCatalogOperationalStateContributor>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, StartupRecoveryOperationalStateContributor>());
         services.AddSingleton<ReconciliationService>();
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
     }
