@@ -17,6 +17,12 @@ public static class NuplaneServiceCollectionExtensions
     /// <c>StoreRegistry</c> are bound directly when present, while builder-only concepts are
     /// translated from the <c>Setup</c> section.
     /// </summary>
+    /// <remarks>
+    /// Where both layers express the same reconciliation setting, the more specific
+    /// <c>Reconciliation</c> section wins: an explicitly present
+    /// <c>Reconciliation:EnableAutomaticReconciliation</c> or <c>Reconciliation:PollInterval</c>
+    /// overrides the <c>Setup:AutomaticReconciliation</c> / <c>Setup:PollInterval</c> shorthand.
+    /// </remarks>
     public static IServiceCollection AddNuplane(
         this IServiceCollection services,
         IConfiguration configuration) =>
@@ -35,11 +41,12 @@ public static class NuplaneServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         var setupSection = NuplaneSetupConfigurationServices.GetSetupSectionOrSelf(configuration);
+        var reconciliationSection = NuplaneSetupConfigurationServices.GetReconciliationSectionOrSelf(configuration);
 
         return services.AddNuplane(builder =>
         {
             NuplaneOptionsRegistrationServices.BindConfiguredOptions(builder.Services, configuration);
-            NuplaneSetupConfigurationServices.ApplySetupConfiguration(builder, setupSection);
+            NuplaneSetupConfigurationServices.ApplySetupConfiguration(builder, setupSection, reconciliationSection);
             configure?.Invoke(builder);
         });
     }
