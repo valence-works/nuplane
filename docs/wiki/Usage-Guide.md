@@ -97,6 +97,23 @@ versions are matched in normalized form. A `.nupkg` written by `dotnet restore` 
 file name therefore still satisfies a dependency that declares the canonical identifier, including
 on case-sensitive file systems such as those inside Linux containers.
 
+The directory is only ever read. Packages resolved from it are extracted under
+`Nuplane:FeedResolution:PackageInstallRoot` — at
+`{PackageInstallRoot}/{feedName}/{packageId}/{version}` — the same layout remote feeds use, so a
+directory feed can be baked into a container image or mounted read-only:
+
+```bash
+docker run --read-only \
+  -v "$(pwd)/packages:/app/packages:ro" \
+  -v nuplane-data:/var/lib/nuplane \
+  -e Nuplane__FeedResolution__PackageInstallRoot=/var/lib/nuplane/packages \
+  your-registry/nuplane-host:latest
+```
+
+Only `PackageInstallRoot` (and the store state file path) has to be writable. Earlier versions
+extracted into a `.installed/` subdirectory of the feed directory; hosts upgrading from those
+versions can delete that directory, and packages are re-extracted once under the install root.
+
 ## Code-driven adoption
 
 - **Applicability:** `Core`

@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.IO.Compression;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
@@ -348,8 +347,11 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
 
     /// <summary>
     /// Resolves the install path for a package from the specified feed.
-    /// Local directory feeds extract the <c>.nupkg</c> into a stable install directory;
-    /// remote feeds are downloaded and extracted via the configured remote package acquirer.
+    /// Local directory feeds extract the <c>.nupkg</c> into a stable install directory under the
+    /// configured package install root — never inside the feed directory, which is only read — so a
+    /// feed that just supplies <c>.nupkg</c> files can be mounted read-only.
+    /// Remote feeds are downloaded and extracted under the same root via the configured remote
+    /// package acquirer.
     /// </summary>
     /// <param name="feed">The feed the package was resolved from.</param>
     /// <param name="packageId">The requested package identifier.</param>
@@ -380,26 +382,25 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                 Path.Combine(feedDirectoryPath, nupkgFileName));
         }
 
-        var nupkgPath = packageFile.Value.FilePath;
-
         // Key the install directory off the identifier as spelled on disk so that requests for the
         // same package under different casing share one extraction.
-        var installDir = Path.Combine(feedDirectoryPath, ".installed", packageFile.Value.PackageId, version);
-        var completionMarkerPath = Path.Combine(installDir, ".nuplane-ready");
+        var installRoot = PackageInstallStore.ResolveInstallRoot(_options);
+        var installDirectory = PackageInstallStore.GetInstallDirectory(
+            installRoot,
+            feed.Name,
+            packageFile.Value.PackageId,
+            version);
 
-        if (!File.Exists(completionMarkerPath))
+        if (!PackageInstallStore.IsInstalled(installDirectory))
         {
-            if (Directory.Exists(installDir))
-            {
-                Directory.Delete(installDir, recursive: true);
-            }
-
-            Directory.CreateDirectory(installDir);
-            ZipFile.ExtractToDirectory(nupkgPath, installDir, overwriteFiles: true);
-            await File.WriteAllTextAsync(completionMarkerPath, string.Empty, cancellationToken);
+            await PackageInstallStore.InstallAsync(
+                installRoot,
+                installDirectory,
+                packageFile.Value.FilePath,
+                cancellationToken);
         }
 
-        return installDir;
+        return installDirectory;
     }
 
     private static bool IsLocalDirectoryFeed(FeedDefinition feed) =>
