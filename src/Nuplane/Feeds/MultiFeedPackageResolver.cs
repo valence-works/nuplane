@@ -114,13 +114,24 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     enumeratedVersionCount: selectedVersion.EnumeratedCount,
                     cacheHit: selectedVersion.CacheHit), seenFailureKeys);
                 _decisions[request.Id] = lastFailure;
+
+                if (ShouldStopAfterCandidateFailure(request))
+                {
+                    break;
+                }
+
                 continue;
             }
 
             string installPath;
             try
             {
-                installPath = await ResolveInstallPathAsync(candidate, request.Id, selectedVersion.Version!, cancellationToken);
+                installPath = await ResolveInstallPathAsync(
+                    candidate,
+                    request.Id,
+                    selectedVersion.Version!,
+                    selectedVersion.LocalPackageFile,
+                    cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -136,10 +147,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     cacheHit: selectedVersion.CacheHit), seenFailureKeys);
                 _decisions[request.Id] = lastFailure;
 
-                var shouldStop = _options.PolicyMode == FeedResolutionPolicyMode.Strict
-                    || _options.StopOnFirstSuccessfulFeed
-                    || !string.IsNullOrWhiteSpace(request.FeedName);
-                if (shouldStop)
+                if (ShouldStopAfterCandidateFailure(request))
                 {
                     throw;
                 }
@@ -185,7 +193,8 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
 
     /// <summary>
     /// Resolves the concrete version for a package from the specified feed.
-    /// For local directory feeds, the version is extracted from the request's range directly.
+    /// For local directory feeds, candidate versions are read from the nupkg files present in the
+    /// directory and the match is carried forward so acquisition does not have to locate it again.
     /// For remote feeds, version enumeration and range evaluation are used.
     /// </summary>
     private async Task<VersionSelection> ResolveVersionAsync(
@@ -217,15 +226,15 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     return VersionSelection.Failed(
                         "exact-local-cache-miss",
                         $"Exact package '{request.Id}' version '{versionRequest.ExactVersion}' was not found in local directory feed '{feed.Name}' at '{feedDirectoryPath}'.",
-                        packageFiles.Count,
-                        cacheHit: true);
+                        packageFiles.Count);
                 }
 
                 return VersionSelection.Succeeded(
                     exactMatch.Value.Version.ToNormalizedString(),
                     packageFiles.Count,
                     cacheHit: true,
-                    "exact-local-cache-hit");
+                    "exact-local-cache-hit",
+                    exactMatch);
             }
 
             var localVersions = packageFiles.Select(static file => file.Version.ToNormalizedString()).ToArray();
@@ -238,15 +247,15 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                 return VersionSelection.Failed(
                     "local-directory-version-no-match",
                     $"No version of package '{request.Id}' matching '{request.VersionRange}' was found in local directory feed '{feed.Name}' at '{feedDirectoryPath}': {localResult.FailureReason}",
-                    localResult.CandidateCount,
-                    cacheHit: true);
+                    localResult.CandidateCount);
             }
 
             return VersionSelection.Succeeded(
                 localResult.SelectedVersion!,
                 localResult.CandidateCount,
                 cacheHit: true,
-                "local-directory-version-match");
+                "local-directory-version-match",
+                LocalDirectoryFeedIndex.SelectVersion(packageFiles, localResult.SelectedVersion!));
         }
 
         if (versionRequest.IsExact)
@@ -322,14 +331,16 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         int EnumeratedCount,
         bool CacheHit,
         string? FailureReason,
-        string DecisionPath)
+        string DecisionPath,
+        LocalDirectoryPackageFile? LocalPackageFile = null)
     {
         public static VersionSelection Succeeded(
             string version,
             int enumeratedCount,
             bool cacheHit,
-            string decisionPath = "ordered-candidate-success") =>
-            new(true, version, enumeratedCount, cacheHit, null, decisionPath);
+            string decisionPath = "ordered-candidate-success",
+            LocalDirectoryPackageFile? localPackageFile = null) =>
+            new(true, version, enumeratedCount, cacheHit, null, decisionPath, localPackageFile);
 
         public static VersionSelection Failed(string decisionPath, string? failureReason, int enumeratedCount = 0, bool cacheHit = false) =>
             new(false, null, enumeratedCount, cacheHit, failureReason, decisionPath);
@@ -340,7 +351,17 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     /// Local directory feeds extract the <c>.nupkg</c> into a stable install directory;
     /// remote feeds are downloaded and extracted via the configured remote package acquirer.
     /// </summary>
-    private async Task<string> ResolveInstallPathAsync(FeedDefinition feed, string packageId, string version, CancellationToken cancellationToken)
+    /// <param name="feed">The feed the package was resolved from.</param>
+    /// <param name="packageId">The requested package identifier.</param>
+    /// <param name="version">The resolved concrete version.</param>
+    /// <param name="localPackageFile">The package file already located during version selection, when the feed is a local directory.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    private async Task<string> ResolveInstallPathAsync(
+        FeedDefinition feed,
+        string packageId,
+        string version,
+        LocalDirectoryPackageFile? localPackageFile,
+        CancellationToken cancellationToken)
     {
         if (!IsLocalDirectoryFeed(feed))
         {
@@ -348,7 +369,8 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         }
 
         var feedDirectoryPath = feed.ServiceIndex.LocalPath;
-        var packageFile = LocalDirectoryFeedIndex.FindPackageFile(feedDirectoryPath, packageId, version);
+        var packageFile = localPackageFile
+            ?? LocalDirectoryFeedIndex.FindPackageFile(feedDirectoryPath, packageId, version);
 
         if (packageFile is null)
         {
@@ -419,6 +441,16 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
 
         return true;
     }
+
+    /// <summary>
+    /// Determines whether a failed candidate ends resolution instead of falling through to the next
+    /// feed. Strict mode and <see cref="FeedResolutionOptions.StopOnFirstSuccessfulFeed"/> both forbid
+    /// fallback, and an explicitly requested feed has no other candidate to fall back to.
+    /// </summary>
+    private bool ShouldStopAfterCandidateFailure(PackageRequest request) =>
+        _options.PolicyMode == FeedResolutionPolicyMode.Strict
+        || _options.StopOnFirstSuccessfulFeed
+        || !string.IsNullOrWhiteSpace(request.FeedName);
 
     /// <summary>
     /// Folds a candidate failure into the running failure so the final diagnostic names every feed
