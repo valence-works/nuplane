@@ -26,7 +26,7 @@
 - Acquisition MUST treat local directory feeds as "artifact already present":
   - no remote fetch is required
   - the resolver MUST locate the `.nupkg` file in the feed directory using the conventional filename `{packageId}.{version}.nupkg`
-  - the resolver MUST extract the `.nupkg` contents to a versioned install directory (e.g., `{feedDir}/.installed/{packageId}/{version}/`)
+  - the resolver MUST extract the `.nupkg` contents to a versioned install directory under the configured package install root (`{PackageInstallRoot}/{feedName}/{packageId}/{version}/`, superseded by issue #56)
   - `ResolvedPackage.InstallPath` MUST point to the extracted directory on disk, NOT a synthetic or placeholder path
   - the loader depends on `InstallPath` being a real directory containing assemblies (under `lib/<tfm>/` or root); a non-existent path causes a loader boundary failure
   - extraction MUST be idempotent (skip if directory already exists)

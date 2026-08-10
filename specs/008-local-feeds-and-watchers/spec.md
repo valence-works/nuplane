@@ -27,7 +27,7 @@
 - **Resolution**: The decision-making step that selects an eligible feed for each desired package request.
 
 - **Acquisition**: The step that determines and records the artifact *location* for activation.
-  - For a local directory feed, this means locating the `.nupkg` file on disk and **extracting its contents** to a versioned install directory (e.g., `{feedLocalPath}/.installed/{packageId}/{version}/`) so that the loader can resolve assemblies from the extracted content. The `ResolvedPackage.InstallPath` MUST point to this extracted directory, NOT a synthetic path.
+  - For a local directory feed, this means locating the `.nupkg` file on disk and **extracting its contents** to a versioned install directory under the configured package install root (`{PackageInstallRoot}/{feedName}/{packageId}/{version}/`, superseded by issue #56) so that the loader can resolve assemblies from the extracted content. The `ResolvedPackage.InstallPath` MUST point to this extracted directory, NOT a synthetic path.
   - For a remote feed, this is typically a remote feed identifier/URI and a concrete version, followed by download and extraction.
   - This feature does not require implementing new NuGet download/extraction mechanics for remote feeds; it requires that directory-originating requests are resolvable without remote feeds, produce a real on-disk install path, and produce explicit outcomes.
 

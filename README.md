@@ -104,6 +104,8 @@ These patterns also inform source/package trust defaults unless you explicitly o
 A local folder treated as a feed.
 Nuplane can scan it for `.nupkg` files and optionally watch it for file changes with debounce.
 This is what powers the sample's drop-folder workflow.
+The folder itself is only read: packages resolved from it are extracted under `FeedResolution:PackageInstallRoot`,
+so a pre-populated package folder can be mounted read-only (`-v "$(pwd)/packages:/app/packages:ro"`).
 
 ### Reconciliation
 
@@ -398,6 +400,7 @@ Operational guidance:
 - for Kubernetes, a `StatefulSet` with one volume per replica is the best fit when warm restarts matter
 - if `UseInMemoryStore=true` is enabled, restart persistence is intentionally disabled
 - if `PackageInstallRoot` is not persisted, Nuplane may need to download and extract packages again after pod restart even if the store state file is preserved
+- `PackageInstallRoot` must be writable; it is the only package location Nuplane writes to, so feed directories supplying `.nupkg` files can stay read-only
 
 With both paths persisted, a restarted pod can typically reload prior active state and reuse previously extracted packages instead of rebuilding its local package store from scratch.
 

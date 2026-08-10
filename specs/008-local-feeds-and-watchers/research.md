@@ -52,7 +52,7 @@
   - Have the loader extract the nupkg itself (rejected: violates separation of concerns; the loader should not know about feed types or nupkg archives).
 - Alternatives considered:
 - Rationale: The package loader (`PackageLoader.ResolveMainAssemblyPath`) requires `InstallPath` to be a real directory on disk containing assemblies. A `.nupkg` is a ZIP archive; without extraction, the loader has no directory to scan for DLLs. The original implementation produced a synthetic path (`/packages/{id}/{version}`) for all feeds, which caused `DirectoryNotFoundException` at the loader boundary.
-- Decision: When a `file://` feed resolves a package, the resolver MUST locate the `.nupkg` file by conventional name (`{id}.{version}.nupkg`) and extract it to `{feedDir}/.installed/{id}/{version}/`. The `ResolvedPackage.InstallPath` MUST point to this extracted directory. Extraction is idempotent (skip if directory already exists).
+- Decision: When a `file://` feed resolves a package, the resolver MUST locate the `.nupkg` file by conventional name (`{id}.{version}.nupkg`) and extract it to `{PackageInstallRoot}/{feedName}/{id}/{version}/` (superseded by issue #56; the feed directory is never written to). The `ResolvedPackage.InstallPath` MUST point to this extracted directory. Extraction is idempotent (skip if directory already exists).
 ## Decision 9: Local feed resolution must extract nupkg to produce a real install path
   - a regression test proving "directory-only + no remote feeds" does not throw and yields an explicit outcome,
   - unit tests for watcher coalescing and debounce behavior,
