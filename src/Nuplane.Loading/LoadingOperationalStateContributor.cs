@@ -51,6 +51,12 @@ internal sealed class LoadingOperationalStateContributor(
                 continue;
             }
 
+            if (_packageLoader.IsInertPackage(package.PackageId, package.Version))
+            {
+                // Evaluated and deliberately not loaded because it contributes no assemblies; not missing state.
+                continue;
+            }
+
             staleCount++;
         }
 

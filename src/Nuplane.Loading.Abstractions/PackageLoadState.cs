@@ -46,6 +46,7 @@ public sealed record PackageLoadState(
                 LoadingStatus.Stale => PackageLoadStatus.Stale,
                 LoadingStatus.Loaded => PackageLoadStatus.Loaded,
                 LoadingStatus.Failed => PackageLoadStatus.Failed,
+                LoadingStatus.Skipped => PackageLoadStatus.Skipped,
                 _ => throw new ArgumentOutOfRangeException(nameof(descriptor))
             },
             descriptor.ActiveInstallPath,

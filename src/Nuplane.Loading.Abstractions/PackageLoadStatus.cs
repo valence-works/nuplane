@@ -23,6 +23,13 @@ public enum PackageLoadStatus
     /// <summary>
     /// The package failed to load for the current process.
     /// </summary>
-    Failed
+    Failed,
+
+    /// <summary>
+    /// The package was evaluated for the current process and deliberately not loaded because it
+    /// contributes no assemblies, either because it contains none (facade/native support packages)
+    /// or because the host runtime already provides them. This is a settled state, not a failure.
+    /// </summary>
+    Skipped
 }
 

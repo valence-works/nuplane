@@ -292,6 +292,8 @@ public sealed class StartupLoadingEventIntegrationTests
             CancellationToken ct) =>
             EnsureLoadedAsync(packageGraphs.SelectMany(static graph => graph).ToArray(), sharedPolicies, ct);
 
+        public bool IsInertPackage(string packageId, string version) => false;
+
         public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
         {
             var key = BuildKey(packageId, version);

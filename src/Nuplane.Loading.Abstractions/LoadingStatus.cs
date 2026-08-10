@@ -23,6 +23,11 @@ internal enum LoadingStatus
     /// <summary>
     /// The package failed to load for the current process.
     /// </summary>
-    Failed
+    Failed,
+
+    /// <summary>
+    /// The package was evaluated and deliberately not loaded because it contributes no assemblies.
+    /// </summary>
+    Skipped
 }
 

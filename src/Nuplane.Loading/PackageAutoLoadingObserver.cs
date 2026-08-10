@@ -96,12 +96,24 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
             return;
         }
 
+        var (packageGraphs, inertPackageCount) = SelectGraphsRequiringLoad(
+            await BuildPackageGraphsAsync(packagesToLoad, ct),
+            changeSet.CorrelationId);
+        if (packageGraphs.Count == 0)
+        {
+            Metrics?.RecordLoaderBoundaryOutcome(succeeded: 0, failed: 0, inertPackageCount);
+            RefreshTracker?.MarkRefreshed(changeSet.CorrelationId);
+            return;
+        }
+
+        var graphPackageCount = packageGraphs.Sum(static graph => graph.Count);
+
         _logger.LogDebug(
             "Loading {Count} packages after reconciliation. CorrelationId={CorrelationId}",
-            packagesToLoad.Count,
+            graphPackageCount,
             changeSet.CorrelationId);
 
-        foreach (var _ in packagesToLoad)
+        for (var i = 0; i < graphPackageCount; i++)
         {
             Metrics?.RecordLoadAttemptStarted();
         }
@@ -110,7 +122,6 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
             .Select(x => new SharedAssemblyPolicyEntry(x.Name, x.PublicKeyToken, x.MajorVersion))
             .ToArray();
 
-        var packageGraphs = await BuildPackageGraphsAsync(packagesToLoad, ct);
         var loadResult = await _loader.EnsureGraphLoadedAsync(packageGraphs, sharedPolicy, ct);
 
         foreach (var _ in loadResult.Loaded)
@@ -138,7 +149,7 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
             await _dispatcher.PublishFailedAsync(packageId, reason, ct);
         }
 
-        Metrics?.RecordLoaderBoundaryOutcome(loadResult.Loaded.Count, loadResult.FailedByPackageId.Count, skipped: 0);
+        Metrics?.RecordLoaderBoundaryOutcome(loadResult.Loaded.Count, loadResult.FailedByPackageId.Count, inertPackageCount);
         RefreshTracker?.MarkRefreshed(changeSet.CorrelationId);
 
         if (loadResult.Loaded.Count > 0)
@@ -185,6 +196,35 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
     }
 
     private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";
+
+    /// <summary>
+    /// Drops graphs whose members were all already evaluated by the loader and deliberately not loaded because
+    /// they contribute no assemblies. Such graphs are the inert remainder of graphs that are already active:
+    /// activating them on their own would fail with "no loadable assembly in graph", even though nothing changed.
+    /// </summary>
+    private (IReadOnlyList<IReadOnlyList<ResolvedPackage>> GraphsRequiringLoad, int InertPackageCount) SelectGraphsRequiringLoad(
+        IReadOnlyList<IReadOnlyList<ResolvedPackage>> packageGraphs,
+        string correlationId)
+    {
+        var graphsRequiringLoad = new List<IReadOnlyList<ResolvedPackage>>(packageGraphs.Count);
+        var inertPackageCount = 0;
+
+        foreach (var packageGraph in packageGraphs)
+        {
+            if (packageGraph.Any(package => !_loader.IsInertPackage(package.Id, package.Version)))
+            {
+                graphsRequiringLoad.Add(packageGraph);
+                continue;
+            }
+
+            inertPackageCount += packageGraph.Count;
+            _logger.LogInertGraphSkipped(
+                string.Join(", ", packageGraph.Select(package => BuildKey(package.Id, package.Version))),
+                correlationId);
+        }
+
+        return (graphsRequiringLoad, inertPackageCount);
+    }
 
     private async Task<IReadOnlyList<IReadOnlyList<ResolvedPackage>>> BuildPackageGraphsAsync(
         IReadOnlyList<ResolvedPackage> packagesToLoad,
