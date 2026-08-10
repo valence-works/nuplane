@@ -12,6 +12,21 @@ namespace Nuplane.Runtime.Tests.Feeds;
 
 public sealed class MultiFeedPackageResolverTests
 {
+    private static MultiFeedPackageResolver CreateResolver(
+        FeedResolutionOptions options,
+        IRemotePackageAcquirer acquirer,
+        IFeedVersionEnumerator? versionEnumerator = null)
+    {
+        var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
+        return new(
+            wrappedOptions,
+            new FeedResolutionPolicy(wrappedOptions),
+            acquirer,
+            versionEnumerator ?? Substitute.For<IFeedVersionEnumerator>(),
+            Substitute.For<IVersionRangeEvaluator>(),
+            NullLogger<MultiFeedPackageResolver>.Instance);
+    }
+
     [Fact]
     public async Task ResolveAsync_RemoteFeed_SelectsHighestStableVersion()
     {
@@ -268,6 +283,84 @@ public sealed class MultiFeedPackageResolverTests
             decision.FailureReason.LastIndexOf("Offline mode is enabled", StringComparison.Ordinal));
         await enumerator.DidNotReceiveWithAnyArgs().EnumerateVersionsAsync(default!, default!, default);
         await acquirer.DidNotReceiveWithAnyArgs().AcquireAsync(default!, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_OfflineMode_RequestPinnedToRemoteFeed_ResolvesFromLocalCacheFeed()
+    {
+        using var localPackages = new TempDirectory();
+        NupkgTestBuilder.Create("MyPlugin", "2.0.0").BuildTo(localPackages.Path);
+
+        var options = new FeedResolutionOptions
+        {
+            OfflineMode = true
+        };
+        options.Feeds.Add(new("nuget.org", new("https://api.nuget.org/v3/index.json")));
+        options.Feeds.Add(new("baked-packages", new Uri(localPackages.Path + Path.DirectorySeparatorChar)));
+
+        var acquirer = Substitute.For<IRemotePackageAcquirer>();
+        var enumerator = Substitute.For<IFeedVersionEnumerator>();
+        var resolver = CreateResolver(options, acquirer, enumerator);
+
+        // Desired roots produced by a remote feed's include patterns carry that feed's name.
+        var request = new PackageRequest("MyPlugin", "[2.0.0]", "nuget.org", PackageUpdatePolicy.Exact, "feed-rule:nuget.org");
+        var result = await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal("baked-packages", result.FeedName);
+        Assert.Equal("2.0.0", result.Version);
+        Assert.True(Directory.Exists(result.InstallPath));
+        await enumerator.DidNotReceiveWithAnyArgs().EnumerateVersionsAsync(default!, default!, default);
+        await acquirer.DidNotReceiveWithAnyArgs().AcquireAsync(default!, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_RequestPinnedToRemoteFeed_LocalCacheMiss_FallsBackToPinnedFeed()
+    {
+        using var localPackages = new TempDirectory();
+
+        var options = new FeedResolutionOptions();
+        options.Feeds.Add(new("nuget.org", new("https://api.nuget.org/v3/index.json")));
+        options.Feeds.Add(new("baked-packages", new Uri(localPackages.Path + Path.DirectorySeparatorChar)));
+
+        var acquirer = Substitute.For<IRemotePackageAcquirer>();
+        acquirer.AcquireAsync(Arg.Any<FeedDefinition>(), "MyPlugin", "2.0.0", Arg.Any<CancellationToken>())
+            .Returns("/installed/MyPlugin/2.0.0");
+
+        var resolver = CreateResolver(options, acquirer);
+
+        var request = new PackageRequest("MyPlugin", "[2.0.0]", "nuget.org", PackageUpdatePolicy.Exact, "feed-rule:nuget.org");
+        var result = await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal("nuget.org", result.FeedName);
+        Assert.Equal("2.0.0", result.Version);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_RequestPinnedToRemoteFeed_DoesNotConsiderOtherRemoteFeeds()
+    {
+        var options = new FeedResolutionOptions();
+        options.Feeds.Add(new("nuget.org", new("https://api.nuget.org/v3/index.json")));
+        options.Feeds.Add(new("other-remote", new("https://other.example/v3/index.json")));
+
+        var acquirer = Substitute.For<IRemotePackageAcquirer>();
+        acquirer.AcquireAsync(
+                Arg.Is<FeedDefinition>(feed => feed.Name == "nuget.org"),
+                "MyPlugin",
+                "2.0.0",
+                Arg.Any<CancellationToken>())
+            .Returns("/installed/MyPlugin/2.0.0");
+
+        var resolver = CreateResolver(options, acquirer);
+
+        var request = new PackageRequest("MyPlugin", "[2.0.0]", "nuget.org", PackageUpdatePolicy.Exact, "feed-rule:nuget.org");
+        var result = await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal("nuget.org", result.FeedName);
+        await acquirer.DidNotReceive().AcquireAsync(
+            Arg.Is<FeedDefinition>(feed => feed.Name == "other-remote"),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

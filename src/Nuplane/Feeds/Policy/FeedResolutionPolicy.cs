@@ -15,6 +15,12 @@ public sealed class FeedResolutionPolicy(IOptions<FeedResolutionOptions> options
 
     /// <summary>
     /// Orders candidate feeds for the specified package request based on explicit feed preference and priority.
+    /// <para>
+    /// A request that names a remote feed keeps local directory feeds eligible, because those feeds act as
+    /// caches: a package already present on disk should satisfy the request without a remote round trip, and
+    /// must remain resolvable when remote feeds are disabled. A request that names a local directory feed keeps
+    /// its exact meaning and resolves from that directory only.
+    /// </para>
     /// </summary>
     /// <param name="request">The package request.</param>
     /// <returns>An ordered list of candidate feed definitions.</returns>
@@ -22,30 +28,31 @@ public sealed class FeedResolutionPolicy(IOptions<FeedResolutionOptions> options
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        FeedDefinition? pinnedFeed = null;
         if (!string.IsNullOrWhiteSpace(request.FeedName))
         {
-            var explicitFeed = _options.Feeds
+            pinnedFeed = _options.Feeds
                 .FirstOrDefault(x => string.Equals(x.Name, request.FeedName, StringComparison.OrdinalIgnoreCase));
 
-            return explicitFeed is null ? [] : [explicitFeed];
+            if (pinnedFeed is null || IsLocalDirectoryFeed(pinnedFeed))
+            {
+                return pinnedFeed is null ? [] : [pinnedFeed];
+            }
         }
 
-        var ordered = _options.Feeds
-            .OrderBy(x => _options.GetPriority(x.Name))
-            .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        // Other remote feeds stay excluded for a pinned request; only the named feed and local caches qualify.
+        var eligible = pinnedFeed is null
+            ? _options.Feeds
+            : _options.Feeds.Where(x => IsLocalDirectoryFeed(x) || IsSameFeed(x, pinnedFeed));
 
         var versionRequest = NuGetVersionRequestClassifier.Classify(request.VersionRange);
         var localFirst = _options.OfflineMode
             || _options.RemoteFallbackMode is RemoteFallbackMode.WhenLocalMisses or RemoteFallbackMode.Never;
         localFirst = localFirst || (versionRequest.IsExact && _options.PreferLocalFeedsForExactVersions);
-        if (!localFirst)
-        {
-            return ordered;
-        }
 
-        return ordered
-            .OrderByDescending(IsLocalDirectoryFeed)
+        // Local-first policy wins over the pinned feed; otherwise the pinned feed leads and local caches follow.
+        return eligible
+            .OrderByDescending(x => localFirst ? IsLocalDirectoryFeed(x) : IsSameFeed(x, pinnedFeed))
             .ThenBy(x => _options.GetPriority(x.Name))
             .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -73,4 +80,7 @@ public sealed class FeedResolutionPolicy(IOptions<FeedResolutionOptions> options
 
     private static bool IsLocalDirectoryFeed(FeedDefinition feed) =>
         feed.ServiceIndex.Scheme.Equals("file", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSameFeed(FeedDefinition feed, FeedDefinition? other) =>
+        other is not null && string.Equals(feed.Name, other.Name, StringComparison.OrdinalIgnoreCase);
 }
