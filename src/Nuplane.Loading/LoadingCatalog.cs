@@ -90,6 +90,14 @@ internal sealed class LoadingCatalog(
                 continue;
             }
 
+            if (_packageLoader.IsInertPackage(package.PackageId, package.Version))
+            {
+                // Evaluated and deliberately not loaded because it contributes no assemblies. This is a
+                // settled outcome, not missing state, so it must not read as stale or degrade the surface.
+                descriptors.Add(CreateDescriptor(package, PackageLoadStatus.Skipped, null, ["loading-no-assemblies-to-load"], []));
+                continue;
+            }
+
             staleCount++;
             descriptors.Add(CreateDescriptor(package, PackageLoadStatus.Stale, null, ["loading-state-missing-for-active-package"], []));
         }
@@ -135,6 +143,7 @@ internal sealed class LoadingCatalog(
                     PackageLoadStatus.Stale => LoadingStatus.Stale,
                     PackageLoadStatus.Loaded => LoadingStatus.Loaded,
                     PackageLoadStatus.Failed => LoadingStatus.Failed,
+                    PackageLoadStatus.Skipped => LoadingStatus.Skipped,
                     _ => throw new ArgumentOutOfRangeException(nameof(package))
                 },
                 package.InstallPath,

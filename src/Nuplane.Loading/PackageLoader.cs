@@ -53,13 +53,10 @@ internal sealed class PackageLoader : IPackageLoader
     public IReadOnlyDictionary<string, PackageLoadSession> Sessions => _sessions;
 
     /// <inheritdoc />
-    public bool IsInertPackage(string packageId, string version)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(version);
-
-        return _inertPackages.ContainsKey(BuildKey(packageId, version));
-    }
+    public bool IsInertPackage(string packageId, string version) =>
+        !string.IsNullOrWhiteSpace(packageId)
+        && !string.IsNullOrWhiteSpace(version)
+        && _inertPackages.ContainsKey(BuildKey(packageId, version));
 
     /// <summary>
     /// Builds deterministic assembly scan candidates for the specified active package install path.

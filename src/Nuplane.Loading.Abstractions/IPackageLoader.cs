@@ -47,7 +47,10 @@ internal interface IPackageLoader
     /// </summary>
     /// <param name="packageId">The package identifier.</param>
     /// <param name="version">The package version.</param>
-    /// <returns><see langword="true"/> if the package version is a known inert graph member; otherwise <see langword="false"/>.</returns>
+    /// <returns>
+    /// <see langword="true"/> if the package version is a known inert graph member; otherwise <see langword="false"/>.
+    /// Implementations must be total so that read surfaces can query unknown or malformed identities safely.
+    /// </returns>
     bool IsInertPackage(string packageId, string version);
 
     /// <summary>
