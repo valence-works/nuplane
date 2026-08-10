@@ -307,6 +307,36 @@ public sealed class MultiFeedPackageResolverTests
     }
 
     [Fact]
+    public async Task ResolveAsync_TwoLocalFeedsMissSameDecisionPath_BothFeedsNamedInFailureReason()
+    {
+        using var localPackages1 = new TempDirectory();
+        using var localPackages2 = new TempDirectory();
+        var options = new FeedResolutionOptions();
+        options.Feeds.Add(new("local-a", new Uri(localPackages1.Path + Path.DirectorySeparatorChar)));
+        options.Feeds.Add(new("local-b", new Uri(localPackages2.Path + Path.DirectorySeparatorChar)));
+        var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
+        var policy = new FeedResolutionPolicy(wrappedOptions);
+
+        var resolver = new MultiFeedPackageResolver(
+            wrappedOptions,
+            policy,
+            Substitute.For<IRemotePackageAcquirer>(),
+            Substitute.For<IFeedVersionEnumerator>(),
+            Substitute.For<IVersionRangeEvaluator>(),
+            NullLogger<MultiFeedPackageResolver>.Instance);
+
+        var request = new PackageRequest("MyPlugin", "[2.0.0]", null, PackageUpdatePolicy.Exact, "source");
+
+        await Assert.ThrowsAsync<NoEligibleFeedException>(
+            () => resolver.ResolveAsync(request, CancellationToken.None));
+
+        Assert.True(resolver.TryGetDecision("MyPlugin", out var decision));
+        Assert.Equal("exact-local-cache-miss+exact-local-cache-miss", decision.DecisionPath);
+        Assert.Contains("local-a", decision.FailureReason);
+        Assert.Contains("local-b", decision.FailureReason);
+    }
+
+    [Fact]
     public async Task ResolveAsync_Range_RemoteStillEnumeratesVersions()
     {
         var options = new FeedResolutionOptions();
