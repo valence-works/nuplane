@@ -29,22 +29,32 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
         }
     }
 
+    private FeedResolutionOptions CreateLocalFeedOptions()
+    {
+        var options = new FeedResolutionOptions();
+        options.Feeds.Add(new("local-drop", new("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'))));
+        return options;
+    }
+
+    private static MultiFeedPackageResolver CreateResolver(
+        FeedResolutionOptions options,
+        IFeedVersionEnumerator? versionEnumerator = null)
+    {
+        var wrappedOptions = new OptionsWrapper<FeedResolutionOptions>(options);
+        return new(
+            wrappedOptions,
+            new FeedResolutionPolicy(wrappedOptions),
+            Substitute.For<IRemotePackageAcquirer>(),
+            versionEnumerator ?? Substitute.For<IFeedVersionEnumerator>(),
+            Substitute.For<IVersionRangeEvaluator>(),
+            NullLogger<MultiFeedPackageResolver>.Instance);
+    }
+
     [Fact]
     public async Task Resolve_WithOnlyLocalFeed_Succeeds()
     {
         NupkgTestBuilder.Create("MyPlugin", "1.0.0").BuildTo(_tempDir);
-
-        var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
-        var localFeed = new FeedDefinition("local-drop", feedUri);
-        var opts = new FeedResolutionOptions();
-        opts.Feeds.Add(localFeed);
-        var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(opts));
-        var resolver = new MultiFeedPackageResolver(
-            new OptionsWrapper<FeedResolutionOptions>(opts), policy,
-            Substitute.For<IRemotePackageAcquirer>(),
-            Substitute.For<IFeedVersionEnumerator>(),
-            Substitute.For<IVersionRangeEvaluator>(),
-            NullLogger<MultiFeedPackageResolver>.Instance);
+        var resolver = CreateResolver(CreateLocalFeedOptions());
 
         var request = new PackageRequest("MyPlugin", "1.0.0", "local-drop", PackageUpdatePolicy.Exact, "local-source");
         var result = await resolver.ResolveAsync(request, CancellationToken.None);
@@ -58,18 +68,7 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
     public async Task Resolve_WithLocalFeedOnly_NoExplicitFeedNameOnRequest_StillResolvesViaPriority()
     {
         NupkgTestBuilder.Create("MyPlugin", "1.0.0").BuildTo(_tempDir);
-
-        var feedUri = new Uri("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'));
-        var localFeed = new FeedDefinition("local-drop", feedUri);
-        var opts = new FeedResolutionOptions();
-        opts.Feeds.Add(localFeed);
-        var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(opts));
-        var resolver = new MultiFeedPackageResolver(
-            new OptionsWrapper<FeedResolutionOptions>(opts), policy,
-            Substitute.For<IRemotePackageAcquirer>(),
-            Substitute.For<IFeedVersionEnumerator>(),
-            Substitute.For<IVersionRangeEvaluator>(),
-            NullLogger<MultiFeedPackageResolver>.Instance);
+        var resolver = CreateResolver(CreateLocalFeedOptions());
 
         // No explicit feed name; resolution should still find the local feed via priority ordering
         var request = new PackageRequest("MyPlugin", "1.0.0", FeedName: null, PackageUpdatePolicy.Exact, "local-source");
@@ -109,16 +108,88 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
 
 
     [Fact]
+    public async Task Resolve_ExactVersion_WhenNupkgFileNameCasingDiffers_ResolvesFromLocalFeed()
+    {
+        // Restore writes lower-cased file names; nuspec dependencies declare canonical ids.
+        NupkgTestBuilder.Create("sourcegear.sqlite3", "1.0.0").BuildTo(_tempDir);
+        var resolver = CreateResolver(CreateLocalFeedOptions());
+
+        var request = new PackageRequest("SourceGear.sqlite3", "1.0.0", FeedName: null, PackageUpdatePolicy.Exact, "local-source");
+        var result = await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal("local-drop", result.FeedName);
+        Assert.Equal("1.0.0", result.Version);
+        Assert.True(Directory.Exists(result.InstallPath), $"Install path '{result.InstallPath}' should exist on disk.");
+        Assert.Equal(
+            Path.Combine(_tempDir, ".installed", "sourcegear.sqlite3", "1.0.0"),
+            result.InstallPath);
+    }
+
+    [Fact]
+    public async Task Resolve_DependencyRange_SelectsVersionPresentInDirectory()
+    {
+        // The directory holds 1.2.0 while the dependency asks for "1.0.0 or newer"; the lower bound
+        // of the range is not on disk, so the version must come from the directory contents.
+        NupkgTestBuilder.Create("MyPlugin", "1.2.0").BuildTo(_tempDir);
+        var resolver = CreateResolver(CreateLocalFeedOptions());
+
+        var request = new PackageRequest("MyPlugin", "[1.0.0, )", FeedName: null, PackageUpdatePolicy.Exact, "dependency-of:MyRoot");
+        var result = await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal("local-drop", result.FeedName);
+        Assert.Equal("1.2.0", result.Version);
+        Assert.True(Directory.Exists(result.InstallPath), $"Install path '{result.InstallPath}' should exist on disk.");
+    }
+
+    [Fact]
+    public async Task Resolve_DependencyRange_WithUnreachableRemoteFeed_ResolvesFromLocalFeed()
+    {
+        NupkgTestBuilder.Create("sourcegear.sqlite3", "1.0.0").BuildTo(_tempDir);
+
+        var options = CreateLocalFeedOptions();
+        options.Feeds.Add(new("nuget.org", new("https://api.nuget.org/v3/index.json")));
+        var enumerator = Substitute.For<IFeedVersionEnumerator>();
+        enumerator.EnumerateVersionsAsync(Arg.Any<FeedDefinition>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<Task<PackageVersionList>>(_ => throw new InvalidOperationException(
+                "Unable to load the service index for source https://api.nuget.org/v3/index.json."));
+        var resolver = CreateResolver(options, enumerator);
+
+        var request = new PackageRequest("SourceGear.sqlite3", "[1.0.0, )", FeedName: null, PackageUpdatePolicy.Exact, "dependency-of:MyRoot");
+        var result = await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal("local-drop", result.FeedName);
+        Assert.Equal("1.0.0", result.Version);
+        await enumerator.DidNotReceiveWithAnyArgs().EnumerateVersionsAsync(default!, default!, default);
+    }
+
+    [Fact]
+    public async Task Resolve_WhenLocalFeedMissesAndRemoteFeedFails_FailureNamesBothFeeds()
+    {
+        NupkgTestBuilder.Create("OtherPlugin", "1.0.0").BuildTo(_tempDir);
+
+        var options = CreateLocalFeedOptions();
+        options.Feeds.Add(new("nuget.org", new("https://api.nuget.org/v3/index.json")));
+        var enumerator = Substitute.For<IFeedVersionEnumerator>();
+        enumerator.EnumerateVersionsAsync(Arg.Any<FeedDefinition>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<Task<PackageVersionList>>(_ => throw new InvalidOperationException("Unable to load the service index."));
+        var resolver = CreateResolver(options, enumerator);
+
+        var request = new PackageRequest("MyPlugin", "[1.0.0, )", FeedName: null, PackageUpdatePolicy.Exact, "dependency-of:MyRoot");
+
+        var exception = await Assert.ThrowsAsync<NoEligibleFeedException>(
+            () => resolver.ResolveAsync(request, CancellationToken.None));
+
+        Assert.Contains("local-drop", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("nuget.org", exception.Message, StringComparison.Ordinal);
+        Assert.True(resolver.TryGetDecision("MyPlugin", out var decision));
+        Assert.Contains("local-directory-version-no-match", decision.DecisionPath, StringComparison.Ordinal);
+        Assert.Contains("version-enumeration-error", decision.DecisionPath, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Resolve_WithNoFeeds_ThrowsForNoEligibleFeed()
     {
-        var opts = new FeedResolutionOptions();
-        var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(opts));
-        var resolver = new MultiFeedPackageResolver(
-            new OptionsWrapper<FeedResolutionOptions>(opts), policy,
-            Substitute.For<IRemotePackageAcquirer>(),
-            Substitute.For<IFeedVersionEnumerator>(),
-            Substitute.For<IVersionRangeEvaluator>(),
-            NullLogger<MultiFeedPackageResolver>.Instance);
+        var resolver = CreateResolver(new FeedResolutionOptions());
 
         var request = new PackageRequest("MyPlugin", "1.0.0", FeedName: null, PackageUpdatePolicy.Exact, "local-source");
 

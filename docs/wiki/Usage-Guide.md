@@ -80,6 +80,17 @@ This avoids positional array merging when `appsettings.json`, environment variab
 configuration files are layered. Feed object order is not semantic; configure feed priorities
 separately when resolution order matters.
 
+### Directory feeds as an offline package source
+
+A directory feed declared with `DirectoryPath` both contributes desired roots and resolves packages,
+so pre-populating it with the full dependency closure removes the boot-time network dependency —
+useful when baking packages into a container image.
+
+Resolution reads the directory itself: package identifiers are matched case-insensitively and
+versions are matched in normalized form. A `.nupkg` written by `dotnet restore` under a lower-cased
+file name therefore still satisfies a dependency that declares the canonical identifier, including
+on case-sensitive file systems such as those inside Linux containers.
+
 ## Code-driven adoption
 
 - **Applicability:** `Core`

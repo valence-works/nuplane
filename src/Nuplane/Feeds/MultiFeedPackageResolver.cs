@@ -74,13 +74,8 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         {
             if (IsRemoteFeedDisabled(candidate, request, candidateNames, out var disabledDecision))
             {
-                if (lastFailure is not null)
-                {
-                    disabledDecision = CombineFailureDiagnostics(lastFailure, disabledDecision);
-                }
-
-                lastFailure = disabledDecision;
-                _decisions[request.Id] = disabledDecision;
+                lastFailure = Accumulate(lastFailure, disabledDecision);
+                _decisions[request.Id] = lastFailure;
                 continue;
             }
 
@@ -107,7 +102,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
             var selectedVersion = await ResolveVersionAsync(candidate, request, cancellationToken);
             if (!selectedVersion.Success)
             {
-                lastFailure = FeedResolutionDecision.Failed(
+                lastFailure = Accumulate(lastFailure, FeedResolutionDecision.Failed(
                     request,
                     candidateNames,
                     correlationId: string.Empty,
@@ -116,7 +111,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     failureReason: selectedVersion.FailureReason ?? $"No version matched '{request.VersionRange}'.",
                     selectedFeed: candidate.Name,
                     enumeratedVersionCount: selectedVersion.EnumeratedCount,
-                    cacheHit: selectedVersion.CacheHit);
+                    cacheHit: selectedVersion.CacheHit));
                 _decisions[request.Id] = lastFailure;
                 continue;
             }
@@ -128,7 +123,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                lastFailure = FeedResolutionDecision.Failed(
+                lastFailure = Accumulate(lastFailure, FeedResolutionDecision.Failed(
                     request,
                     candidateNames,
                     correlationId: string.Empty,
@@ -137,7 +132,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     failureReason: ex.Message,
                     selectedFeed: candidate.Name,
                     enumeratedVersionCount: selectedVersion.EnumeratedCount,
-                    cacheHit: selectedVersion.CacheHit);
+                    cacheHit: selectedVersion.CacheHit));
                 _decisions[request.Id] = lastFailure;
 
                 var shouldStop = _options.PolicyMode == FeedResolutionPolicyMode.Strict
@@ -199,7 +194,8 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     {
         var versionRequest = NuGetVersionRequestClassifier.Classify(request.VersionRange);
 
-        // Local directory feeds have exact versions already specified in the package request.
+        // Local directory feeds are backed by nupkg files already on disk, so candidate versions
+        // come from the directory itself rather than from a remote version enumeration.
         if (IsLocalDirectoryFeed(feed))
         {
             if (string.IsNullOrWhiteSpace(request.VersionRange))
@@ -209,21 +205,47 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     $"Local directory feed '{feed.Name}' requires an explicit version for package '{request.Id}'; empty or whitespace version ranges are not supported.");
             }
 
+            var feedDirectoryPath = feed.ServiceIndex.LocalPath;
+            var packageFiles = LocalDirectoryFeedIndex.FindPackageFiles(feedDirectoryPath, request.Id);
+
             if (versionRequest.IsExact)
             {
-                var nupkgPath = GetLocalNupkgPath(feed, request.Id, versionRequest.ExactVersion!);
-                if (!File.Exists(nupkgPath))
+                var exactMatch = LocalDirectoryFeedIndex.SelectVersion(packageFiles, versionRequest.ExactVersion!);
+                if (exactMatch is null)
                 {
                     return VersionSelection.Failed(
                         "exact-local-cache-miss",
-                        $"Exact package '{request.Id}' version '{versionRequest.ExactVersion}' was not found in local directory feed '{feed.Name}'.");
+                        $"Exact package '{request.Id}' version '{versionRequest.ExactVersion}' was not found in local directory feed '{feed.Name}' at '{feedDirectoryPath}'.",
+                        packageFiles.Count,
+                        cacheHit: true);
                 }
 
-                return VersionSelection.Succeeded(versionRequest.ExactVersion!, 0, cacheHit: true, "exact-local-cache-hit");
+                return VersionSelection.Succeeded(
+                    exactMatch.Value.Version.ToNormalizedString(),
+                    packageFiles.Count,
+                    cacheHit: true,
+                    "exact-local-cache-hit");
             }
 
-            var localVersion = NuGetVersionRangeParser.SelectVersion(request.VersionRange);
-            return VersionSelection.Succeeded(localVersion, 0, cacheHit: false);
+            var localVersions = packageFiles.Select(static file => file.Version.ToNormalizedString()).ToArray();
+            var localResult = IsDependencyRequest(request)
+                ? SelectLowestDependencyMatch(request.VersionRange, localVersions)
+                : _versionRangeEvaluator.SelectBestMatch(request.VersionRange, localVersions);
+
+            if (!localResult.Success)
+            {
+                return VersionSelection.Failed(
+                    "local-directory-version-no-match",
+                    $"No version of package '{request.Id}' matching '{request.VersionRange}' was found in local directory feed '{feed.Name}' at '{feedDirectoryPath}': {localResult.FailureReason}",
+                    localResult.CandidateCount,
+                    cacheHit: true);
+            }
+
+            return VersionSelection.Succeeded(
+                localResult.SelectedVersion!,
+                localResult.CandidateCount,
+                cacheHit: true,
+                "local-directory-version-match");
         }
 
         if (versionRequest.IsExact)
@@ -325,17 +347,21 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         }
 
         var feedDirectoryPath = feed.ServiceIndex.LocalPath;
-        var nupkgPath = GetLocalNupkgPath(feed, packageId, version);
+        var packageFile = LocalDirectoryFeedIndex.FindPackageFile(feedDirectoryPath, packageId, version);
 
-        if (!File.Exists(nupkgPath))
+        if (packageFile is null)
         {
-            var nupkgFileName = Path.GetFileName(nupkgPath);
+            var nupkgFileName = $"{packageId}.{version}.nupkg";
             throw new FileNotFoundException(
                 $"Expected nupkg '{nupkgFileName}' was not found in local directory feed '{feed.Name}' at '{feedDirectoryPath}'.",
-                nupkgPath);
+                Path.Combine(feedDirectoryPath, nupkgFileName));
         }
 
-        var installDir = Path.Combine(feedDirectoryPath, ".installed", packageId, version);
+        var nupkgPath = packageFile.Value.FilePath;
+
+        // Key the install directory off the identifier as spelled on disk so that requests for the
+        // same package under different casing share one extraction.
+        var installDir = Path.Combine(feedDirectoryPath, ".installed", packageFile.Value.PackageId, version);
         var completionMarkerPath = Path.Combine(installDir, ".nuplane-ready");
 
         if (!File.Exists(completionMarkerPath))
@@ -355,9 +381,6 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
 
     private static bool IsLocalDirectoryFeed(FeedDefinition feed) =>
         feed.ServiceIndex.Scheme.Equals("file", StringComparison.OrdinalIgnoreCase);
-
-    private static string GetLocalNupkgPath(FeedDefinition feed, string packageId, string version) =>
-        Path.Combine(feed.ServiceIndex.LocalPath, $"{packageId}.{version}.nupkg");
 
     private bool IsRemoteFeedDisabled(
         FeedDefinition feed,
@@ -395,6 +418,13 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
 
         return true;
     }
+
+    /// <summary>
+    /// Folds a candidate failure into the running failure so the final diagnostic names every feed
+    /// that was tried, instead of only the one that happened to be tried last.
+    /// </summary>
+    private static FeedResolutionDecision Accumulate(FeedResolutionDecision? previous, FeedResolutionDecision current) =>
+        previous is null ? current : CombineFailureDiagnostics(previous, current);
 
     private static FeedResolutionDecision CombineFailureDiagnostics(
         FeedResolutionDecision previous,
