@@ -85,6 +85,71 @@ public sealed class MultiFeedResolutionPolicyTests
     }
 
     [Fact]
+    public void OrderCandidates_PinnedRemoteFeed_KeepsLocalCacheFeedsEligible()
+    {
+        var options = new FeedResolutionOptions();
+        options.Feeds.Add(new("nuget.org", new("https://api.nuget.org/v3/index.json")));
+        options.Feeds.Add(new("baked-packages", new("file:///packages/baked/")));
+        options.Feeds.Add(new("other-remote", new("https://other.example/v3/index.json")));
+
+        var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
+        var request = new PackageRequest("pkg", "[1.2.3]", "nuget.org", PackageUpdatePolicy.Exact, "feed-rule:nuget.org");
+
+        var ordered = policy.OrderCandidates(request).Select(x => x.Name).ToArray();
+
+        Assert.Equal(new[] { "baked-packages", "nuget.org" }, ordered);
+    }
+
+    [Fact]
+    public void OrderCandidates_PinnedRemoteFeedWithAlwaysFallback_PutsPinnedFeedFirst()
+    {
+        var options = new FeedResolutionOptions
+        {
+            RemoteFallbackMode = RemoteFallbackMode.Always
+        };
+        options.Feeds.Add(new("nuget.org", new("https://api.nuget.org/v3/index.json")));
+        options.Feeds.Add(new("baked-packages", new("file:///packages/baked/")));
+        options.SetPriority("baked-packages", 0);
+        options.SetPriority("nuget.org", 100);
+
+        var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
+        var request = new PackageRequest("pkg", "[1.0.0,2.0.0)", "nuget.org", PackageUpdatePolicy.Range, "feed-rule:nuget.org");
+
+        var ordered = policy.OrderCandidates(request).Select(x => x.Name).ToArray();
+
+        Assert.Equal(new[] { "nuget.org", "baked-packages" }, ordered);
+    }
+
+    [Fact]
+    public void OrderCandidates_PinnedLocalFeed_ReturnsOnlyThatFeed()
+    {
+        var options = new FeedResolutionOptions();
+        options.Feeds.Add(new("baked-packages", new("file:///packages/baked/")));
+        options.Feeds.Add(new("other-local", new("file:///packages/other/")));
+        options.Feeds.Add(new("nuget.org", new("https://api.nuget.org/v3/index.json")));
+
+        var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
+        var request = new PackageRequest("pkg", "[1.2.3]", "baked-packages", PackageUpdatePolicy.Exact, "source");
+
+        var candidates = policy.OrderCandidates(request);
+
+        Assert.Single(candidates);
+        Assert.Equal("baked-packages", candidates[0].Name);
+    }
+
+    [Fact]
+    public void OrderCandidates_PinnedFeedNotConfigured_ReturnsNoCandidates()
+    {
+        var options = new FeedResolutionOptions();
+        options.Feeds.Add(new("baked-packages", new("file:///packages/baked/")));
+
+        var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
+        var request = new PackageRequest("pkg", "[1.2.3]", "missing-feed", PackageUpdatePolicy.Exact, "source");
+
+        Assert.Empty(policy.OrderCandidates(request));
+    }
+
+    [Fact]
     public void SelectWinner_WhenVersionsEqual_UsesDeterministicFeedNameTieBreak()
     {
         var options = new FeedResolutionOptions();

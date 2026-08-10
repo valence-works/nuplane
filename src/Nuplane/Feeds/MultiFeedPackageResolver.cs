@@ -115,7 +115,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     cacheHit: selectedVersion.CacheHit), seenFailureKeys);
                 _decisions[request.Id] = lastFailure;
 
-                if (ShouldStopAfterCandidateFailure(request))
+                if (ShouldStopAfterCandidateFailure(request, candidates.Count))
                 {
                     break;
                 }
@@ -147,7 +147,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     cacheHit: selectedVersion.CacheHit), seenFailureKeys);
                 _decisions[request.Id] = lastFailure;
 
-                if (ShouldStopAfterCandidateFailure(request))
+                if (ShouldStopAfterCandidateFailure(request, candidates.Count))
                 {
                     throw;
                 }
@@ -445,12 +445,13 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     /// <summary>
     /// Determines whether a failed candidate ends resolution instead of falling through to the next
     /// feed. Strict mode and <see cref="FeedResolutionOptions.StopOnFirstSuccessfulFeed"/> both forbid
-    /// fallback, and an explicitly requested feed has no other candidate to fall back to.
+    /// fallback, and a request pinned to a single candidate feed has nothing to fall back to. A pinned
+    /// request that also has local cache feeds as candidates may still fall through to them.
     /// </summary>
-    private bool ShouldStopAfterCandidateFailure(PackageRequest request) =>
+    private bool ShouldStopAfterCandidateFailure(PackageRequest request, int candidateCount) =>
         _options.PolicyMode == FeedResolutionPolicyMode.Strict
         || _options.StopOnFirstSuccessfulFeed
-        || !string.IsNullOrWhiteSpace(request.FeedName);
+        || (!string.IsNullOrWhiteSpace(request.FeedName) && candidateCount <= 1);
 
     /// <summary>
     /// Folds a candidate failure into the running failure so the final diagnostic names every feed

@@ -108,6 +108,48 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
 
 
     [Fact]
+    public async Task CacheOnlyFeed_OfflineMode_ResolvesRootRequestedFromRemoteFeed()
+    {
+        NupkgTestBuilder.Create("BakedPlugin", "1.2.3").BuildTo(_tempDir);
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(nuplane =>
+        {
+            nuplane.AddFeed("nuget.org", feed => feed
+                .FromUri(new("https://api.nuget.org/v3/index.json"))
+                .Include("BakedPlugin [1.2.3]"));
+            nuplane.AddDirectoryFeed("baked-packages", _tempDir, feed =>
+            {
+                feed.Role = DirectoryFeedRole.Cache;
+                feed.Watch = false;
+            });
+        });
+        services.Configure<FeedResolutionOptions>(options => options.OfflineMode = true);
+
+        using var provider = services.BuildServiceProvider();
+
+        var desired = new List<PackageRequest>();
+        foreach (var source in provider.GetServices<IDesiredPackageSource>())
+        {
+            desired.AddRange(await source.GetDesiredAsync(CancellationToken.None));
+        }
+
+        // The cache-role directory contributes no desired roots, so the only root is the one the
+        // operator asked for, pinned to the remote feed that declared it.
+        var root = Assert.Single(desired);
+        Assert.Equal("BakedPlugin", root.Id);
+        Assert.Equal("nuget.org", root.FeedName);
+
+        var resolver = provider.GetRequiredService<IPackageResolver>();
+        var result = await resolver.ResolveAsync(root, CancellationToken.None);
+
+        Assert.Equal("baked-packages", result.FeedName);
+        Assert.Equal("1.2.3", result.Version);
+        Assert.True(Directory.Exists(result.InstallPath), $"Install path '{result.InstallPath}' should exist on disk.");
+    }
+
+    [Fact]
     public async Task Resolve_ExactVersion_WhenNupkgFileNameCasingDiffers_ResolvesFromLocalFeed()
     {
         // Restore writes lower-cased file names; nuspec dependencies declare canonical ids.
