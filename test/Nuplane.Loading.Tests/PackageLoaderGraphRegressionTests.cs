@@ -133,6 +133,8 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
         Assert.Empty(result.FailedByPackageId);
         Assert.True(loader.TryGetContext("Plugin.Root", "1.0.0", out _));
         Assert.False(loader.TryGetContext("Microsoft.Data.Sqlite", "10.0.3", out _));
+        Assert.True(loader.IsInertPackage("Microsoft.Data.Sqlite", "10.0.3"));
+        Assert.False(loader.IsInertPackage("Plugin.Root", "1.0.0"));
     }
 
     [Fact]
@@ -254,6 +256,64 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
         Assert.DoesNotContain("Microsoft.Data.Sqlite", loader.Sessions.Keys, StringComparer.OrdinalIgnoreCase);
         Assert.False(loader.TryGetContext("Plugin.Root", "1.0.0", out _));
         Assert.False(loader.TryGetContext("Microsoft.Data.Sqlite", "10.0.3", out _));
+        Assert.False(loader.IsInertPackage("Microsoft.Data.Sqlite", "10.0.3"));
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_HostRuntimeAssemblyPackage_MarksSkippedDependencyInert()
+    {
+        var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");
+        var systemMemoryInstall = CreateHostRuntimeAssemblyPackageInstall("System.Memory");
+        var loader = new PackageLoader();
+
+        await loader.EnsureGraphLoadedAsync(
+            [[
+                new ResolvedPackage("Plugin.Root", "1.0.0", "test-feed", rootInstall, DateTimeOffset.UtcNow, "test-source"),
+                new ResolvedPackage("System.Memory", "4.5.3", "test-feed", systemMemoryInstall, DateTimeOffset.UtcNow, "dependency-of:Plugin.Root")
+            ]],
+            [],
+            CancellationToken.None);
+
+        Assert.True(loader.IsInertPackage("System.Memory", "4.5.3"));
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_InertPackageThatLaterFails_ClearsInertMarker()
+    {
+        var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");
+        var facadeInstall = CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite");
+        var facade = new ResolvedPackage("Microsoft.Data.Sqlite", "10.0.3", "test-feed", facadeInstall, DateTimeOffset.UtcNow, "test-source");
+        var loader = new PackageLoader();
+
+        await loader.EnsureGraphLoadedAsync(
+            [[new ResolvedPackage("Plugin.Root", "1.0.0", "test-feed", rootInstall, DateTimeOffset.UtcNow, "test-source"), facade]],
+            [],
+            CancellationToken.None);
+        Assert.True(loader.IsInertPackage(facade.Id, facade.Version));
+
+        var result = await loader.EnsureGraphLoadedAsync([[facade]], [], CancellationToken.None);
+
+        Assert.Single(result.FailedByPackageId);
+        Assert.False(loader.IsInertPackage(facade.Id, facade.Version));
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_GraphWithOnlyNoAssemblyPackages_DoesNotMarkFailedPackagesInert()
+    {
+        var facadeInstall = CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[
+                new ResolvedPackage("Microsoft.Data.Sqlite", "10.0.3", "test-feed", facadeInstall, DateTimeOffset.UtcNow, "test-source"),
+                new ResolvedPackage("Microsoft.Data.Sqlite.Support", "10.0.3", "test-feed", CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite.Support"), DateTimeOffset.UtcNow, "test-source")
+            ]],
+            [],
+            CancellationToken.None);
+
+        Assert.Equal(2, result.FailedByPackageId.Count);
+        Assert.False(loader.IsInertPackage("Microsoft.Data.Sqlite", "10.0.3"));
+        Assert.False(loader.IsInertPackage("Microsoft.Data.Sqlite.Support", "10.0.3"));
     }
 
     public void Dispose()

@@ -41,6 +41,16 @@ internal interface IPackageLoader
     bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context);
 
     /// <summary>
+    /// Determines whether a package version was already evaluated by the loader and deliberately not loaded
+    /// because it contributes no assemblies, either because it contains none (facade/native support packages)
+    /// or because the host runtime already provides them.
+    /// </summary>
+    /// <param name="packageId">The package identifier.</param>
+    /// <param name="version">The package version.</param>
+    /// <returns><see langword="true"/> if the package version is a known inert graph member; otherwise <see langword="false"/>.</returns>
+    bool IsInertPackage(string packageId, string version);
+
+    /// <summary>
     /// Attempts to get the active assembly load context for a specific package version without removing it.
     /// </summary>
     /// <param name="packageId">The package identifier.</param>

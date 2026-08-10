@@ -7,9 +7,19 @@ using Nuplane.Store.State;
 
 namespace Nuplane.Loading.Tests;
 
-public sealed class PackageAutoLoadingObserverTests
+public sealed class PackageAutoLoadingObserverTests : IDisposable
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
+
+    private readonly string tempRoot = Path.Combine(Path.GetTempPath(), $"nuplane-auto-loading-{Guid.NewGuid():N}");
+
+    public void Dispose()
+    {
+        if (Directory.Exists(tempRoot))
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
 
     [Fact]
     public async Task AddedAndUpdatedPackages_PublishLoadedFired()
@@ -242,8 +252,106 @@ public sealed class PackageAutoLoadingObserverTests
         Assert.Equal(["dependency", "root-a", "root-b"], packageGraph.Select(static package => package.Id));
     }
 
+    [Fact]
+    public async Task GraphWithOnlyInertPackages_IsNotSubmittedToLoader()
+    {
+        var facade = new ResolvedPackage("pkg-facade", "1.0.0", "feed", "/path-facade", Now);
+        var loader = new FakePackageLoader(inertPackages: [facade]);
+        var dispatcher = new FakeLoadingEventDispatcher();
+        var sut = CreateObserver(
+            loader,
+            dispatcher,
+            new() { Enabled = true },
+            storeRegistry: CreateStoreRegistry("graph-facade", facade));
+
+        await sut.OnPackagesReconciledAsync(new PackageChangeSet([], [], [], "corr-inert", Now), [facade], CancellationToken.None);
+
+        Assert.False(loader.WasCalled);
+        Assert.Empty(dispatcher.LoadedEvents);
+        Assert.Empty(dispatcher.FailedPackages);
+    }
+
+    [Fact]
+    public async Task GraphWithInertAndPendingPackages_SubmitsWholeGraphToLoader()
+    {
+        var pending = new ResolvedPackage("pkg-pending", "1.0.0", "feed", "/path-pending", Now);
+        var facade = new ResolvedPackage("pkg-facade", "1.0.0", "feed", "/path-facade", Now);
+        var loader = new FakePackageLoader(inertPackages: [facade]);
+        var dispatcher = new FakeLoadingEventDispatcher();
+        var sut = CreateObserver(
+            loader,
+            dispatcher,
+            new() { Enabled = true },
+            storeRegistry: CreateStoreRegistry("graph-mixed", pending, facade));
+
+        await sut.OnPackagesReconciledAsync(
+            new PackageChangeSet([pending], [], [], "corr-mixed", Now),
+            [pending, facade],
+            CancellationToken.None);
+
+        var packageGraph = Assert.Single(loader.PackageGraphs);
+        Assert.Equal(["pkg-facade", "pkg-pending"], packageGraph.Select(static package => package.Id));
+    }
+
+    [Fact]
+    public async Task RepeatedCycles_WithNoAssemblyGraphMembers_DoNotFailSkippedGraphMembers()
+    {
+        var loader = new PackageLoader();
+        var dispatcher = new FakeLoadingEventDispatcher();
+        var failureTracker = new LoadingFailureTracker();
+        var root = new ResolvedPackage("Plugin.Root", "1.0.0", "feed", CreateAssemblyPackageInstall("Plugin.Root"), Now, "test-source");
+        var facade = new ResolvedPackage("Microsoft.Data.Sqlite", "10.0.9", "feed", CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite"), Now, "test-source");
+        var nativeFacade = new ResolvedPackage("SQLitePCLRaw.bundle_e_sqlite3", "10.0.9", "feed", CreateNoAssemblyPackageInstall("SQLitePCLRaw.bundle_e_sqlite3"), Now, "test-source");
+        var applied = new[] { root, facade, nativeFacade };
+        var sut = CreateObserver(
+            loader,
+            dispatcher,
+            new() { Enabled = true },
+            loadingFailureTracker: failureTracker,
+            storeRegistry: CreateStoreRegistry("graph-sqlite", applied));
+
+        await sut.OnPackagesReconciledAsync(
+            new PackageChangeSet(applied, [], [], "corr-startup", Now),
+            applied,
+            CancellationToken.None);
+
+        Assert.Empty(dispatcher.FailedPackages);
+        Assert.Empty(failureTracker.TakeFailedPackageIds("corr-startup"));
+        Assert.Single(dispatcher.LoadedEvents);
+
+        await sut.OnPackagesReconciledAsync(
+            new PackageChangeSet([], [], [], "corr-scheduled", Now),
+            applied,
+            CancellationToken.None);
+
+        Assert.Empty(dispatcher.FailedPackages);
+        Assert.Empty(failureTracker.TakeFailedPackageIds("corr-scheduled"));
+        Assert.Single(dispatcher.LoadedEvents);
+    }
+
+    private string CreateAssemblyPackageInstall(string packageId)
+    {
+        var installPath = Path.Combine(tempRoot, packageId, "1.0.0");
+        var libPath = Path.Combine(installPath, "lib", "net10.0");
+        Directory.CreateDirectory(libPath);
+        File.Copy(
+            TestFixtureAssemblyPaths.FindProjectAssembly("Nuplane.Loading.Tests.Fixtures.Root", "Plugin.Root.dll"),
+            Path.Combine(libPath, "Plugin.Root.dll"),
+            overwrite: true);
+        return installPath;
+    }
+
+    private string CreateNoAssemblyPackageInstall(string packageId)
+    {
+        var installPath = Path.Combine(tempRoot, packageId, "10.0.9");
+        var libPath = Path.Combine(installPath, "lib", "netstandard2.0");
+        Directory.CreateDirectory(libPath);
+        File.WriteAllText(Path.Combine(libPath, "_._"), string.Empty);
+        return installPath;
+    }
+
     private static PackageAutoLoadingObserver CreateObserver(
-        FakePackageLoader loader,
+        IPackageLoader loader,
         FakeLoadingEventDispatcher dispatcher,
         LoadingOptions options,
         FakeFailureRecorder? failureRecorder = null,
@@ -260,6 +368,23 @@ public sealed class PackageAutoLoadingObserverTests
             loadingFailureTracker,
             null,
             storeRegistry);
+
+    private static FakeStoreRegistry CreateStoreRegistry(string graphId, params ResolvedPackage[] packages) =>
+        new(StoreStateRecord.Empty() with
+        {
+            ActiveVersionById = packages.ToDictionary(
+                static package => package.Id,
+                static package => package.Version,
+                StringComparer.OrdinalIgnoreCase),
+            ActivePackageDescriptorsById = packages.ToDictionary(
+                static package => package.Id,
+                Descriptor,
+                StringComparer.OrdinalIgnoreCase),
+            ActiveGraphsById = new(StringComparer.OrdinalIgnoreCase)
+            {
+                [graphId] = Graph(graphId, $"{graphId}-generation", packages.Select(static package => package.Id).ToArray())
+            }
+        });
 
     private static GraphActivationRecord Graph(string graphId, string generationId, IReadOnlyList<string> nodePackageIds) =>
         new(
@@ -283,11 +408,15 @@ public sealed class PackageAutoLoadingObserverTests
 
     internal sealed class FakePackageLoader(
         IEnumerable<string>? failIds = null,
-        IEnumerable<ResolvedPackage>? preloadedPackages = null) : IPackageLoader
+        IEnumerable<ResolvedPackage>? preloadedPackages = null,
+        IEnumerable<ResolvedPackage>? inertPackages = null) : IPackageLoader
     {
         private readonly HashSet<string> _failIds = failIds is not null
             ? new HashSet<string>(failIds, StringComparer.OrdinalIgnoreCase)
             : [];
+        private readonly HashSet<string> _inertPackageKeys = (inertPackages ?? [])
+            .Select(static package => BuildKey(package.Id, package.Version))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, PackageLoadSession> _sessions = CreateSessions(preloadedPackages);
 
         public bool WasCalled { get; private set; }
@@ -342,6 +471,9 @@ public sealed class PackageAutoLoadingObserverTests
             PackageGraphs.AddRange(packageGraphs);
             return EnsureLoadedAsync(packageGraphs.SelectMany(static graph => graph).ToArray(), sharedPolicy, cancellationToken);
         }
+
+        public bool IsInertPackage(string packageId, string version) =>
+            _inertPackageKeys.Contains(BuildKey(packageId, version));
 
         public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
         {

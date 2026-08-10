@@ -25,6 +25,7 @@ internal sealed class PackageLoader : IPackageLoader
     private readonly ConcurrentDictionary<string, AssemblyLoadContext> _contexts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, PackageLoadSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, LoadedGraphCacheEntry> _loadedGraphs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, byte> _inertPackages = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Initializes a new instance of <see cref="PackageLoader"/> with an optional shared assembly policy matcher.
@@ -50,6 +51,15 @@ internal sealed class PackageLoader : IPackageLoader
     /// Gets the active load sessions keyed by package-version key.
     /// </summary>
     public IReadOnlyDictionary<string, PackageLoadSession> Sessions => _sessions;
+
+    /// <inheritdoc />
+    public bool IsInertPackage(string packageId, string version)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+
+        return _inertPackages.ContainsKey(BuildKey(packageId, version));
+    }
 
     /// <summary>
     /// Builds deterministic assembly scan candidates for the specified active package install path.
@@ -152,6 +162,7 @@ internal sealed class PackageLoader : IPackageLoader
                 var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath, package.Id);
                 if (HostRuntimeAssemblyCatalog.Contains(mainAssemblyPath))
                 {
+                    MarkInert(key);
                     _logger.LogInformation(
                         "Skipped package {PackageId}@{Version} because assembly {AssemblyPath} is provided by the host runtime.",
                         package.Id,
@@ -165,6 +176,7 @@ internal sealed class PackageLoader : IPackageLoader
                 context.LoadFromAssemblyName(assemblyName);
 
                 _contexts[key] = context;
+                ClearInert(key);
 
                 var session = new PackageLoadSession(
                     package.Id,
@@ -183,6 +195,9 @@ internal sealed class PackageLoader : IPackageLoader
             }
             catch (Exception ex)
             {
+                // A package reported as failed must stay retryable, so it can never remain marked inert.
+                ClearInert(key);
+
                 failed[package.Id] = ex.Message;
                 _sessions[key] = new(
                     package.Id,
@@ -237,6 +252,7 @@ internal sealed class PackageLoader : IPackageLoader
             {
                 if (graphPackages.SkippedPackages.Count == 0 && graphPackages.HostRuntimePackages.Count > 0)
                 {
+                    MarkInert(graphPackages.InertPackages);
                     return new(loaded, failed);
                 }
 
@@ -284,6 +300,7 @@ internal sealed class PackageLoader : IPackageLoader
                 }
 
                 _contexts[key] = context;
+                ClearInert(key);
 
                 var session = new PackageLoadSession(
                     package.Id,
@@ -316,6 +333,7 @@ internal sealed class PackageLoader : IPackageLoader
                     .ToArray());
 
             UnloadUnreferencedContexts(replacedContexts);
+            MarkInert(graphPackages.InertPackages);
         }
         catch (Exception ex)
         {
@@ -338,6 +356,9 @@ internal sealed class PackageLoader : IPackageLoader
                 {
                     _hostIntegratedResolutionCatalog.RemovePackage(package.Id, package.Version);
                 }
+
+                // A package reported as failed must stay retryable, so it can never remain marked inert.
+                ClearInert(key);
 
                 failed[package.Id] = ex.Message;
                 _sessions[key] = new(
@@ -432,6 +453,18 @@ internal sealed class PackageLoader : IPackageLoader
         return new(loadablePackages, skippedPackages, hostRuntimePackages, failedPackages, resolutionFailure);
     }
 
+    private void MarkInert(IEnumerable<GraphPackage> packages)
+    {
+        foreach (var package in packages)
+        {
+            MarkInert(BuildKey(package.Id, package.Version));
+        }
+    }
+
+    private void MarkInert(string packageKey) => _inertPackages[packageKey] = 0;
+
+    private void ClearInert(string packageKey) => _inertPackages.TryRemove(packageKey, out _);
+
     private void UnloadUnreferencedContexts(IEnumerable<AssemblyLoadContext> contexts)
     {
         foreach (var context in contexts.Distinct())
@@ -448,6 +481,7 @@ internal sealed class PackageLoader : IPackageLoader
     {
         var key = BuildKey(packageId, version);
         _sessions.TryRemove(key, out _);
+        ClearInert(key);
 
         if (_contexts.TryRemove(key, out var removed))
         {
@@ -821,6 +855,12 @@ internal sealed class PackageLoader : IPackageLoader
         Exception? ResolutionFailure)
     {
         public IReadOnlyList<string> SkippedInstallPaths => SkippedPackages.Select(static package => package.InstallPath).ToArray();
+
+        /// <summary>
+        /// Gets the graph members that were evaluated successfully but contribute no assemblies to load,
+        /// either because they contain none or because the host runtime already provides them.
+        /// </summary>
+        public IEnumerable<GraphPackage> InertPackages => SkippedPackages.Concat(HostRuntimePackages);
     }
 
     private sealed record LoadedGraphCacheEntry(
