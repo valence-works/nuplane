@@ -80,6 +80,12 @@ This avoids positional array merging when `appsettings.json`, environment variab
 configuration files are layered. Feed object order is not semantic; configure feed priorities
 separately when resolution order matters.
 
+When the same reconciliation setting is expressed in both layers, the more specific
+`Nuplane:Reconciliation` section wins over the `Nuplane:Setup` shorthand. An explicitly present
+`Reconciliation:EnableAutomaticReconciliation` decides automatic reconciliation in both directions,
+so `false` there disables polling even when `Setup:AutomaticReconciliation` is `true`; the same
+applies to `Reconciliation:PollInterval` over `Setup:PollInterval`.
+
 ### Directory feeds as an offline package source
 
 A directory feed declared with `DirectoryPath` both contributes desired roots and resolves packages,

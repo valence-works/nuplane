@@ -17,7 +17,7 @@ namespace Nuplane.Registration;
 internal static class NuplaneOptionsRegistrationServices
 {
     internal const string SetupSectionName = "Setup";
-    private const string ReconciliationSectionName = "Reconciliation";
+    internal const string ReconciliationSectionName = "Reconciliation";
     private const string FeedResolutionSectionName = "FeedResolution";
     private const string LockFileSectionName = "LockFile";
     private const string CleanupPolicySectionName = "CleanupPolicy";

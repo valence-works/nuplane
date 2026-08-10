@@ -305,6 +305,11 @@ Nuplane has two configuration layers:
   - `PackageLoadModes`
   - `SharedAssemblies`
 
+When both layers express the same reconciliation setting, the more specific `Nuplane:Reconciliation` section wins over the `Nuplane:Setup` shorthand:
+
+- `Reconciliation:EnableAutomaticReconciliation` overrides `Setup:AutomaticReconciliation` in both directions when the key is present; an explicit `false` disables automatic reconciliation even when the shorthand enables it.
+- `Reconciliation:PollInterval` overrides `Setup:PollInterval`; when neither is set, automatic reconciliation polls every 60 seconds.
+
 For unrestricted feeds, prefer one of these explicit forms:
 
 - configuration: `"IncludePatterns": ["*"]`
