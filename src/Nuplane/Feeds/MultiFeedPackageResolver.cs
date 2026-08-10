@@ -69,12 +69,13 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         var candidates = _policy.OrderCandidates(request);
         var candidateNames = candidates.Select(x => x.Name).ToArray();
         FeedResolutionDecision? lastFailure = null;
+        var seenFailureKeys = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var candidate in candidates)
         {
             if (IsRemoteFeedDisabled(candidate, request, candidateNames, out var disabledDecision))
             {
-                lastFailure = Accumulate(lastFailure, disabledDecision);
+                lastFailure = Accumulate(lastFailure, disabledDecision, seenFailureKeys);
                 _decisions[request.Id] = lastFailure;
                 continue;
             }
@@ -111,7 +112,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     failureReason: selectedVersion.FailureReason ?? $"No version matched '{request.VersionRange}'.",
                     selectedFeed: candidate.Name,
                     enumeratedVersionCount: selectedVersion.EnumeratedCount,
-                    cacheHit: selectedVersion.CacheHit));
+                    cacheHit: selectedVersion.CacheHit), seenFailureKeys);
                 _decisions[request.Id] = lastFailure;
                 continue;
             }
@@ -132,7 +133,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     failureReason: ex.Message,
                     selectedFeed: candidate.Name,
                     enumeratedVersionCount: selectedVersion.EnumeratedCount,
-                    cacheHit: selectedVersion.CacheHit));
+                    cacheHit: selectedVersion.CacheHit), seenFailureKeys);
                 _decisions[request.Id] = lastFailure;
 
                 var shouldStop = _options.PolicyMode == FeedResolutionPolicyMode.Strict
@@ -422,19 +423,28 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     /// <summary>
     /// Folds a candidate failure into the running failure so the final diagnostic names every feed
     /// that was tried, instead of only the one that happened to be tried last.
+    /// Deduplication is keyed by <c>(DecisionPath, FailureReason)</c> so that identical policy-wide
+    /// diagnostics (e.g. offline-mode applied to every remote feed) are collapsed into one entry
+    /// while feed-specific failures that share a decision path but differ in reason are all preserved.
     /// </summary>
-    private static FeedResolutionDecision Accumulate(FeedResolutionDecision? previous, FeedResolutionDecision current) =>
-        previous is null ? current : CombineFailureDiagnostics(previous, current);
+    private static FeedResolutionDecision Accumulate(
+        FeedResolutionDecision? previous,
+        FeedResolutionDecision current,
+        HashSet<string> seenKeys)
+    {
+        var key = $"{current.DecisionPath}\x1f{current.FailureReason}";
+        if (!seenKeys.Add(key))
+        {
+            return previous!;
+        }
+
+        return previous is null ? current : CombineFailureDiagnostics(previous, current);
+    }
 
     private static FeedResolutionDecision CombineFailureDiagnostics(
         FeedResolutionDecision previous,
         FeedResolutionDecision current)
     {
-        if (previous.DecisionPath.Split('+').Contains(current.DecisionPath, StringComparer.Ordinal))
-        {
-            return previous;
-        }
-
         return current with
         {
             DecisionPath = $"{previous.DecisionPath}+{current.DecisionPath}",
