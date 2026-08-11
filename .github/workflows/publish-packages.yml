@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BASE_VERSION: 0.0.10
+  BASE_VERSION: 0.0.11
 
 jobs:
   build-test-pack:
