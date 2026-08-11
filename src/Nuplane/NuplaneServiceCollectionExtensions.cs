@@ -18,10 +18,12 @@ public static class NuplaneServiceCollectionExtensions
     /// translated from the <c>Setup</c> section.
     /// </summary>
     /// <remarks>
-    /// Where both layers express the same reconciliation setting, the more specific
-    /// <c>Reconciliation</c> section wins: an explicitly present
-    /// <c>Reconciliation:EnableAutomaticReconciliation</c> or <c>Reconciliation:PollInterval</c>
-    /// overrides the <c>Setup:AutomaticReconciliation</c> / <c>Setup:PollInterval</c> shorthand.
+    /// Where both layers express the same setting, the more specific runtime option section wins:
+    /// an explicitly present <c>Reconciliation:EnableAutomaticReconciliation</c> or
+    /// <c>Reconciliation:PollInterval</c> overrides the <c>Setup:AutomaticReconciliation</c> /
+    /// <c>Setup:PollInterval</c> shorthand, and an explicitly present
+    /// <c>StoreRegistry:StateFilePath</c> or <c>StoreRegistry:UseInMemoryStore</c> overrides the
+    /// <c>Setup:StateFilePath</c> / <c>Setup:UseInMemoryStore</c> shorthand.
     /// </remarks>
     public static IServiceCollection AddNuplane(
         this IServiceCollection services,
@@ -42,11 +44,16 @@ public static class NuplaneServiceCollectionExtensions
 
         var setupSection = NuplaneSetupConfigurationServices.GetSetupSectionOrSelf(configuration);
         var reconciliationSection = NuplaneSetupConfigurationServices.GetReconciliationSectionOrSelf(configuration);
+        var storeRegistrySection = NuplaneSetupConfigurationServices.GetStoreRegistrySectionOrSelf(configuration);
 
         return services.AddNuplane(builder =>
         {
             NuplaneOptionsRegistrationServices.BindConfiguredOptions(builder.Services, configuration);
-            NuplaneSetupConfigurationServices.ApplySetupConfiguration(builder, setupSection, reconciliationSection);
+            NuplaneSetupConfigurationServices.ApplySetupConfiguration(
+                builder,
+                setupSection,
+                reconciliationSection,
+                storeRegistrySection);
             configure?.Invoke(builder);
         });
     }

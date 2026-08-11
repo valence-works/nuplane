@@ -22,7 +22,7 @@ internal static class NuplaneOptionsRegistrationServices
     private const string LockFileSectionName = "LockFile";
     private const string CleanupPolicySectionName = "CleanupPolicy";
     private const string ConvergenceSectionName = "Convergence";
-    private const string StoreRegistrySectionName = "StoreRegistry";
+    internal const string StoreRegistrySectionName = "StoreRegistry";
 
     private static readonly Action<IServiceCollection, IConfiguration>[] ConfiguredOptionBinders =
     [

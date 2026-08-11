@@ -307,10 +307,14 @@ Nuplane has two configuration layers:
   - `PackageLoadModes`
   - `SharedAssemblies`
 
-When both layers express the same reconciliation setting, the more specific `Nuplane:Reconciliation` section wins over the `Nuplane:Setup` shorthand:
+When both layers express the same setting, the more specific runtime option section wins over the `Nuplane:Setup` shorthand:
 
 - `Reconciliation:EnableAutomaticReconciliation` overrides `Setup:AutomaticReconciliation` in both directions when the key is present; an explicit `false` disables automatic reconciliation even when the shorthand enables it.
 - `Reconciliation:PollInterval` overrides `Setup:PollInterval`; when neither is set, automatic reconciliation polls every 60 seconds.
+- `StoreRegistry:StateFilePath` overrides `Setup:StateFilePath`, and `StoreRegistry:UseInMemoryStore` overrides `Setup:UseInMemoryStore` in both directions; an explicit `false` there keeps state persisted even when the shorthand asks for an in-memory store.
+- The two store persistence settings are mutually exclusive, so an explicit choice in `StoreRegistry` also suppresses the opposing `Setup` shorthand: `StoreRegistry:UseInMemoryStore: true` ignores `Setup:StateFilePath`, and `StoreRegistry:StateFilePath` ignores `Setup:UseInMemoryStore`.
+
+Builder calls run after configuration binds, so `WithStateFile(...)` and `UseInMemoryStore()` in the `AddNuplane` callback still override both layers.
 
 For unrestricted feeds, prefer one of these explicit forms:
 
