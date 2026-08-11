@@ -10,144 +10,194 @@ namespace Nuplane.Sources.Directory.Tests.Hosting;
 /// <summary>
 /// Contract tests for directory observation coalescing/debounce invariants.
 /// </summary>
-public sealed class DirectoryObservationContractTests
+/// <remarks>
+/// These tests drive a real <see cref="FileSystemWatcher" />, so they cannot use a fake clock. The tests that
+/// wait for a trigger stay load-tolerant instead: readiness is awaited via <see cref="DirectoryWatcherProbe" />
+/// rather than assumed after a fixed sleep, and every wait ceiling is generous relative to the debounce window.
+/// </remarks>
+public sealed class DirectoryObservationContractTests : IAsyncDisposable
 {
+    private static readonly byte[] NupkgContent = [0x50, 0x4B];
+    private static readonly TimeSpan DebounceWindow = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
+    /// Kept short so that a trigger which should never arrive would still have time to show up within the
+    /// fixed observation window used by the negative test below.
+    /// </summary>
+    private static readonly TimeSpan NonNupkgDebounceWindow = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>
+    /// A ceiling, not an expectation: the happy path returns as soon as the trigger lands, so being generous
+    /// costs nothing and stops a loaded machine from being mistaken for a broken watcher.
+    /// </summary>
+    private static readonly TimeSpan WatcherTimeout = TimeSpan.FromSeconds(30);
+
+    private readonly TempDirectory tempDir = new();
+    private readonly SpyTriggerSink spy = new();
+    private DirectorySourceReconciliationTriggerHostedService? service;
+
     [Fact]
     public async Task BurstyEvents_AreCoalesced_ToAtMostOneTriggerPerDebounceWindow()
     {
-        using var tempDir = new TempDirectory();
-        var spy = new SpyTriggerSink();
-        var options = new DirectorySourceOptions
-        {
-            FeedName = "test-feed",
-            DirectoryPath = tempDir.Path,
-            DebounceWindow = TimeSpan.FromMilliseconds(200),
-            TriggerReconciliationOnChange = true
-        };
+        // Arrange
+        await StartObservingAsync("test-feed");
 
-        var service = new DirectorySourceReconciliationTriggerHostedService(
-            options, spy, NullLogger<DirectorySourceReconciliationTriggerHostedService>.Instance, new ObservationDegradationTracker());
-
-        using var cts = new CancellationTokenSource();
-        var serviceTask = service.StartAsync(cts.Token);
-
-        await Task.Delay(150);
-
+        // Act
         for (var i = 0; i < 10; i++)
         {
-            File.WriteAllBytes(Path.Combine(tempDir.Path, $"burst-{i}.nupkg"), [0x50, 0x4B]);
-            await Task.Delay(10);
+            await WriteNupkgAsync($"burst-{i}.nupkg");
         }
 
+        // Assert
         await DebounceAssert.WaitForCountAsync(
             () => spy.TriggerCount,
             1,
-            TimeSpan.FromSeconds(5),
+            WatcherTimeout,
             "Expected at least 1 queued trigger after burst events");
 
         await DebounceAssert.AssertCoalescedAsync(
             () => spy.TriggerCount,
             2,
-            TimeSpan.FromMilliseconds(500),
+            DebounceWindow * 4,
             "Bursty events should be coalesced to at most 2 queued triggers");
-
-        cts.Cancel();
-        try { await serviceTask; } catch (OperationCanceledException) { }
     }
 
     [Fact]
     public async Task ObservedChangeTrigger_IncludesStructuredFeedOrigin()
     {
-        using var tempDir = new TempDirectory();
-        var spy = new SpyTriggerSink();
-        var options = new DirectorySourceOptions
-        {
-            FeedName = "my-local-feed",
-            DirectoryPath = tempDir.Path,
-            DebounceWindow = TimeSpan.FromMilliseconds(100),
-            TriggerReconciliationOnChange = true
-        };
+        // Arrange
+        await StartObservingAsync("my-local-feed");
 
-        var service = new DirectorySourceReconciliationTriggerHostedService(options, spy, NullLogger<DirectorySourceReconciliationTriggerHostedService>.Instance, new());
-
-        using var cts = new CancellationTokenSource();
-        var serviceTask = service.StartAsync(cts.Token);
-
-        await Task.Delay(150);
-
-        File.WriteAllBytes(Path.Combine(tempDir.Path, "test.nupkg"), [0x50, 0x4B]);
+        // Act
+        await WriteNupkgAsync("test.nupkg");
 
         await DebounceAssert.WaitForCountAsync(
             () => spy.TriggerCount,
             1,
-            TimeSpan.FromSeconds(5),
+            WatcherTimeout,
             "Expected trigger after file creation");
 
-        Assert.NotEmpty(spy.Triggers);
-        var trigger = spy.Triggers[0];
+        // Assert
+        var trigger = Assert.Single(spy.Triggers);
         Assert.Equal(TriggerType.ObservedChange, trigger.Type);
         Assert.NotNull(trigger.ObservedOrigin);
         Assert.Equal("my-local-feed", trigger.ObservedOrigin.FeedName);
         Assert.Equal(FeedObservationKind.DirectoryWatcher, trigger.ObservedOrigin.Kind);
-
-        cts.Cancel();
-        try { await serviceTask; } catch (OperationCanceledException) { }
     }
 
     [Fact]
     public async Task NonNupkgFiles_DoNotTriggerReconciliation()
     {
-        using var tempDir = new TempDirectory();
-        var spy = new SpyTriggerSink();
+        // Arrange
+        await StartAsync("filter-feed", NonNupkgDebounceWindow);
+        await Task.Delay(150, CancellationToken.None);
+
+        // Act
+        await File.WriteAllTextAsync(Path.Combine(tempDir.Path, "readme.txt"), "hello", CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(tempDir.Path, "data.json"), "{}", CancellationToken.None);
+
+        await Task.Delay(TimeSpan.FromMilliseconds(400), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, spy.TriggerCount);
+    }
+
+    /// <summary>
+    /// Starts the observation loop, waits until the watcher is demonstrably delivering events, and clears the
+    /// probe triggers so the caller starts from a known-empty spy.
+    /// </summary>
+    private async Task StartObservingAsync(string feedName)
+    {
+        await StartAsync(feedName, DebounceWindow);
+
+        await DirectoryWatcherProbe.WaitUntilObservingAsync(
+            tempDir.Path,
+            () => spy.TriggerCount,
+            DebounceWindow,
+            WatcherTimeout);
+
+        spy.Reset();
+    }
+
+    private async Task StartAsync(string feedName, TimeSpan debounceWindow)
+    {
         var options = new DirectorySourceOptions
         {
-            FeedName = "filter-feed",
+            FeedName = feedName,
             DirectoryPath = tempDir.Path,
-            DebounceWindow = TimeSpan.FromMilliseconds(100),
+            DebounceWindow = debounceWindow,
             TriggerReconciliationOnChange = true
         };
 
-        var service = new DirectorySourceReconciliationTriggerHostedService(options, spy, NullLogger<DirectorySourceReconciliationTriggerHostedService>.Instance, new());
-        using var cts = new CancellationTokenSource();
-        var serviceTask = service.StartAsync(cts.Token);
+        service = new DirectorySourceReconciliationTriggerHostedService(
+            options,
+            spy,
+            NullLogger<DirectorySourceReconciliationTriggerHostedService>.Instance,
+            new ObservationDegradationTracker());
 
-        await Task.Delay(150, cts.Token);
+        await service.StartAsync(CancellationToken.None);
+    }
 
-        await File.WriteAllTextAsync(Path.Combine(tempDir.Path, "readme.txt"), "hello", cts.Token);
-        await File.WriteAllTextAsync(Path.Combine(tempDir.Path, "data.json"), "{}", cts.Token);
+    private Task WriteNupkgAsync(string fileName) =>
+        File.WriteAllBytesAsync(Path.Combine(tempDir.Path, fileName), NupkgContent, CancellationToken.None);
 
-        await Task.Delay(TimeSpan.FromMilliseconds(400), cts.Token);
+    public async ValueTask DisposeAsync()
+    {
+        if (service is not null)
+        {
+            try
+            {
+                await service.StopAsync(CancellationToken.None);
+            }
+            catch (OperationCanceledException)
+            {
+            }
 
-        Assert.Equal(0, spy.TriggerCount);
+            service.Dispose();
+        }
 
-        await cts.CancelAsync();
-        try { await serviceTask; } catch (OperationCanceledException) { }
+        tempDir.Dispose();
     }
 
     private sealed class SpyTriggerSink : IReconciliationTriggerIngress
     {
-        private int _triggerCount;
-        private readonly List<ReconciliationTrigger> _triggers = [];
+        private readonly List<ReconciliationTrigger> triggers = [];
 
-        public int TriggerCount => _triggerCount;
+        public int TriggerCount
+        {
+            get
+            {
+                lock (triggers)
+                {
+                    return triggers.Count;
+                }
+            }
+        }
 
         public IReadOnlyList<ReconciliationTrigger> Triggers
         {
             get
             {
-                lock (_triggers)
+                lock (triggers)
                 {
-                    return _triggers.ToArray();
+                    return triggers.ToArray();
                 }
+            }
+        }
+
+        public void Reset()
+        {
+            lock (triggers)
+            {
+                triggers.Clear();
             }
         }
 
         public void Enqueue(ReconciliationTrigger trigger)
         {
-            Interlocked.Increment(ref _triggerCount);
-            lock (_triggers)
+            lock (triggers)
             {
-                _triggers.Add(trigger);
+                triggers.Add(trigger);
             }
         }
 

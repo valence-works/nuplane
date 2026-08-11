@@ -8,12 +8,18 @@ namespace Nuplane.Sources.Directory.Hosting;
 internal sealed class DebouncedDirtySignal
 {
     private readonly TimeSpan _debounceWindow;
+    private readonly TimeProvider _timeProvider;
     private readonly Channel<bool> _signals = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
     {
         FullMode = BoundedChannelFullMode.DropOldest
     });
 
-    public DebouncedDirtySignal(TimeSpan debounceWindow)
+    /// <param name="debounceWindow">The quiet period that must elapse before a settled notification is produced.</param>
+    /// <param name="timeProvider">
+    /// The clock used to measure the debounce window. Defaults to <see cref="TimeProvider.System" />; tests supply a
+    /// fake clock so debounce behavior can be verified without depending on the wall clock.
+    /// </param>
+    public DebouncedDirtySignal(TimeSpan debounceWindow, TimeProvider? timeProvider = null)
     {
         if (debounceWindow < TimeSpan.Zero)
         {
@@ -21,6 +27,7 @@ internal sealed class DebouncedDirtySignal
         }
 
         _debounceWindow = debounceWindow;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public void Signal()
@@ -35,7 +42,7 @@ internal sealed class DebouncedDirtySignal
 
         while (true)
         {
-            await Task.Delay(_debounceWindow, cancellationToken);
+            await Task.Delay(_debounceWindow, _timeProvider, cancellationToken);
 
             if (!_signals.Reader.TryRead(out _))
             {
