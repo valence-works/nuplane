@@ -48,12 +48,18 @@ This document defines the coding standards and conventions for the Nuplane proje
 | Kind | Convention | Example |
 |------|-----------|---------|
 | Public property | PascalCase | `PollInterval`, `MaxRetryAttempts` |
-| Private field | camelCase (no underscore prefix) | `reconciliationOptions`, `cycleLock` |
+| Private instance field | `_camelCase` (underscore prefix) | `_reconciliationOptions`, `_cycleLock` |
+| Private static field | PascalCase | `JsonOptions`, `AssemblyNames` |
 | Parameter | camelCase | `cancellationToken`, `configureFeeds` |
 | Local variable | camelCase | `feedResolutionOptions`, `validationErrors` |
 | Constant | PascalCase | `EmptyChangeSet` |
 | Method | PascalCase, verb phrase | `TriggerManualAsync`, `EvaluateAsync` |
 | Async method | `Async` suffix | `ResolveAsync`, `GetDesiredAsync` |
+
+The private instance field rule is enforced by the naming policy in `Nuplane.sln.DotSettings`
+(`AccessRightKinds="Private"`, `Prefix="_"`, `Style="aaBb"`), so ReSharper and Rider flag deviations
+automatically. A small number of older files still use bare `camelCase`; treat `_camelCase` as correct
+when adding fields or touching those files.
 
 ### Files
 

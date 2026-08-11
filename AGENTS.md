@@ -39,7 +39,7 @@ Run focused tests first for the area changed, then run the full solution when pr
 - Package versions are centrally managed in `Directory.Packages.props`; do not add `Version` attributes to individual `PackageReference` items.
 - Prefer `sealed record` for DTO/result types and sealed data-only options classes.
 - Use file-scoped namespaces that mirror folder structure.
-- Use private fields without underscore prefixes.
+- Use `_camelCase` for private instance fields and PascalCase for private static fields; the naming policy in `Nuplane.sln.DotSettings` enforces this.
 - Use `ArgumentNullException.ThrowIfNull(...)` for public API null guards.
 - Keep options validation in `IValidateOptions<T>` implementations; do not add `IsValid()` methods to options classes.
 - Use `[LoggerMessage]` source-generated logging for structured log methods.
