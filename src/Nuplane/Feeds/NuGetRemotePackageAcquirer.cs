@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
@@ -29,30 +28,15 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
                 $"Feed '{feed.Name}' configures credentials, but remote credential resolution is not implemented yet.");
         }
 
-        var installRoot = ResolveInstallRoot();
-        var installDirectory = Path.Combine(
-            installRoot,
-            SanitizePathSegment(feed.Name),
-            SanitizePathSegment(packageId),
-            SanitizePathSegment(version));
-        var completionMarkerPath = Path.Combine(installDirectory, ".nuplane-ready");
+        var installRoot = PackageInstallStore.ResolveInstallRoot(_options);
+        var installDirectory = PackageInstallStore.GetInstallDirectory(installRoot, feed.Name, packageId, version);
 
-        if (File.Exists(completionMarkerPath))
+        if (PackageInstallStore.IsInstalled(installDirectory))
         {
             return installDirectory;
         }
 
-        if (Directory.Exists(installDirectory))
-        {
-            Directory.Delete(installDirectory, recursive: true);
-        }
-
-        var tempRoot = Path.Combine(installRoot, ".tmp");
-        Directory.CreateDirectory(tempRoot);
-        Directory.CreateDirectory(Path.GetDirectoryName(installDirectory)!);
-
-        var tempNupkgPath = Path.Combine(tempRoot, $"{Guid.NewGuid():N}.nupkg");
-        var tempExtractDirectory = Path.Combine(tempRoot, Guid.NewGuid().ToString("N"));
+        var stagedNupkgPath = PackageInstallStore.CreateStagingPath(installRoot, ".nupkg");
 
         try
         {
@@ -60,28 +44,19 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
                 feed,
                 packageId,
                 version,
-                tempNupkgPath,
+                stagedNupkgPath,
                 _options.PackageBaseAddressCacheTtl,
                 cancellationToken);
 
-            Directory.CreateDirectory(tempExtractDirectory);
-            ZipFile.ExtractToDirectory(tempNupkgPath, tempExtractDirectory, overwriteFiles: true);
-            await File.WriteAllTextAsync(Path.Combine(tempExtractDirectory, ".nuplane-ready"), string.Empty, cancellationToken);
-            Directory.Move(tempExtractDirectory, installDirectory);
-            tempExtractDirectory = string.Empty;
+            await PackageInstallStore.InstallAsync(installRoot, installDirectory, stagedNupkgPath, cancellationToken);
 
             return installDirectory;
         }
         finally
         {
-            if (File.Exists(tempNupkgPath))
+            if (File.Exists(stagedNupkgPath))
             {
-                File.Delete(tempNupkgPath);
-            }
-
-            if (!string.IsNullOrEmpty(tempExtractDirectory) && Directory.Exists(tempExtractDirectory))
-            {
-                Directory.Delete(tempExtractDirectory, recursive: true);
+                File.Delete(stagedNupkgPath);
             }
         }
     }
@@ -216,18 +191,6 @@ public sealed class NuGetRemotePackageAcquirer(IOptions<FeedResolutionOptions> o
         return value.EndsWith("/", StringComparison.Ordinal)
             ? uri
             : new Uri(value + "/", UriKind.Absolute);
-    }
-
-    private string ResolveInstallRoot() =>
-        !string.IsNullOrWhiteSpace(_options.PackageInstallRoot)
-            ? Path.GetFullPath(_options.PackageInstallRoot)
-            : Path.Combine(AppContext.BaseDirectory, ".nuplane", "packages");
-
-    private static string SanitizePathSegment(string value)
-    {
-        var invalidCharacters = Path.GetInvalidFileNameChars();
-        var buffer = value.Select(ch => invalidCharacters.Contains(ch) ? '_' : ch).ToArray();
-        return new(buffer);
     }
 
     private sealed record CachedPackageBaseAddress(Uri Uri, DateTimeOffset ExpiresAt);

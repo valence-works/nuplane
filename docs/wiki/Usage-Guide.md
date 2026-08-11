@@ -80,6 +80,12 @@ This avoids positional array merging when `appsettings.json`, environment variab
 configuration files are layered. Feed object order is not semantic; configure feed priorities
 separately when resolution order matters.
 
+When the same reconciliation setting is expressed in both layers, the more specific
+`Nuplane:Reconciliation` section wins over the `Nuplane:Setup` shorthand. An explicitly present
+`Reconciliation:EnableAutomaticReconciliation` decides automatic reconciliation in both directions,
+so `false` there disables polling even when `Setup:AutomaticReconciliation` is `true`; the same
+applies to `Reconciliation:PollInterval` over `Setup:PollInterval`.
+
 ### Directory feeds as an offline package source
 
 A directory feed declared with `DirectoryPath` both contributes desired roots and resolves packages,
@@ -90,6 +96,23 @@ Resolution reads the directory itself: package identifiers are matched case-inse
 versions are matched in normalized form. A `.nupkg` written by `dotnet restore` under a lower-cased
 file name therefore still satisfies a dependency that declares the canonical identifier, including
 on case-sensitive file systems such as those inside Linux containers.
+
+The directory is only ever read. Packages resolved from it are extracted under
+`Nuplane:FeedResolution:PackageInstallRoot` — at
+`{PackageInstallRoot}/{feedName}/{packageId}/{version}` — the same layout remote feeds use, so a
+directory feed can be baked into a container image or mounted read-only:
+
+```bash
+docker run --read-only \
+  -v "$(pwd)/packages:/app/packages:ro" \
+  -v nuplane-data:/var/lib/nuplane \
+  -e Nuplane__FeedResolution__PackageInstallRoot=/var/lib/nuplane/packages \
+  your-registry/nuplane-host:latest
+```
+
+Only `PackageInstallRoot` (and the store state file path) has to be writable. Earlier versions
+extracted into a `.installed/` subdirectory of the feed directory; hosts upgrading from those
+versions can delete that directory, and packages are re-extracted once under the install root.
 
 ## Code-driven adoption
 

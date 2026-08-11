@@ -64,4 +64,13 @@ internal static partial class LoadingLogger
         string graphKey,
         PackageLoadMode loadMode,
         string scope);
+
+    [LoggerMessage(
+        EventId = 2107,
+        Level = LogLevel.Debug,
+        Message = "Skipped graph load for packages {PackageKeys} because every member was already evaluated as an inert graph member that contributes no assemblies. CorrelationId={CorrelationId}")]
+    public static partial void LogInertGraphSkipped(
+        this ILogger logger,
+        string packageKeys,
+        string correlationId);
 }
