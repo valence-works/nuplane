@@ -80,11 +80,19 @@ This avoids positional array merging when `appsettings.json`, environment variab
 configuration files are layered. Feed object order is not semantic; configure feed priorities
 separately when resolution order matters.
 
-When the same reconciliation setting is expressed in both layers, the more specific
-`Nuplane:Reconciliation` section wins over the `Nuplane:Setup` shorthand. An explicitly present
+When the same setting is expressed in both layers, the more specific runtime option section wins
+over the `Nuplane:Setup` shorthand. An explicitly present
 `Reconciliation:EnableAutomaticReconciliation` decides automatic reconciliation in both directions,
 so `false` there disables polling even when `Setup:AutomaticReconciliation` is `true`; the same
 applies to `Reconciliation:PollInterval` over `Setup:PollInterval`.
+
+Store persistence follows the same rule: `StoreRegistry:StateFilePath` and
+`StoreRegistry:UseInMemoryStore` decide over `Setup:StateFilePath` and `Setup:UseInMemoryStore`, so
+`StoreRegistry:UseInMemoryStore: false` keeps state persisted even when the shorthand asks for an
+in-memory store. Because the two persistence settings are mutually exclusive, an explicit choice in
+`StoreRegistry` also suppresses the opposing shorthand instead of combining into a rejected
+configuration. Builder calls run last, so `WithStateFile(...)` and `UseInMemoryStore()` in the
+`AddNuplane` callback still override both configuration layers.
 
 ### Directory feeds as an offline package source
 

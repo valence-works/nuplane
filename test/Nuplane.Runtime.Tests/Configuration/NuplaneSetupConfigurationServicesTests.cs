@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Nuplane.Hosting;
 using Nuplane.Reconciliation.Configuration;
+using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Configuration;
 
@@ -215,6 +216,144 @@ public sealed class NuplaneSetupConfigurationServicesTests
         Assert.Equal(TimeSpan.FromSeconds(10), options.PollInterval);
     }
 
+    // The store persistence layer follows the same precedence rule as the Reconciliation section:
+    // an explicitly present StoreRegistry key decides in both directions, and the Setup shorthand
+    // only applies when the matching StoreRegistry key is absent.
+    [Theory]
+    [InlineData("./setup-state.json", null, "./setup-state.json")]
+    [InlineData(null, "./store-state.json", "./store-state.json")]
+    [InlineData("./setup-state.json", "./store-state.json", "./store-state.json")]
+    public void ApplySetupConfiguration_SetupAndStoreRegistryStateFilePathCombination_PrefersStoreRegistrySection(
+        string? setupValue,
+        string? storeRegistryValue,
+        string expectedPath)
+    {
+        // Arrange
+        var settings = BuildStoreSettings(("Setup:StateFilePath", setupValue), ("StoreRegistry:StateFilePath", storeRegistryValue));
+
+        // Act
+        var settingsResult = ResolveStorePersistenceSettings(settings);
+
+        // Assert
+        Assert.Equal(StorePersistenceMode.ConfiguredPath, settingsResult.Mode);
+        Assert.Equal(Path.GetFullPath(expectedPath), settingsResult.ResolvedStateFilePath);
+    }
+
+    [Theory]
+    [InlineData("true", null, StorePersistenceMode.InMemory)]
+    [InlineData("true", "false", StorePersistenceMode.DefaultPath)]
+    [InlineData("false", "true", StorePersistenceMode.InMemory)]
+    [InlineData(null, "true", StorePersistenceMode.InMemory)]
+    [InlineData("false", null, StorePersistenceMode.DefaultPath)]
+    [InlineData(null, null, StorePersistenceMode.DefaultPath)]
+    public void ApplySetupConfiguration_SetupAndStoreRegistryUseInMemoryStoreCombination_PrefersStoreRegistrySection(
+        string? setupValue,
+        string? storeRegistryValue,
+        StorePersistenceMode expectedMode)
+    {
+        // Arrange
+        var settings = BuildStoreSettings(("Setup:UseInMemoryStore", setupValue), ("StoreRegistry:UseInMemoryStore", storeRegistryValue));
+
+        // Act
+        var settingsResult = ResolveStorePersistenceSettings(settings);
+
+        // Assert
+        Assert.Equal(expectedMode, settingsResult.Mode);
+    }
+
+    [Fact]
+    public void ApplySetupConfiguration_StoreRegistryStateFilePathWithSetupInMemoryShorthand_UsesStoreRegistryPath()
+    {
+        // Arrange
+        var settings = BuildStoreSettings(("Setup:UseInMemoryStore", "true"), ("StoreRegistry:StateFilePath", "./store-state.json"));
+
+        // Act
+        var settingsResult = ResolveStorePersistenceSettings(settings);
+
+        // Assert
+        Assert.Equal(StorePersistenceMode.ConfiguredPath, settingsResult.Mode);
+        Assert.Equal(Path.GetFullPath("./store-state.json"), settingsResult.ResolvedStateFilePath);
+    }
+
+    [Fact]
+    public void ApplySetupConfiguration_StoreRegistryInMemoryStoreWithSetupStateFilePathShorthand_UsesInMemoryStore()
+    {
+        // Arrange
+        var settings = BuildStoreSettings(("Setup:StateFilePath", "./setup-state.json"), ("StoreRegistry:UseInMemoryStore", "true"));
+
+        // Act
+        var settingsResult = ResolveStorePersistenceSettings(settings);
+
+        // Assert
+        Assert.Equal(StorePersistenceMode.InMemory, settingsResult.Mode);
+        Assert.Null(settingsResult.ResolvedStateFilePath);
+    }
+
+    [Fact]
+    public void ApplySetupConfiguration_StoreRegistryInMemoryStoreDisabledWithSetupStateFilePathShorthand_UsesSetupPath()
+    {
+        // Arrange
+        var settings = BuildStoreSettings(("Setup:StateFilePath", "./setup-state.json"), ("StoreRegistry:UseInMemoryStore", "false"));
+
+        // Act
+        var settingsResult = ResolveStorePersistenceSettings(settings);
+
+        // Assert
+        Assert.Equal(StorePersistenceMode.ConfiguredPath, settingsResult.Mode);
+        Assert.Equal(Path.GetFullPath("./setup-state.json"), settingsResult.ResolvedStateFilePath);
+    }
+
+    [Fact]
+    public void ApplySetupConfiguration_BuilderWithStateFileAfterStoreRegistrySection_UsesBuilderPath()
+    {
+        // Arrange
+        var configuration = BuildConfiguration(BuildStoreSettings(
+            ("Setup:StateFilePath", "./setup-state.json"),
+            ("StoreRegistry:StateFilePath", "./store-state.json")));
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Act
+        services.AddNuplane(
+            configuration.GetSection("Nuplane"),
+            nuplane => nuplane.WithStateFile("./builder-state.json"));
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        var settingsResult = provider.GetRequiredService<EffectiveStorePersistenceSettings>();
+        Assert.Equal(StorePersistenceMode.ConfiguredPath, settingsResult.Mode);
+        Assert.Equal(Path.GetFullPath("./builder-state.json"), settingsResult.ResolvedStateFilePath);
+    }
+
+    [Fact]
+    public void ApplySetupConfiguration_SetupSectionPassedDirectly_UsesSetupStateFilePath()
+    {
+        // Arrange
+        var configuration = BuildConfiguration(BuildStoreSettings(("Setup:StateFilePath", "./setup-state.json")));
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Act
+        services.AddNuplane(configuration.GetSection("Nuplane:Setup"));
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        var settingsResult = provider.GetRequiredService<EffectiveStorePersistenceSettings>();
+        Assert.Equal(StorePersistenceMode.ConfiguredPath, settingsResult.Mode);
+        Assert.Equal(Path.GetFullPath("./setup-state.json"), settingsResult.ResolvedStateFilePath);
+    }
+
+    private static Dictionary<string, string?> BuildStoreSettings(params (string Key, string? Value)[] entries)
+    {
+        var settings = new Dictionary<string, string?>();
+        foreach (var (key, value) in entries.Where(static entry => entry.Value is not null))
+        {
+            settings[$"Nuplane:{key}"] = value;
+        }
+
+        return settings;
+    }
+
     private static IConfigurationRoot BuildConfiguration(Dictionary<string, string?> settings) =>
         new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
 
@@ -232,5 +371,12 @@ public sealed class NuplaneSetupConfigurationServicesTests
         var services = AddNuplaneFromConfiguration(settings);
         using var provider = services.BuildServiceProvider();
         return provider.GetRequiredService<IOptions<ReconciliationOptions>>().Value;
+    }
+
+    private static EffectiveStorePersistenceSettings ResolveStorePersistenceSettings(Dictionary<string, string?> settings)
+    {
+        var services = AddNuplaneFromConfiguration(settings);
+        using var provider = services.BuildServiceProvider();
+        return provider.GetRequiredService<EffectiveStorePersistenceSettings>();
     }
 }

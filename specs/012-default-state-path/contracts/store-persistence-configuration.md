@@ -49,7 +49,9 @@ Defines the external configuration and builder contract for selecting store pers
 ## Precedence Rules
 
 - `Nuplane:Setup` remains the high-level translation surface.
-- Programmatic builder configuration and `Nuplane:Setup` translation continue to override directly bound `Nuplane:StoreRegistry` values, matching existing `StateFilePath` behavior.
+- Programmatic builder configuration overrides both configuration layers, because builder calls run after configuration binds.
+- The more specific `Nuplane:StoreRegistry` section overrides the `Nuplane:Setup` translation in both directions when the key is explicitly present; the shorthand only applies when the matching `StoreRegistry` key is absent. Superseded the original rule, under which the `Setup` translation always won.
+- Because the two persistence settings are mutually exclusive, an explicit `StoreRegistry` persistence choice also suppresses the opposing `Setup` shorthand rather than combining into a configuration the validator rejects.
 - The final resolved `StoreRegistryOptions` object is the single source of truth for runtime behavior.
 
 ## Trust & Security Boundary

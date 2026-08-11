@@ -167,8 +167,7 @@ public sealed class ConfigurationDrivenRegistrationTests
                     ["Nuplane:Setup:Feeds:0:IncludePatterns:0"] = "*",
                     ["Nuplane:Setup:Feeds:0:Directory:Watch"] = "false",
                     ["Nuplane:Setup:Feeds:0:Directory:DebounceWindow"] = "00:00:02",
-                    ["Nuplane:Reconciliation:MaxRetryAttempts"] = "5",
-                    ["Nuplane:StoreRegistry:StateFilePath"] = Path.Combine(root, "ignored-by-setup.json")
+                    ["Nuplane:Reconciliation:MaxRetryAttempts"] = "5"
                 })
                 .Build();
 
@@ -571,7 +570,7 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
-    public void AddNuplane_SetupStateFilePathOverridesStoreRegistrySection()
+    public void AddNuplane_StoreRegistryStateFilePathOverridesSetupSection()
     {
         var root = Path.Combine(Path.GetTempPath(), "nuplane-precedence", Guid.NewGuid().ToString("N"));
         var packagesPath = Path.Combine(root, "packages");
@@ -600,7 +599,7 @@ public sealed class ConfigurationDrivenRegistrationTests
             var effectiveSettings = provider.GetRequiredService<EffectiveStorePersistenceSettings>();
 
             Assert.Equal(StorePersistenceMode.ConfiguredPath, effectiveSettings.Mode);
-            Assert.Equal(Path.GetFullPath(setupPath), effectiveSettings.ResolvedStateFilePath);
+            Assert.Equal(Path.GetFullPath(storeRegistryPath), effectiveSettings.ResolvedStateFilePath);
         }
         finally
         {
