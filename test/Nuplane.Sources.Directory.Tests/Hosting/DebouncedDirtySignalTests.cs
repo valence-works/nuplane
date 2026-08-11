@@ -29,10 +29,14 @@ public sealed class DebouncedDirtySignalTests
         // Arrange
         var wakeup = signal.WaitForNextSettledSignalAsync(CancellationToken.None);
 
-        // Act: a burst of signals inside a single quiet window.
+        // Act: a burst spread across a single quiet window. Spacing the signals in virtual time keeps the
+        // capacity-one channel from collapsing them on its own, so the debounce is what has to hold the
+        // wakeup back; the burst spans half a window, which a correct implementation never settles inside.
         for (var i = 0; i < 10; i++)
         {
             signal.Signal();
+            await FakeClockDriver.AdvanceAsync(time, DebounceWindow / 20);
+            Assert.False(wakeup.IsCompleted, $"Wakeup settled mid-burst, after signal {i + 1}.");
         }
 
         await FakeClockDriver.AdvanceUntilCompletedAsync(time, wakeup, DebounceWindow);
