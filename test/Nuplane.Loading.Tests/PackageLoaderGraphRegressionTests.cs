@@ -6,7 +6,7 @@ namespace Nuplane.Loading.Tests;
 
 public sealed class PackageLoaderGraphRegressionTests : IDisposable
 {
-    private readonly string tempRoot = Path.Combine(Path.GetTempPath(), $"nuplane-graph-loader-{Guid.NewGuid():N}");
+    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"nuplane-graph-loader-{Guid.NewGuid():N}");
 
     public static IReadOnlyList<ResolvedPackage> CreateProviderStyleGraph(DirectoryInfo tempDir)
     {
@@ -81,7 +81,7 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
     [Fact]
     public void ResolveNativeLibraryPath_WithRuntimeNativeAsset_ResolvesPlatformSpecificName()
     {
-        var nativePackageInstall = Path.Combine(tempRoot, "SQLitePCLRaw.lib.e_sqlite3", "2.1.11");
+        var nativePackageInstall = Path.Combine(_tempRoot, "SQLitePCLRaw.lib.e_sqlite3", "2.1.11");
         var runtimeIdentifier = RuntimeInformation.RuntimeIdentifier;
         var nativeDirectory = Path.Combine(nativePackageInstall, "runtimes", runtimeIdentifier, "native");
         var nativePath = Path.Combine(nativeDirectory, ResolveCurrentPlatformNativeLibraryFileName("e_sqlite3"));
@@ -99,7 +99,7 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
     [Fact]
     public void ResolveNativeLibraryPath_WithRuntimeGraphFallback_ResolvesCompatibleRidAsset()
     {
-        var nativePackageInstall = Path.Combine(tempRoot, "Native.Package", "1.0.0");
+        var nativePackageInstall = Path.Combine(_tempRoot, "Native.Package", "1.0.0");
         var nativeDirectory = Path.Combine(nativePackageInstall, "runtimes", "linux-x64", "native");
         var nativePath = Path.Combine(nativeDirectory, "e_sqlite3");
         Directory.CreateDirectory(nativeDirectory);
@@ -318,15 +318,15 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(tempRoot))
+        if (Directory.Exists(_tempRoot))
         {
-            Directory.Delete(tempRoot, recursive: true);
+            Directory.Delete(_tempRoot, recursive: true);
         }
     }
 
     private string CreatePackageInstall(string packageId, string assemblyFileName)
     {
-        var installPath = Path.Combine(tempRoot, packageId, "1.0.0");
+        var installPath = Path.Combine(_tempRoot, packageId, "1.0.0");
         var libPath = Path.Combine(installPath, "lib", "net10.0");
         Directory.CreateDirectory(libPath);
         File.Copy(FindFixtureAssembly(assemblyFileName), Path.Combine(libPath, assemblyFileName), overwrite: true);
@@ -335,7 +335,7 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
 
     private string CreatePackageInstall(string packageId, string assemblyFileName, string sourceAssembly)
     {
-        var installPath = Path.Combine(tempRoot, packageId, "1.0.0");
+        var installPath = Path.Combine(_tempRoot, packageId, "1.0.0");
         var libPath = Path.Combine(installPath, "lib", "net10.0");
         Directory.CreateDirectory(libPath);
         File.Copy(sourceAssembly, Path.Combine(libPath, assemblyFileName), overwrite: true);
@@ -360,7 +360,7 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
 
     private string CreateFlatPackageInstall(string packageId, string assemblyFileName)
     {
-        var installPath = Path.Combine(tempRoot, packageId, "1.0.0");
+        var installPath = Path.Combine(_tempRoot, packageId, "1.0.0");
         Directory.CreateDirectory(installPath);
         File.Copy(FindFixtureAssembly(assemblyFileName), Path.Combine(installPath, assemblyFileName), overwrite: true);
         return installPath;
@@ -368,7 +368,7 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
 
     private string CreateNoAssemblyPackageInstall(string packageId)
     {
-        var installPath = Path.Combine(tempRoot, packageId, "1.0.0");
+        var installPath = Path.Combine(_tempRoot, packageId, "1.0.0");
         var libPath = Path.Combine(installPath, "lib", "netstandard2.0");
         Directory.CreateDirectory(libPath);
         File.WriteAllText(Path.Combine(libPath, "_._"), string.Empty);
@@ -377,7 +377,7 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
 
     private string CreateAmbiguousPackageInstall(string packageId)
     {
-        var installPath = Path.Combine(tempRoot, packageId, "1.0.0");
+        var installPath = Path.Combine(_tempRoot, packageId, "1.0.0");
         var libPath = Path.Combine(installPath, "lib", "net10.0");
         Directory.CreateDirectory(libPath);
         File.Copy(FindFixtureAssembly("Plugin.Root.dll"), Path.Combine(libPath, "First.dll"), overwrite: true);

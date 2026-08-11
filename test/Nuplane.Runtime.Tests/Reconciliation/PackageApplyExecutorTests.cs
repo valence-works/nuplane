@@ -9,7 +9,7 @@ namespace Nuplane.Runtime.Tests.Reconciliation;
 
 public sealed class PackageApplyExecutorTests : IDisposable
 {
-    private readonly string tempRoot = Path.Combine(Path.GetTempPath(), $"nuplane-apply-executor-{Guid.NewGuid():N}");
+    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"nuplane-apply-executor-{Guid.NewGuid():N}");
 
     [Fact]
     public async Task ResolveAsync_WhenConflictAndIndependentResolutionFailure_RecordsConflictOnlyForConflictRoots()
@@ -76,9 +76,9 @@ public sealed class PackageApplyExecutorTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(tempRoot))
+        if (Directory.Exists(_tempRoot))
         {
-            Directory.Delete(tempRoot, recursive: true);
+            Directory.Delete(_tempRoot, recursive: true);
         }
     }
 
@@ -88,7 +88,7 @@ public sealed class PackageApplyExecutorTests : IDisposable
         string? dependencyId = null,
         string? dependencyVersionRange = null)
     {
-        var installPath = Path.Combine(tempRoot, packageId, version);
+        var installPath = Path.Combine(_tempRoot, packageId, version);
         Directory.CreateDirectory(installPath);
         File.WriteAllText(
             Path.Combine(installPath, $"{packageId}.nuspec"),

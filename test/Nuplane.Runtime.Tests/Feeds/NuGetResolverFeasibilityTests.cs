@@ -10,7 +10,7 @@ namespace Nuplane.Runtime.Tests.Feeds;
 
 public sealed class NuGetResolverFeasibilityTests
 {
-    private readonly SourceRepository source = new(
+    private readonly SourceRepository _source = new(
         new PackageSource("https://feed.example/v3/index.json", "test-feed"),
         Enumerable.Empty<INuGetResourceProvider>());
 
@@ -100,7 +100,7 @@ public sealed class NuGetResolverFeasibilityTests
             packagesConfig: [],
             preferredVersions,
             availablePackages,
-            [source.PackageSource],
+            [_source.PackageSource],
             NullLogger.Instance);
 
         return new PackageResolver()
@@ -111,7 +111,7 @@ public sealed class NuGetResolverFeasibilityTests
     }
 
     private SourcePackageDependencyInfo Package(string id, string version, params PackageDependency[] dependencies) =>
-        new(id, NuGetVersion.Parse(version), dependencies, listed: true, source);
+        new(id, NuGetVersion.Parse(version), dependencies, listed: true, _source);
 
     private static PackageDependency Dependency(string id, string versionRange) =>
         new(id, VersionRange.Parse(versionRange));

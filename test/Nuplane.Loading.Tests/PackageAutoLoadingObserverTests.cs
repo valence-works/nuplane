@@ -11,13 +11,13 @@ public sealed class PackageAutoLoadingObserverTests : IDisposable
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
 
-    private readonly string tempRoot = Path.Combine(Path.GetTempPath(), $"nuplane-auto-loading-{Guid.NewGuid():N}");
+    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"nuplane-auto-loading-{Guid.NewGuid():N}");
 
     public void Dispose()
     {
-        if (Directory.Exists(tempRoot))
+        if (Directory.Exists(_tempRoot))
         {
-            Directory.Delete(tempRoot, recursive: true);
+            Directory.Delete(_tempRoot, recursive: true);
         }
     }
 
@@ -331,7 +331,7 @@ public sealed class PackageAutoLoadingObserverTests : IDisposable
 
     private string CreateAssemblyPackageInstall(string packageId)
     {
-        var installPath = Path.Combine(tempRoot, packageId, "1.0.0");
+        var installPath = Path.Combine(_tempRoot, packageId, "1.0.0");
         var libPath = Path.Combine(installPath, "lib", "net10.0");
         Directory.CreateDirectory(libPath);
         File.Copy(
@@ -343,7 +343,7 @@ public sealed class PackageAutoLoadingObserverTests : IDisposable
 
     private string CreateNoAssemblyPackageInstall(string packageId)
     {
-        var installPath = Path.Combine(tempRoot, packageId, "10.0.9");
+        var installPath = Path.Combine(_tempRoot, packageId, "10.0.9");
         var libPath = Path.Combine(installPath, "lib", "netstandard2.0");
         Directory.CreateDirectory(libPath);
         File.WriteAllText(Path.Combine(libPath, "_._"), string.Empty);

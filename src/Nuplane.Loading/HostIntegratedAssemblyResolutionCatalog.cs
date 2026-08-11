@@ -7,9 +7,9 @@ namespace Nuplane.Loading;
 /// </summary>
 internal sealed class HostIntegratedAssemblyResolutionCatalog
 {
-    private readonly object gate = new();
-    private IReadOnlyList<HostIntegratedAssemblyResolutionEntry> entries = [];
-    private long generation;
+    private readonly object _gate = new();
+    private IReadOnlyList<HostIntegratedAssemblyResolutionEntry> _entries = [];
+    private long _generation;
 
     /// <summary>
     /// Gets the current published generation.
@@ -18,9 +18,9 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
     {
         get
         {
-            lock (gate)
+            lock (_gate)
             {
-                return generation;
+                return _generation;
             }
         }
     }
@@ -63,13 +63,13 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
             }
         }
 
-        lock (gate)
+        lock (_gate)
         {
             var replacementPackageKeys = additions
                 .Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var nextGeneration = generation + 1;
-            var retained = entries
+            var nextGeneration = _generation + 1;
+            var retained = _entries
                 .Where(entry => !string.Equals(entry.GraphKey, graphKey, StringComparison.OrdinalIgnoreCase)
                     && !replacementPackageKeys.Contains(BuildPackageKey(entry.PackageId, entry.PackageVersion)))
                 .Concat(additions.Select(entry => entry with { Generation = nextGeneration }))
@@ -77,13 +77,13 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
 
             ValidateNoConflicts(retained);
 
-            entries = retained
+            _entries = retained
                 .OrderBy(static entry => entry.AssemblySimpleName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static entry => entry.Version?.ToString(), StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static entry => entry.PackageId, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static entry => entry.PackageVersion, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            generation = nextGeneration;
+            _generation = nextGeneration;
         }
     }
 
@@ -97,12 +97,12 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
         ArgumentException.ThrowIfNullOrWhiteSpace(graphKey);
         ArgumentNullException.ThrowIfNull(candidates);
 
-        lock (gate)
+        lock (_gate)
         {
             var replacementPackageKeys = candidates
                 .Select(static candidate => BuildPackageKey(candidate.PackageId, candidate.PackageVersion))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var proposedEntries = entries
+            var proposedEntries = _entries
                 .Where(entry => !string.Equals(entry.GraphKey, graphKey, StringComparison.OrdinalIgnoreCase)
                     && !replacementPackageKeys.Contains(BuildPackageKey(entry.PackageId, entry.PackageVersion)))
                 .Select(static entry => new ConflictCandidate(
@@ -126,16 +126,16 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
     /// </summary>
     public void RemovePackage(string packageId, string version)
     {
-        lock (gate)
+        lock (_gate)
         {
-            var retained = entries
+            var retained = _entries
                 .Where(entry => !string.Equals(entry.PackageId, packageId, StringComparison.OrdinalIgnoreCase)
                     || !string.Equals(entry.PackageVersion, version, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
-            if (retained.Length != entries.Count)
+            if (retained.Length != _entries.Count)
             {
-                entries = retained;
-                generation++;
+                _entries = retained;
+                _generation++;
             }
         }
     }
@@ -148,9 +148,9 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
         ArgumentNullException.ThrowIfNull(assemblyName);
 
         IReadOnlyList<HostIntegratedAssemblyResolutionEntry> snapshot;
-        lock (gate)
+        lock (_gate)
         {
-            snapshot = entries;
+            snapshot = _entries;
         }
 
         var candidates = snapshot

@@ -5,7 +5,7 @@ namespace Nuplane.Setup;
 
 internal sealed class NuplaneSetupOptionsValidator : IValidateOptions<NuplaneSetupOptions>
 {
-    private readonly INuplaneSetupFeedDeclarationSource? feedDeclarationSource;
+    private readonly INuplaneSetupFeedDeclarationSource? _feedDeclarationSource;
 
     public NuplaneSetupOptionsValidator()
     {
@@ -13,7 +13,7 @@ internal sealed class NuplaneSetupOptionsValidator : IValidateOptions<NuplaneSet
 
     public NuplaneSetupOptionsValidator(INuplaneSetupFeedDeclarationSource feedDeclarationSource)
     {
-        this.feedDeclarationSource = feedDeclarationSource ?? throw new ArgumentNullException(nameof(feedDeclarationSource));
+        _feedDeclarationSource = feedDeclarationSource ?? throw new ArgumentNullException(nameof(feedDeclarationSource));
     }
 
     public ValidateOptionsResult Validate(string? name, NuplaneSetupOptions options)
@@ -37,7 +37,7 @@ internal sealed class NuplaneSetupOptionsValidator : IValidateOptions<NuplaneSet
             errors.Add("Nuplane setup UseInMemoryStore cannot be combined with a non-empty StateFilePath.");
         }
 
-        if (feedDeclarationSource is { } source)
+        if (_feedDeclarationSource is { } source)
         {
             var readResult = source.Read();
             var feedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

@@ -2,14 +2,14 @@ namespace Nuplane.Loading.Tests;
 
 public sealed class PackageMetadataLoadModeReaderTests : IDisposable
 {
-    private readonly DirectoryInfo tempDir = Directory.CreateTempSubdirectory("nuplane-metadata-reader-test-");
+    private readonly DirectoryInfo _tempDir = Directory.CreateTempSubdirectory("nuplane-metadata-reader-test-");
 
-    public void Dispose() => tempDir.Delete(recursive: true);
+    public void Dispose() => _tempDir.Delete(recursive: true);
 
     [Fact]
     public void Read_WhenPackageRootMetadataIsValid_ReturnsLoadingRequirement()
     {
-        var installPath = PackageMetadataTestSupport.CreateInstallDir(tempDir, "pkg-a");
+        var installPath = PackageMetadataTestSupport.CreateInstallDir(_tempDir, "pkg-a");
         PackageMetadataTestSupport.WriteMetadata(
             installPath,
             PackageLoadMode.HostIntegrated,
@@ -41,7 +41,7 @@ public sealed class PackageMetadataLoadModeReaderTests : IDisposable
     [InlineData("""{"schemaVersion":1,"loading":{"loadMode":"HostIntegrated"}}""")]
     public void Read_WhenMetadataIsInvalid_ReturnsInvalidDiagnostic(string json)
     {
-        var installPath = PackageMetadataTestSupport.CreateInstallDir(tempDir, "pkg-a");
+        var installPath = PackageMetadataTestSupport.CreateInstallDir(_tempDir, "pkg-a");
         File.WriteAllText(Path.Combine(installPath, PackageMetadataLoadModeReader.MetadataFileName), json);
         var sut = new PackageMetadataLoadModeReader();
 
@@ -55,7 +55,7 @@ public sealed class PackageMetadataLoadModeReaderTests : IDisposable
     [Fact]
     public void Read_WhenMetadataIsOversized_ReturnsInvalidDiagnostic()
     {
-        var installPath = PackageMetadataTestSupport.CreateInstallDir(tempDir, "pkg-a");
+        var installPath = PackageMetadataTestSupport.CreateInstallDir(_tempDir, "pkg-a");
         File.WriteAllText(
             Path.Combine(installPath, PackageMetadataLoadModeReader.MetadataFileName),
             new string('x', 64 * 1024 + 1));

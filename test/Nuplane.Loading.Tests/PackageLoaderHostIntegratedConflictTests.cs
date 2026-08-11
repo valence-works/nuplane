@@ -6,9 +6,9 @@ namespace Nuplane.Loading.Tests;
 
 public sealed class PackageLoaderHostIntegratedConflictTests : IDisposable
 {
-    private readonly DirectoryInfo tempDir = Directory.CreateTempSubdirectory("nuplane-host-integrated-conflict-test-");
+    private readonly DirectoryInfo _tempDir = Directory.CreateTempSubdirectory("nuplane-host-integrated-conflict-test-");
 
-    public void Dispose() => tempDir.Delete(recursive: true);
+    public void Dispose() => _tempDir.Delete(recursive: true);
 
     [Fact]
     public async Task EnsureGraphLoadedAsync_HostIntegratedVersionConflict_FailsBeforePublishingVisibility()
@@ -35,7 +35,7 @@ public sealed class PackageLoaderHostIntegratedConflictTests : IDisposable
 
     private string CreateInstallDir(string packageId, string sourceAssemblyPath)
     {
-        var dir = tempDir.CreateSubdirectory(packageId);
+        var dir = _tempDir.CreateSubdirectory(packageId);
         File.Copy(sourceAssemblyPath, Path.Combine(dir.FullName, "Nuplane.Loading.Tests.Fixtures.dll"));
         return dir.FullName;
     }

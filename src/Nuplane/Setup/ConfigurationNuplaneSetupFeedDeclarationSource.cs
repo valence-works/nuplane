@@ -8,7 +8,7 @@ namespace Nuplane.Setup;
 /// </summary>
 public sealed class ConfigurationNuplaneSetupFeedDeclarationSource : INuplaneSetupFeedDeclarationSource
 {
-    private readonly Lazy<NuplaneFeedSetupReadResult> result;
+    private readonly Lazy<NuplaneFeedSetupReadResult> _result;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ConfigurationNuplaneSetupFeedDeclarationSource"/> class.
@@ -18,10 +18,10 @@ public sealed class ConfigurationNuplaneSetupFeedDeclarationSource : INuplaneSet
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        result = new(() => NuplaneFeedSetupDeclarationReader.Read(configuration));
+        _result = new(() => NuplaneFeedSetupDeclarationReader.Read(configuration));
     }
 
     /// <inheritdoc />
     public NuplaneFeedSetupReadResult Read() =>
-        result.Value;
+        _result.Value;
 }

@@ -4,16 +4,16 @@ namespace Nuplane.Loading.Tests;
 
 public sealed class PackageMetadataLoadModeAdvisorTests : IDisposable
 {
-    private readonly DirectoryInfo tempDir = Directory.CreateTempSubdirectory("nuplane-metadata-advisor-test-");
+    private readonly DirectoryInfo _tempDir = Directory.CreateTempSubdirectory("nuplane-metadata-advisor-test-");
 
-    public void Dispose() => tempDir.Delete(recursive: true);
+    public void Dispose() => _tempDir.Delete(recursive: true);
 
     [Fact]
     public async Task EvaluateAsync_WhenPackageDeclaresHostIntegratedDependencyClosure_ReturnsPackageMetadataResult()
     {
         var messages = new List<string>();
         using var loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(new CapturingLoggerProvider(messages)));
-        var installPath = PackageMetadataTestSupport.CreateInstallDir(tempDir, "pkg-a");
+        var installPath = PackageMetadataTestSupport.CreateInstallDir(_tempDir, "pkg-a");
         PackageMetadataTestSupport.WriteMetadata(
             installPath,
             PackageLoadMode.HostIntegrated,

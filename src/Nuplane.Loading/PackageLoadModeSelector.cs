@@ -9,15 +9,15 @@ namespace Nuplane.Loading;
 /// </summary>
 internal sealed class PackageLoadModeSelector
 {
-    private readonly IReadOnlyList<IPackageLoadModeAdvisor> advisors;
-    private readonly ILogger<PackageLoadModeSelector> logger;
+    private readonly IReadOnlyList<IPackageLoadModeAdvisor> _advisors;
+    private readonly ILogger<PackageLoadModeSelector> _logger;
 
     public PackageLoadModeSelector(
         IEnumerable<IPackageLoadModeAdvisor>? advisors = null,
         ILogger<PackageLoadModeSelector>? logger = null)
     {
-        this.advisors = advisors?.ToArray() ?? [];
-        this.logger = logger ?? NullLogger<PackageLoadModeSelector>.Instance;
+        _advisors = advisors?.ToArray() ?? [];
+        _logger = logger ?? NullLogger<PackageLoadModeSelector>.Instance;
     }
 
     /// <summary>
@@ -64,11 +64,11 @@ internal sealed class PackageLoadModeSelector
                 options.DefaultLoadMode,
                 packageOverrides);
 
-            foreach (var advisor in advisors.OrderBy(static advisor => advisor.Name, StringComparer.OrdinalIgnoreCase))
+            foreach (var advisor in _advisors.OrderBy(static advisor => advisor.Name, StringComparer.OrdinalIgnoreCase))
             {
                 var results = await advisor.EvaluateAsync(context, cancellationToken).ConfigureAwait(false);
                 advisorResults.AddRange(results);
-                logger.LoadModeAdvisorEvaluated(advisor.Name, graphKey, results.Count);
+                _logger.LoadModeAdvisorEvaluated(advisor.Name, graphKey, results.Count);
             }
         }
 
@@ -107,7 +107,7 @@ internal sealed class PackageLoadModeSelector
         if (metadataConflict)
         {
             graphLoadMode = PackageLoadMode.HostIntegrated;
-            logger.PackageLoadMetadataConflict(graphKey, graphLoadMode);
+            _logger.PackageLoadMetadataConflict(graphKey, graphLoadMode);
         }
 
         IReadOnlySet<string> conflictingMetadataKeys = metadataConflict
@@ -124,7 +124,7 @@ internal sealed class PackageLoadModeSelector
             .Select(decision => PromoteDecision(decision, graphKey, graphLoadMode, conflictingMetadataKeys))
             .ToArray();
 
-        logger.GraphLoadModeSelected(graphKey, graphLoadMode);
+        _logger.GraphLoadModeSelected(graphKey, graphLoadMode);
 
         return new(
             graphKey,
@@ -159,7 +159,7 @@ internal sealed class PackageLoadModeSelector
             if (!result.IsValid)
             {
                 diagnostics.Add(CreateAdvisorDiagnostic(graphKey, loadMode, loadMode, result));
-                logger.InvalidPackageLoadModeAdvisorResult(package.Id, package.Version, graphKey, result.Diagnostic ?? "Package load-mode advisor result is invalid.");
+                _logger.InvalidPackageLoadModeAdvisorResult(package.Id, package.Version, graphKey, result.Diagnostic ?? "Package load-mode advisor result is invalid.");
                 continue;
             }
 
@@ -169,7 +169,7 @@ internal sealed class PackageLoadModeSelector
                 loadMode,
                 result,
                 "Package load-mode advisor result was suppressed by an explicit package load mode override."));
-            logger.PackageLoadModeAdvisorResultSuppressed(package.Id, package.Version, graphKey);
+            _logger.PackageLoadModeAdvisorResultSuppressed(package.Id, package.Version, graphKey);
         }
 
         return new(new(package.Id, package.Version, loadMode, LoadModeReasonCodes.PackageOverride, graphKey), diagnostics);
@@ -185,7 +185,7 @@ internal sealed class PackageLoadModeSelector
         foreach (var invalidResult in packageResults.Where(static result => !result.IsValid))
         {
             diagnostics.Add(CreateAdvisorDiagnostic(graphKey, options.DefaultLoadMode, options.DefaultLoadMode, invalidResult));
-            logger.InvalidPackageLoadModeAdvisorResult(package.Id, package.Version, graphKey, invalidResult.Diagnostic ?? "Package load-mode advisor result is invalid.");
+            _logger.InvalidPackageLoadModeAdvisorResult(package.Id, package.Version, graphKey, invalidResult.Diagnostic ?? "Package load-mode advisor result is invalid.");
         }
 
         var validResults = packageResults
@@ -224,7 +224,7 @@ internal sealed class PackageLoadModeSelector
                 options.DefaultLoadMode,
                 collectiblePreference,
                 "Package metadata requested Collectible but the configured default load mode takes precedence."));
-            logger.PackageLoadModeAdvisorResultSuppressed(package.Id, package.Version, graphKey);
+            _logger.PackageLoadModeAdvisorResultSuppressed(package.Id, package.Version, graphKey);
         }
 
         diagnostics.Add(new(

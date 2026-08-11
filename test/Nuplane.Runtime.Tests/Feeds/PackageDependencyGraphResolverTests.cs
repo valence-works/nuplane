@@ -9,7 +9,7 @@ namespace Nuplane.Runtime.Tests.Feeds;
 
 public sealed class PackageDependencyGraphResolverTests : IDisposable
 {
-    private readonly string tempRoot = Path.Combine(Path.GetTempPath(), $"nuplane-graph-resolver-{Guid.NewGuid():N}");
+    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"nuplane-graph-resolver-{Guid.NewGuid():N}");
 
     [Fact]
     public async Task ResolveAsync_RootOnlyDesiredInput_ResolvesRootAndDependencyGraph()
@@ -418,9 +418,9 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(tempRoot))
+        if (Directory.Exists(_tempRoot))
         {
-            Directory.Delete(tempRoot, recursive: true);
+            Directory.Delete(_tempRoot, recursive: true);
         }
     }
 
@@ -431,7 +431,7 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
         string? dependencyVersionRange = null,
         string? dependenciesXml = null)
     {
-        var installPath = Path.Combine(tempRoot, packageId, version);
+        var installPath = Path.Combine(_tempRoot, packageId, version);
         Directory.CreateDirectory(installPath);
         File.WriteAllText(Path.Combine(installPath, $"{packageId}.nuspec"), CreateNuspec(packageId, version, dependencyId, dependencyVersionRange, dependenciesXml));
         return new ResolvedPackage(packageId, version, "test-feed", installPath, DateTimeOffset.UtcNow, "test-source");
