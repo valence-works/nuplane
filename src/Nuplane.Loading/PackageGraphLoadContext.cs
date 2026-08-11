@@ -8,10 +8,10 @@ namespace Nuplane.Loading;
 internal class PackageGraphLoadContext : AssemblyLoadContext
 {
     private readonly IReadOnlyDictionary<string, string> assemblyPathsByName;
-    private readonly IReadOnlyList<AssemblyDependencyResolver> dependencyResolvers;
-    private readonly IReadOnlyList<string> packageInstallPaths;
-    private readonly IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy;
-    private readonly SharedAssemblyPolicyMatcher matcher;
+    private readonly IReadOnlyList<AssemblyDependencyResolver> _dependencyResolvers;
+    private readonly IReadOnlyList<string> _packageInstallPaths;
+    private readonly IReadOnlyList<SharedAssemblyPolicyEntry> _sharedPolicy;
+    private readonly SharedAssemblyPolicyMatcher _matcher;
     private static readonly Lazy<RuntimeGraph> RuntimeGraphProvider = new(LoadRuntimeGraph);
 
     public PackageGraphLoadContext(
@@ -36,10 +36,10 @@ internal class PackageGraphLoadContext : AssemblyLoadContext
         ArgumentException.ThrowIfNullOrWhiteSpace(contextName);
         ArgumentNullException.ThrowIfNull(mainAssemblyPaths);
 
-        this.sharedPolicy = sharedPolicy ?? throw new ArgumentNullException(nameof(sharedPolicy));
-        this.matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
-        this.packageInstallPaths = packageInstallPaths ?? throw new ArgumentNullException(nameof(packageInstallPaths));
-        dependencyResolvers = mainAssemblyPaths.Select(static path => new AssemblyDependencyResolver(path)).ToArray();
+        _sharedPolicy = sharedPolicy ?? throw new ArgumentNullException(nameof(sharedPolicy));
+        _matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
+        _packageInstallPaths = packageInstallPaths ?? throw new ArgumentNullException(nameof(packageInstallPaths));
+        _dependencyResolvers = mainAssemblyPaths.Select(static path => new AssemblyDependencyResolver(path)).ToArray();
         assemblyPathsByName = mainAssemblyPaths
             .SelectMany(path => Directory.EnumerateFiles(Path.GetDirectoryName(path)!, "*.dll", SearchOption.AllDirectories))
             .Select(static path => new
@@ -54,7 +54,7 @@ internal class PackageGraphLoadContext : AssemblyLoadContext
 
     protected override Assembly? Load(AssemblyName assemblyName)
     {
-        if (matcher.IsMatch(assemblyName, sharedPolicy))
+        if (_matcher.IsMatch(assemblyName, _sharedPolicy))
         {
             try
             {
@@ -71,7 +71,7 @@ internal class PackageGraphLoadContext : AssemblyLoadContext
             return LoadFromAssemblyPath(graphAssemblyPath);
         }
 
-        foreach (var resolver in dependencyResolvers)
+        foreach (var resolver in _dependencyResolvers)
         {
             var resolvedPath = resolver.ResolveAssemblyToPath(assemblyName);
             if (!string.IsNullOrWhiteSpace(resolvedPath))
@@ -85,7 +85,7 @@ internal class PackageGraphLoadContext : AssemblyLoadContext
 
     protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
     {
-        foreach (var resolver in dependencyResolvers)
+        foreach (var resolver in _dependencyResolvers)
         {
             var resolvedPath = resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
             if (!string.IsNullOrWhiteSpace(resolvedPath))
@@ -94,7 +94,7 @@ internal class PackageGraphLoadContext : AssemblyLoadContext
             }
         }
 
-        var nativePath = ResolveNativeLibraryPath(packageInstallPaths, unmanagedDllName, RuntimeInformation.RuntimeIdentifier);
+        var nativePath = ResolveNativeLibraryPath(_packageInstallPaths, unmanagedDllName, RuntimeInformation.RuntimeIdentifier);
         return nativePath is null ? IntPtr.Zero : LoadUnmanagedDllFromPath(nativePath);
     }
 

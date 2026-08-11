@@ -32,9 +32,9 @@ public sealed class DirectoryObservationContractTests : IAsyncDisposable
     /// </summary>
     private static readonly TimeSpan WatcherTimeout = TimeSpan.FromSeconds(30);
 
-    private readonly TempDirectory tempDir = new();
-    private readonly SpyTriggerSink spy = new();
-    private DirectorySourceReconciliationTriggerHostedService? service;
+    private readonly TempDirectory _tempDir = new();
+    private readonly SpyTriggerSink _spy = new();
+    private DirectorySourceReconciliationTriggerHostedService? _service;
 
     [Fact]
     public async Task BurstyEvents_AreCoalesced_ToAtMostOneTriggerPerDebounceWindow()
@@ -50,13 +50,13 @@ public sealed class DirectoryObservationContractTests : IAsyncDisposable
 
         // Assert
         await DebounceAssert.WaitForCountAsync(
-            () => spy.TriggerCount,
+            () => _spy.TriggerCount,
             1,
             WatcherTimeout,
             "Expected at least 1 queued trigger after burst events");
 
         await DebounceAssert.AssertCoalescedAsync(
-            () => spy.TriggerCount,
+            () => _spy.TriggerCount,
             2,
             DebounceWindow * 4,
             "Bursty events should be coalesced to at most 2 queued triggers");
@@ -72,13 +72,13 @@ public sealed class DirectoryObservationContractTests : IAsyncDisposable
         await WriteNupkgAsync("test.nupkg");
 
         await DebounceAssert.WaitForCountAsync(
-            () => spy.TriggerCount,
+            () => _spy.TriggerCount,
             1,
             WatcherTimeout,
             "Expected trigger after file creation");
 
         // Assert
-        var trigger = Assert.Single(spy.Triggers);
+        var trigger = Assert.Single(_spy.Triggers);
         Assert.Equal(TriggerType.ObservedChange, trigger.Type);
         Assert.NotNull(trigger.ObservedOrigin);
         Assert.Equal("my-local-feed", trigger.ObservedOrigin.FeedName);
@@ -93,13 +93,13 @@ public sealed class DirectoryObservationContractTests : IAsyncDisposable
         await Task.Delay(150, CancellationToken.None);
 
         // Act
-        await File.WriteAllTextAsync(Path.Combine(tempDir.Path, "readme.txt"), "hello", CancellationToken.None);
-        await File.WriteAllTextAsync(Path.Combine(tempDir.Path, "data.json"), "{}", CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(_tempDir.Path, "readme.txt"), "hello", CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(_tempDir.Path, "data.json"), "{}", CancellationToken.None);
 
         await Task.Delay(TimeSpan.FromMilliseconds(400), CancellationToken.None);
 
         // Assert
-        Assert.Equal(0, spy.TriggerCount);
+        Assert.Equal(0, _spy.TriggerCount);
     }
 
     /// <summary>
@@ -111,12 +111,12 @@ public sealed class DirectoryObservationContractTests : IAsyncDisposable
         await StartAsync(feedName, DebounceWindow);
 
         await DirectoryWatcherProbe.WaitUntilObservingAsync(
-            tempDir.Path,
-            () => spy.TriggerCount,
+            _tempDir.Path,
+            () => _spy.TriggerCount,
             DebounceWindow,
             WatcherTimeout);
 
-        spy.Reset();
+        _spy.Reset();
     }
 
     private async Task StartAsync(string feedName, TimeSpan debounceWindow)
@@ -124,52 +124,52 @@ public sealed class DirectoryObservationContractTests : IAsyncDisposable
         var options = new DirectorySourceOptions
         {
             FeedName = feedName,
-            DirectoryPath = tempDir.Path,
+            DirectoryPath = _tempDir.Path,
             DebounceWindow = debounceWindow,
             TriggerReconciliationOnChange = true
         };
 
-        service = new DirectorySourceReconciliationTriggerHostedService(
+        _service = new DirectorySourceReconciliationTriggerHostedService(
             options,
-            spy,
+            _spy,
             NullLogger<DirectorySourceReconciliationTriggerHostedService>.Instance,
             new ObservationDegradationTracker());
 
-        await service.StartAsync(CancellationToken.None);
+        await _service.StartAsync(CancellationToken.None);
     }
 
     private Task WriteNupkgAsync(string fileName) =>
-        File.WriteAllBytesAsync(Path.Combine(tempDir.Path, fileName), NupkgContent, CancellationToken.None);
+        File.WriteAllBytesAsync(Path.Combine(_tempDir.Path, fileName), NupkgContent, CancellationToken.None);
 
     public async ValueTask DisposeAsync()
     {
-        if (service is not null)
+        if (_service is not null)
         {
             try
             {
-                await service.StopAsync(CancellationToken.None);
+                await _service.StopAsync(CancellationToken.None);
             }
             catch (OperationCanceledException)
             {
             }
 
-            service.Dispose();
+            _service.Dispose();
         }
 
-        tempDir.Dispose();
+        _tempDir.Dispose();
     }
 
     private sealed class SpyTriggerSink : IReconciliationTriggerIngress
     {
-        private readonly List<ReconciliationTrigger> triggers = [];
+        private readonly List<ReconciliationTrigger> _triggers = [];
 
         public int TriggerCount
         {
             get
             {
-                lock (triggers)
+                lock (_triggers)
                 {
-                    return triggers.Count;
+                    return _triggers.Count;
                 }
             }
         }
@@ -178,26 +178,26 @@ public sealed class DirectoryObservationContractTests : IAsyncDisposable
         {
             get
             {
-                lock (triggers)
+                lock (_triggers)
                 {
-                    return triggers.ToArray();
+                    return _triggers.ToArray();
                 }
             }
         }
 
         public void Reset()
         {
-            lock (triggers)
+            lock (_triggers)
             {
-                triggers.Clear();
+                _triggers.Clear();
             }
         }
 
         public void Enqueue(ReconciliationTrigger trigger)
         {
-            lock (triggers)
+            lock (_triggers)
             {
-                triggers.Add(trigger);
+                _triggers.Add(trigger);
             }
         }
 

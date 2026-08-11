@@ -18,8 +18,8 @@ namespace Nuplane.Reconciliation;
 /// </summary>
 public sealed class PackageDependencyGraphResolver(IPackageResolver packageResolver, IReconciliationRetryPolicy retryPolicy)
 {
-    private readonly IPackageResolver packageResolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver));
-    private readonly IReconciliationRetryPolicy retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
+    private readonly IPackageResolver _packageResolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver));
+    private readonly IReconciliationRetryPolicy _retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
 
     /// <summary>
     /// Resolves desired roots and their package dependencies into deterministic graph records.
@@ -84,8 +84,8 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
                     PackageUpdatePolicy.Exact,
                     $"dependency-of:{parent.Id}");
 
-                dependencyPackage = await retryPolicy.ExecuteAsync(
-                    ct => packageResolver.ResolveAsync(dependencyRequest, ct),
+                dependencyPackage = await _retryPolicy.ExecuteAsync(
+                    ct => _packageResolver.ResolveAsync(dependencyRequest, ct),
                     cancellationToken);
                 resolvedPackages[BuildPackageKey(dependencyPackage.Id, dependencyPackage.Version)] = dependencyPackage;
             }

@@ -5,8 +5,8 @@ namespace Nuplane.Loading;
 
 internal sealed class PackageMetadataLoadModeAdvisor : IPackageLoadModeAdvisor
 {
-    private readonly PackageMetadataLoadModeReader reader;
-    private readonly ILogger<PackageMetadataLoadModeAdvisor> logger;
+    private readonly PackageMetadataLoadModeReader _reader;
+    private readonly ILogger<PackageMetadataLoadModeAdvisor> _logger;
 
     public PackageMetadataLoadModeAdvisor(
         PackageMetadataLoadModeReader reader,
@@ -14,8 +14,8 @@ internal sealed class PackageMetadataLoadModeAdvisor : IPackageLoadModeAdvisor
     {
         ArgumentNullException.ThrowIfNull(reader);
 
-        this.reader = reader;
-        this.logger = logger ?? NullLogger<PackageMetadataLoadModeAdvisor>.Instance;
+        _reader = reader;
+        _logger = logger ?? NullLogger<PackageMetadataLoadModeAdvisor>.Instance;
     }
 
     public string Name => "package-metadata";
@@ -33,7 +33,7 @@ internal sealed class PackageMetadataLoadModeAdvisor : IPackageLoadModeAdvisor
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var result = reader.Read(package.Id, package.Version, package.InstallPath);
+            var result = _reader.Read(package.Id, package.Version, package.InstallPath);
             if (!result.MetadataFound)
             {
                 continue;
@@ -54,7 +54,7 @@ internal sealed class PackageMetadataLoadModeAdvisor : IPackageLoadModeAdvisor
                 continue;
             }
 
-            logger.PackageLoadMetadataDiscovered(
+            _logger.PackageLoadMetadataDiscovered(
                 package.Id,
                 package.Version,
                 context.GraphKey,

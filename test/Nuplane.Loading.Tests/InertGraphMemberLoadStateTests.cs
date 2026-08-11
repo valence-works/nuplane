@@ -17,25 +17,25 @@ public sealed class InertGraphMemberLoadStateTests : IDisposable
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
 
-    private readonly string tempRoot = Path.Combine(Path.GetTempPath(), $"nuplane-inert-load-state-{Guid.NewGuid():N}");
-    private readonly PackageLoader loader = new();
-    private readonly LoadingCatalogRefreshTracker refreshTracker = new();
-    private readonly ResolvedPackage root;
-    private readonly ResolvedPackage facade;
-    private readonly ResolvedPackage nativeFacade;
+    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"nuplane-inert-load-state-{Guid.NewGuid():N}");
+    private readonly PackageLoader _loader = new();
+    private readonly LoadingCatalogRefreshTracker _refreshTracker = new();
+    private readonly ResolvedPackage _root;
+    private readonly ResolvedPackage _facade;
+    private readonly ResolvedPackage _nativeFacade;
 
     public InertGraphMemberLoadStateTests()
     {
-        root = new("Plugin.Root", "1.0.0", "feed", CreateAssemblyPackageInstall("Plugin.Root"), Now, "test-source");
-        facade = new("Microsoft.Data.Sqlite", "10.0.9", "feed", CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite"), Now, "test-source");
-        nativeFacade = new("SQLitePCLRaw.bundle_e_sqlite3", "10.0.9", "feed", CreateNoAssemblyPackageInstall("SQLitePCLRaw.bundle_e_sqlite3"), Now, "test-source");
+        _root = new("Plugin.Root", "1.0.0", "feed", CreateAssemblyPackageInstall("Plugin.Root"), Now, "test-source");
+        _facade = new("Microsoft.Data.Sqlite", "10.0.9", "feed", CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite"), Now, "test-source");
+        _nativeFacade = new("SQLitePCLRaw.bundle_e_sqlite3", "10.0.9", "feed", CreateNoAssemblyPackageInstall("SQLitePCLRaw.bundle_e_sqlite3"), Now, "test-source");
     }
 
     public void Dispose()
     {
-        if (Directory.Exists(tempRoot))
+        if (Directory.Exists(_tempRoot))
         {
-            Directory.Delete(tempRoot, recursive: true);
+            Directory.Delete(_tempRoot, recursive: true);
         }
     }
 
@@ -59,15 +59,15 @@ public sealed class InertGraphMemberLoadStateTests : IDisposable
 
         Assert.Equal(PackageLoadStateAvailability.Available, snapshot.Availability);
         Assert.Null(snapshot.Reason);
-        Assert.Equal(PackageLoadStatus.Loaded, StatusOf(snapshot, root.Id));
-        Assert.Equal(PackageLoadStatus.Skipped, StatusOf(snapshot, facade.Id));
-        Assert.Equal(PackageLoadStatus.Skipped, StatusOf(snapshot, nativeFacade.Id));
+        Assert.Equal(PackageLoadStatus.Loaded, StatusOf(snapshot, _root.Id));
+        Assert.Equal(PackageLoadStatus.Skipped, StatusOf(snapshot, _facade.Id));
+        Assert.Equal(PackageLoadStatus.Skipped, StatusOf(snapshot, _nativeFacade.Id));
     }
 
     [Fact]
     public async Task ScheduledCycle_WithFailedPackage_StillDegradesLoadingOperationalState()
     {
-        var broken = new ResolvedPackage("Plugin.Broken", "1.0.0", "feed", Path.Combine(tempRoot, "missing"), Now, "test-source");
+        var broken = new ResolvedPackage("Plugin.Broken", "1.0.0", "feed", Path.Combine(_tempRoot, "missing"), Now, "test-source");
         await RunReconciliationCyclesAsync(broken);
 
         var snapshot = await ProjectOperationalSnapshotAsync(broken);
@@ -77,14 +77,14 @@ public sealed class InertGraphMemberLoadStateTests : IDisposable
 
     private async Task RunReconciliationCyclesAsync(params ResolvedPackage[] additionalPackages)
     {
-        var applied = new[] { root, facade, nativeFacade }.Concat(additionalPackages).ToArray();
+        var applied = new[] { _root, _facade, _nativeFacade }.Concat(additionalPackages).ToArray();
         var observer = new PackageAutoLoadingObserver(
-            loader,
+            _loader,
             new StubLoadingEventDispatcher(),
             Options.Create(new LoadingOptions { Enabled = true }),
             NullLogger<PackageAutoLoadingObserver>.Instance,
             loadingFailureTracker: null,
-            refreshTracker: refreshTracker,
+            refreshTracker: _refreshTracker,
             storeRegistry: new StubStoreRegistry(CreateStoreState(applied)));
 
         await observer.OnPackagesReconciledAsync(new PackageChangeSet(applied, [], [], "corr-startup", Now), applied, CancellationToken.None);
@@ -99,8 +99,8 @@ public sealed class InertGraphMemberLoadStateTests : IDisposable
             new ReconciliationMetrics(new ReconciliationTelemetry()),
             [new LoadingOperationalStateContributor(
                 CreateActivePackageCatalog(additionalPackages),
-                loader,
-                refreshTracker,
+                _loader,
+                _refreshTracker,
                 Options.Create(new LoadingOptions { Enabled = true }))]);
 
         return await projector.ProjectAsync("state-1", CancellationToken.None);
@@ -109,9 +109,9 @@ public sealed class InertGraphMemberLoadStateTests : IDisposable
     private LoadingCatalog CreateCatalog() =>
         new(
             CreateActivePackageCatalog(),
-            loader,
-            new AssemblyScanCandidateProjector(loader),
-            refreshTracker,
+            _loader,
+            new AssemblyScanCandidateProjector(_loader),
+            _refreshTracker,
             Options.Create(new LoadingOptions { Enabled = true }),
             new ReconciliationLogger(),
             new ReconciliationMetrics(new ReconciliationTelemetry()));
@@ -120,7 +120,7 @@ public sealed class InertGraphMemberLoadStateTests : IDisposable
         new(new ActivePackageCatalogSnapshot(
             Now,
             Now,
-            new[] { root, facade, nativeFacade }
+            new[] { _root, _facade, _nativeFacade }
                 .Concat(additionalPackages)
                 .Select(Descriptor)
                 .ToArray(),
@@ -165,21 +165,21 @@ public sealed class InertGraphMemberLoadStateTests : IDisposable
 
     private string CreateAssemblyPackageInstall(string packageId)
     {
-        var libPath = Path.Combine(tempRoot, packageId, "1.0.0", "lib", "net10.0");
+        var libPath = Path.Combine(_tempRoot, packageId, "1.0.0", "lib", "net10.0");
         Directory.CreateDirectory(libPath);
         File.Copy(
             TestFixtureAssemblyPaths.FindProjectAssembly("Nuplane.Loading.Tests.Fixtures.Root", "Plugin.Root.dll"),
             Path.Combine(libPath, "Plugin.Root.dll"),
             overwrite: true);
-        return Path.Combine(tempRoot, packageId, "1.0.0");
+        return Path.Combine(_tempRoot, packageId, "1.0.0");
     }
 
     private string CreateNoAssemblyPackageInstall(string packageId)
     {
-        var libPath = Path.Combine(tempRoot, packageId, "10.0.9", "lib", "netstandard2.0");
+        var libPath = Path.Combine(_tempRoot, packageId, "10.0.9", "lib", "netstandard2.0");
         Directory.CreateDirectory(libPath);
         File.WriteAllText(Path.Combine(libPath, "_._"), string.Empty);
-        return Path.Combine(tempRoot, packageId, "10.0.9");
+        return Path.Combine(_tempRoot, packageId, "10.0.9");
     }
 
     private sealed class StubActivePackageCatalog(ActivePackageCatalogSnapshot snapshot) : IActivePackageCatalog

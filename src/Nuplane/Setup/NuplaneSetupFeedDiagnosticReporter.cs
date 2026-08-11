@@ -6,24 +6,24 @@ namespace Nuplane.Setup;
 
 internal sealed partial class NuplaneSetupFeedDiagnosticReporter : IPostConfigureOptions<NuplaneSetupOptions>
 {
-    private readonly INuplaneSetupFeedDeclarationSource feedDeclarationSource;
-    private readonly ILogger<NuplaneSetupFeedDiagnosticReporter> logger;
+    private readonly INuplaneSetupFeedDeclarationSource _feedDeclarationSource;
+    private readonly ILogger<NuplaneSetupFeedDiagnosticReporter> _logger;
 
     public NuplaneSetupFeedDiagnosticReporter(
         INuplaneSetupFeedDeclarationSource feedDeclarationSource,
         ILogger<NuplaneSetupFeedDiagnosticReporter> logger)
     {
-        this.feedDeclarationSource = feedDeclarationSource ?? throw new ArgumentNullException(nameof(feedDeclarationSource));
-        this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _feedDeclarationSource = feedDeclarationSource ?? throw new ArgumentNullException(nameof(feedDeclarationSource));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public void PostConfigure(string? name, NuplaneSetupOptions options)
     {
-        foreach (var diagnostic in feedDeclarationSource.Read().Diagnostics
+        foreach (var diagnostic in _feedDeclarationSource.Read().Diagnostics
                      .Where(static diagnostic => diagnostic.Severity == NuplaneFeedSetupDiagnosticSeverity.Warning))
         {
             SetupFeedWarning(
-                logger,
+                _logger,
                 diagnostic.Code,
                 diagnostic.FeedName,
                 diagnostic.ConfigurationPath,

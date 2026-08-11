@@ -9,13 +9,13 @@ namespace Nuplane.Loading.Tests;
 
 public sealed class PackageLoaderHostIntegratedTests : IDisposable
 {
-    private readonly DirectoryInfo tempDir = Directory.CreateTempSubdirectory("nuplane-host-integrated-test-");
+    private readonly DirectoryInfo _tempDir = Directory.CreateTempSubdirectory("nuplane-host-integrated-test-");
 
     public void Dispose()
     {
         try
         {
-            tempDir.Delete(recursive: true);
+            _tempDir.Delete(recursive: true);
         }
         catch (IOException)
         {
@@ -96,7 +96,7 @@ public sealed class PackageLoaderHostIntegratedTests : IDisposable
         var loader = new PackageLoader(
             hostIntegratedResolutionCatalog: catalog,
             loadModeAdvisors: [new PackageMetadataLoadModeAdvisor(new PackageMetadataLoadModeReader())]);
-        var graph = PackageLoaderGraphRegressionTests.CreateProviderStyleGraph(tempDir);
+        var graph = PackageLoaderGraphRegressionTests.CreateProviderStyleGraph(_tempDir);
 
         var result = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
 
@@ -248,14 +248,14 @@ public sealed class PackageLoaderHostIntegratedTests : IDisposable
 
     private string CreateInstallDir(string packageId, Assembly assembly)
     {
-        var dir = tempDir.CreateSubdirectory(packageId);
+        var dir = _tempDir.CreateSubdirectory(packageId);
         File.Copy(assembly.Location, Path.Combine(dir.FullName, $"{packageId}.dll"));
         return dir.FullName;
     }
 
     private string CreateNoAssemblyInstallDir(string packageId)
     {
-        var dir = tempDir.CreateSubdirectory(packageId);
+        var dir = _tempDir.CreateSubdirectory(packageId);
         var frameworkDir = Directory.CreateDirectory(Path.Combine(dir.FullName, "lib", "netstandard2.0"));
         File.WriteAllText(Path.Combine(frameworkDir.FullName, "_._"), string.Empty);
         return dir.FullName;
