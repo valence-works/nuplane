@@ -1,80 +1,103 @@
-using System.Diagnostics;
+using Microsoft.Extensions.Time.Testing;
 using Nuplane.Sources.Directory.Hosting;
+using Nuplane.Sources.Directory.Tests.TestSupport;
 
 namespace Nuplane.Sources.Directory.Tests.Hosting;
 
 /// <summary>
 /// Contract tests for the debounced dirty-signal primitive used by directory observation.
 /// </summary>
+/// <remarks>
+/// The debounce window is measured against a <see cref="FakeTimeProvider" />, so every timing assertion here is
+/// about virtual time the test controls rather than about how quickly the machine happens to be running.
+/// </remarks>
 public sealed class DebouncedDirtySignalTests
 {
+    private static readonly TimeSpan DebounceWindow = TimeSpan.FromMilliseconds(150);
+
+    private readonly FakeTimeProvider time = new();
+    private readonly DebouncedDirtySignal signal;
+
+    public DebouncedDirtySignalTests()
+    {
+        signal = new DebouncedDirtySignal(DebounceWindow, time);
+    }
+
     [Fact]
     public async Task BurstSignals_AreCoalesced_IntoASingleSettledWakeup()
     {
-        var signal = new DebouncedDirtySignal(TimeSpan.FromMilliseconds(100));
+        // Arrange
+        var wakeup = signal.WaitForNextSettledSignalAsync(CancellationToken.None);
 
-        using var waitCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        var wakeup = signal.WaitForNextSettledSignalAsync(waitCts.Token);
-
+        // Act: a burst of signals inside a single quiet window.
         for (var i = 0; i < 10; i++)
         {
             signal.Signal();
-            await Task.Delay(10);
         }
 
-        await wakeup;
+        await FakeClockDriver.AdvanceUntilCompletedAsync(time, wakeup, DebounceWindow);
 
-        using var probeCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(75));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            async () => await signal.WaitForNextSettledSignalAsync(probeCts.Token));
+        // Assert: the burst produced exactly one wakeup, so a second wait never settles.
+        using var cts = new CancellationTokenSource();
+        var leftover = signal.WaitForNextSettledSignalAsync(cts.Token);
+
+        await FakeClockDriver.AdvanceAsync(time, DebounceWindow * 10);
+        Assert.False(leftover.IsCompleted);
+
+        await cts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => leftover);
     }
 
     [Fact]
     public async Task SignalDuringDebounce_ExtendsTheQuietWindow()
     {
-        var signal = new DebouncedDirtySignal(TimeSpan.FromMilliseconds(150));
-        var stopwatch = Stopwatch.StartNew();
-
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        var wakeup = signal.WaitForNextSettledSignalAsync(cts.Token);
-
-        signal.Signal();
-        await Task.Delay(100, CancellationToken.None);
+        // Arrange
+        var wakeup = signal.WaitForNextSettledSignalAsync(CancellationToken.None);
         signal.Signal();
 
-        await wakeup;
-        stopwatch.Stop();
+        // Act: signal again halfway through the quiet window.
+        await FakeClockDriver.AdvanceAsync(time, DebounceWindow / 2);
+        Assert.False(wakeup.IsCompleted);
+        signal.Signal();
 
-        Assert.True(
-            stopwatch.Elapsed >= TimeSpan.FromMilliseconds(220),
-            $"Expected trailing-edge debounce to defer wakeup until after the second signal. Actual: {stopwatch.Elapsed.TotalMilliseconds}ms.");
+        // Assert: the original deadline passes without settling, because the late signal restarted the window.
+        await FakeClockDriver.AdvanceAsync(time, DebounceWindow / 2);
+        Assert.False(wakeup.IsCompleted);
+
+        await FakeClockDriver.AdvanceAsync(time, DebounceWindow / 2);
+        Assert.False(wakeup.IsCompleted);
+
+        await FakeClockDriver.AdvanceUntilCompletedAsync(time, wakeup, DebounceWindow);
     }
 
     [Fact]
     public async Task SignalsInSeparateQuietWindows_ProduceSeparateWakeups()
     {
-        var signal = new DebouncedDirtySignal(TimeSpan.FromMilliseconds(80));
+        // Arrange
+        var firstWakeup = signal.WaitForNextSettledSignalAsync(CancellationToken.None);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-
-        var firstWakeup = signal.WaitForNextSettledSignalAsync(cts.Token);
+        // Act
         signal.Signal();
-        await firstWakeup;
+        await FakeClockDriver.AdvanceUntilCompletedAsync(time, firstWakeup, DebounceWindow);
 
-        await Task.Delay(120, CancellationToken.None);
-
-        var secondWakeup = signal.WaitForNextSettledSignalAsync(cts.Token);
+        var secondWakeup = signal.WaitForNextSettledSignalAsync(CancellationToken.None);
         signal.Signal();
-        await secondWakeup;
+
+        // Assert: a signal in a later quiet window settles on its own rather than being swallowed by the first.
+        await FakeClockDriver.AdvanceUntilCompletedAsync(time, secondWakeup, DebounceWindow);
     }
 
     [Fact]
     public async Task WaitForNextSettledSignalAsync_WhenCancelledBeforeSignal_Throws()
     {
-        var signal = new DebouncedDirtySignal(TimeSpan.FromMilliseconds(100));
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        var wakeup = signal.WaitForNextSettledSignalAsync(cts.Token);
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            async () => await signal.WaitForNextSettledSignalAsync(cts.Token));
+        // Act
+        await cts.CancelAsync();
+
+        // Assert
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => wakeup);
     }
 }
