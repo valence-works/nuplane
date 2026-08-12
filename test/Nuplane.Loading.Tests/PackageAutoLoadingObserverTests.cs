@@ -63,6 +63,73 @@ public sealed class PackageAutoLoadingObserverTests : IDisposable
     }
 
     [Fact]
+    public async Task RemovedPackage_UnloadsItsContext()
+    {
+        var oldPackage = new ResolvedPackage("pkg-old", "1.0.0", "feed", "/path-old", Now);
+        var newPackage = new ResolvedPackage("pkg-new", "1.0.0", "feed", "/path-new", Now);
+
+        // The loader already holds the old package's context from a previous cycle.
+        var loader = new FakePackageLoader(preloadedPackages: [oldPackage]);
+        var dispatcher = new FakeLoadingEventDispatcher();
+        // Authoritative post-reconcile active set contains only the new package.
+        var store = CreateStoreRegistry("graph-new", newPackage);
+        var sut = CreateObserver(loader, dispatcher, new() { Enabled = true }, storeRegistry: store);
+
+        var changeSet = new PackageChangeSet(
+            Added: [newPackage],
+            Updated: [],
+            Removed: ["pkg-old"],
+            CorrelationId: "corr-remove",
+            Timestamp: Now);
+
+        await sut.OnPackagesReconciledAsync(changeSet, [newPackage], CancellationToken.None);
+
+        Assert.Contains("pkg-old@1.0.0", loader.UnloadedKeys);
+        Assert.False(loader.TryGetContext("pkg-old", "1.0.0", out _));
+        Assert.True(loader.TryGetContext("pkg-new", "1.0.0", out _));
+    }
+
+    [Fact]
+    public async Task UpdatedPackage_UnloadsSupersededVersionContext()
+    {
+        var oldVersion = new ResolvedPackage("pkg", "1.0.0", "feed", "/path-1", Now);
+        var newVersion = new ResolvedPackage("pkg", "2.0.0", "feed", "/path-2", Now);
+
+        var loader = new FakePackageLoader(preloadedPackages: [oldVersion]);
+        var dispatcher = new FakeLoadingEventDispatcher();
+        var store = CreateStoreRegistry("graph", newVersion); // active is pkg@2.0.0
+        var sut = CreateObserver(loader, dispatcher, new() { Enabled = true }, storeRegistry: store);
+
+        var changeSet = new PackageChangeSet([], [newVersion], [], "corr-update", Now);
+
+        await sut.OnPackagesReconciledAsync(changeSet, [newVersion], CancellationToken.None);
+
+        Assert.Contains("pkg@1.0.0", loader.UnloadedKeys);
+        Assert.False(loader.TryGetContext("pkg", "1.0.0", out _));
+        Assert.True(loader.TryGetContext("pkg", "2.0.0", out _));
+    }
+
+    [Fact]
+    public async Task PureAdd_DoesNotRunUnloadPass()
+    {
+        var existing = new ResolvedPackage("pkg-existing", "1.0.0", "feed", "/path-e", Now);
+        var added = new ResolvedPackage("pkg-added", "1.0.0", "feed", "/path-a", Now);
+
+        var loader = new FakePackageLoader(preloadedPackages: [existing]);
+        var dispatcher = new FakeLoadingEventDispatcher();
+        var store = CreateStoreRegistry("graph", existing, added);
+        var sut = CreateObserver(loader, dispatcher, new() { Enabled = true }, storeRegistry: store);
+
+        // No Removed and no Updated — a pure add (and the common no-op poll) must not touch contexts.
+        var changeSet = new PackageChangeSet([added], [], [], "corr-add", Now);
+
+        await sut.OnPackagesReconciledAsync(changeSet, [existing, added], CancellationToken.None);
+
+        Assert.Empty(loader.UnloadedKeys);
+        Assert.True(loader.TryGetContext("pkg-existing", "1.0.0", out _));
+    }
+
+    [Fact]
     public async Task LoadingDisabled_PublishLoadedNotFired()
     {
         var loader = new FakePackageLoader();
@@ -489,6 +556,24 @@ public sealed class PackageAutoLoadingObserverTests : IDisposable
             var exists = _sessions.ContainsKey(key);
             context = exists ? new PackageLoadContextHandle(key, new()) : null;
             return exists;
+        }
+
+        public List<string> UnloadedKeys { get; } = [];
+
+        public IReadOnlyList<string> UnloadContextsNotActive(IReadOnlyDictionary<string, string> activeVersionById)
+        {
+            var activeKeys = new HashSet<string>(
+                activeVersionById.Select(static entry => BuildKey(entry.Key, entry.Value)),
+                StringComparer.OrdinalIgnoreCase);
+
+            var inactive = _sessions.Keys.Where(key => !activeKeys.Contains(key)).ToArray();
+            foreach (var key in inactive)
+            {
+                _sessions.Remove(key);
+            }
+
+            UnloadedKeys.AddRange(inactive);
+            return inactive;
         }
 
         private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";

@@ -474,6 +474,86 @@ internal sealed class PackageLoader : IPackageLoader
     }
 
     /// <inheritdoc />
+    public IReadOnlyList<string> UnloadContextsNotActive(IReadOnlyDictionary<string, string> activeVersionById)
+    {
+        ArgumentNullException.ThrowIfNull(activeVersionById);
+
+        var activeKeys = new HashSet<string>(
+            activeVersionById.Select(static entry => BuildKey(entry.Key, entry.Value)),
+            StringComparer.OrdinalIgnoreCase);
+
+        // Snapshot the keys before mutating: only currently-loaded contexts whose id@version is no longer
+        // the active identity are eligible. Everything still active is left completely untouched.
+        var inactiveKeys = _contexts.Keys
+            .Where(key => !activeKeys.Contains(key))
+            .ToArray();
+
+        if (inactiveKeys.Length == 0)
+        {
+            return [];
+        }
+
+        var removedContexts = new List<AssemblyLoadContext>();
+        foreach (var key in inactiveKeys)
+        {
+            _sessions.TryRemove(key, out _);
+            ClearInert(key);
+            RemoveKeyFromLoadedGraphs(key);
+
+            if (_contexts.TryRemove(key, out var context))
+            {
+                removedContexts.Add(context);
+            }
+
+            if (TrySplitKey(key, out var packageId, out var version))
+            {
+                _hostIntegratedResolutionCatalog.RemovePackage(packageId, version);
+            }
+        }
+
+        // Only actually unloads a context once no *remaining* (still-active) key references it, so a graph
+        // context shared with a package that is still active is preserved. Non-collectible contexts are skipped.
+        UnloadUnreferencedContexts(removedContexts);
+
+        foreach (var key in inactiveKeys)
+        {
+            _logger.LogInformation("Unloaded package context {ContextKey} because it is no longer active.", key);
+        }
+
+        return inactiveKeys;
+    }
+
+    // Drops any cached loaded-graph entry that included this package key, so a later reactivation of the
+    // package rebuilds its graph from scratch instead of matching a now-partial cache entry.
+    private void RemoveKeyFromLoadedGraphs(string key)
+    {
+        foreach (var graphKey in _loadedGraphs
+            .Where(entry => entry.Value.LoadablePackageKeys.Contains(key, StringComparer.OrdinalIgnoreCase))
+            .Select(static entry => entry.Key)
+            .ToArray())
+        {
+            _loadedGraphs.TryRemove(graphKey, out _);
+        }
+    }
+
+    // Context keys are BuildKey output: "{packageId}@{version}". Package ids and semver versions never
+    // contain '@', so the first '@' is an unambiguous separator.
+    private static bool TrySplitKey(string key, out string packageId, out string version)
+    {
+        var separatorIndex = key.IndexOf('@');
+        if (separatorIndex <= 0 || separatorIndex >= key.Length - 1)
+        {
+            packageId = string.Empty;
+            version = string.Empty;
+            return false;
+        }
+
+        packageId = key[..separatorIndex];
+        version = key[(separatorIndex + 1)..];
+        return true;
+    }
+
+    /// <inheritdoc />
     public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
     {
         var key = BuildKey(packageId, version);
