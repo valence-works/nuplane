@@ -61,4 +61,16 @@ internal interface IPackageLoader
     /// <param name="context">When successful, receives the active load context handle.</param>
     /// <returns><see langword="true"/> if the context exists; otherwise <see langword="false"/>.</returns>
     bool TryGetContext(string packageId, string version, out PackageLoadContextHandle? context);
+
+    /// <summary>
+    /// Forgets and unloads the assembly load context of every currently-loaded package whose
+    /// <c>id@version</c> identity is not present in <paramref name="activeVersionById"/> — i.e. packages
+    /// that were removed from, or superseded in, the desired set by a reconciliation. A load context shared
+    /// across a package graph is only unloaded once no still-active package references it, and
+    /// non-collectible (host-integrated) contexts are never unloaded. The unload is cooperative: the CLR
+    /// reclaims the context on a subsequent GC once every remaining managed reference to it is released.
+    /// </summary>
+    /// <param name="activeVersionById">The authoritative active version per package id after reconciliation.</param>
+    /// <returns>The <c>id@version</c> keys whose contexts were forgotten (and unloaded when unreferenced).</returns>
+    IReadOnlyList<string> UnloadContextsNotActive(IReadOnlyDictionary<string, string> activeVersionById);
 }

@@ -89,6 +89,11 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
             return;
         }
 
+        // Unload the contexts of packages this cycle removed or superseded BEFORE loading the new set, so a
+        // hot-swapped package's old assemblies stop being rooted by the loader. Runs before the early returns
+        // below because a pure removal produces nothing to load yet still must release the old context.
+        await UnloadInactiveContextsAsync(changeSet, ct);
+
         var packagesToLoad = BuildPackagesToLoad(changeSet, appliedPackages);
         if (packagesToLoad.Count == 0)
         {
@@ -171,6 +176,40 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
     /// <inheritdoc />
     public Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken ct)
         => Task.CompletedTask;
+
+    /// <summary>
+    /// Releases the assembly load contexts of packages that this reconciliation removed or superseded.
+    /// The authoritative "what should stay loaded" set is the post-reconcile store state
+    /// (<c>ActiveVersionById</c>) — NOT <paramref name="changeSet"/> alone and NOT the applied delta —
+    /// so a context is only ever unloaded when it is genuinely no longer active.
+    /// </summary>
+    private async Task UnloadInactiveContextsAsync(PackageChangeSet changeSet, CancellationToken ct)
+    {
+        // Fast path: a no-op reconcile (nothing removed, nothing updated) can never orphan a context.
+        if (changeSet.Removed.Count == 0 && changeSet.Updated.Count == 0)
+        {
+            return;
+        }
+
+        // Without the store we cannot know the authoritative active set, and guessing risks unloading a
+        // still-active package. Skip rather than over-unload.
+        if (_storeRegistry is null)
+        {
+            return;
+        }
+
+        var state = await _storeRegistry.GetStateAsync(ct);
+        var unloaded = _loader.UnloadContextsNotActive(state.ActiveVersionById);
+
+        if (unloaded.Count > 0)
+        {
+            _logger.LogInformation(
+                "Unloaded {Count} package context(s) no longer active after reconciliation: {Keys}. CorrelationId={CorrelationId}",
+                unloaded.Count,
+                string.Join(", ", unloaded),
+                changeSet.CorrelationId);
+        }
+    }
 
     private List<ResolvedPackage> BuildPackagesToLoad(
         PackageChangeSet changeSet,

@@ -310,6 +310,21 @@ public sealed class StartupLoadingEventIntegrationTests
             return exists;
         }
 
+        public IReadOnlyList<string> UnloadContextsNotActive(IReadOnlyDictionary<string, string> activeVersionById)
+        {
+            var activeKeys = new HashSet<string>(
+                activeVersionById.Select(static entry => BuildKey(entry.Key, entry.Value)),
+                StringComparer.OrdinalIgnoreCase);
+
+            var inactive = _sessions.Keys.Where(key => !activeKeys.Contains(key)).ToArray();
+            foreach (var key in inactive)
+            {
+                _sessions.Remove(key);
+            }
+
+            return inactive;
+        }
+
         private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";
 
         private static Dictionary<string, PackageLoadSession> CreateSessions(IEnumerable<ResolvedPackage>? packages)
