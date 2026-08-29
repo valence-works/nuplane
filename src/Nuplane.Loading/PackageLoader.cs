@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Runtime.Versioning;
 using Microsoft.Extensions.Logging;
@@ -701,9 +702,16 @@ internal sealed class PackageLoader : IPackageLoader
     {
         var relativePath = Path.GetRelativePath(installPath, assemblyPath);
         var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (segments.Length >= 3
-            && string.Equals(segments[0], "lib", StringComparison.OrdinalIgnoreCase)
-            && TryParseFrameworkTarget(segments[1], out var framework))
+
+        var frameworkFolder = segments.Length >= 2 && string.Equals(segments[0], "lib", StringComparison.OrdinalIgnoreCase)
+            ? segments[1]
+            : segments.Length >= 4
+                && string.Equals(segments[0], "runtimes", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(segments[2], "lib", StringComparison.OrdinalIgnoreCase)
+                ? segments[3]
+                : null;
+
+        if (frameworkFolder is not null && TryParseFrameworkTarget(frameworkFolder, out var framework))
         {
             return framework.DisplayName;
         }
@@ -727,6 +735,11 @@ internal sealed class PackageLoader : IPackageLoader
             throw new DirectoryNotFoundException($"Install path '{installPath}' does not exist.");
         }
 
+        if (TryResolveRuntimeSpecificAssemblySelection(installPath, packageId, hostTargetFrameworkOverride, out var runtimeSpecificSelection))
+        {
+            return runtimeSpecificSelection;
+        }
+
         var libPath = Path.Combine(installPath, "lib");
         if (Directory.Exists(libPath) && TryResolveFrameworkSpecificAssemblySelection(libPath, installPath, packageId, hostTargetFrameworkOverride, out var frameworkSpecificSelection))
         {
@@ -743,6 +756,61 @@ internal sealed class PackageLoader : IPackageLoader
         return new AssemblyAssetSelection(mainAssemblyPath, searchRoot);
     }
 
+    private static bool TryResolveRuntimeSpecificAssemblySelection(
+        string installPath,
+        string packageId,
+        string? hostTargetFrameworkOverride,
+        out AssemblyAssetSelection selection)
+    {
+        var runtimesPath = Path.Combine(installPath, "runtimes");
+        if (!Directory.Exists(runtimesPath))
+        {
+            selection = null!;
+            return false;
+        }
+
+        var hostFramework = ResolveHostFramework(hostTargetFrameworkOverride);
+        if (hostFramework is null)
+        {
+            throw new InvalidOperationException(
+                $"Nuplane could not determine the current host target framework while resolving '{packageId}' from '{installPath}'.");
+        }
+
+        foreach (var runtimeIdentifier in PackageGraphLoadContext.ExpandRuntimeIdentifiers(RuntimeInformation.RuntimeIdentifier))
+        {
+            var libPath = Path.Combine(runtimesPath, runtimeIdentifier, "lib");
+            if (!Directory.Exists(libPath))
+            {
+                continue;
+            }
+
+            var frameworkDirectories = GetFrameworkDirectories(libPath);
+            var selectedDirectory = SelectBestFrameworkDirectory(hostFramework, frameworkDirectories);
+            if (selectedDirectory is null)
+            {
+                continue;
+            }
+
+            var candidatePaths = EnumerateAssemblyCandidatesExcludingNativeAssets(selectedDirectory.Path, installPath).ToArray();
+            if (candidatePaths.Length == 0)
+            {
+                continue;
+            }
+
+            var mainAssemblyPath = ResolveAssemblyFromCandidates(
+                candidatePaths,
+                installPath,
+                packageId,
+                selectedDirectory.FolderName);
+
+            selection = new AssemblyAssetSelection(mainAssemblyPath, selectedDirectory.Path);
+            return true;
+        }
+
+        selection = null!;
+        return false;
+    }
+
     private static bool TryResolveFrameworkSpecificAssemblySelection(
         string libPath,
         string installPath,
@@ -750,12 +818,7 @@ internal sealed class PackageLoader : IPackageLoader
         string? hostTargetFrameworkOverride,
         out AssemblyAssetSelection selection)
     {
-        var frameworkDirectories = Directory
-            .EnumerateDirectories(libPath)
-            .Select(FrameworkDirectory.Create)
-            .Where(candidate => candidate is not null)
-            .Cast<FrameworkDirectory>()
-            .ToArray();
+        var frameworkDirectories = GetFrameworkDirectories(libPath);
 
         if (frameworkDirectories.Length == 0)
         {
@@ -788,6 +851,13 @@ internal sealed class PackageLoader : IPackageLoader
 
         return true;
     }
+
+    private static FrameworkDirectory[] GetFrameworkDirectories(string libPath) => Directory
+        .EnumerateDirectories(libPath)
+        .Select(FrameworkDirectory.Create)
+        .Where(candidate => candidate is not null)
+        .Cast<FrameworkDirectory>()
+        .ToArray();
 
     private static string ResolveAssemblyFromCandidates(
         IEnumerable<string> candidatePaths,
