@@ -702,9 +702,16 @@ internal sealed class PackageLoader : IPackageLoader
     {
         var relativePath = Path.GetRelativePath(installPath, assemblyPath);
         var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (segments.Length >= 3
-            && string.Equals(segments[0], "lib", StringComparison.OrdinalIgnoreCase)
-            && TryParseFrameworkTarget(segments[1], out var framework))
+
+        var frameworkFolder = segments.Length >= 2 && string.Equals(segments[0], "lib", StringComparison.OrdinalIgnoreCase)
+            ? segments[1]
+            : segments.Length >= 4
+                && string.Equals(segments[0], "runtimes", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(segments[2], "lib", StringComparison.OrdinalIgnoreCase)
+                ? segments[3]
+                : null;
+
+        if (frameworkFolder is not null && TryParseFrameworkTarget(frameworkFolder, out var framework))
         {
             return framework.DisplayName;
         }
