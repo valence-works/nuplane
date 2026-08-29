@@ -395,6 +395,44 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveAsync_NativeOnlyRidDependency_RemainsResolvedWithRuntimeAsset()
+    {
+        var root = CreateInstalledPackage(
+            "Plugin.Root",
+            "1.0.0",
+            dependencyId: "Microsoft.Data.SqlClient.SNI.runtime",
+            dependencyVersionRange: "[6.0.2]");
+        var nativeDependency = CreateInstalledPackage("Microsoft.Data.SqlClient.SNI.runtime", "6.0.2");
+        var nativeAssetPath = Path.Combine(
+            nativeDependency.InstallPath,
+            "runtimes",
+            "win-x64",
+            "native",
+            "Microsoft.Data.SqlClient.SNI.dll");
+        Directory.CreateDirectory(Path.GetDirectoryName(nativeAssetPath)!);
+        File.WriteAllText(nativeAssetPath, "native asset");
+
+        var resolver = new StubPackageResolver(
+            new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+            {
+                [nativeDependency.Id] = nativeDependency
+            });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        Assert.Contains(result.ResolvedPackages, package => package.Id == nativeDependency.Id);
+        var graph = Assert.Single(result.ResolvedGraphs);
+        var node = Assert.Single(graph.Nodes, package => package.PackageId == nativeDependency.Id);
+        Assert.Equal([Path.Combine("runtimes", "win-x64", "native", "Microsoft.Data.SqlClient.SNI.dll")], node.RuntimeAssets);
+        Assert.Equal(node.RuntimeAssets, node.SupportAssets);
+        Assert.Empty(node.DiscoverableAssets);
+    }
+
+    [Fact]
     public async Task ResolveAsync_WithDependencyCycle_ThrowsCycleDiagnostic()
     {
         var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Plugin.Dependency", dependencyVersionRange: "[1.0.0]");

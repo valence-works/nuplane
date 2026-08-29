@@ -79,6 +79,28 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureGraphLoadedAsync_NativeOnlyRidPackage_SkipsPackageWithoutFailure()
+    {
+        var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");
+        var nativeInstall = CreateNativeOnlyPackageInstall("Microsoft.Data.SqlClient.SNI.runtime");
+        var loader = new PackageLoader();
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[
+                new ResolvedPackage("Plugin.Root", "1.0.0", "test-feed", rootInstall, DateTimeOffset.UtcNow, "test-source"),
+                new ResolvedPackage("Microsoft.Data.SqlClient.SNI.runtime", "6.0.2", "test-feed", nativeInstall, DateTimeOffset.UtcNow, "test-source")
+            ]],
+            [],
+            CancellationToken.None);
+
+        var loaded = Assert.Single(result.Loaded);
+        Assert.Equal("Plugin.Root", loaded.PackageId);
+        Assert.Empty(result.FailedByPackageId);
+        Assert.False(loader.TryGetContext("Microsoft.Data.SqlClient.SNI.runtime", "6.0.2", out _));
+        Assert.True(loader.IsInertPackage("Microsoft.Data.SqlClient.SNI.runtime", "6.0.2"));
+    }
+
+    [Fact]
     public void ResolveNativeLibraryPath_WithRuntimeNativeAsset_ResolvesPlatformSpecificName()
     {
         var nativePackageInstall = Path.Combine(_tempRoot, "SQLitePCLRaw.lib.e_sqlite3", "2.1.11");
@@ -372,6 +394,19 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
         var libPath = Path.Combine(installPath, "lib", "netstandard2.0");
         Directory.CreateDirectory(libPath);
         File.WriteAllText(Path.Combine(libPath, "_._"), string.Empty);
+        return installPath;
+    }
+
+    private string CreateNativeOnlyPackageInstall(string packageId)
+    {
+        var installPath = Path.Combine(_tempRoot, packageId, "6.0.2");
+        foreach (var runtimeIdentifier in new[] { "win-arm64", "win-x64", "win-x86" })
+        {
+            var nativePath = Path.Combine(installPath, "runtimes", runtimeIdentifier, "native");
+            Directory.CreateDirectory(nativePath);
+            File.WriteAllText(Path.Combine(nativePath, "Microsoft.Data.SqlClient.SNI.dll"), "native asset");
+        }
+
         return installPath;
     }
 
