@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Nuplane.Abstractions;
 using Nuplane.Loading.Tests.Fixtures;
@@ -167,6 +168,29 @@ public sealed class PackageLoaderTests : IDisposable
     }
 
     [Fact]
+    public void ResolveMainAssemblyPath_MultiTargetPackage_PrefersNearestCompatibleRuntimeRidAssembly()
+    {
+        var packageId = "Nuplane.Loading.Tests.Fixtures";
+        var installPath = CreateRuntimeMultiTargetInstallDir(packageId, "unix", "net8.0", "net9.0");
+
+        Assert.Contains(
+            "unix",
+            PackageGraphLoadContext.ExpandRuntimeIdentifiers(RuntimeInformation.RuntimeIdentifier),
+            StringComparer.OrdinalIgnoreCase);
+
+        var resolvedAssemblyPath = GetResolvedAssemblyPath(installPath, packageId, "net10.0");
+
+        Assert.Contains(
+            $"{Path.DirectorySeparatorChar}runtimes{Path.DirectorySeparatorChar}unix{Path.DirectorySeparatorChar}lib{Path.DirectorySeparatorChar}net9.0{Path.DirectorySeparatorChar}",
+            resolvedAssemblyPath,
+            StringComparison.OrdinalIgnoreCase);
+
+        var candidates = new PackageLoader().BuildScanCandidates(packageId, installPath);
+        var primary = Assert.Single(candidates);
+        Assert.Equal(resolvedAssemblyPath, primary.AssemblyPath);
+    }
+
+    [Fact]
     public async Task EnsureLoadedAsync_MultiTargetPackage_WithOnlyHigherFrameworks_FailsClearly()
     {
         var installPath = CreateMultiTargetInstallDir("Nuplane.Loading.Tests.Fixtures", "net11.0");
@@ -196,6 +220,33 @@ public sealed class PackageLoaderTests : IDisposable
             var frameworkDir = Directory.CreateDirectory(Path.Combine(packageDir.FullName, "lib", framework));
             CopyFixtureAssembly(frameworkDir.FullName, packageId);
         }
+
+        return packageDir.FullName;
+    }
+
+    private string CreateRuntimeMultiTargetInstallDir(string packageId, string runtimeIdentifier, params string[] frameworks)
+    {
+        var packageDir = _tempDir.CreateSubdirectory(packageId);
+        foreach (var framework in frameworks)
+        {
+            var compileDirectory = Directory.CreateDirectory(Path.Combine(packageDir.FullName, "lib", framework));
+            CopyFixtureAssembly(compileDirectory.FullName, packageId);
+
+            var runtimeDirectory = Directory.CreateDirectory(Path.Combine(
+                packageDir.FullName,
+                "runtimes",
+                runtimeIdentifier,
+                "lib",
+                framework));
+            CopyFixtureAssembly(runtimeDirectory.FullName, packageId);
+        }
+
+        var nativeDirectory = Directory.CreateDirectory(Path.Combine(
+            packageDir.FullName,
+            "runtimes",
+            runtimeIdentifier,
+            "native"));
+        File.WriteAllText(Path.Combine(nativeDirectory.FullName, "native-support.dll"), "native asset");
 
         return packageDir.FullName;
     }
