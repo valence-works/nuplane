@@ -67,8 +67,7 @@ internal sealed class PackageLoader : IPackageLoader
         ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
 
         var selection = ResolveAssemblySelection(installPath, packageId, hostTargetFrameworkOverride: null);
-        var assemblyPaths = Directory
-            .EnumerateFiles(selection.CandidateSearchRoot, "*.dll", SearchOption.AllDirectories)
+        var assemblyPaths = EnumerateAssemblyCandidatesExcludingNativeAssets(selection.CandidateSearchRoot, installPath)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -736,7 +735,7 @@ internal sealed class PackageLoader : IPackageLoader
 
         var searchRoot = Directory.Exists(libPath) ? libPath : installPath;
         var mainAssemblyPath = ResolveAssemblyFromCandidates(
-            Directory.EnumerateFiles(searchRoot, "*.dll", SearchOption.AllDirectories),
+            EnumerateAssemblyCandidatesExcludingNativeAssets(searchRoot, installPath),
             installPath,
             packageId,
             selectedFramework: null);
@@ -780,7 +779,7 @@ internal sealed class PackageLoader : IPackageLoader
         }
 
         var mainAssemblyPath = ResolveAssemblyFromCandidates(
-            Directory.EnumerateFiles(selectedDirectory.Path, "*.dll", SearchOption.AllDirectories),
+            EnumerateAssemblyCandidatesExcludingNativeAssets(selectedDirectory.Path, installPath),
             installPath,
             packageId,
             selectedDirectory.FolderName);
@@ -823,6 +822,21 @@ internal sealed class PackageLoader : IPackageLoader
         throw new InvalidOperationException(
             $"Multiple assemblies were found under '{installPath}'{frameworkSuffix}, and a main assembly could not be determined for package '{packageId}'. " +
             "Ensure the package contains a single loadable assembly for the selected target framework or that one assembly name matches the package ID.");
+    }
+
+    private static IEnumerable<string> EnumerateAssemblyCandidatesExcludingNativeAssets(string searchRoot, string installPath) =>
+        Directory
+            .EnumerateFiles(searchRoot, "*.dll", SearchOption.AllDirectories)
+            .Where(path => !IsNativeRuntimeAsset(path, installPath));
+
+    private static bool IsNativeRuntimeAsset(string assemblyPath, string installPath)
+    {
+        var relativePath = Path.GetRelativePath(installPath, assemblyPath);
+        var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        return segments.Length >= 3
+            && string.Equals(segments[0], "runtimes", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(segments[2], "native", StringComparison.OrdinalIgnoreCase);
     }
 
     private static FrameworkDirectory? SelectBestFrameworkDirectory(
