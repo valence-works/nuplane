@@ -2,7 +2,7 @@
 
 **Feature Branch**: `019-tolerate-facade-packages`  
 **Created**: 2026-05-12  
-**Status**: Draft  
+**Status**: Implemented (PR #37)  
 **Input**: User description: "Nuplane package loading should tolerate dependency/support NuGet packages that contain no loadable assemblies, such as facade packages like Microsoft.Data.Sqlite with lib/netstandard2.0/_._, so their presence does not fail or degrade the whole dependency graph while still loading packages in the graph that do contain assemblies and still reporting real load failures."
 
 ## User Scenarios & Testing *(mandatory)*
