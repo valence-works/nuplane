@@ -9,6 +9,8 @@ internal interface IPackageLoader
 {
     /// <summary>
     /// Ensures that all specified packages are loaded into assembly contexts, returning the load results.
+    /// This flat path loads each package on its own and does not consult
+    /// <see cref="IPackageActivationGate"/>; use <see cref="EnsureGraphLoadedAsync"/> for gated activation.
     /// </summary>
     /// <param name="packages">The resolved packages to load.</param>
     /// <param name="sharedPolicy">The shared assembly policy entries controlling host assembly sharing.</param>
@@ -20,7 +22,9 @@ internal interface IPackageLoader
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Ensures that each supplied package graph is loaded into its own assembly context.
+    /// Ensures that each supplied package graph is loaded into its own assembly context. Every registered
+    /// <see cref="IPackageActivationGate"/> is consulted for a graph that is about to be loaded; a graph a
+    /// gate blocks is reported in the failures instead of being loaded.
     /// </summary>
     /// <param name="packageGraphs">The graph-scoped package groups to load.</param>
     /// <param name="sharedPolicy">The shared assembly policy entries controlling host assembly sharing.</param>

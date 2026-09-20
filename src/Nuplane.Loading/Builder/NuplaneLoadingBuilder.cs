@@ -1,5 +1,6 @@
 using System.Runtime.Loader;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Nuplane.Loading.Hosting.Builder;
 
@@ -104,6 +105,27 @@ public sealed class NuplaneLoadingBuilder
                 LoadMode = loadMode
             });
         });
+
+        return this;
+    }
+
+    /// <summary>
+    /// Registers a package activation gate that is consulted before any package graph is loaded, and can
+    /// refuse activation of a graph whose host-side pre-condition is not met. Nothing is registered by
+    /// default: with no gate registered, loading behaves exactly as it does without this call.
+    /// </summary>
+    /// <remarks>
+    /// Every registered gate is consulted in registration order and any block blocks the whole graph, which
+    /// then surfaces as an ordinary load failure. A gate that throws also blocks the graph. Registering the
+    /// same gate type twice registers it once. See <see cref="IPackageActivationGate"/> for the full contract.
+    /// </remarks>
+    /// <typeparam name="TGate">The gate implementation to register as a singleton.</typeparam>
+    public NuplaneLoadingBuilder AddActivationGate<TGate>()
+        where TGate : class, IPackageActivationGate
+    {
+        Services.TryAddSingleton<TGate>();
+        Services.TryAddEnumerable(ServiceDescriptor.Singleton<IPackageActivationGate, TGate>(
+            static sp => sp.GetRequiredService<TGate>()));
 
         return this;
     }
