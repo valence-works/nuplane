@@ -1,36 +1,54 @@
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
+using Nuplane;
 using Nuplane.Abstractions;
+using Nuplane.Events;
 using Nuplane.Loading;
-using Nuplane.Observability;
-using Nuplane.Operational;
+using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Loading;
 
 /// <summary>
-/// End-to-end view of a blocked activation: what an operator reads from the load-state surface while a
-/// gate refuses a package graph, and what happens on the next attempt once the pre-condition is fixed.
+/// Proves the activation gate contract through the real composition: a gate registered with
+/// <see cref="NuplaneLoadingBuilder.AddActivationGate{TGate}"/> reaches the DI-resolved
+/// <see cref="PackageLoader"/> and is consulted on the only production load path —
+/// the reconciled-observer callback that both startup and reconcile drive — and shows what an operator
+/// then reads from the load-state surface.
 /// </summary>
-public sealed class PackageActivationGateIntegrationTests : IDisposable
+public sealed class PackageActivationGateIntegrationTests : IAsyncDisposable
 {
     private const string PackageId = "pkg-gated";
     private const string Version = "1.0.0";
+    private const string CorrelationId = "corr-activation-gate";
     private const string BlockReason = "module schema version is behind the package.";
 
-    private readonly string _tempRoot = Path.Combine(
-        Path.GetTempPath(),
-        "nuplane-activation-gate-integration",
-        Guid.NewGuid().ToString("N"));
+    private readonly DirectoryInfo _tempDir = Directory.CreateTempSubdirectory("nuplane-activation-gate-integration-");
+    private readonly ServiceProvider _provider;
+    private readonly ResolvedPackage _package;
+    private readonly ToggleActivationGate _gate;
 
-    private readonly ReconciliationLogger _logger = new();
-    private readonly ReconciliationMetrics _metrics = new(new ReconciliationTelemetry());
-    private readonly LoadingCatalogRefreshTracker _refreshTracker = new();
-
-    public void Dispose()
+    public PackageActivationGateIntegrationTests()
     {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(nuplane =>
+        {
+            nuplane.UseInMemoryStore();
+            nuplane.AutoloadPackages(loading => loading.AddActivationGate<ToggleActivationGate>());
+        });
+
+        _provider = services.BuildServiceProvider();
+        _package = new(PackageId, Version, "feed-a", CreateInstallDirectory(), DateTimeOffset.UtcNow, "source-a");
+        _gate = _provider.GetRequiredService<ToggleActivationGate>();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _provider.DisposeAsync();
+
         try
         {
-            Directory.Delete(_tempRoot, recursive: true);
+            _tempDir.Delete(recursive: true);
         }
         catch (IOException)
         {
@@ -38,92 +56,118 @@ public sealed class PackageActivationGateIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task BlockedGraph_ReportsFailedLoadStateForStillActivePackage_AndLoadsOnTheNextAttemptOnceAllowed()
+    public async Task ReconciledObserverPath_WhenRegisteredGateBlocks_ConsultsGateAndLeavesPackageUnloaded()
     {
-        var installPath = CreateInstallDirectory();
-        var store = await CreateStoreWithActivePackageAsync(installPath);
-        var blocked = true;
-        var loader = new PackageLoader(
-            activationGates: [new ToggleActivationGate(() => blocked)]);
-        var package = new ResolvedPackage(PackageId, Version, "feed-a", installPath, DateTimeOffset.UtcNow, "source-a");
-        var loadingCatalog = CreateLoadingCatalog(store, loader);
+        await PersistActivePackageAsync();
+        _gate.IsBlocked = true;
 
-        var blockedResult = await loader.EnsureGraphLoadedAsync([[package]], [], CancellationToken.None);
-        var blockedSnapshot = await loadingCatalog.GetLoadStateAsync(CancellationToken.None);
+        await ReconcileAsync();
 
-        Assert.Empty(blockedResult.Loaded);
-        Assert.Contains(BlockReason, Assert.Single(blockedResult.FailedByPackageId).Value, StringComparison.Ordinal);
+        // The gate registered through the builder was reached by the DI-resolved loader.
+        var context = Assert.Single(_gate.Invocations);
+        var gatedPackage = Assert.Single(context.Packages);
+        Assert.Equal(PackageId, gatedPackage.Id);
+        Assert.Equal(_package.InstallPath, gatedPackage.InstallPath);
 
-        // The operator-facing surface reports the package as active but failed, carrying the gate's reason.
-        var blockedPackage = Assert.Single(blockedSnapshot.Packages);
-        Assert.Equal(PackageLoadStatus.Failed, blockedPackage.Status);
-        Assert.Contains(blockedPackage.Diagnostics, diagnostic => diagnostic.Contains(BlockReason, StringComparison.Ordinal));
-        Assert.Contains(PackageId, (await store.GetStateAsync(CancellationToken.None)).ActiveVersionById.Keys);
+        // Nothing of the package was loaded: no load context, no assemblies.
+        var loader = _provider.GetRequiredService<PackageLoader>();
+        Assert.False(loader.TryGetContext(PackageId, Version, out _));
+        Assert.Null(await _provider.GetRequiredService<IPackageAssemblyCatalog>().GetPackagedAssembliesAsync(PackageId, CancellationToken.None));
 
-        // Next reconcile after the pre-condition is fixed: the gate is re-evaluated and the graph loads.
-        blocked = false;
-        var allowedResult = await loader.EnsureGraphLoadedAsync([[package]], [], CancellationToken.None);
-        var allowedSnapshot = await loadingCatalog.GetLoadStateAsync(CancellationToken.None);
+        // The operator reads a failed package that is still active, with the gate's reason attached.
+        var package = Assert.Single((await ReadLoadStateAsync()).Packages);
+        Assert.Equal(PackageLoadStatus.Failed, package.Status);
+        Assert.Contains(package.Diagnostics, diagnostic => diagnostic.Contains(BlockReason, StringComparison.Ordinal));
 
-        Assert.Empty(allowedResult.FailedByPackageId);
-        Assert.Single(allowedResult.Loaded);
-        Assert.Equal(PackageLoadStatus.Loaded, Assert.Single(allowedSnapshot.Packages).Status);
+        var storeState = await _provider.GetRequiredService<IStoreRegistry>().GetStateAsync(CancellationToken.None);
+        Assert.Contains(PackageId, storeState.ActiveVersionById.Keys);
+        Assert.Equal("load", storeState.LastFailureById[PackageId].Stage);
+        Assert.Contains(BlockReason, storeState.LastFailureById[PackageId].Message, StringComparison.Ordinal);
     }
 
-    private LoadingCatalog CreateLoadingCatalog(IStoreRegistry store, PackageLoader loader)
+    [Fact]
+    public async Task ReconciledObserverPath_WhenRegisteredGateAllows_LoadsPackageAsUsual()
     {
-        _refreshTracker.MarkRefreshed("corr-activation-gate");
+        await PersistActivePackageAsync();
+        _gate.IsBlocked = false;
 
-        return new LoadingCatalog(
-            new ActivePackageCatalog(store, _logger, _metrics),
-            loader,
-            new AssemblyScanCandidateProjector(loader),
-            _refreshTracker,
-            Options.Create(new LoadingOptions { Enabled = true }),
-            _logger,
-            _metrics);
+        await ReconcileAsync();
+
+        Assert.Single(_gate.Invocations);
+        Assert.True(_provider.GetRequiredService<PackageLoader>().TryGetContext(PackageId, Version, out _));
+        Assert.Equal(PackageLoadStatus.Loaded, Assert.Single((await ReadLoadStateAsync()).Packages).Status);
     }
 
-    private async Task<IStoreRegistry> CreateStoreWithActivePackageAsync(string installPath)
+    [Fact]
+    public async Task ReconciledObserverPath_WhenGateAllowsAfterBlocking_LoadsOnTheNextReconcile()
     {
-        var descriptor = new ActivePackageDescriptor(
-            PackageId,
-            Version,
-            "feed-a",
-            "source-a",
-            installPath,
-            DateTimeOffset.UtcNow,
-            "corr-activation-gate");
+        await PersistActivePackageAsync();
+        _gate.IsBlocked = true;
+        await ReconcileAsync();
 
-        var store = new StoreRegistry(new StoreStateSerializer(), Path.Combine(_tempRoot, "store-state.json"));
-        await store.PersistActiveVersionsAsync(
+        // The operator fixes the pre-condition; the next reconcile re-evaluates the gate.
+        _gate.IsBlocked = false;
+        await ReconcileAsync();
+
+        Assert.Equal(2, _gate.Invocations.Count);
+        Assert.True(_provider.GetRequiredService<PackageLoader>().TryGetContext(PackageId, Version, out _));
+        Assert.Equal(PackageLoadStatus.Loaded, Assert.Single((await ReadLoadStateAsync()).Packages).Status);
+    }
+
+    // Drives the exact call the reconciliation pipeline and last-known-good startup recovery make.
+    private Task ReconcileAsync() =>
+        _provider.GetRequiredService<IObserverEventDispatcher>().PublishReconciledAsync(
+            new PackageChangeSet([], [], [], CorrelationId, DateTimeOffset.UtcNow),
+            [_package],
+            CancellationToken.None);
+
+    private Task<PackageLoadStateSnapshot> ReadLoadStateAsync() =>
+        _provider.GetRequiredService<IPackageLoadStateCatalog>().GetLoadStateAsync(CancellationToken.None);
+
+    private Task PersistActivePackageAsync() =>
+        _provider.GetRequiredService<IStoreRegistry>().PersistActiveVersionsAsync(
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [PackageId] = Version },
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [PackageId] = Version },
-            descriptor.ActivationCorrelationId,
+            CorrelationId,
             CancellationToken.None,
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase) { [PackageId] = descriptor });
-
-        return store;
-    }
+            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            {
+                [PackageId] = new(
+                    PackageId,
+                    Version,
+                    "feed-a",
+                    "source-a",
+                    _package.InstallPath,
+                    DateTimeOffset.UtcNow,
+                    CorrelationId)
+            });
 
     private string CreateInstallDirectory()
     {
-        var installPath = Path.Combine(_tempRoot, PackageId, Version);
-        Directory.CreateDirectory(installPath);
-
+        var installDirectory = _tempDir.CreateSubdirectory(PackageId);
         var sourceAssembly = typeof(PackageLoader).Assembly.Location;
-        File.Copy(sourceAssembly, Path.Combine(installPath, Path.GetFileName(sourceAssembly)));
+        File.Copy(sourceAssembly, Path.Combine(installDirectory.FullName, Path.GetFileName(sourceAssembly)));
 
-        return installPath;
+        return installDirectory.FullName;
     }
 
-    private sealed class ToggleActivationGate(Func<bool> isBlocked) : IPackageActivationGate
+    internal sealed class ToggleActivationGate : IPackageActivationGate
     {
+        private readonly List<PackageActivationContext> _invocations = [];
+
+        public bool IsBlocked { get; set; }
+
+        public IReadOnlyList<PackageActivationContext> Invocations => _invocations;
+
         public ValueTask<PackageActivationGateResult> EvaluateAsync(
             PackageActivationContext context,
-            CancellationToken cancellationToken) =>
-            new(isBlocked()
+            CancellationToken cancellationToken)
+        {
+            _invocations.Add(context);
+
+            return new(IsBlocked
                 ? PackageActivationGateResult.Block(BlockReason)
                 : PackageActivationGateResult.Allow);
+        }
     }
 }
