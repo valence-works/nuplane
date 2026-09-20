@@ -40,6 +40,19 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
         return path;
     }
 
+    private string WriteSinglePackageManifest(string id, string version)
+    {
+        return WriteManifestFile(new
+        {
+            SchemaVersion = "1.0",
+            GeneratedAtUtc = DateTimeOffset.UtcNow,
+            Packages = new[]
+            {
+                new { Id = id, Version = version }
+            }
+        });
+    }
+
     private static ReconciliationService CreateService(IDesiredPackageSource source)
     {
         return ReconciliationServiceFactory.Create(
@@ -187,15 +200,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
     [Fact]
     public async Task ManifestEnabled_ReconciliationCycle_ManifestPackagesReachDesiredRequestsAndArePersisted()
     {
-        var manifestPath = WriteManifestFile(new
-        {
-            SchemaVersion = "1.0",
-            GeneratedAtUtc = DateTimeOffset.UtcNow,
-            Packages = new[]
-            {
-                new { Id = "Lib.Core", Version = "1.0.0" }
-            }
-        });
+        var manifestPath = WriteSinglePackageManifest("Lib.Core", "1.0.0");
 
         var options = new ConvergenceOptions { Manifest = { Enabled = true, Path = manifestPath } };
         var source = new DesiredManifestPackageSource(new(), options);
@@ -217,15 +222,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
     [Fact]
     public async Task AddNuplane_FromConfiguration_ManifestEnabled_ReconciliationCycleIncludesManifestPackage()
     {
-        var manifestPath = WriteManifestFile(new
-        {
-            SchemaVersion = "1.0",
-            GeneratedAtUtc = DateTimeOffset.UtcNow,
-            Packages = new[]
-            {
-                new { Id = "Lib.Core", Version = "1.0.0" }
-            }
-        });
+        var manifestPath = WriteSinglePackageManifest("Lib.Core", "1.0.0");
 
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -247,15 +244,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
     [Fact]
     public async Task AddNuplane_BuilderOnly_ManifestEnabledViaCodeConfigure_ReconciliationCycleIncludesManifestPackage()
     {
-        var manifestPath = WriteManifestFile(new
-        {
-            SchemaVersion = "1.0",
-            GeneratedAtUtc = DateTimeOffset.UtcNow,
-            Packages = new[]
-            {
-                new { Id = "Lib.Core", Version = "1.0.0" }
-            }
-        });
+        var manifestPath = WriteSinglePackageManifest("Lib.Core", "1.0.0");
 
         var services = new ServiceCollection();
         services.AddLogging();
