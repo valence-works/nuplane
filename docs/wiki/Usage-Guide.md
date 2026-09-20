@@ -63,6 +63,39 @@ Current repository behavior is explicit about query-first reads:
 
 That split keeps hosts from rebuilding state from event history.
 
+### Offline reads of the active package set
+
+- **Applicability:** `Core`
+- **Stability note:** `Recently Changed`
+
+`Nuplane.NuplaneStore` is a static, dependency-injection-free entry point for tooling that needs
+the active package set — every active package's id, version, and install path — without a running
+host, a DI container, or network access:
+
+```csharp
+var activePackages = await NuplaneStore.ReadActivePackagesAsync("/var/lib/nuplane/.nuplane/store-state.json");
+
+foreach (var package in activePackages)
+{
+    Console.WriteLine($"{package.PackageId} {package.Version} -> {package.InstallPath}");
+}
+```
+
+An overload accepts a `StoreRegistryOptions` and resolves the effective state file path the same
+way a running host does, via `EffectiveStorePersistenceSettings.Resolve`:
+
+```csharp
+var activePackages = await NuplaneStore.ReadActivePackagesAsync(
+    new StoreRegistryOptions { StateFilePath = configuredPath });
+```
+
+Both overloads are strictly read-only — they never create, rewrite, or migrate `store-state.json`
+or its directory, so it is safe to call them while a running host owns the file. A missing state
+file or a state file with no active packages recorded both return an empty collection; a state
+file that exists but is not valid JSON lets the underlying deserialization error propagate instead
+of being silently treated as "no active packages." Passing options that resolve to in-memory
+persistence throws `InvalidOperationException`, since there is no state file to read.
+
 ## Configuration-driven adoption
 
 - **Applicability:** `Core`
