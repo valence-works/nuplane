@@ -38,12 +38,11 @@ public sealed class HostIntegratedLoadOptions
     /// registered.
     /// </summary>
     /// <remarks>
-    /// A gate must not call
-    /// <see cref="NuplaneHostIntegratedLoader.LoadActivePackagesAsync(IReadOnlyList{Nuplane.Abstractions.ActivePackage}, HostIntegratedLoadOptions, CancellationToken)"/>
-    /// or any of its overloads: a load holds a process-wide lock while its gates run, so the nested call
-    /// throws <see cref="InvalidOperationException"/> instead of waiting forever. Because gates fail
-    /// closed, that throw refuses the graph the gate was evaluating and is reported as an ordinary load
-    /// failure naming the gate.
+    /// A gate must not call back into <see cref="NuplaneHostIntegratedLoader"/>: a load holds a
+    /// process-wide lock while its gates run, so the nested call throws
+    /// <see cref="InvalidOperationException"/> instead of waiting forever. Because gates fail closed,
+    /// that throw refuses the graph the gate was evaluating and is reported as an ordinary load failure
+    /// naming the gate.
     /// </remarks>
     public IList<IPackageActivationGate> ActivationGates { get; } = [];
 

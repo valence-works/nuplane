@@ -93,7 +93,7 @@ public sealed class NuplaneHostIntegratedLoaderParityTests : IDisposable
 
         // Act: the whole two-step flow in one call — the entry point performs the same strictly
         // read-only offline read NuplaneStore does, then loads what the state records.
-        var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(stateFilePath);
+        var result = await NuplaneHostIntegratedLoader.LoadFromStateAsync(stateFilePath);
 
         // Assert
         var activePackages = await NuplaneStore.ReadActivePackagesAsync(stateFilePath);
@@ -126,7 +126,7 @@ public sealed class NuplaneHostIntegratedLoaderParityTests : IDisposable
         }
 
         // Act
-        var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(
+        var result = await NuplaneHostIntegratedLoader.LoadFromStateAsync(
             new StoreRegistryOptions { StateFilePath = stateFilePath });
 
         // Assert
@@ -141,6 +141,6 @@ public sealed class NuplaneHostIntegratedLoaderParityTests : IDisposable
         // There is no state file to read, and answering "nothing is active" would let a caller mistake
         // wrong options for an empty host.
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            NuplaneHostIntegratedLoader.LoadActivePackagesAsync(new StoreRegistryOptions { UseInMemoryStore = true }));
+            NuplaneHostIntegratedLoader.LoadFromStateAsync(new StoreRegistryOptions { UseInMemoryStore = true }));
     }
 }

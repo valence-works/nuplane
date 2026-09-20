@@ -122,11 +122,12 @@ loading does inside a running host — without a host, hosted services, reconcil
 or network access. Tooling that has to resolve a Nuplane host's module or provider assemblies the way
 that host's own process resolves them uses it instead of re-implementing the loader.
 
-Point it at the host's `store-state.json` and it performs both steps — the same strictly read-only
-offline read `NuplaneStore` performs, then the load:
+`LoadFromStateAsync` is the entry point to reach for. Point it at the host's `store-state.json` and
+it performs both steps — the same strictly read-only offline read `NuplaneStore` performs, then the
+load:
 
 ```csharp
-var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(
+var result = await NuplaneHostIntegratedLoader.LoadFromStateAsync(
     "/var/lib/nuplane/.nuplane/store-state.json");
 
 foreach (var package in result.Packages.Where(p => p.Status == PackageLoadStatus.Loaded))
@@ -139,27 +140,27 @@ var providerType = Type.GetType("Acme.Provider.SqlProvider, Acme.Provider");
 ```
 
 An overload accepts a `StoreRegistryOptions` and resolves the effective state file path the same way a
-running host does, mirroring `NuplaneStore.ReadActivePackagesAsync`:
+running host does, mirroring `NuplaneStore.ReadStateAsync`:
 
 ```csharp
-var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(
+var result = await NuplaneHostIntegratedLoader.LoadFromStateAsync(
     new StoreRegistryOptions { StateFilePath = configuredPath });
 ```
 
-**Prefer these state-file overloads.** Packages are grouped into load graphs exactly as the host groups
-them — from the `Active` graph activation records the state records, merging records that share a
-package, and falling back to the graph generation identity on each active package descriptor only when
-the state holds no active graph record. Only the state carries those records, so only these overloads
-can reproduce the host's grouping in every case. The state is read once, so the package set and the
-graph records always come from one snapshot of the file.
+**`LoadFromStateAsync` is the only entry point with guaranteed grouping parity.** It groups packages
+into load graphs exactly as the host groups them — from the `Active` graph activation records the state
+records, merging records that share a package, and falling back to the graph generation identity on
+each active package descriptor only when the state holds no active graph record. Only the state carries
+those records. The state is read once, so the package set and the graph records always come from one
+snapshot of the file.
 
 Each graph is loaded into one non-collectible context, so a package and its dependencies resolve each
 other exactly as they do in the host. Because the loaded assemblies are published through the same
 assembly-resolution catalog and the same `AssemblyLoadContext.Default.Resolving` hook, `Type.GetType`,
 `Assembly.Load`, and a scan of `AppDomain.CurrentDomain.GetAssemblies()` all see them.
 
-An overload still accepts an `IReadOnlyList<ActivePackage>`, for callers that filter or assemble the
-set themselves — for example after reading it with `NuplaneStore.ReadActivePackagesAsync`:
+`LoadActivePackagesAsync` takes an `IReadOnlyList<ActivePackage>` instead, for callers that filter or
+assemble the set themselves — for example after reading it with `NuplaneStore.ReadActivePackagesAsync`:
 
 ```csharp
 var activePackages = await NuplaneStore.ReadActivePackagesAsync(stateFilePath);
@@ -168,12 +169,12 @@ var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(
 ```
 
 An `ActivePackage` carries its graph generation identity but not the store's graph activation records,
-so that overload groups by graph generation identity alone. It matches the host whenever the state
+so that entry point groups by graph generation identity alone. It matches the host whenever the state
 holds no active graph record, and whenever every active graph record's node set matches the generations
 the descriptors carry — the ordinary case after a single reconcile. It can differ when the store holds
 several active graph records that share packages, because a record from an earlier reconcile survives
 until a newer graph with the same root set replaces it: packages the host would load into one context
-can then be split across two. Use a state-file overload when grouping parity with the host matters.
+can then be split across two. Use `LoadFromStateAsync` when grouping parity with the host matters.
 
 **The load is irreversible for the lifetime of the process.** Host-integrated assemblies go into
 non-collectible load contexts and the resolving hook is never removed, so nothing loaded this way can
@@ -207,12 +208,12 @@ options.ActivationGates.Add(new SchemaVersionActivationGate());
 // different copies of a shared assembly.
 options.SharedAssemblies.Add(new SharedAssemblyIdentity("Acme.Contracts", "", 1));
 
-var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(stateFilePath, options);
+var result = await NuplaneHostIntegratedLoader.LoadFromStateAsync(stateFilePath, options);
 ```
 
-A gate must not call back into `LoadActivePackagesAsync`: a load holds a process-wide lock while its
-gates run, so a nested call throws `InvalidOperationException` rather than waiting for a lock that can
-never be released. Because gates fail closed, that throw refuses the graph the gate was evaluating and
+A gate must not call back into `NuplaneHostIntegratedLoader`: a load holds a process-wide lock while
+its gates run, so a nested call throws `InvalidOperationException` rather than waiting for a lock that
+can never be released. Because gates fail closed, that throw refuses the graph the gate was evaluating and
 is reported as an ordinary load failure naming the gate. Concurrent calls from unrelated flows are
 safe and are serialized.
 

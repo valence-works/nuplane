@@ -14,6 +14,13 @@ namespace Nuplane.Loading.Tests;
 /// </summary>
 public sealed class NuplaneHostIntegratedLoaderTests : IDisposable
 {
+    /// <summary>
+    /// Bounds the loads whose regression mode is a deadlock rather than a wrong answer, so such a
+    /// regression fails the test instead of hanging the suite. A host-free load of a one-assembly
+    /// package takes milliseconds.
+    /// </summary>
+    private static readonly TimeSpan LoadTimeout = TimeSpan.FromSeconds(30);
+
     private readonly DirectoryInfo _tempDir = Directory.CreateTempSubdirectory("nuplane-host-free-");
 
     public void Dispose()
@@ -247,19 +254,19 @@ public sealed class NuplaneHostIntegratedLoaderTests : IDisposable
     [Fact]
     public async Task LoadActivePackagesAsync_WhenPackagesIsNull_Throws() =>
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            NuplaneHostIntegratedLoader.LoadActivePackagesAsync((IReadOnlyList<ActivePackage>)null!));
+            NuplaneHostIntegratedLoader.LoadActivePackagesAsync(null!));
 
     [Fact]
     public async Task LoadActivePackagesAsync_WhenStateFilePathIsBlank_Throws() =>
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            NuplaneHostIntegratedLoader.LoadActivePackagesAsync("   "));
+            NuplaneHostIntegratedLoader.LoadFromStateAsync("   "));
 
     [Fact]
     public async Task LoadActivePackagesAsync_WhenStateFileIsMissing_ReturnsEmptyResult()
     {
         // A missing state file is the "nothing persisted yet" outcome the offline reader reports, not an
         // error, and it must install nothing into the process.
-        var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(
+        var result = await NuplaneHostIntegratedLoader.LoadFromStateAsync(
             Path.Combine(_tempDir.FullName, $"missing-{Guid.NewGuid():N}", "store-state.json"));
 
         Assert.Empty(result.Packages);
@@ -321,19 +328,28 @@ public sealed class NuplaneHostIntegratedLoaderTests : IDisposable
         Assert.Equal(1, HostIntegratedLoadComposition.ResolverInstallCount);
     }
 
-    [Fact]
-    public async Task LoadActivePackagesAsync_WhenAnActivationGateCallsBackIntoTheLoader_FailsTheGraphInsteadOfDeadlocking()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LoadActivePackagesAsync_WhenAnActivationGateCallsBackIntoTheLoader_FailsTheGraphInsteadOfDeadlocking(
+        bool reenterOnAnotherThread)
     {
         // Arrange: a load holds a process-wide, non-reentrant lock while it consults its gates, so a gate
-        // that loads again would wait for a lock its own call chain holds.
-        var emitted = HostFreeLoadTestSupport.EmitPackage(_tempDir, "Nuplane.HostFree.Reentrant");
+        // that loads again would wait for a lock its own call chain holds. Re-entering through
+        // Task.Run is the same call chain, because the execution context flows into the work item.
+        var scenario = reenterOnAnotherThread ? "Threaded" : "Inline";
+        var emitted = HostFreeLoadTestSupport.EmitPackage(_tempDir, $"Nuplane.HostFree.Reentrant{scenario}");
         var package = emitted.AsActivePackage();
+        var gate = new ReentrantActivationGate(
+            HostFreeLoadTestSupport.EmitPackage(_tempDir, $"Nuplane.HostFree.ReentrantInner{scenario}").AsActivePackage(),
+            reenterOnAnotherThread);
         var options = new HostIntegratedLoadOptions();
-        options.ActivationGates.Add(new ReentrantActivationGate(
-            HostFreeLoadTestSupport.EmitPackage(_tempDir, "Nuplane.HostFree.ReentrantInner").AsActivePackage()));
+        options.ActivationGates.Add(gate);
 
-        // Act
-        var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync([package], options);
+        // Act: a regression here deadlocks, so the wait is bounded — the test must fail, not hang.
+        var result = await NuplaneHostIntegratedLoader
+            .LoadActivePackagesAsync([package], options)
+            .WaitAsync(LoadTimeout);
 
         // Assert: the nested call threw, and because gates fail closed the graph the gate was evaluating
         // is an ordinary load failure naming the gate and carrying the re-entrancy reason.
@@ -342,13 +358,52 @@ public sealed class NuplaneHostIntegratedLoaderTests : IDisposable
         var diagnostic = Assert.Single(state.Diagnostics);
         Assert.Contains(nameof(ReentrantActivationGate), diagnostic, StringComparison.Ordinal);
         Assert.Contains("already in progress on this call chain", diagnostic, StringComparison.Ordinal);
-        Assert.NotNull(options.ActivationGates.OfType<ReentrantActivationGate>().Single().NestedCallFailure);
+        Assert.NotNull(gate.NestedCallFailure);
+        Assert.Equal(0, HostFreeLoadTestSupport.CountGraphLoadContexts(package));
 
         // The lock was released, so an ordinary load still works afterwards.
-        var afterwards = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(
-            [HostFreeLoadTestSupport.EmitPackage(_tempDir, "Nuplane.HostFree.AfterReentrancy").AsActivePackage()]);
+        var afterwards = await NuplaneHostIntegratedLoader
+            .LoadActivePackagesAsync([HostFreeLoadTestSupport.EmitPackage(_tempDir, $"Nuplane.HostFree.AfterReentrancy{scenario}").AsActivePackage()])
+            .WaitAsync(LoadTimeout);
         Assert.Equal(PackageLoadStatus.Loaded, Assert.Single(afterwards.Packages).Status);
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LoadActivePackagesAsync_WhenTwoIndependentFlowsLoadConcurrently_BothLoadWithoutBeingTreatedAsReentrant(
+        bool startOnThreadPool)
+    {
+        // Arrange: two package sets with identities of their own, so the only thing the two calls share
+        // is the process-wide composition. Both ways of starting them are covered: on the thread pool,
+        // and by starting both before awaiting either, which is the form that would expose the
+        // re-entrancy marker leaking out of the first call into the caller's flow.
+        var scenario = startOnThreadPool ? "Pooled" : "Started";
+        var first = HostFreeLoadTestSupport.EmitPackage(_tempDir, $"Nuplane.HostFree.Concurrent{scenario}One").AsActivePackage();
+        var second = HostFreeLoadTestSupport.EmitPackage(_tempDir, $"Nuplane.HostFree.Concurrent{scenario}Two").AsActivePackage();
+
+        // Act: started together from independent flows. Concurrency is legitimate — it is re-entrancy on
+        // one flow that cannot work — so these must serialize, not refuse each other and not deadlock.
+        var results = await Task.WhenAll(
+                StartLoad(first, startOnThreadPool),
+                StartLoad(second, startOnThreadPool))
+            .WaitAsync(LoadTimeout);
+
+        // Assert
+        Assert.All(results, result =>
+        {
+            Assert.Empty(result.FailedByPackageId);
+            Assert.Equal(PackageLoadStatus.Loaded, Assert.Single(result.Packages).Status);
+        });
+        Assert.Equal(1, HostFreeLoadTestSupport.CountGraphLoadContexts(first));
+        Assert.Equal(1, HostFreeLoadTestSupport.CountGraphLoadContexts(second));
+        Assert.Equal(1, HostIntegratedLoadComposition.ResolverInstallCount);
+    }
+
+    private static Task<HostIntegratedLoadResult> StartLoad(ActivePackage package, bool onThreadPool) =>
+        onThreadPool
+            ? Task.Run(() => NuplaneHostIntegratedLoader.LoadActivePackagesAsync([package]))
+            : NuplaneHostIntegratedLoader.LoadActivePackagesAsync([package]);
 
     private sealed class StubActivationGate(string blockReason) : IPackageActivationGate
     {
@@ -358,7 +413,8 @@ public sealed class NuplaneHostIntegratedLoaderTests : IDisposable
             new(PackageActivationGateResult.Block(blockReason));
     }
 
-    private sealed class ReentrantActivationGate(ActivePackage nestedPackage) : IPackageActivationGate
+    private sealed class ReentrantActivationGate(ActivePackage nestedPackage, bool reenterOnAnotherThread)
+        : IPackageActivationGate
     {
         /// <summary>Gets what the nested load threw, or <see langword="null"/> if it did not throw.</summary>
         public InvalidOperationException? NestedCallFailure { get; private set; }
@@ -369,9 +425,11 @@ public sealed class NuplaneHostIntegratedLoaderTests : IDisposable
         {
             try
             {
-                await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(
-                    [nestedPackage],
-                    cancellationToken: cancellationToken);
+                await (reenterOnAnotherThread
+                    ? Task.Run(
+                        () => NuplaneHostIntegratedLoader.LoadActivePackagesAsync([nestedPackage], cancellationToken: cancellationToken),
+                        cancellationToken)
+                    : NuplaneHostIntegratedLoader.LoadActivePackagesAsync([nestedPackage], cancellationToken: cancellationToken));
             }
             catch (InvalidOperationException exception)
             {

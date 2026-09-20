@@ -69,7 +69,7 @@ public sealed class HostFreeGraphGroupingParityTests : IDisposable
 
         // Act: the host-free load runs first, because a graph a composed host has already loaded into a
         // non-collectible context is deliberately refused rather than loaded a second time.
-        var hostFree = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(fixture.StateFilePath);
+        var hostFree = await NuplaneHostIntegratedLoader.LoadFromStateAsync(fixture.StateFilePath);
 
         await using var host = CreateHost(fixture.StateFilePath);
         await ReconcileAsync(host, fixture.ResolvedPackages);

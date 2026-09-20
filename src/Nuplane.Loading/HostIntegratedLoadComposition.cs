@@ -88,9 +88,9 @@ internal sealed class HostIntegratedLoadComposition
         {
             throw new InvalidOperationException(
                 $"A {nameof(NuplaneHostIntegratedLoader)} load is already in progress on this call chain. " +
-                $"{nameof(NuplaneHostIntegratedLoader)}.{nameof(NuplaneHostIntegratedLoader.LoadActivePackagesAsync)} must not be called from " +
-                $"an {nameof(IPackageActivationGate)}, or from anything else a load invokes, because the load holds a process-wide lock for " +
-                "its duration and the nested call would wait for it forever. Do the nested work after the outer load returns.");
+                $"{nameof(NuplaneHostIntegratedLoader)} must not be called from an {nameof(IPackageActivationGate)}, " +
+                "or from anything else a load invokes, because the load holds a process-wide lock for its duration and the nested " +
+                "call would wait for it forever. Do the nested work after the outer load returns.");
         }
 
         await CompositionGate.WaitAsync(cancellationToken).ConfigureAwait(false);

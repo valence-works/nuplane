@@ -8,9 +8,13 @@ namespace Nuplane.Loading;
 /// Offline, dependency-injection-free entry point that loads an already-resolved active package set
 /// into assemblies exactly the way <see cref="PackageLoadMode.HostIntegrated"/> loading does inside a
 /// running Nuplane host — with no host, no hosted services, no reconciliation, and no feed or network
-/// access. The overload taking a <c>store-state.json</c> path is the primary one: it reads the state
-/// offline and loads what it records, grouping packages into graphs exactly as the host that wrote the
-/// state does.
+/// access.
+/// <see cref="LoadFromStateAsync(string, HostIntegratedLoadOptions, CancellationToken)"/> is the primary
+/// entry point: it reads a <c>store-state.json</c> offline and loads what it records, grouping packages
+/// into graphs exactly as the host that wrote the state does.
+/// <see cref="LoadActivePackagesAsync(IReadOnlyList{ActivePackage}, HostIntegratedLoadOptions, CancellationToken)"/>
+/// takes an already-assembled package set instead, and groups by graph generation identity because that
+/// is all such a set carries.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -43,15 +47,15 @@ public static class NuplaneHostIntegratedLoader
     /// <summary>
     /// Loads the supplied active package set into this process the way a running host's
     /// <see cref="PackageLoadMode.HostIntegrated"/> loading would, and reports the resulting per-package
-    /// load state. Prefer <see cref="LoadActivePackagesAsync(string, HostIntegratedLoadOptions, CancellationToken)"/>
+    /// load state. Prefer <see cref="LoadFromStateAsync(string, HostIntegratedLoadOptions, CancellationToken)"/>
     /// when the caller has the state file, because only the state carries the graph activation records
     /// that decide which packages a host loads together.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Graph membership from this overload is not always the host's.</b> An
+    /// <b>Graph membership from this method is not always the host's.</b> An
     /// <see cref="ActivePackage"/> carries its graph generation identity but not the store's graph
-    /// activation records, so this overload groups packages by graph generation identity. A host groups
+    /// activation records, so this method groups packages by graph generation identity. A host groups
     /// by the node sets of every <c>Active</c> graph activation record in the store, merging records that
     /// share a package, and only falls back to graph generation identity when the store holds no active
     /// graph record. The two agree whenever the store holds no active graph record, and whenever every
@@ -59,9 +63,9 @@ public static class NuplaneHostIntegratedLoader
     /// ordinary case after a single reconcile. They can differ when the store holds several active graph
     /// records that share packages, because a record from an earlier reconcile survives until a newer
     /// graph with the same root set replaces it. Use
-    /// <see cref="LoadActivePackagesAsync(string, HostIntegratedLoadOptions, CancellationToken)"/> for
-    /// guaranteed parity with the host; use this overload when the caller has already filtered or
-    /// assembled the package set itself.
+    /// <see cref="LoadFromStateAsync(string, HostIntegratedLoadOptions, CancellationToken)"/> for
+    /// guaranteed parity with the host; use this one when the caller has already filtered or assembled
+    /// the package set itself.
     /// </para>
     /// <para>
     /// Each graph is loaded into one non-collectible context, so a package and its dependencies resolve
@@ -118,7 +122,7 @@ public static class NuplaneHostIntegratedLoader
     /// <summary>
     /// Reads the persisted store state at <paramref name="stateFilePath"/> and loads the package set it
     /// records into this process the way a running host's <see cref="PackageLoadMode.HostIntegrated"/>
-    /// loading would. This is the overload to prefer: it is the only one that can group packages into
+    /// loading would. This is the entry point to prefer: it is the only one that can group packages into
     /// graphs exactly as the host does, because grouping needs the state's graph activation records.
     /// </summary>
     /// <remarks>
@@ -140,11 +144,11 @@ public static class NuplaneHostIntegratedLoader
     /// <param name="options">The load options, or <see langword="null"/> to load exactly as a host with default host-integrated configuration does.</param>
     /// <param name="cancellationToken">A token to cancel the read and the load.</param>
     /// <returns>The per-package load state, and the failure reason of every package that could not be loaded.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="stateFilePath"/> is <see langword="null"/>, empty, or whitespace, or when <paramref name="options"/> is invalid as described on the other overload.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="stateFilePath"/> is <see langword="null"/>, empty, or whitespace, or when <paramref name="options"/> is invalid as described on <see cref="LoadActivePackagesAsync(IReadOnlyList{ActivePackage}, HostIntegratedLoadOptions, CancellationToken)"/>.</exception>
     /// <exception cref="IOException">Thrown when the state file exists but cannot be opened for reading, for example while a host holds an exclusive lock on it mid-write.</exception>
     /// <exception cref="System.Text.Json.JsonException">Thrown when the state file exists but its content is empty, torn, or otherwise not valid JSON.</exception>
-    /// <exception cref="InvalidOperationException">Thrown for the reasons described on the other overload.</exception>
-    public static async Task<HostIntegratedLoadResult> LoadActivePackagesAsync(
+    /// <exception cref="InvalidOperationException">Thrown for the reasons described on <see cref="LoadActivePackagesAsync(IReadOnlyList{ActivePackage}, HostIntegratedLoadOptions, CancellationToken)"/>.</exception>
+    public static async Task<HostIntegratedLoadResult> LoadFromStateAsync(
         string stateFilePath,
         HostIntegratedLoadOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -159,7 +163,7 @@ public static class NuplaneHostIntegratedLoader
     /// <summary>
     /// Reads the persisted store state from the state file resolved from <paramref name="storeOptions"/>
     /// the same way a running host resolves it, and loads the package set it records. See
-    /// <see cref="LoadActivePackagesAsync(string, HostIntegratedLoadOptions, CancellationToken)"/>, which
+    /// <see cref="LoadFromStateAsync(string, HostIntegratedLoadOptions, CancellationToken)"/>, which
     /// this delegates to.
     /// </summary>
     /// <param name="storeOptions">The store registry options to resolve the effective state file path from.</param>
@@ -167,8 +171,8 @@ public static class NuplaneHostIntegratedLoader
     /// <param name="cancellationToken">A token to cancel the read and the load.</param>
     /// <returns>The per-package load state, and the failure reason of every package that could not be loaded.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="storeOptions"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when <paramref name="storeOptions"/> resolves to in-memory persistence, which persists no state file, or for the reasons described on the other overloads.</exception>
-    public static async Task<HostIntegratedLoadResult> LoadActivePackagesAsync(
+    /// <exception cref="InvalidOperationException">Thrown when <paramref name="storeOptions"/> resolves to in-memory persistence, which persists no state file, or for the reasons described on <see cref="LoadFromStateAsync(string, HostIntegratedLoadOptions, CancellationToken)"/>.</exception>
+    public static async Task<HostIntegratedLoadResult> LoadFromStateAsync(
         StoreRegistryOptions storeOptions,
         HostIntegratedLoadOptions? options = null,
         CancellationToken cancellationToken = default)
