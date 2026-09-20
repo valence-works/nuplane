@@ -46,7 +46,7 @@ public sealed class HostFreeGraphGroupingParityTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadActivePackagesAsync_FromStateWithOverlappingActiveGraphRecords_GroupsExactlyAsAComposedHostDoes()
+    public async Task LoadFromStateAsync_FromStateWithOverlappingActiveGraphRecords_GroupsExactlyAsAComposedHostDoes()
     {
         // Arrange
         var fixture = await CreateOverlappingGraphStateAsync(
@@ -117,9 +117,9 @@ public sealed class HostFreeGraphGroupingParityTests : IDisposable
         var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(activePackages);
 
         // Assert: an ActivePackage carries its graph generation but not the store's graph records, so
-        // this overload splits what the store activated together — the first root loads on its own,
+        // this splits what the store activated together — the first root loads on its own,
         // while the second root and the shared dependency, which share a generation, load together.
-        // This is the documented limit of the list overload and the reason the from-state overload
+        // This is the documented limit of LoadActivePackagesAsync and the reason LoadFromStateAsync
         // exists; nothing here is a failure, it is simply a different, smaller graph.
         Assert.Empty(result.FailedByPackageId);
         Assert.Equal(2, GraphKeysOf(result.Packages).Count);

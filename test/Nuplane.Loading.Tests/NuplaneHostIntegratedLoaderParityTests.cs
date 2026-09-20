@@ -76,7 +76,7 @@ public sealed class NuplaneHostIntegratedLoaderParityTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadActivePackagesAsync_FromAPersistedStoreStateFile_LoadsWhatTheStoreRecorded()
+    public async Task LoadFromStateAsync_FromAPersistedStoreStateFile_LoadsWhatTheStoreRecorded()
     {
         // Arrange: a real store writes store-state.json, exactly as a running host leaves it behind.
         const string graphGenerationId = "generation-store";
@@ -114,7 +114,7 @@ public sealed class NuplaneHostIntegratedLoaderParityTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadActivePackagesAsync_FromStoreRegistryOptions_ResolvesTheSameStateFileAHostWould()
+    public async Task LoadFromStateAsync_FromStoreRegistryOptions_ResolvesTheSameStateFileAHostWould()
     {
         // Arrange
         var stateFilePath = Path.Combine(_tempDir.FullName, "options-store-state.json");
@@ -136,7 +136,7 @@ public sealed class NuplaneHostIntegratedLoaderParityTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadActivePackagesAsync_FromStoreRegistryOptionsWithInMemoryPersistence_Throws()
+    public async Task LoadFromStateAsync_FromStoreRegistryOptionsWithInMemoryPersistence_Throws()
     {
         // There is no state file to read, and answering "nothing is active" would let a caller mistake
         // wrong options for an empty host.

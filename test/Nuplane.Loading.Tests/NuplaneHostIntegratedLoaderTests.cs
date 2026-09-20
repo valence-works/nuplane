@@ -257,12 +257,12 @@ public sealed class NuplaneHostIntegratedLoaderTests : IDisposable
             NuplaneHostIntegratedLoader.LoadActivePackagesAsync(null!));
 
     [Fact]
-    public async Task LoadActivePackagesAsync_WhenStateFilePathIsBlank_Throws() =>
+    public async Task LoadFromStateAsync_WhenStateFilePathIsBlank_Throws() =>
         await Assert.ThrowsAsync<ArgumentException>(() =>
             NuplaneHostIntegratedLoader.LoadFromStateAsync("   "));
 
     [Fact]
-    public async Task LoadActivePackagesAsync_WhenStateFileIsMissing_ReturnsEmptyResult()
+    public async Task LoadFromStateAsync_WhenStateFileIsMissing_ReturnsEmptyResult()
     {
         // A missing state file is the "nothing persisted yet" outcome the offline reader reports, not an
         // error, and it must install nothing into the process.
