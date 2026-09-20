@@ -2,12 +2,15 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Nuplane.Abstractions;
 using Nuplane.Feeds.Configuration;
+using Nuplane.Observability;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Convergence;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Validation;
 using Nuplane.Setup;
+using Nuplane.Sources;
 using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
 using Nuplane.Store.Validation;
@@ -69,6 +72,30 @@ internal static class NuplaneOptionsRegistrationServices
         {
             bindOptions(services, configuration);
         }
+
+        RegisterManifestPackageSourceIfEnabled(services, configuration);
+    }
+
+    // Registers the manifest-backed desired package source only when the manifest reader is
+    // enabled via configuration. This mirrors the class's own no-op behavior when disabled, but
+    // keeping the registration itself conditional avoids adding an inert source to every
+    // reconciliation cycle when the feature is off.
+    private static void RegisterManifestPackageSourceIfEnabled(IServiceCollection services, IConfiguration configuration)
+    {
+        var convergenceSection = GetNamedSectionOrSelf(configuration, ConvergenceSectionName);
+        var manifestEnabled = convergenceSection
+            .GetSection(nameof(ConvergenceOptions.Manifest))
+            .GetValue<bool>(nameof(ManifestOptions.Enabled));
+
+        if (!manifestEnabled)
+        {
+            return;
+        }
+
+        services.AddSingleton<IDesiredPackageSource>(sp => new DesiredManifestPackageSource(
+            sp.GetRequiredService<DesiredManifestReader>(),
+            sp.GetRequiredService<IOptions<ConvergenceOptions>>().Value,
+            sp.GetService<ReconciliationMetrics>()));
     }
 
     internal static IConfigurationSection GetNamedSectionOrSelf(IConfiguration configuration, string sectionName)

@@ -10,6 +10,7 @@ using Nuplane.Hosting;
 using Nuplane.Loading;
 using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Setup;
+using Nuplane.Sources;
 using Nuplane.Sources.Directory;
 using Nuplane.Sources.Directory.Builder;
 using Nuplane.Sources.Directory.Configuration;
@@ -945,6 +946,44 @@ public sealed class ConfigurationDrivenRegistrationTests
             try { Directory.Delete(root1, recursive: true); } catch { }
             try { Directory.Delete(root2, recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public void AddNuplane_FromConfiguration_ManifestEnabled_RegistersDesiredManifestPackageSource()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Convergence:Manifest:Enabled"] = "true",
+                ["Nuplane:Convergence:Manifest:Path"] = "manifest.json"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+
+        var source = Assert.Single(provider.GetServices<IDesiredPackageSource>()
+            .OfType<DesiredManifestPackageSource>());
+        Assert.NotNull(source);
+    }
+
+    [Fact]
+    public void AddNuplane_FromConfiguration_ManifestDisabled_DoesNotRegisterDesiredManifestPackageSource()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>())
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Empty(provider.GetServices<IDesiredPackageSource>().OfType<DesiredManifestPackageSource>());
     }
 
     private sealed class CapturingLoggerProvider(List<string> messages) : ILoggerProvider
