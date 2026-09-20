@@ -69,6 +69,36 @@ public static class NuplaneStore
     /// <exception cref="System.Text.Json.JsonException">Thrown when the state file exists but its content is empty, torn, or otherwise not valid JSON for <see cref="StoreStateRecord"/>.</exception>
     public static async Task<IReadOnlyList<ActivePackage>> ReadActivePackagesAsync(
         string stateFilePath,
+        CancellationToken cancellationToken = default) =>
+        GetActivePackages(await ReadStateAsync(stateFilePath, cancellationToken).ConfigureAwait(false));
+
+    /// <summary>
+    /// Reads the whole persisted store state at <paramref name="stateFilePath"/>, for callers that need
+    /// more than the active package set — for example the graph activation records that decide which
+    /// packages were activated together.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the read <see cref="ReadActivePackagesAsync(string, CancellationToken)"/> itself performs,
+    /// with the same strictly read-only file handling and the same missing-file, corrupt-file, and
+    /// concurrent-write behavior described there — with one difference: a missing state file yields
+    /// <see cref="StoreStateRecord.Empty"/>, the same "nothing persisted yet" record a running host
+    /// starts from, rather than an empty package collection.
+    /// </para>
+    /// <para>
+    /// Prefer reading once through this method and projecting with
+    /// <see cref="GetActivePackages(StoreStateRecord)"/> over calling both readers, so every part of the
+    /// answer comes from one snapshot of the file.
+    /// </para>
+    /// </remarks>
+    /// <param name="stateFilePath">The path to a <c>store-state.json</c> file.</param>
+    /// <param name="cancellationToken">A token to cancel the read.</param>
+    /// <returns>The persisted store state, or <see cref="StoreStateRecord.Empty"/> when no state file exists.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="stateFilePath"/> is <see langword="null"/>, empty, or whitespace.</exception>
+    /// <exception cref="IOException">Thrown when the state file exists but cannot be opened for reading, for example while a host holds an exclusive lock on it mid-write.</exception>
+    /// <exception cref="System.Text.Json.JsonException">Thrown when the state file exists but its content is empty, torn, or otherwise not valid JSON for <see cref="StoreStateRecord"/>.</exception>
+    public static async Task<StoreStateRecord> ReadStateAsync(
+        string stateFilePath,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stateFilePath);
@@ -84,12 +114,28 @@ public static class NuplaneStore
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
-            return [];
+            return StoreStateRecord.Empty();
         }
 
         await using var _ = stream;
 
-        var state = await StoreStateSerializer.DeserializeAsync(stream, cancellationToken).ConfigureAwait(false);
+        return await StoreStateSerializer.DeserializeAsync(stream, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Projects the active packages of an already-read <paramref name="state"/>: the same set
+    /// <see cref="ReadActivePackagesAsync(string, CancellationToken)"/> returns, through the same single
+    /// definition a running host's <c>IActivePackageCatalog</c> uses.
+    /// </summary>
+    /// <param name="state">The store state to project, typically from <see cref="ReadStateAsync(string, CancellationToken)"/>.</param>
+    /// <returns>
+    /// Every active package as an <see cref="ActivePackage"/>, ordered deterministically by package id
+    /// and then version.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="state"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<ActivePackage> GetActivePackages(StoreStateRecord state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
 
         return ActivePackageCatalogMapper.MapActivePackages(state);
     }
@@ -119,17 +165,44 @@ public static class NuplaneStore
     /// <exception cref="System.Text.Json.JsonException">Thrown when the resolved state file exists but its content is empty, torn, or otherwise not valid JSON for <see cref="StoreStateRecord"/>.</exception>
     public static Task<IReadOnlyList<ActivePackage>> ReadActivePackagesAsync(
         StoreRegistryOptions options,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ReadActivePackagesAsync(ResolveStateFilePath(options), cancellationToken);
+
+    /// <summary>
+    /// Reads the whole persisted store state from the state file resolved from
+    /// <paramref name="options"/> the same way a running host resolves it, via
+    /// <see cref="EffectiveStorePersistenceSettings.Resolve(StoreRegistryOptions)"/>.
+    /// </summary>
+    /// <remarks>
+    /// See <see cref="ReadStateAsync(string, CancellationToken)"/> for the missing-file, corrupt-file,
+    /// and concurrent-write behavior once a path is resolved. When <paramref name="options"/> resolves
+    /// to <see cref="StorePersistenceMode.InMemory"/>, there is no state file to read; this method
+    /// throws <see cref="InvalidOperationException"/> rather than silently returning an empty record,
+    /// so a caller does not mistake "options that do not match how the host was actually configured"
+    /// for "nothing persisted".
+    /// </remarks>
+    /// <param name="options">The store registry options to resolve the effective state file path from.</param>
+    /// <param name="cancellationToken">A token to cancel the read.</param>
+    /// <returns>The persisted store state, or <see cref="StoreStateRecord.Empty"/> when no state file exists.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when <paramref name="options"/> resolves to <see cref="StorePersistenceMode.InMemory"/>.</exception>
+    /// <exception cref="IOException">Thrown when the resolved state file exists but cannot be opened for reading, for example while a host holds an exclusive lock on it mid-write.</exception>
+    /// <exception cref="System.Text.Json.JsonException">Thrown when the resolved state file exists but its content is empty, torn, or otherwise not valid JSON for <see cref="StoreStateRecord"/>.</exception>
+    public static Task<StoreStateRecord> ReadStateAsync(
+        StoreRegistryOptions options,
+        CancellationToken cancellationToken = default) =>
+        ReadStateAsync(ResolveStateFilePath(options), cancellationToken);
+
+    /// <summary>
+    /// The single definition of "which state file do these options mean", shared by both options
+    /// overloads so they refuse in-memory persistence identically and synchronously.
+    /// </summary>
+    private static string ResolveStateFilePath(StoreRegistryOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var effectiveSettings = EffectiveStorePersistenceSettings.Resolve(options);
-        if (effectiveSettings.ResolvedStateFilePath is null)
-        {
-            throw new InvalidOperationException(
-                "Cannot read active packages: the resolved persistence settings specify in-memory mode, which persists no state file.");
-        }
-
-        return ReadActivePackagesAsync(effectiveSettings.ResolvedStateFilePath, cancellationToken);
+        return EffectiveStorePersistenceSettings.Resolve(options).ResolvedStateFilePath
+            ?? throw new InvalidOperationException(
+                "Cannot read Nuplane store state: the resolved persistence settings specify in-memory mode, which persists no state file.");
     }
 }

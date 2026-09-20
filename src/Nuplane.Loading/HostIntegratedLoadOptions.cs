@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 namespace Nuplane.Loading;
 
 /// <summary>
-/// Options for <see cref="NuplaneHostIntegratedLoader.LoadActivePackagesAsync"/>.
+/// Options for <see cref="NuplaneHostIntegratedLoader"/>.
 /// Every option defaults to what a running Nuplane host does, so the default-constructed instance
 /// loads a package set exactly the way a host configured for host-integrated loading would.
 /// </summary>
@@ -37,6 +37,14 @@ public sealed class HostIntegratedLoadOptions
     /// <see cref="IPackageActivationGate"/>. With none added, loading behaves like a host with no gates
     /// registered.
     /// </summary>
+    /// <remarks>
+    /// A gate must not call
+    /// <see cref="NuplaneHostIntegratedLoader.LoadActivePackagesAsync(IReadOnlyList{Nuplane.Abstractions.ActivePackage}, HostIntegratedLoadOptions, CancellationToken)"/>
+    /// or any of its overloads: a load holds a process-wide lock while its gates run, so the nested call
+    /// throws <see cref="InvalidOperationException"/> instead of waiting forever. Because gates fail
+    /// closed, that throw refuses the graph the gate was evaluating and is reported as an ordinary load
+    /// failure naming the gate.
+    /// </remarks>
     public IList<IPackageActivationGate> ActivationGates { get; } = [];
 
     /// <summary>

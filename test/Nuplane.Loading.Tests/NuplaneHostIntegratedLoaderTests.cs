@@ -246,7 +246,25 @@ public sealed class NuplaneHostIntegratedLoaderTests : IDisposable
 
     [Fact]
     public async Task LoadActivePackagesAsync_WhenPackagesIsNull_Throws() =>
-        await Assert.ThrowsAsync<ArgumentNullException>(() => NuplaneHostIntegratedLoader.LoadActivePackagesAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            NuplaneHostIntegratedLoader.LoadActivePackagesAsync((IReadOnlyList<ActivePackage>)null!));
+
+    [Fact]
+    public async Task LoadActivePackagesAsync_WhenStateFilePathIsBlank_Throws() =>
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            NuplaneHostIntegratedLoader.LoadActivePackagesAsync("   "));
+
+    [Fact]
+    public async Task LoadActivePackagesAsync_WhenStateFileIsMissing_ReturnsEmptyResult()
+    {
+        // A missing state file is the "nothing persisted yet" outcome the offline reader reports, not an
+        // error, and it must install nothing into the process.
+        var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(
+            Path.Combine(_tempDir.FullName, $"missing-{Guid.NewGuid():N}", "store-state.json"));
+
+        Assert.Empty(result.Packages);
+        Assert.Empty(result.FailedByPackageId);
+    }
 
     [Fact]
     public async Task LoadActivePackagesAsync_WhenPackageIdentityIsIncomplete_Throws()
@@ -303,11 +321,65 @@ public sealed class NuplaneHostIntegratedLoaderTests : IDisposable
         Assert.Equal(1, HostIntegratedLoadComposition.ResolverInstallCount);
     }
 
+    [Fact]
+    public async Task LoadActivePackagesAsync_WhenAnActivationGateCallsBackIntoTheLoader_FailsTheGraphInsteadOfDeadlocking()
+    {
+        // Arrange: a load holds a process-wide, non-reentrant lock while it consults its gates, so a gate
+        // that loads again would wait for a lock its own call chain holds.
+        var emitted = HostFreeLoadTestSupport.EmitPackage(_tempDir, "Nuplane.HostFree.Reentrant");
+        var package = emitted.AsActivePackage();
+        var options = new HostIntegratedLoadOptions();
+        options.ActivationGates.Add(new ReentrantActivationGate(
+            HostFreeLoadTestSupport.EmitPackage(_tempDir, "Nuplane.HostFree.ReentrantInner").AsActivePackage()));
+
+        // Act
+        var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync([package], options);
+
+        // Assert: the nested call threw, and because gates fail closed the graph the gate was evaluating
+        // is an ordinary load failure naming the gate and carrying the re-entrancy reason.
+        var state = Assert.Single(result.Packages);
+        Assert.Equal(PackageLoadStatus.Failed, state.Status);
+        var diagnostic = Assert.Single(state.Diagnostics);
+        Assert.Contains(nameof(ReentrantActivationGate), diagnostic, StringComparison.Ordinal);
+        Assert.Contains("already in progress on this call chain", diagnostic, StringComparison.Ordinal);
+        Assert.NotNull(options.ActivationGates.OfType<ReentrantActivationGate>().Single().NestedCallFailure);
+
+        // The lock was released, so an ordinary load still works afterwards.
+        var afterwards = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(
+            [HostFreeLoadTestSupport.EmitPackage(_tempDir, "Nuplane.HostFree.AfterReentrancy").AsActivePackage()]);
+        Assert.Equal(PackageLoadStatus.Loaded, Assert.Single(afterwards.Packages).Status);
+    }
+
     private sealed class StubActivationGate(string blockReason) : IPackageActivationGate
     {
         public ValueTask<PackageActivationGateResult> EvaluateAsync(
             PackageActivationContext context,
             CancellationToken cancellationToken) =>
             new(PackageActivationGateResult.Block(blockReason));
+    }
+
+    private sealed class ReentrantActivationGate(ActivePackage nestedPackage) : IPackageActivationGate
+    {
+        /// <summary>Gets what the nested load threw, or <see langword="null"/> if it did not throw.</summary>
+        public InvalidOperationException? NestedCallFailure { get; private set; }
+
+        public async ValueTask<PackageActivationGateResult> EvaluateAsync(
+            PackageActivationContext context,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(
+                    [nestedPackage],
+                    cancellationToken: cancellationToken);
+            }
+            catch (InvalidOperationException exception)
+            {
+                NestedCallFailure = exception;
+                throw;
+            }
+
+            return PackageActivationGateResult.Allow;
+        }
     }
 }

@@ -1,5 +1,6 @@
 using System.Runtime.Loader;
 using Nuplane.Abstractions;
+using Nuplane.Store.State;
 
 namespace Nuplane.Loading;
 
@@ -7,7 +8,9 @@ namespace Nuplane.Loading;
 /// Offline, dependency-injection-free entry point that loads an already-resolved active package set
 /// into assemblies exactly the way <see cref="PackageLoadMode.HostIntegrated"/> loading does inside a
 /// running Nuplane host — with no host, no hosted services, no reconciliation, and no feed or network
-/// access. Pair it with <c>NuplaneStore.ReadActivePackagesAsync</c>, which supplies the package set.
+/// access. The overload taking a <c>store-state.json</c> path is the primary one: it reads the state
+/// offline and loads what it records, grouping packages into graphs exactly as the host that wrote the
+/// state does.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -28,19 +31,41 @@ namespace Nuplane.Loading;
 /// The entry point never writes: it does not touch the store, the state file, completion markers, or
 /// the install directories it reads.
 /// </para>
+/// <para>
+/// A load is not re-entrant. It holds a process-wide lock for its duration, so calling it again from
+/// inside itself — from an <see cref="IPackageActivationGate"/>, most plausibly — throws
+/// <see cref="InvalidOperationException"/> rather than waiting for a lock that can never be released.
+/// Concurrent calls from unrelated flows are safe and are serialized.
+/// </para>
 /// </remarks>
 public static class NuplaneHostIntegratedLoader
 {
     /// <summary>
     /// Loads the supplied active package set into this process the way a running host's
     /// <see cref="PackageLoadMode.HostIntegrated"/> loading would, and reports the resulting per-package
-    /// load state.
+    /// load state. Prefer <see cref="LoadActivePackagesAsync(string, HostIntegratedLoadOptions, CancellationToken)"/>
+    /// when the caller has the state file, because only the state carries the graph activation records
+    /// that decide which packages a host loads together.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The packages are grouped into load graphs by their graph generation identity — the same grouping
-    /// a host applies to its active set — and each graph is loaded into one non-collectible context, so
-    /// a package and its dependencies resolve each other exactly as they do in the host.
+    /// <b>Graph membership from this overload is not always the host's.</b> An
+    /// <see cref="ActivePackage"/> carries its graph generation identity but not the store's graph
+    /// activation records, so this overload groups packages by graph generation identity. A host groups
+    /// by the node sets of every <c>Active</c> graph activation record in the store, merging records that
+    /// share a package, and only falls back to graph generation identity when the store holds no active
+    /// graph record. The two agree whenever the store holds no active graph record, and whenever every
+    /// active graph record's node set matches the generations the descriptors carry — which is the
+    /// ordinary case after a single reconcile. They can differ when the store holds several active graph
+    /// records that share packages, because a record from an earlier reconcile survives until a newer
+    /// graph with the same root set replaces it. Use
+    /// <see cref="LoadActivePackagesAsync(string, HostIntegratedLoadOptions, CancellationToken)"/> for
+    /// guaranteed parity with the host; use this overload when the caller has already filtered or
+    /// assembled the package set itself.
+    /// </para>
+    /// <para>
+    /// Each graph is loaded into one non-collectible context, so a package and its dependencies resolve
+    /// each other exactly as they do in the host.
     /// </para>
     /// <para>
     /// Per-package problems are reported, not thrown: a graph whose install path is missing on disk,
@@ -80,13 +105,84 @@ public static class NuplaneHostIntegratedLoader
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// Thrown when a package graph in <paramref name="packages"/> is already loaded into this process for
-    /// a different <see cref="HostIntegratedLoadOptions.TargetFrameworkOverride"/>. Nothing is loaded or
-    /// changed by the rejected call.
+    /// a different <see cref="HostIntegratedLoadOptions.TargetFrameworkOverride"/>, in which case nothing
+    /// is loaded or changed by the rejected call; or when the calling flow is already inside a load, for
+    /// example an <see cref="IPackageActivationGate"/> calling back into this method.
     /// </exception>
     public static Task<HostIntegratedLoadResult> LoadActivePackagesAsync(
         IReadOnlyList<ActivePackage> packages,
         HostIntegratedLoadOptions? options = null,
+        CancellationToken cancellationToken = default) =>
+        LoadAsync(packages, state: null, options, cancellationToken);
+
+    /// <summary>
+    /// Reads the persisted store state at <paramref name="stateFilePath"/> and loads the package set it
+    /// records into this process the way a running host's <see cref="PackageLoadMode.HostIntegrated"/>
+    /// loading would. This is the overload to prefer: it is the only one that can group packages into
+    /// graphs exactly as the host does, because grouping needs the state's graph activation records.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The state file is read strictly read-only and offline, with the same file sharing, missing-file,
+    /// corrupt-file, and concurrent-write behavior as
+    /// <c>NuplaneStore.ReadActivePackagesAsync</c> — it is that same read. A missing state file loads
+    /// nothing and returns an empty result. The packages to load are the state's active packages, derived
+    /// through the same single definition a running host's <c>IActivePackageCatalog</c> uses, and the
+    /// state is read exactly once, so the package set and the graph records always come from one snapshot.
+    /// </para>
+    /// <para>
+    /// Everything else — load mode, asset selection, activation gates, failure reporting, repeat calls,
+    /// and the irreversibility of the load — behaves as described on
+    /// <see cref="LoadActivePackagesAsync(IReadOnlyList{ActivePackage}, HostIntegratedLoadOptions, CancellationToken)"/>.
+    /// </para>
+    /// </remarks>
+    /// <param name="stateFilePath">The path to the host's <c>store-state.json</c> file.</param>
+    /// <param name="options">The load options, or <see langword="null"/> to load exactly as a host with default host-integrated configuration does.</param>
+    /// <param name="cancellationToken">A token to cancel the read and the load.</param>
+    /// <returns>The per-package load state, and the failure reason of every package that could not be loaded.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="stateFilePath"/> is <see langword="null"/>, empty, or whitespace, or when <paramref name="options"/> is invalid as described on the other overload.</exception>
+    /// <exception cref="IOException">Thrown when the state file exists but cannot be opened for reading, for example while a host holds an exclusive lock on it mid-write.</exception>
+    /// <exception cref="System.Text.Json.JsonException">Thrown when the state file exists but its content is empty, torn, or otherwise not valid JSON.</exception>
+    /// <exception cref="InvalidOperationException">Thrown for the reasons described on the other overload.</exception>
+    public static async Task<HostIntegratedLoadResult> LoadActivePackagesAsync(
+        string stateFilePath,
+        HostIntegratedLoadOptions? options = null,
         CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stateFilePath);
+
+        var state = await NuplaneStore.ReadStateAsync(stateFilePath, cancellationToken).ConfigureAwait(false);
+
+        return await LoadAsync(NuplaneStore.GetActivePackages(state), state, options, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Reads the persisted store state from the state file resolved from <paramref name="storeOptions"/>
+    /// the same way a running host resolves it, and loads the package set it records. See
+    /// <see cref="LoadActivePackagesAsync(string, HostIntegratedLoadOptions, CancellationToken)"/>, which
+    /// this delegates to.
+    /// </summary>
+    /// <param name="storeOptions">The store registry options to resolve the effective state file path from.</param>
+    /// <param name="options">The load options, or <see langword="null"/> to load exactly as a host with default host-integrated configuration does.</param>
+    /// <param name="cancellationToken">A token to cancel the read and the load.</param>
+    /// <returns>The per-package load state, and the failure reason of every package that could not be loaded.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="storeOptions"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when <paramref name="storeOptions"/> resolves to in-memory persistence, which persists no state file, or for the reasons described on the other overloads.</exception>
+    public static async Task<HostIntegratedLoadResult> LoadActivePackagesAsync(
+        StoreRegistryOptions storeOptions,
+        HostIntegratedLoadOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        var state = await NuplaneStore.ReadStateAsync(storeOptions, cancellationToken).ConfigureAwait(false);
+
+        return await LoadAsync(NuplaneStore.GetActivePackages(state), state, options, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static Task<HostIntegratedLoadResult> LoadAsync(
+        IReadOnlyList<ActivePackage> packages,
+        StoreStateRecord? state,
+        HostIntegratedLoadOptions? options,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(packages);
 
@@ -96,7 +192,7 @@ public static class NuplaneHostIntegratedLoader
 
         return packages.Count == 0
             ? Task.FromResult(new HostIntegratedLoadResult([], new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)))
-            : HostIntegratedLoadComposition.LoadAsync(packages, options, cancellationToken);
+            : HostIntegratedLoadComposition.LoadAsync(packages, state, options, cancellationToken);
     }
 
     private static void ValidateOptions(HostIntegratedLoadOptions options)

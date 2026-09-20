@@ -206,6 +206,73 @@ public sealed class NuplaneStoreTests : IDisposable
         });
     }
 
+    [Fact]
+    public async Task ReadStateAsync_WhenFileMissing_ReturnsEmptyStateWithoutCreatingAnything()
+    {
+        var stateFilePath = Path.Combine(_tempRoot, "store-state.json");
+
+        var state = await NuplaneStore.ReadStateAsync(stateFilePath, CancellationToken.None);
+
+        Assert.Empty(state.ActiveVersionById);
+        Assert.Empty(state.ActiveGraphsByIdNormalized);
+        Assert.False(File.Exists(stateFilePath));
+        Assert.False(Directory.Exists(_tempRoot));
+    }
+
+    [Fact]
+    public async Task ReadStateAsync_WhenFileExists_ReturnsTheRecordsOnlyTheWholeStateCarries()
+    {
+        // The graph activation records are the reason a caller reads the whole state instead of just the
+        // active package set: they say which packages were activated together.
+        var graph = new GraphActivationRecord(
+            "graph-1",
+            "generation-1",
+            [DefaultDescriptor.PackageId],
+            [DefaultDescriptor.PackageId],
+            DefaultDescriptor.ActivatedAtUtc,
+            DefaultDescriptor.ActivationCorrelationId,
+            GraphActivationStatus.Active);
+        var stateFilePath = await WriteStateAsync(StoreStateRecord.Empty() with
+        {
+            ActiveVersionById = new(StringComparer.OrdinalIgnoreCase) { [DefaultDescriptor.PackageId] = DefaultDescriptor.Version },
+            ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase) { [DefaultDescriptor.PackageId] = DefaultDescriptor },
+            ActiveGraphsById = new(StringComparer.OrdinalIgnoreCase) { [graph.GraphId] = graph }
+        });
+
+        var state = await NuplaneStore.ReadStateAsync(stateFilePath, CancellationToken.None);
+
+        var persistedGraph = Assert.Single(state.ActiveGraphsByIdNormalized.Values);
+        Assert.Equal(graph.GenerationId, persistedGraph.GenerationId);
+        Assert.Equal(GraphActivationStatus.Active, persistedGraph.Status);
+
+        // The same state projects to exactly what the active-package reader returns.
+        Assert.Equal(
+            (await NuplaneStore.ReadActivePackagesAsync(stateFilePath, CancellationToken.None)).Select(static package => package.PackageId),
+            NuplaneStore.GetActivePackages(state).Select(static package => package.PackageId));
+    }
+
+    [Fact]
+    public void GetActivePackages_WithNullState_Throws() =>
+        Assert.Throws<ArgumentNullException>(() => NuplaneStore.GetActivePackages(null!));
+
+    [Fact]
+    public void ReadStateAsync_WithNullOptions_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+        {
+            _ = NuplaneStore.ReadStateAsync((StoreRegistryOptions)null!, CancellationToken.None);
+        });
+    }
+
+    [Fact]
+    public void ReadStateAsync_WithInMemoryOptions_Throws()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            _ = NuplaneStore.ReadStateAsync(new StoreRegistryOptions { UseInMemoryStore = true }, CancellationToken.None);
+        });
+    }
+
     /// <summary>
     /// Writes <paramref name="descriptor"/> as the sole active package descriptor, with a
     /// matching <see cref="StoreStateRecord.ActiveVersionById"/> entry, matching how a running

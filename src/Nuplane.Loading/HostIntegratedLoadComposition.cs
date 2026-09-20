@@ -2,6 +2,7 @@ using System.Runtime.Loader;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Store.State;
 
 namespace Nuplane.Loading;
 
@@ -46,6 +47,7 @@ namespace Nuplane.Loading;
 internal sealed class HostIntegratedLoadComposition
 {
     private static readonly SemaphoreSlim CompositionGate = new(1, 1);
+    private static readonly AsyncLocal<bool> IsLoadInProgress = new();
     private static HostIntegratedLoadComposition? Current;
 
     private readonly HostIntegratedAssemblyResolutionCatalog _catalog = new();
@@ -68,38 +70,57 @@ internal sealed class HostIntegratedLoadComposition
 
     /// <summary>
     /// Loads <paramref name="packages"/> into the process-wide composition, creating it on first use.
+    /// When <paramref name="state"/> is supplied, graph membership comes from the persisted activation
+    /// records in it; otherwise it comes from the graph generation identity on each package.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the calling flow is already inside a load — an activation gate calling back into the
+    /// entry point, typically. The call would otherwise wait forever on the process-wide gate this load
+    /// already holds.
+    /// </exception>
     public static async Task<HostIntegratedLoadResult> LoadAsync(
         IReadOnlyList<ActivePackage> packages,
+        StoreStateRecord? state,
         HostIntegratedLoadOptions options,
         CancellationToken cancellationToken)
     {
+        if (IsLoadInProgress.Value)
+        {
+            throw new InvalidOperationException(
+                $"A {nameof(NuplaneHostIntegratedLoader)} load is already in progress on this call chain. " +
+                $"{nameof(NuplaneHostIntegratedLoader)}.{nameof(NuplaneHostIntegratedLoader.LoadActivePackagesAsync)} must not be called from " +
+                $"an {nameof(IPackageActivationGate)}, or from anything else a load invokes, because the load holds a process-wide lock for " +
+                "its duration and the nested call would wait for it forever. Do the nested work after the outer load returns.");
+        }
+
         await CompositionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        IsLoadInProgress.Value = true;
 
         try
         {
             Current ??= new HostIntegratedLoadComposition(options.LoggerFactory);
 
-            return await Current.LoadCoreAsync(packages, options, cancellationToken).ConfigureAwait(false);
+            return await Current.LoadCoreAsync(packages, state, options, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
+            IsLoadInProgress.Value = false;
             CompositionGate.Release();
         }
     }
 
     private async Task<HostIntegratedLoadResult> LoadCoreAsync(
         IReadOnlyList<ActivePackage> packages,
+        StoreStateRecord? state,
         HostIntegratedLoadOptions options,
         CancellationToken cancellationToken)
     {
-        var graphGenerationByPackageId = packages.ToDictionary(
-            static package => package.PackageId,
-            static package => package.GraphGenerationId,
-            StringComparer.OrdinalIgnoreCase);
-        var graphs = PackageGraphGrouping.ByGraphGeneration(
-            packages.Select(ToResolvedPackage),
-            package => graphGenerationByPackageId[package.Id]);
+        var resolvedPackages = packages.Select(ToResolvedPackage).ToArray();
+        var graphs = state is null
+            ? PackageGraphGrouping.ByGraphGeneration(
+                resolvedPackages,
+                BuildGraphGenerationSelector(packages))
+            : PackageGraphGrouping.ForActiveState(resolvedPackages, state);
 
         var targetFramework = NormalizeTargetFramework(options.TargetFrameworkOverride);
         var graphsByKey = graphs
@@ -263,6 +284,21 @@ internal sealed class HostIntegratedLoadComposition
         {
             ownerByPackageKey[BuildPackageKey(package.Id, package.Version)] = owner;
         }
+    }
+
+    /// <summary>
+    /// Reports the graph generation identity of each package for a caller that supplied only the active
+    /// package set. It is the same identity the store's active package descriptors carry, because that
+    /// is where an <see cref="ActivePackage"/> gets it.
+    /// </summary>
+    private static Func<ResolvedPackage, string> BuildGraphGenerationSelector(IReadOnlyList<ActivePackage> packages)
+    {
+        var graphGenerationByPackageId = packages.ToDictionary(
+            static package => package.PackageId,
+            static package => package.GraphGenerationId,
+            StringComparer.OrdinalIgnoreCase);
+
+        return package => graphGenerationByPackageId[package.Id];
     }
 
     private static ResolvedPackage ToResolvedPackage(ActivePackage package) =>

@@ -1,4 +1,5 @@
 using System.Reflection;
+using Nuplane.Store.State;
 
 namespace Nuplane.Loading.Tests;
 
@@ -75,7 +76,7 @@ public sealed class NuplaneHostIntegratedLoaderParityTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadActivePackagesAsync_WithActiveSetReadFromAPersistedStore_LoadsWhatTheStoreRecorded()
+    public async Task LoadActivePackagesAsync_FromAPersistedStoreStateFile_LoadsWhatTheStoreRecorded()
     {
         // Arrange: a real store writes store-state.json, exactly as a running host leaves it behind.
         const string graphGenerationId = "generation-store";
@@ -90,13 +91,15 @@ public sealed class NuplaneHostIntegratedLoaderParityTests : IDisposable
                 emittedDependency.AsActivePackage(graphGenerationId));
         }
 
-        // Act: the two-step flow — offline read of the active set, then a host-free load of it.
-        var activePackages = await NuplaneStore.ReadActivePackagesAsync(stateFilePath);
-        var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(activePackages);
+        // Act: the whole two-step flow in one call — the entry point performs the same strictly
+        // read-only offline read NuplaneStore does, then loads what the state records.
+        var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(stateFilePath);
 
         // Assert
+        var activePackages = await NuplaneStore.ReadActivePackagesAsync(stateFilePath);
         Assert.Equal(2, activePackages.Count);
         Assert.All(activePackages, package => Assert.Equal(graphGenerationId, package.GraphGenerationId));
+        Assert.Equal(2, result.Packages.Count);
         Assert.Empty(result.FailedByPackageId);
         Assert.All(result.Packages, package =>
         {
@@ -104,9 +107,40 @@ public sealed class NuplaneHostIntegratedLoaderParityTests : IDisposable
             Assert.Equal(PackageLoadMode.HostIntegrated, package.LoadMode);
         });
 
-        // The graph generation recorded in the store decided the grouping: one context for both packages.
+        // The activation the store recorded decided the grouping: one context for both packages.
         Assert.Equal(1, HostFreeLoadTestSupport.CountGraphLoadContexts([.. activePackages]));
         Assert.NotNull(Type.GetType(emittedRoot.MarkerTypeName));
         Assert.NotNull(Assembly.Load(new AssemblyName(emittedDependency.AssemblyName)));
+    }
+
+    [Fact]
+    public async Task LoadActivePackagesAsync_FromStoreRegistryOptions_ResolvesTheSameStateFileAHostWould()
+    {
+        // Arrange
+        var stateFilePath = Path.Combine(_tempDir.FullName, "options-store-state.json");
+        var emitted = HostFreeLoadTestSupport.EmitPackage(_tempDir, "Nuplane.HostFree.StoreOptions");
+
+        await using (var writingHost = new NuplaneHostFixture(stateFilePath, withLoading: false))
+        {
+            await writingHost.ActivateAsync(emitted.AsActivePackage());
+        }
+
+        // Act
+        var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(
+            new StoreRegistryOptions { StateFilePath = stateFilePath });
+
+        // Assert
+        Assert.Empty(result.FailedByPackageId);
+        Assert.Equal(PackageLoadStatus.Loaded, Assert.Single(result.Packages).Status);
+        Assert.NotNull(Type.GetType(emitted.MarkerTypeName));
+    }
+
+    [Fact]
+    public async Task LoadActivePackagesAsync_FromStoreRegistryOptionsWithInMemoryPersistence_Throws()
+    {
+        // There is no state file to read, and answering "nothing is active" would let a caller mistake
+        // wrong options for an empty host.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            NuplaneHostIntegratedLoader.LoadActivePackagesAsync(new StoreRegistryOptions { UseInMemoryStore = true }));
     }
 }
