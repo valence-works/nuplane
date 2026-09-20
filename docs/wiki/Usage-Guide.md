@@ -63,6 +63,48 @@ Current repository behavior is explicit about query-first reads:
 
 That split keeps hosts from rebuilding state from event history.
 
+### Offline reads of the active package set
+
+- **Applicability:** `Core`
+- **Stability note:** `Recently Changed`
+
+`Nuplane.NuplaneStore` is a static, dependency-injection-free entry point for tooling that needs
+the active package set — every active package's id, version, and install path — without a running
+host, a DI container, or network access. It reports exactly the set a running host's
+`IActivePackageCatalog` reports: active package descriptors whose version matches the state
+file's recorded active version for that package id.
+
+```csharp
+var activePackages = await NuplaneStore.ReadActivePackagesAsync("/var/lib/nuplane/.nuplane/store-state.json");
+
+foreach (var package in activePackages)
+{
+    Console.WriteLine($"{package.PackageId} {package.Version} -> {package.InstallPath}");
+}
+```
+
+An overload accepts a `StoreRegistryOptions` and resolves the effective state file path the same
+way a running host does, via `EffectiveStorePersistenceSettings.Resolve`:
+
+```csharp
+var activePackages = await NuplaneStore.ReadActivePackagesAsync(
+    new StoreRegistryOptions { StateFilePath = configuredPath });
+```
+
+Both overloads are strictly read-only — they open `store-state.json` for reading only, sharing the
+file with a concurrent writer, and never create, rewrite, or migrate the file or its directory, so
+it is safe to call them while a running host owns the file. A missing state file or a state file
+with no active packages recorded both return an empty collection; a state file that exists but is
+not valid JSON lets the underlying deserialization error propagate instead of being silently
+treated as "no active packages." Passing options that resolve to in-memory persistence throws
+`InvalidOperationException`, since there is no state file to read.
+
+Because the host does not write `store-state.json` via a temp-file-and-move, a read that races a
+concurrent write can observe one of two transient outcomes instead of a consistent snapshot: an
+`IOException` (a sharing violation, if the write briefly holds an exclusive lock) or a
+`JsonException` (torn or partial JSON content, if the read observes a write in progress). Both are
+safe to retry; the reader itself does not retry on the caller's behalf.
+
 ## Configuration-driven adoption
 
 - **Applicability:** `Core`

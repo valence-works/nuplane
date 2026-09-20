@@ -262,7 +262,8 @@ using Nuplane.Sample.AspNetCore.Catalog;
 app.MapSampleCatalog();
 ```
 
-- Use `IActivePackageCatalog.GetActivePackagesAsync(ct)` when you only need the authoritative active package inventory.
+- Use `IActivePackageCatalog.GetActivePackagesAsync(ct)` when you only need the authoritative active package inventory from inside a running host.
+- Use `NuplaneStore.ReadActivePackagesAsync(stateFilePath, ct)` when you need the same active package id/version/install-path data without a running host, a DI container, or network access — see [Usage Guide: Offline reads of the active package set](docs/wiki/Usage-Guide.md#offline-reads-of-the-active-package-set).
 - Use `IPackageLoadStateCatalog.GetLoadStateAsync(ct)` when the optional loading module is installed and you need current-process load-state availability or per-package load status.
 - Use `IPackageAssemblyCatalog` as the default loading-enabled host integration surface when you want sane-default access to loaded `Assembly` instances for the current active package set without manually filtering load-state snapshots first.
 - Use `IPackageAssemblyCatalog.GetAssembliesAsync(packageId, ct)` when you want the currently active loaded version for one package identifier.
