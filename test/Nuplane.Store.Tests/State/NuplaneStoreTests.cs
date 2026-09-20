@@ -6,7 +6,17 @@ namespace Nuplane.Store.Tests.State;
 
 public sealed class NuplaneStoreTests : IDisposable
 {
+    private static readonly ActivePackageDescriptor DefaultDescriptor = new(
+        "Contoso.Plugin",
+        "1.2.3",
+        "trusted-feed",
+        "manifest-source",
+        "/var/lib/nuplane/packages/trusted-feed/Contoso.Plugin/1.2.3",
+        DateTimeOffset.Parse("2026-04-08T12:00:00Z"),
+        "corr-active");
+
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), "nuplane-store-reader", Guid.NewGuid().ToString("N"));
+    private readonly StoreStateSerializer _serializer = new();
 
     public void Dispose()
     {
@@ -40,7 +50,7 @@ public sealed class NuplaneStoreTests : IDisposable
     [Fact]
     public async Task ReadActivePackagesAsync_WhenNoActivePackagesRecorded_ReturnsEmptyCollection()
     {
-        var stateFilePath = await WriteStateFileAsync(StoreStateRecord.Empty());
+        var stateFilePath = await WriteStateAsync(StoreStateRecord.Empty());
 
         var packages = await NuplaneStore.ReadActivePackagesAsync(stateFilePath, CancellationToken.None);
 
@@ -50,44 +60,49 @@ public sealed class NuplaneStoreTests : IDisposable
     [Fact]
     public async Task ReadActivePackagesAsync_WhenActivePackagesRecorded_ReturnsIdVersionAndInstallPath()
     {
-        var descriptor = new ActivePackageDescriptor(
-            "Contoso.Plugin",
-            "1.2.3",
-            "trusted-feed",
-            "manifest-source",
-            "/var/lib/nuplane/packages/trusted-feed/Contoso.Plugin/1.2.3",
-            DateTimeOffset.Parse("2026-04-08T12:00:00Z"),
-            "corr-active");
-        var state = StoreStateRecord.Empty() with
-        {
-            ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase) { [descriptor.PackageId] = descriptor }
-        };
-        var stateFilePath = await WriteStateFileAsync(state);
+        var stateFilePath = await WriteActivePackageAsync(DefaultDescriptor);
 
         var packages = await NuplaneStore.ReadActivePackagesAsync(stateFilePath, CancellationToken.None);
 
         var actual = Assert.Single(packages);
-        Assert.Equal(descriptor.PackageId, actual.PackageId);
-        Assert.Equal(descriptor.Version, actual.Version);
-        Assert.Equal(descriptor.InstallPath, actual.InstallPath);
+        Assert.Equal(DefaultDescriptor.PackageId, actual.PackageId);
+        Assert.Equal(DefaultDescriptor.Version, actual.Version);
+        Assert.Equal(DefaultDescriptor.InstallPath, actual.InstallPath);
+    }
+
+    [Fact]
+    public async Task ReadActivePackagesAsync_WhenDescriptorVersionDivergesFromActiveVersion_OmitsPackage()
+    {
+        var state = StoreStateRecord.Empty() with
+        {
+            ActiveVersionById = new(StringComparer.OrdinalIgnoreCase) { [DefaultDescriptor.PackageId] = "9.9.9" },
+            ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase) { [DefaultDescriptor.PackageId] = DefaultDescriptor }
+        };
+        var stateFilePath = await WriteStateAsync(state);
+
+        var packages = await NuplaneStore.ReadActivePackagesAsync(stateFilePath, CancellationToken.None);
+
+        Assert.Empty(packages);
+    }
+
+    [Fact]
+    public async Task ReadActivePackagesAsync_WhenDescriptorHasNoActiveVersionEntry_OmitsPackage()
+    {
+        var state = StoreStateRecord.Empty() with
+        {
+            ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase) { [DefaultDescriptor.PackageId] = DefaultDescriptor }
+        };
+        var stateFilePath = await WriteStateAsync(state);
+
+        var packages = await NuplaneStore.ReadActivePackagesAsync(stateFilePath, CancellationToken.None);
+
+        Assert.Empty(packages);
     }
 
     [Fact]
     public async Task ReadActivePackagesAsync_WhenFileExists_DoesNotModifyFile()
     {
-        var descriptor = new ActivePackageDescriptor(
-            "Contoso.Plugin",
-            "1.2.3",
-            "trusted-feed",
-            "manifest-source",
-            "/var/lib/nuplane/packages/trusted-feed/Contoso.Plugin/1.2.3",
-            DateTimeOffset.Parse("2026-04-08T12:00:00Z"),
-            "corr-active");
-        var state = StoreStateRecord.Empty() with
-        {
-            ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase) { [descriptor.PackageId] = descriptor }
-        };
-        var stateFilePath = await WriteStateFileAsync(state);
+        var stateFilePath = await WriteActivePackageAsync(DefaultDescriptor);
         var bytesBefore = await File.ReadAllBytesAsync(stateFilePath);
         var lastWriteTimeBefore = File.GetLastWriteTimeUtc(stateFilePath);
 
@@ -97,6 +112,28 @@ public sealed class NuplaneStoreTests : IDisposable
         var lastWriteTimeAfter = File.GetLastWriteTimeUtc(stateFilePath);
         Assert.Equal(bytesBefore, bytesAfter);
         Assert.Equal(lastWriteTimeBefore, lastWriteTimeAfter);
+    }
+
+    [Fact]
+    public async Task ReadActivePackagesAsync_WhenFileHeldOpenExclusively_ThrowsIOException()
+    {
+        var stateFilePath = await WriteActivePackageAsync(DefaultDescriptor);
+        await using var exclusiveHandle = new FileStream(stateFilePath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            NuplaneStore.ReadActivePackagesAsync(stateFilePath, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ReadActivePackagesAsync_WhenFileHeldOpenByWriterWithReadWriteShare_ReadsSuccessfully()
+    {
+        var stateFilePath = await WriteActivePackageAsync(DefaultDescriptor);
+        await using var writerHandle = new FileStream(stateFilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+
+        var packages = await NuplaneStore.ReadActivePackagesAsync(stateFilePath, CancellationToken.None);
+
+        var actual = Assert.Single(packages);
+        Assert.Equal(DefaultDescriptor.PackageId, actual.PackageId);
     }
 
     [Fact]
@@ -131,25 +168,13 @@ public sealed class NuplaneStoreTests : IDisposable
     [Fact]
     public async Task ReadActivePackagesAsync_WithConfiguredPathOptions_ReadsResolvedEffectivePath()
     {
-        var descriptor = new ActivePackageDescriptor(
-            "Contoso.Plugin",
-            "1.2.3",
-            "trusted-feed",
-            "manifest-source",
-            "/var/lib/nuplane/packages/trusted-feed/Contoso.Plugin/1.2.3",
-            DateTimeOffset.Parse("2026-04-08T12:00:00Z"),
-            "corr-active");
-        var state = StoreStateRecord.Empty() with
-        {
-            ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase) { [descriptor.PackageId] = descriptor }
-        };
-        var stateFilePath = await WriteStateFileAsync(state, fileName: "custom-state.json");
+        var stateFilePath = await WriteActivePackageAsync(DefaultDescriptor, fileName: "custom-state.json");
         var options = new StoreRegistryOptions { StateFilePath = stateFilePath };
 
         var packages = await NuplaneStore.ReadActivePackagesAsync(options, CancellationToken.None);
 
         var actual = Assert.Single(packages);
-        Assert.Equal(descriptor.PackageId, actual.PackageId);
+        Assert.Equal(DefaultDescriptor.PackageId, actual.PackageId);
     }
 
     [Fact]
@@ -170,10 +195,26 @@ public sealed class NuplaneStoreTests : IDisposable
         });
     }
 
-    private async Task<string> WriteStateFileAsync(StoreStateRecord state, string fileName = "store-state.json")
+    /// <summary>
+    /// Writes <paramref name="descriptor"/> as the sole active package descriptor, with a
+    /// matching <see cref="StoreStateRecord.ActiveVersionById"/> entry, matching how a running
+    /// host keeps both dictionaries in sync for an active package.
+    /// </summary>
+    private Task<string> WriteActivePackageAsync(ActivePackageDescriptor descriptor, string fileName = "store-state.json")
+    {
+        var state = StoreStateRecord.Empty() with
+        {
+            ActiveVersionById = new(StringComparer.OrdinalIgnoreCase) { [descriptor.PackageId] = descriptor.Version },
+            ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase) { [descriptor.PackageId] = descriptor }
+        };
+
+        return WriteStateAsync(state, fileName);
+    }
+
+    private async Task<string> WriteStateAsync(StoreStateRecord state, string fileName = "store-state.json")
     {
         var stateFilePath = Path.Combine(_tempRoot, fileName);
-        await new StoreStateSerializer().SaveAsync(stateFilePath, state, CancellationToken.None);
+        await _serializer.SaveAsync(stateFilePath, state, CancellationToken.None);
         return stateFilePath;
     }
 }

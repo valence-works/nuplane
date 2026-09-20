@@ -195,19 +195,31 @@ internal static class ActivePackageCatalogMapper
         ArgumentNullException.ThrowIfNull(state);
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
-        var packages = state.ActivePackageDescriptorsByIdNormalized.Values
+        return new ActivePackagesSnapshot(
+            DateTimeOffset.UtcNow,
+            state.UpdatedAt,
+            MapActivePackages(state),
+            correlationId);
+    }
+
+    /// <summary>
+    /// Projects the active packages of <paramref name="state"/>: descriptors whose version
+    /// matches <see cref="StoreStateRecord.ActiveVersionById"/>, ordered deterministically by
+    /// package id and then version. This is the single definition of "the active packages of a
+    /// <see cref="StoreStateRecord"/>" and backs both <see cref="MapSnapshot"/> and offline
+    /// readers such as <see cref="NuplaneStore"/>.
+    /// </summary>
+    internal static IReadOnlyList<ActivePackage> MapActivePackages(StoreStateRecord state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        return state.ActivePackageDescriptorsByIdNormalized.Values
             .Where(package => state.ActiveVersionById.TryGetValue(package.PackageId, out var version)
                 && string.Equals(version, package.Version, StringComparison.OrdinalIgnoreCase))
             .OrderBy(package => package.PackageId, StringComparer.OrdinalIgnoreCase)
             .ThenBy(package => package.Version, StringComparer.OrdinalIgnoreCase)
             .Select(static package => package.ToActivePackage())
             .ToArray();
-
-        return new ActivePackagesSnapshot(
-            DateTimeOffset.UtcNow,
-            state.UpdatedAt,
-            packages,
-            correlationId);
     }
 
     private static string? Sanitize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
