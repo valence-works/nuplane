@@ -191,13 +191,12 @@ public sealed class PackageLoaderActivationGateTests : IDisposable
     [Fact]
     public async Task EnsureGraphLoadedAsync_WhenBlockedGraphIsRetriedAfterGateAllows_LoadsGraph()
     {
-        var blocked = true;
-        var gate = new FakeActivationGate((_, _) => blocked ? PackageActivationGateResult.Block(BlockReason) : PackageActivationGateResult.Allow);
+        var (gate, setBlocked) = CreateToggleGate(initiallyBlocked: true);
         var loader = CreateLoader(gate);
         var graph = CreateGraph("pkg-a", "pkg-b");
 
         var blockedResult = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
-        blocked = false;
+        setBlocked(false);
         var retriedResult = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
 
         Assert.Empty(blockedResult.Loaded);
@@ -210,13 +209,12 @@ public sealed class PackageLoaderActivationGateTests : IDisposable
     [Fact]
     public async Task EnsureGraphLoadedAsync_WhenGraphIsAlreadyLoaded_DoesNotConsultGatesAgain()
     {
-        var blocked = false;
-        var gate = new FakeActivationGate((_, _) => blocked ? PackageActivationGateResult.Block(BlockReason) : PackageActivationGateResult.Allow);
+        var (gate, setBlocked) = CreateToggleGate(initiallyBlocked: false);
         var loader = CreateLoader(gate);
         var graph = CreateGraph("pkg-a", "pkg-b");
 
         await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
-        blocked = true;
+        setBlocked(true);
         var result = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
 
         Assert.Empty(result.FailedByPackageId);
@@ -227,13 +225,12 @@ public sealed class PackageLoaderActivationGateTests : IDisposable
     [Fact]
     public async Task EnsureGraphLoadedAsync_WhenSinglePackageGraphIsAlreadyLoaded_DoesNotConsultGatesAgain()
     {
-        var blocked = false;
-        var gate = new FakeActivationGate((_, _) => blocked ? PackageActivationGateResult.Block(BlockReason) : PackageActivationGateResult.Allow);
+        var (gate, setBlocked) = CreateToggleGate(initiallyBlocked: false);
         var loader = CreateLoader(gate);
         var graph = CreateGraph("pkg-a");
 
         await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
-        blocked = true;
+        setBlocked(true);
         var result = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
 
         Assert.Empty(result.FailedByPackageId);
@@ -315,9 +312,8 @@ public sealed class PackageLoaderActivationGateTests : IDisposable
     [Fact]
     public async Task EnsureGraphLoadedAsync_WhenBlockedGraphHoldsHostRuntimePackage_FailsItAndRestoresInertStateOnceAllowed()
     {
-        var blocked = true;
-        var loader = CreateLoader(new FakeActivationGate((_, _) =>
-            blocked ? PackageActivationGateResult.Block(BlockReason) : PackageActivationGateResult.Allow));
+        var (gate, setBlocked) = CreateToggleGate(initiallyBlocked: true);
+        var loader = CreateLoader(gate);
         var hostRuntimePackage = CreateHostRuntimePackage("System.Memory");
         var packageKey = $"{hostRuntimePackage.Id}@{hostRuntimePackage.Version}";
 
@@ -329,7 +325,7 @@ public sealed class PackageLoaderActivationGateTests : IDisposable
         Assert.False(loader.Sessions[packageKey].IsLoaded);
         Assert.False(loader.IsInertPackage(hostRuntimePackage.Id, hostRuntimePackage.Version));
 
-        blocked = false;
+        setBlocked(false);
         var allowedResult = await loader.EnsureGraphLoadedAsync([[hostRuntimePackage]], [], CancellationToken.None);
 
         // Once allowed, the package returns to exactly the state a first, never-blocked attempt leaves:
@@ -343,9 +339,8 @@ public sealed class PackageLoaderActivationGateTests : IDisposable
     [Fact]
     public async Task EnsureGraphLoadedAsync_WhenBlockedGraphHoldsSkippedPackage_FailsEveryMemberAndRestoresSkippedStateOnceAllowed()
     {
-        var blocked = true;
-        var loader = CreateLoader(new FakeActivationGate((_, _) =>
-            blocked ? PackageActivationGateResult.Block(BlockReason) : PackageActivationGateResult.Allow));
+        var (gate, setBlocked) = CreateToggleGate(initiallyBlocked: true);
+        var loader = CreateLoader(gate);
         var root = CreatePackage("pkg-root");
         var facade = CreateFacadePackage("pkg-facade");
         var graph = new[] { root, facade };
@@ -358,7 +353,7 @@ public sealed class PackageLoaderActivationGateTests : IDisposable
             Assert.Contains(BlockReason, blockedResult.FailedByPackageId[package.Id], StringComparison.Ordinal));
         Assert.False(loader.IsInertPackage(facade.Id, facade.Version));
 
-        blocked = false;
+        setBlocked(false);
         var allowedResult = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
 
         // Once allowed, the facade is inert again and leaves no failed session behind.
@@ -443,17 +438,10 @@ public sealed class PackageLoaderActivationGateTests : IDisposable
     /// </summary>
     private ResolvedPackage CreateHostRuntimePackage(string assemblyName)
     {
-        var trustedPlatformAssemblies = (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string)!
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
-        var hostAssemblyPath = trustedPlatformAssemblies.FirstOrDefault(path =>
-            string.Equals(Path.GetFileNameWithoutExtension(path), assemblyName, StringComparison.OrdinalIgnoreCase));
-        Assert.False(string.IsNullOrWhiteSpace(hostAssemblyPath));
+        var installPath = CreateInstallDirectory(assemblyName, DefaultVersion);
+        PackageMetadataTestSupport.CreateHostRuntimeAssemblyPackageInstall(installPath, assemblyName);
 
-        var libDirectory = Directory.CreateDirectory(
-            Path.Combine(CreateInstallDirectory(assemblyName, DefaultVersion), "lib", "net10.0"));
-        File.Copy(hostAssemblyPath, Path.Combine(libDirectory.FullName, $"{assemblyName}.dll"));
-
-        return CreateResolvedPackage(assemblyName, DefaultVersion, libDirectory.Parent!.Parent!.FullName);
+        return CreateResolvedPackage(assemblyName, DefaultVersion, installPath);
     }
 
     /// <summary>
@@ -462,11 +450,10 @@ public sealed class PackageLoaderActivationGateTests : IDisposable
     /// </summary>
     private ResolvedPackage CreateFacadePackage(string packageId)
     {
-        var installDirectory = CreateInstallDirectory(packageId, DefaultVersion);
-        var libDirectory = Directory.CreateDirectory(Path.Combine(installDirectory, "lib", "netstandard2.0"));
-        File.WriteAllText(Path.Combine(libDirectory.FullName, "_._"), string.Empty);
+        var installPath = CreateInstallDirectory(packageId, DefaultVersion);
+        PackageMetadataTestSupport.CreateNoAssemblyPackageInstall(installPath);
 
-        return CreateResolvedPackage(packageId, DefaultVersion, installDirectory);
+        return CreateResolvedPackage(packageId, DefaultVersion, installPath);
     }
 
     // Each call gets its own directory so the same package identity can be installed more than once in a test
@@ -482,6 +469,17 @@ public sealed class PackageLoaderActivationGateTests : IDisposable
     private static FakeActivationGate Blocking(string reason) => new((_, _) => PackageActivationGateResult.Block(reason));
 
     private static FakeActivationGate Throwing(Exception exception) => new((_, _) => throw exception);
+
+    /// <summary>
+    /// Creates a gate whose block/allow answer can be flipped after construction, so a test can assert the
+    /// blocked state, then flip it and assert the allowed state, without repeating the toggle closure.
+    /// </summary>
+    private static (FakeActivationGate Gate, Action<bool> SetBlocked) CreateToggleGate(bool initiallyBlocked)
+    {
+        var blocked = initiallyBlocked;
+        var gate = new FakeActivationGate((_, _) => blocked ? PackageActivationGateResult.Block(BlockReason) : PackageActivationGateResult.Allow);
+        return (gate, value => blocked = value);
+    }
 
     private sealed record UpdateAttempt(
         PackageLoader Loader,

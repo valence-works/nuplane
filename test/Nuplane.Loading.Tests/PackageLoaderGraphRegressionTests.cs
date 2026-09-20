@@ -355,30 +355,8 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
         return installPath;
     }
 
-    private string CreatePackageInstall(string packageId, string assemblyFileName, string sourceAssembly)
-    {
-        var installPath = Path.Combine(_tempRoot, packageId, "1.0.0");
-        var libPath = Path.Combine(installPath, "lib", "net10.0");
-        Directory.CreateDirectory(libPath);
-        File.Copy(sourceAssembly, Path.Combine(libPath, assemblyFileName), overwrite: true);
-        return installPath;
-    }
-
     private string CreateHostRuntimeAssemblyPackageInstall(string assemblyName) =>
-        CreatePackageInstall(assemblyName, $"{assemblyName}.dll", FindHostRuntimeAssembly(assemblyName));
-
-    private static string FindHostRuntimeAssembly(string assemblyName)
-    {
-        var trustedPlatformAssemblies = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
-        Assert.False(string.IsNullOrWhiteSpace(trustedPlatformAssemblies));
-
-        var path = trustedPlatformAssemblies
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault(path => string.Equals(Path.GetFileNameWithoutExtension(path), assemblyName, StringComparison.OrdinalIgnoreCase));
-
-        Assert.False(string.IsNullOrWhiteSpace(path));
-        return path!;
-    }
+        PackageMetadataTestSupport.CreateHostRuntimeAssemblyPackageInstall(Path.Combine(_tempRoot, assemblyName, "1.0.0"), assemblyName);
 
     private string CreateFlatPackageInstall(string packageId, string assemblyFileName)
     {
@@ -388,14 +366,8 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
         return installPath;
     }
 
-    private string CreateNoAssemblyPackageInstall(string packageId)
-    {
-        var installPath = Path.Combine(_tempRoot, packageId, "1.0.0");
-        var libPath = Path.Combine(installPath, "lib", "netstandard2.0");
-        Directory.CreateDirectory(libPath);
-        File.WriteAllText(Path.Combine(libPath, "_._"), string.Empty);
-        return installPath;
-    }
+    private string CreateNoAssemblyPackageInstall(string packageId) =>
+        PackageMetadataTestSupport.CreateNoAssemblyPackageInstall(Path.Combine(_tempRoot, packageId, "1.0.0"));
 
     private string CreateNativeOnlyPackageInstall(string packageId)
     {
