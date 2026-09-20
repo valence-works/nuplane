@@ -72,7 +72,12 @@ public sealed class ReconciliationService : IReconciliationService
         ICycleFailureContributor? cycleFailureContributor = null,
         StartupRecoveryState? startupRecoveryState = null)
     {
-        var sourcesList = (sources ?? throw new ArgumentNullException(nameof(sources))).ToArray();
+        // DesiredManifestPackageSource is always registered so code-based and configuration-based
+        // hosts behave identically; it is excluded here when disabled so it leaves no
+        // snapshot/state footprint on hosts that never opted into manifest convergence.
+        var sourcesList = (sources ?? throw new ArgumentNullException(nameof(sources)))
+            .Where(source => source is not DesiredManifestPackageSource { IsEnabled: false })
+            .ToArray();
         var reconciliationOpts = (reconciliationOptions ?? throw new ArgumentNullException(nameof(reconciliationOptions))).Value;
         var feedResOpts = (feedResolutionOptions ?? throw new ArgumentNullException(nameof(feedResolutionOptions))).Value;
         var cleanupOpts = (cleanupPolicyOptions ?? throw new ArgumentNullException(nameof(cleanupPolicyOptions))).Value; ;

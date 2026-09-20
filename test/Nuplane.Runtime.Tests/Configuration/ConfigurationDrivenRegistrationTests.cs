@@ -10,6 +10,7 @@ using Nuplane.Feeds.Registration;
 using Nuplane.Hosting;
 using Nuplane.Loading;
 using Nuplane.Loading.Hosting.Builder;
+using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Setup;
 using Nuplane.Sources;
 using Nuplane.Sources.Directory;
@@ -900,11 +901,8 @@ public sealed class ConfigurationDrivenRegistrationTests
 
             using var provider = services.BuildServiceProvider();
 
-            // Only one desired source for the feed. DesiredManifestPackageSource is always
-            // registered (gated at runtime by ConvergenceOptions.Manifest.Enabled); exclude it
-            // to isolate feed-derived sources.
-            var sourceCount = provider.GetServices<IDesiredPackageSource>()
-                .Count(source => source is not DesiredManifestPackageSource);
+            // Only one desired source for the feed.
+            var sourceCount = provider.GetFeedDesiredPackageSources().Count();
             Assert.Equal(1, sourceCount);
         }
         finally
@@ -945,11 +943,8 @@ public sealed class ConfigurationDrivenRegistrationTests
 
             using var provider = services.BuildServiceProvider();
 
-            // Both feeds should have their own desired source. DesiredManifestPackageSource is
-            // always registered (gated at runtime by ConvergenceOptions.Manifest.Enabled);
-            // exclude it to isolate feed-derived sources.
-            var sourceCount = provider.GetServices<IDesiredPackageSource>()
-                .Count(source => source is not DesiredManifestPackageSource);
+            // Both feeds should have their own desired source.
+            var sourceCount = provider.GetFeedDesiredPackageSources().Count();
             Assert.Equal(2, sourceCount);
         }
         finally

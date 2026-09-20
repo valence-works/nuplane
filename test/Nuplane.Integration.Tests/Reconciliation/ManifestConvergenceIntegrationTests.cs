@@ -5,6 +5,7 @@ using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Convergence;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Sources;
+using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -158,5 +159,56 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
 
         Assert.Single(result.ChangeSet.Removed);
         Assert.Equal("RemoveMe", result.ChangeSet.Removed[0]);
+    }
+
+    [Fact]
+    public async Task ManifestDisabledByDefault_ReconciliationCycle_PersistsNoManifestSourceSnapshot()
+    {
+        // DesiredManifestPackageSource is always registered on the shared runtime path, but a
+        // host that never enables manifest convergence must see no observable effect from it:
+        // no snapshot entry should be written to store state for a disabled manifest source.
+        var options = new ConvergenceOptions();
+        var source = new DesiredManifestPackageSource(new(), options);
+        var store = new StoreRegistry(new StoreStateSerializer(), stateFilePath: null);
+        var service = ReconciliationServiceFactory.Create(
+            sources: [source],
+            storeRegistry: store,
+            packageResolver: new NuGetPackageResolver());
+
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
+
+        Assert.False(result.IsDegraded);
+        var state = await store.GetStateAsync(CancellationToken.None);
+        Assert.DoesNotContain(state.LastSuccessfulSourceSnapshots.Keys, key => key.Contains(nameof(DesiredManifestPackageSource), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ManifestEnabled_ReconciliationCycle_ManifestPackagesReachDesiredRequestsAndArePersisted()
+    {
+        var manifestPath = WriteManifestFile(new
+        {
+            SchemaVersion = "1.0",
+            GeneratedAtUtc = DateTimeOffset.UtcNow,
+            Packages = new[]
+            {
+                new { Id = "Lib.Core", Version = "1.0.0" }
+            }
+        });
+
+        var options = new ConvergenceOptions { Manifest = { Enabled = true, Path = manifestPath } };
+        var source = new DesiredManifestPackageSource(new(), options);
+        var store = new StoreRegistry(new StoreStateSerializer(), stateFilePath: null);
+        var service = ReconciliationServiceFactory.Create(
+            sources: [source],
+            storeRegistry: store,
+            packageResolver: new NuGetPackageResolver());
+
+        var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
+
+        var added = Assert.Single(result.ChangeSet.Added);
+        Assert.Equal("Lib.Core", added.Id);
+
+        var state = await store.GetStateAsync(CancellationToken.None);
+        Assert.Contains(state.LastSuccessfulSourceSnapshots.Keys, key => key.Contains(nameof(DesiredManifestPackageSource), StringComparison.Ordinal));
     }
 }

@@ -1,8 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using Nuplane.Abstractions;
 using Nuplane.Feeds.Configuration;
-using Nuplane.Sources;
+using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Sources.Directory.Builder;
 
 namespace Nuplane.Runtime.Tests.Hosting;
@@ -51,11 +50,7 @@ public sealed class FeedSelectionRegistrationTests
             using var provider = services.BuildServiceProvider();
 
             var feedResolution = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
-            // DesiredManifestPackageSource is always registered (gated at runtime by
-            // ConvergenceOptions.Manifest.Enabled); exclude it to isolate feed-derived sources.
-            var desiredSources = provider.GetServices<IDesiredPackageSource>()
-                .Where(source => source is not DesiredManifestPackageSource)
-                .ToArray();
+            var desiredSources = provider.GetFeedDesiredPackageSources().ToArray();
 
             Assert.Contains(feedResolution.Feeds, feed => string.Equals(feed.Name, "drop-folder", StringComparison.OrdinalIgnoreCase));
             Assert.Single(desiredSources);
@@ -135,11 +130,7 @@ public sealed class FeedSelectionRegistrationTests
             using var provider = services.BuildServiceProvider();
 
             var feedResolution = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
-            // DesiredManifestPackageSource is always registered (gated at runtime by
-            // ConvergenceOptions.Manifest.Enabled); exclude it to isolate feed-derived sources.
-            var desiredSources = provider.GetServices<IDesiredPackageSource>()
-                .Where(source => source is not DesiredManifestPackageSource)
-                .ToArray();
+            var desiredSources = provider.GetFeedDesiredPackageSources().ToArray();
 
             Assert.Contains(feedResolution.Feeds, feed => string.Equals(feed.Name, "drop-folder", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(feedResolution.Feeds, feed => string.Equals(feed.Name, "nuget.org", StringComparison.OrdinalIgnoreCase));

@@ -7,6 +7,7 @@ using Nuplane.Abstractions;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Setup;
 using Nuplane.Reconciliation.Convergence;
+using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Sources;
 using Nuplane.Sources.Directory.Builder;
 using Nuplane.Sources.Directory.Configuration;
@@ -69,11 +70,8 @@ public sealed class DirectoryBuilderIntegrationTests
             var feed = Assert.Single(feedOptions.Feeds);
             Assert.Equal("cache-only", feed.Name);
 
-            // DesiredManifestPackageSource is always registered (gated at runtime by
-            // ConvergenceOptions.Manifest.Enabled); a cache-role feed should not add any other source.
-            var nonManifestSources = provider.GetServices<IDesiredPackageSource>()
-                .Where(source => source is not DesiredManifestPackageSource);
-            Assert.Empty(nonManifestSources);
+            // A cache-role feed should not add any other source.
+            Assert.Empty(provider.GetFeedDesiredPackageSources());
         }
         finally
         {
@@ -197,12 +195,8 @@ public sealed class DirectoryBuilderIntegrationTests
 
             using var provider = services.BuildServiceProvider();
 
-            // Only one desired source for the feed. DesiredManifestPackageSource is always
-            // registered (gated at runtime by ConvergenceOptions.Manifest.Enabled); exclude it
-            // to isolate feed-derived sources.
-            var feedSources = provider.GetServices<IDesiredPackageSource>()
-                .Where(source => source is not DesiredManifestPackageSource)
-                .ToList();
+            // Only one desired source for the feed.
+            var feedSources = provider.GetFeedDesiredPackageSources().ToList();
             Assert.Single(feedSources);
         }
         finally

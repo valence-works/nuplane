@@ -2,11 +2,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Feeds.Configuration;
+using Nuplane.Integration.Tests.Support;
 using Nuplane.Loading;
 using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Loading.Registration;
 using Nuplane.Reconciliation.Models;
-using Nuplane.Sources;
 using Nuplane.Sources.Directory;
 using Nuplane.Sources.Directory.Builder;
 
@@ -125,11 +125,7 @@ public sealed class ModuleRegistrationCompatibilityTests
 
             using var provider = services.BuildServiceProvider();
             var feedResolution = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
-            // DesiredManifestPackageSource is always registered (gated at runtime by
-            // ConvergenceOptions.Manifest.Enabled); exclude it to isolate feed-derived sources.
-            var desiredSources = provider.GetServices<IDesiredPackageSource>()
-                .Where(source => source is not DesiredManifestPackageSource)
-                .ToArray();
+            var desiredSources = provider.GetFeedDesiredPackageSources().ToArray();
 
             Assert.Contains(feedResolution.Feeds, feed => string.Equals(feed.Name, "builder-feed", StringComparison.OrdinalIgnoreCase));
             Assert.Single(desiredSources);

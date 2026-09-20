@@ -23,6 +23,14 @@ public sealed class DesiredManifestPackageSource : IDesiredPackageSource
     public DesiredManifestReadResult? LastReadResult => _lastReadResult;
 
     /// <summary>
+    /// Gets a value indicating whether the manifest source is enabled, i.e. manifest convergence
+    /// is turned on and a manifest path has been configured. This is the single definition of
+    /// "enabled" shared between <see cref="GetDesiredAsync"/> and consumers that need to decide
+    /// whether this source should participate in a reconciliation cycle.
+    /// </summary>
+    internal bool IsEnabled => _options.Manifest.Enabled && !string.IsNullOrWhiteSpace(_options.Manifest.Path);
+
+    /// <summary>
     /// Initializes a new instance of <see cref="DesiredManifestPackageSource"/>.
     /// </summary>
     /// <param name="reader">The manifest reader.</param>
@@ -41,7 +49,7 @@ public sealed class DesiredManifestPackageSource : IDesiredPackageSource
     /// <inheritdoc />
     public async Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
     {
-        if (!_options.Manifest.Enabled || string.IsNullOrWhiteSpace(_options.Manifest.Path))
+        if (!IsEnabled)
         {
             return [];
         }
@@ -51,7 +59,7 @@ public sealed class DesiredManifestPackageSource : IDesiredPackageSource
             : CorrelationContext.Current;
 
         var result = await _reader.ReadAsync(
-            _options.Manifest.Path,
+            _options.Manifest.Path!,
             correlationId,
             ct,
             _options.Manifest.SchemaVersion);
