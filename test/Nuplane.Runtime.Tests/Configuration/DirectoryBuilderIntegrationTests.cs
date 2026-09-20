@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -5,6 +6,8 @@ using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Setup;
+using Nuplane.Reconciliation.Convergence;
+using Nuplane.Sources;
 using Nuplane.Sources.Directory.Builder;
 using Nuplane.Sources.Directory.Configuration;
 
@@ -65,7 +68,12 @@ public sealed class DirectoryBuilderIntegrationTests
 
             var feed = Assert.Single(feedOptions.Feeds);
             Assert.Equal("cache-only", feed.Name);
-            Assert.DoesNotContain(services, d => d.ServiceType == typeof(IDesiredPackageSource));
+
+            // DesiredManifestPackageSource is always registered (gated at runtime by
+            // ConvergenceOptions.Manifest.Enabled); a cache-role feed should not add any other source.
+            var nonManifestSources = provider.GetServices<IDesiredPackageSource>()
+                .Where(source => source is not DesiredManifestPackageSource);
+            Assert.Empty(nonManifestSources);
         }
         finally
         {
@@ -187,16 +195,77 @@ public sealed class DirectoryBuilderIntegrationTests
                 });
             });
 
-            // Only one desired source for the feed
-            var sourceDescriptors = services
-                .Where(d => d.ServiceType == typeof(IDesiredPackageSource))
+            using var provider = services.BuildServiceProvider();
+
+            // Only one desired source for the feed. DesiredManifestPackageSource is always
+            // registered (gated at runtime by ConvergenceOptions.Manifest.Enabled); exclude it
+            // to isolate feed-derived sources.
+            var feedSources = provider.GetServices<IDesiredPackageSource>()
+                .Where(source => source is not DesiredManifestPackageSource)
                 .ToList();
-            Assert.Single(sourceDescriptors);
+            Assert.Single(feedSources);
         }
         finally
         {
             Cleanup(root);
         }
+    }
+
+    [Fact]
+    public async Task AddNuplane_BuilderOnly_ManifestEnabledViaCodeConfigure_ResolvedSourceYieldsManifestPackages()
+    {
+        var manifestPath = Path.Combine(Path.GetTempPath(), $"nuplane-manifest-{Guid.NewGuid():N}.json");
+        File.WriteAllText(manifestPath, JsonSerializer.Serialize(new
+        {
+            SchemaVersion = "1.0",
+            GeneratedAtUtc = DateTimeOffset.UtcNow,
+            Packages = new[] { new { Id = "Lib.Core", Version = "1.0.0" } }
+        }));
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddLogging();
+
+            // The manifest is enabled purely through code, with no IConfiguration involved,
+            // exercising the builder-only AddNuplane overload.
+            services.Configure<ConvergenceOptions>(options =>
+            {
+                options.Manifest.Enabled = true;
+                options.Manifest.Path = manifestPath;
+            });
+
+            services.AddNuplane(_ => { });
+
+            using var provider = services.BuildServiceProvider();
+
+            var source = Assert.Single(provider.GetServices<IDesiredPackageSource>()
+                .OfType<DesiredManifestPackageSource>());
+
+            var desired = await source.GetDesiredAsync(CancellationToken.None);
+            var package = Assert.Single(desired);
+            Assert.Equal("Lib.Core", package.Id);
+        }
+        finally
+        {
+            try { File.Delete(manifestPath); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task AddNuplane_BuilderOnly_ManifestDisabledByDefault_ResolvedSourceContributesNothing()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(_ => { });
+
+        using var provider = services.BuildServiceProvider();
+
+        var source = Assert.Single(provider.GetServices<IDesiredPackageSource>()
+            .OfType<DesiredManifestPackageSource>());
+
+        var desired = await source.GetDesiredAsync(CancellationToken.None);
+        Assert.Empty(desired);
     }
 
     private static string CreateTempDir(string suffix)

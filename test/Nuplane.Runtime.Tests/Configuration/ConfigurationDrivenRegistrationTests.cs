@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -897,8 +898,13 @@ public sealed class ConfigurationDrivenRegistrationTests
                 });
             });
 
-            // Only one desired source for the feed
-            var sourceCount = services.Count(d => d.ServiceType == typeof(IDesiredPackageSource));
+            using var provider = services.BuildServiceProvider();
+
+            // Only one desired source for the feed. DesiredManifestPackageSource is always
+            // registered (gated at runtime by ConvergenceOptions.Manifest.Enabled); exclude it
+            // to isolate feed-derived sources.
+            var sourceCount = provider.GetServices<IDesiredPackageSource>()
+                .Count(source => source is not DesiredManifestPackageSource);
             Assert.Equal(1, sourceCount);
         }
         finally
@@ -937,8 +943,13 @@ public sealed class ConfigurationDrivenRegistrationTests
                 });
             });
 
-            // Both feeds should have their own desired source
-            var sourceCount = services.Count(d => d.ServiceType == typeof(IDesiredPackageSource));
+            using var provider = services.BuildServiceProvider();
+
+            // Both feeds should have their own desired source. DesiredManifestPackageSource is
+            // always registered (gated at runtime by ConvergenceOptions.Manifest.Enabled);
+            // exclude it to isolate feed-derived sources.
+            var sourceCount = provider.GetServices<IDesiredPackageSource>()
+                .Count(source => source is not DesiredManifestPackageSource);
             Assert.Equal(2, sourceCount);
         }
         finally
@@ -949,29 +960,46 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
-    public void AddNuplane_FromConfiguration_ManifestEnabled_RegistersDesiredManifestPackageSource()
+    public async Task AddNuplane_FromConfiguration_ManifestEnabled_ResolvedSourceYieldsManifestPackages()
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Nuplane:Convergence:Manifest:Enabled"] = "true",
-                ["Nuplane:Convergence:Manifest:Path"] = "manifest.json"
-            })
-            .Build();
+        var manifestPath = WriteManifestFile(new[]
+        {
+            new { Id = "Lib.Core", Version = "1.0.0" }
+        });
 
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddNuplane(configuration.GetSection("Nuplane"));
+        try
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Nuplane:Convergence:Manifest:Enabled"] = "true",
+                    ["Nuplane:Convergence:Manifest:Path"] = manifestPath
+                })
+                .Build();
 
-        using var provider = services.BuildServiceProvider();
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddNuplane(configuration.GetSection("Nuplane"));
 
-        var source = Assert.Single(provider.GetServices<IDesiredPackageSource>()
-            .OfType<DesiredManifestPackageSource>());
-        Assert.NotNull(source);
+            using var provider = services.BuildServiceProvider();
+
+            // DesiredManifestPackageSource is always registered (the manifest gate now lives
+            // solely in ConvergenceOptions.Manifest.Enabled, honored at read time).
+            var source = Assert.Single(provider.GetServices<IDesiredPackageSource>()
+                .OfType<DesiredManifestPackageSource>());
+
+            var desired = await source.GetDesiredAsync(CancellationToken.None);
+            var package = Assert.Single(desired);
+            Assert.Equal("Lib.Core", package.Id);
+        }
+        finally
+        {
+            try { File.Delete(manifestPath); } catch { }
+        }
     }
 
     [Fact]
-    public void AddNuplane_FromConfiguration_ManifestDisabled_DoesNotRegisterDesiredManifestPackageSource()
+    public async Task AddNuplane_FromConfiguration_ManifestDisabled_ResolvedSourceContributesNothing()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>())
@@ -983,7 +1011,23 @@ public sealed class ConfigurationDrivenRegistrationTests
 
         using var provider = services.BuildServiceProvider();
 
-        Assert.Empty(provider.GetServices<IDesiredPackageSource>().OfType<DesiredManifestPackageSource>());
+        var source = Assert.Single(provider.GetServices<IDesiredPackageSource>()
+            .OfType<DesiredManifestPackageSource>());
+
+        var desired = await source.GetDesiredAsync(CancellationToken.None);
+        Assert.Empty(desired);
+    }
+
+    private static string WriteManifestFile(object packages)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nuplane-manifest-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(new
+        {
+            SchemaVersion = "1.0",
+            GeneratedAtUtc = DateTimeOffset.UtcNow,
+            Packages = packages
+        }));
+        return path;
     }
 
     private sealed class CapturingLoggerProvider(List<string> messages) : ILoggerProvider

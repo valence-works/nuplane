@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Nuplane;
 using Nuplane.Abstractions;
 using Nuplane.Feeds.Configuration;
+using Nuplane.Sources;
 using Nuplane.Sources.Directory.Configuration;
 
 namespace Nuplane.Sources.Directory.Tests.Configuration;
@@ -43,7 +44,11 @@ public sealed class DirectoryFeedSetupConfigurationTests
             var feed = Assert.Single(feeds);
             Assert.Equal("local-packages", feed.Name);
             Assert.Equal("file", feed.ServiceIndex.Scheme);
-            Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IDesiredPackageSource));
+            // DesiredManifestPackageSource is always registered (gated at runtime by
+            // ConvergenceOptions.Manifest.Enabled); exclude it to isolate feed-derived sources.
+            Assert.DoesNotContain(
+                provider.GetServices<IDesiredPackageSource>(),
+                source => source is not DesiredManifestPackageSource);
             Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IHostedService)
                 && descriptor.ImplementationFactory is not null);
         }
