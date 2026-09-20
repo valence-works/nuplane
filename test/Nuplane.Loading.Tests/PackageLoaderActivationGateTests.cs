@@ -12,10 +12,14 @@ namespace Nuplane.Loading.Tests;
 public sealed class PackageLoaderActivationGateTests : IDisposable
 {
     private const string BlockReason = "module schema is behind the package.";
+    private const string DefaultVersion = "1.0.0";
+    private const string UpdatePackageId = "pkg-updated";
+    private const string UpdateVersion = "2.0.0";
 
     private readonly DirectoryInfo _tempDir = Directory.CreateTempSubdirectory("nuplane-activation-gate-test-");
     private readonly HostIntegratedAssemblyResolutionCatalog _resolutionCatalog = new();
     private readonly LoadingOptions _loadingOptions = new();
+    private int _installDirectoryCount;
 
     public void Dispose()
     {
@@ -273,6 +277,97 @@ public sealed class PackageLoaderActivationGateTests : IDisposable
         Assert.True(_resolutionCatalog.TryResolve(typeof(FixtureMarker).Assembly.GetName(), out _, out _));
     }
 
+    [Theory]
+    [InlineData(PackageLoadMode.Collectible)]
+    [InlineData(PackageLoadMode.HostIntegrated)]
+    public async Task EnsureGraphLoadedAsync_WhenUpdateGraphIsBlocked_LeavesLoadedVersionExactlyAsAResolutionFailureWould(
+        PackageLoadMode loadMode)
+    {
+        var blockedUpdate = await RunUpdateAttemptAsync(loadMode, blockUpdateWithGate: true);
+        var genuinelyFailedUpdate = await RunUpdateAttemptAsync(loadMode, blockUpdateWithGate: false);
+
+        Assert.All<UpdateAttempt>([blockedUpdate, genuinelyFailedUpdate], attempt =>
+        {
+            // The version that is already loaded keeps its live context, session and host-integrated visibility.
+            Assert.True(attempt.Loader.TryGetContext(UpdatePackageId, DefaultVersion, out var loadedContext));
+            Assert.NotNull(loadedContext!.Context);
+            var loadedSession = attempt.Loader.Sessions[$"{UpdatePackageId}@{DefaultVersion}"];
+            Assert.True(loadedSession.IsLoaded);
+            Assert.Null(loadedSession.LastError);
+            Assert.Equal(loadMode, loadedSession.LoadMode);
+            Assert.Equal(
+                loadMode == PackageLoadMode.HostIntegrated,
+                attempt.ResolutionCatalog.TryResolve(typeof(FixtureMarker).Assembly.GetName(), out _, out _));
+
+            // The update version is failed under its own version-scoped key and never got a context. The
+            // id-keyed failure map reports the package id while the loaded version keeps running.
+            Assert.Empty(attempt.Result.Loaded);
+            Assert.False(attempt.Loader.TryGetContext(UpdatePackageId, UpdateVersion, out _));
+            var updateSession = attempt.Loader.Sessions[$"{UpdatePackageId}@{UpdateVersion}"];
+            Assert.False(updateSession.IsLoaded);
+            Assert.False(string.IsNullOrWhiteSpace(updateSession.LastError));
+            Assert.Equal(UpdatePackageId, Assert.Single(attempt.Result.FailedByPackageId).Key);
+        });
+
+        Assert.Contains(BlockReason, blockedUpdate.Result.FailedByPackageId[UpdatePackageId], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_WhenBlockedGraphHoldsHostRuntimePackage_FailsItAndRestoresInertStateOnceAllowed()
+    {
+        var blocked = true;
+        var loader = CreateLoader(new FakeActivationGate((_, _) =>
+            blocked ? PackageActivationGateResult.Block(BlockReason) : PackageActivationGateResult.Allow));
+        var hostRuntimePackage = CreateHostRuntimePackage("System.Memory");
+        var packageKey = $"{hostRuntimePackage.Id}@{hostRuntimePackage.Version}";
+
+        var blockedResult = await loader.EnsureGraphLoadedAsync([[hostRuntimePackage]], [], CancellationToken.None);
+
+        // The graph is refused before it is resolved, so even the member a successful load would have skipped
+        // as host-provided is reported failed with the gate's reason.
+        Assert.Contains(BlockReason, Assert.Single(blockedResult.FailedByPackageId).Value, StringComparison.Ordinal);
+        Assert.False(loader.Sessions[packageKey].IsLoaded);
+        Assert.False(loader.IsInertPackage(hostRuntimePackage.Id, hostRuntimePackage.Version));
+
+        blocked = false;
+        var allowedResult = await loader.EnsureGraphLoadedAsync([[hostRuntimePackage]], [], CancellationToken.None);
+
+        // Once allowed, the package returns to exactly the state a first, never-blocked attempt leaves:
+        // inert, with no session and no lingering failure.
+        Assert.Empty(allowedResult.FailedByPackageId);
+        Assert.Empty(allowedResult.Loaded);
+        Assert.True(loader.IsInertPackage(hostRuntimePackage.Id, hostRuntimePackage.Version));
+        Assert.Empty(loader.Sessions);
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_WhenBlockedGraphHoldsSkippedPackage_FailsEveryMemberAndRestoresSkippedStateOnceAllowed()
+    {
+        var blocked = true;
+        var loader = CreateLoader(new FakeActivationGate((_, _) =>
+            blocked ? PackageActivationGateResult.Block(BlockReason) : PackageActivationGateResult.Allow));
+        var root = CreatePackage("pkg-root");
+        var facade = CreateFacadePackage("pkg-facade");
+        var graph = new[] { root, facade };
+
+        var blockedResult = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
+
+        // Every member of the refused graph is failed, including the facade a successful load would skip.
+        Assert.Equal(["pkg-facade", "pkg-root"], blockedResult.FailedByPackageId.Keys.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.All(graph, package =>
+            Assert.Contains(BlockReason, blockedResult.FailedByPackageId[package.Id], StringComparison.Ordinal));
+        Assert.False(loader.IsInertPackage(facade.Id, facade.Version));
+
+        blocked = false;
+        var allowedResult = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
+
+        // Once allowed, the facade is inert again and leaves no failed session behind.
+        Assert.Empty(allowedResult.FailedByPackageId);
+        Assert.Equal("pkg-root", Assert.Single(allowedResult.Loaded).PackageId);
+        Assert.True(loader.IsInertPackage(facade.Id, facade.Version));
+        Assert.Equal($"{root.Id}@{root.Version}", Assert.Single(loader.Sessions).Key);
+    }
+
     [Fact]
     public async Task EnsureGraphLoadedAsync_WithEmptyGraph_DoesNotConsultGates()
     {
@@ -286,30 +381,112 @@ public sealed class PackageLoaderActivationGateTests : IDisposable
         Assert.Empty(gate.Invocations);
     }
 
+    /// <summary>
+    /// Loads <c>pkg-updated</c> 1.0.0, then attempts to load 2.0.0 of the same package in a way that cannot
+    /// succeed: either an activation gate refuses it, or it genuinely fails to resolve because it is not
+    /// installed. Both attempts must leave the loaded 1.0.0 identical.
+    /// </summary>
+    private async Task<UpdateAttempt> RunUpdateAttemptAsync(PackageLoadMode loadMode, bool blockUpdateWithGate)
+    {
+        _loadingOptions.DefaultLoadMode = loadMode;
+        var resolutionCatalog = new HostIntegratedAssemblyResolutionCatalog();
+        var loader = CreateLoader(
+            resolutionCatalog,
+            new FakeActivationGate((context, _) =>
+                blockUpdateWithGate && context.Packages.Any(static package => package.Version == UpdateVersion)
+                    ? PackageActivationGateResult.Block(BlockReason)
+                    : PackageActivationGateResult.Allow));
+
+        var loadedResult = await loader.EnsureGraphLoadedAsync(
+            [[CreatePackage(UpdatePackageId, DefaultVersion)]],
+            [],
+            CancellationToken.None);
+        Assert.Single(loadedResult.Loaded);
+
+        var update = blockUpdateWithGate
+            ? CreatePackage(UpdatePackageId, UpdateVersion)
+            : CreateResolvedPackage(UpdatePackageId, UpdateVersion, Path.Combine(_tempDir.FullName, "never-installed"));
+
+        return new(
+            loader,
+            resolutionCatalog,
+            await loader.EnsureGraphLoadedAsync([[update]], [], CancellationToken.None));
+    }
+
     private PackageLoader CreateLoader(params IPackageActivationGate[] gates) =>
+        CreateLoader(_resolutionCatalog, gates);
+
+    private PackageLoader CreateLoader(
+        HostIntegratedAssemblyResolutionCatalog resolutionCatalog,
+        params IPackageActivationGate[] gates) =>
         new(
-            hostIntegratedResolutionCatalog: _resolutionCatalog,
+            hostIntegratedResolutionCatalog: resolutionCatalog,
             options: Options.Create(_loadingOptions),
             activationGates: gates);
 
     private IReadOnlyList<ResolvedPackage> CreateGraph(params string[] packageIds) =>
-        packageIds.Select(CreatePackage).ToArray();
+        packageIds.Select(packageId => CreatePackage(packageId)).ToArray();
 
-    private ResolvedPackage CreatePackage(string packageId)
+    private ResolvedPackage CreatePackage(string packageId, string version = DefaultVersion)
     {
-        var installDirectory = _tempDir.CreateSubdirectory(packageId);
+        var installDirectory = CreateInstallDirectory(packageId, version);
         File.Copy(
             typeof(FixtureMarker).Assembly.Location,
-            Path.Combine(installDirectory.FullName, $"{packageId}.dll"));
+            Path.Combine(installDirectory, $"{packageId}.dll"));
 
-        return new(packageId, "1.0.0", "feed-a", installDirectory.FullName, DateTimeOffset.UtcNow, packageId);
+        return CreateResolvedPackage(packageId, version, installDirectory);
     }
+
+    /// <summary>
+    /// Creates a package whose only assembly is provided by the host runtime, which the loader evaluates as an
+    /// inert graph member: it is neither loaded nor failed by a successful load attempt.
+    /// </summary>
+    private ResolvedPackage CreateHostRuntimePackage(string assemblyName)
+    {
+        var trustedPlatformAssemblies = (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string)!
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+        var hostAssemblyPath = trustedPlatformAssemblies.FirstOrDefault(path =>
+            string.Equals(Path.GetFileNameWithoutExtension(path), assemblyName, StringComparison.OrdinalIgnoreCase));
+        Assert.False(string.IsNullOrWhiteSpace(hostAssemblyPath));
+
+        var libDirectory = Directory.CreateDirectory(
+            Path.Combine(CreateInstallDirectory(assemblyName, DefaultVersion), "lib", "net10.0"));
+        File.Copy(hostAssemblyPath, Path.Combine(libDirectory.FullName, $"{assemblyName}.dll"));
+
+        return CreateResolvedPackage(assemblyName, DefaultVersion, libDirectory.Parent!.Parent!.FullName);
+    }
+
+    /// <summary>
+    /// Creates a facade package that carries no assembly, which the loader skips as an inert graph member
+    /// rather than failing when the graph around it loads.
+    /// </summary>
+    private ResolvedPackage CreateFacadePackage(string packageId)
+    {
+        var installDirectory = CreateInstallDirectory(packageId, DefaultVersion);
+        var libDirectory = Directory.CreateDirectory(Path.Combine(installDirectory, "lib", "netstandard2.0"));
+        File.WriteAllText(Path.Combine(libDirectory.FullName, "_._"), string.Empty);
+
+        return CreateResolvedPackage(packageId, DefaultVersion, installDirectory);
+    }
+
+    // Each call gets its own directory so the same package identity can be installed more than once in a test
+    // without one scenario overwriting an assembly another scenario already loaded.
+    private string CreateInstallDirectory(string packageId, string version) =>
+        _tempDir.CreateSubdirectory($"{packageId}-{version}-{_installDirectoryCount++}").FullName;
+
+    private static ResolvedPackage CreateResolvedPackage(string packageId, string version, string installPath) =>
+        new(packageId, version, "feed-a", installPath, DateTimeOffset.UtcNow, packageId);
 
     private static FakeActivationGate Allowing() => new(static (_, _) => PackageActivationGateResult.Allow);
 
     private static FakeActivationGate Blocking(string reason) => new((_, _) => PackageActivationGateResult.Block(reason));
 
     private static FakeActivationGate Throwing(Exception exception) => new((_, _) => throw exception);
+
+    private sealed record UpdateAttempt(
+        PackageLoader Loader,
+        HostIntegratedAssemblyResolutionCatalog ResolutionCatalog,
+        PackageLoadResult Result);
 
     private sealed class FakeActivationGate(
         Func<PackageActivationContext, CancellationToken, PackageActivationGateResult?> decide)

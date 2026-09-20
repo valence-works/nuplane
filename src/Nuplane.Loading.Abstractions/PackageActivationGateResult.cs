@@ -29,7 +29,10 @@ public sealed record PackageActivationGateResult
     public string? Reason { get; }
 
     /// <summary>
-    /// Creates a result that refuses activation of the whole package graph.
+    /// Creates a result that refuses activation of the whole package graph. Because the graph is refused
+    /// before it is resolved, every package in it is reported as a failed package carrying
+    /// <paramref name="reason"/> — including members a successful load would have skipped as
+    /// host-runtime-provided or as carrying no assemblies.
     /// </summary>
     /// <param name="reason">The secret-safe, human-readable reason activation was refused.</param>
     /// <returns>A blocking result carrying <paramref name="reason"/>.</returns>

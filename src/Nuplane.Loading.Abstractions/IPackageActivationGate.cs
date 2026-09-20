@@ -9,8 +9,16 @@ namespace Nuplane.Loading;
 /// <para>
 /// Every registered gate is consulted, sequentially, in registration order; gates are never
 /// evaluated in parallel. A <see cref="PackageActivationGateResult.Block(string)"/> from any gate
-/// blocks the whole graph — roots and dependencies alike — and every blocking reason is collected
-/// into a single ordinary load failure. Other graphs in the same load call are unaffected.
+/// refuses the whole graph, and every blocking reason is collected into a single ordinary load
+/// failure. Other graphs in the same load call are unaffected.
+/// </para>
+/// <para>
+/// A refused graph is never resolved, so every package in it — roots, dependencies, and members a
+/// successful load would have skipped as host-runtime-provided or as carrying no assemblies — is
+/// reported as a failed package with the gate's reason. Nothing about a graph may be inspected or
+/// processed before the gates allow it, so the loader deliberately does not resolve the graph first
+/// just to classify its members. Once the gates allow the graph, those members return to their normal
+/// state: skipped members become inert again and leave no failure behind.
 /// </para>
 /// <para>
 /// Gate evaluation is fail-closed. A gate that throws anything other than an

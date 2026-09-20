@@ -254,7 +254,8 @@ nuplane.AutoloadPackages(loading => loading.AddActivationGate<SchemaVersionActiv
 Rules the loading module guarantees:
 
 - Gates run after the graph's load mode is selected and before any load context is created, so a blocked graph never loads a single assembly, in either `Collectible` or `HostIntegrated` mode.
-- Every registered gate is consulted, sequentially, in registration order. A block from any gate blocks the whole graph — roots and dependencies alike — and every blocking reason is reported together. Other graphs in the same load pass are unaffected.
+- Every registered gate is consulted, sequentially, in registration order. A block from any gate refuses the whole graph and every blocking reason is reported together. Other graphs in the same load pass are unaffected.
+- A refused graph is not resolved at all, so **every** package in it is reported failed with the gate's reason — roots, dependencies, and members a successful load would have skipped because the host runtime already provides their assembly or because they carry none. Nothing of a graph may be processed before the gates allow it, so the loader does not resolve the graph first just to classify its members. Once the gates allow it, those members go back to being skipped and leave no failure behind.
 - Gates are **fail-closed**: a gate that throws, or that returns no result, blocks the graph, and the failure names the gate type. A gate fault is never treated as an allow. A cancellation that honors the caller's token stays a cancellation and is not reported as a load failure.
 - Gates are not consulted for a graph generation that is already loaded; they run when a graph is genuinely about to be activated.
 - A blocked graph is never cached as loaded, so the next attempt — the next reconcile or the next process start — re-evaluates the gates and loads the graph as soon as they allow it. Nothing has to be reset by hand.
@@ -263,7 +264,7 @@ Rules the loading module guarantees:
 What an operator sees when a gate blocks a graph during a reconcile:
 
 - A `Warning` log per blocking gate, naming the gate type, the graph key, the package identities, and the gate-supplied reason.
-- An ordinary load failure for every package in that graph — the same shape a missing assembly or a resolution error produces: a recorded package failure for the `load` stage, a package-failed loading event, and a degraded reconciliation cycle.
+- An ordinary load failure for every package in that graph — the same shape a missing assembly or a resolution error produces: a recorded package failure for the `load` stage, a package-failed loading event, and a degraded reconciliation cycle. Because the graph is refused before it is resolved, that includes graph members a successful load would have skipped as host-provided or assembly-less; they stop being reported as failed as soon as the gates allow the graph.
 - No rollback of package state. Activation gating happens at the loading boundary, after the store transaction, so the package stays active and installed; it is simply not loaded in this process. The load-state surface reports it as `Failed` with the gate's reason in its diagnostics.
 
 At startup the same failure makes the startup cycle degraded, so the configured `StartupFailurePolicy` decides what happens next — gating does not change that policy:

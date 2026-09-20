@@ -655,7 +655,19 @@ internal sealed class PackageLoader : IPackageLoader
         }
     }
 
-    private void MarkInert(string packageKey) => _inertPackages[packageKey] = 0;
+    private void MarkInert(string packageKey)
+    {
+        _inertPackages[packageKey] = 0;
+
+        // A package the loader has just evaluated as an inert graph member has no outstanding failure. Drop a
+        // failed session left by an earlier attempt — for example a graph an activation gate refused before it
+        // could be resolved — so read surfaces report the package as skipped, exactly as they would had the
+        // earlier attempt never happened.
+        if (_sessions.TryGetValue(packageKey, out var session) && !session.IsLoaded)
+        {
+            _sessions.TryRemove(new KeyValuePair<string, PackageLoadSession>(packageKey, session));
+        }
+    }
 
     private void ClearInert(string packageKey) => _inertPackages.TryRemove(packageKey, out _);
 
