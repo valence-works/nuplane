@@ -3,9 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Nuplane;
-using Nuplane.Abstractions;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Sources.Directory.Configuration;
+using Nuplane.Sources.Directory.Tests.TestSupport;
 
 namespace Nuplane.Sources.Directory.Tests.Configuration;
 
@@ -43,7 +43,7 @@ public sealed class DirectoryFeedSetupConfigurationTests
             var feed = Assert.Single(feeds);
             Assert.Equal("local-packages", feed.Name);
             Assert.Equal("file", feed.ServiceIndex.Scheme);
-            Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IDesiredPackageSource));
+            Assert.Empty(provider.GetFeedDesiredPackageSources());
             Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IHostedService)
                 && descriptor.ImplementationFactory is not null);
         }

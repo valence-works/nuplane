@@ -5,6 +5,9 @@ using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Setup;
+using Nuplane.Reconciliation.Convergence;
+using Nuplane.Runtime.Tests.TestSupport;
+using Nuplane.Sources;
 using Nuplane.Sources.Directory.Builder;
 using Nuplane.Sources.Directory.Configuration;
 
@@ -65,7 +68,9 @@ public sealed class DirectoryBuilderIntegrationTests
 
             var feed = Assert.Single(feedOptions.Feeds);
             Assert.Equal("cache-only", feed.Name);
-            Assert.DoesNotContain(services, d => d.ServiceType == typeof(IDesiredPackageSource));
+
+            // A cache-role feed should not add any other source.
+            Assert.Empty(provider.GetFeedDesiredPackageSources());
         }
         finally
         {
@@ -187,16 +192,60 @@ public sealed class DirectoryBuilderIntegrationTests
                 });
             });
 
-            // Only one desired source for the feed
-            var sourceDescriptors = services
-                .Where(d => d.ServiceType == typeof(IDesiredPackageSource))
-                .ToList();
-            Assert.Single(sourceDescriptors);
+            using var provider = services.BuildServiceProvider();
+
+            // Only one desired source for the feed.
+            var feedSources = provider.GetFeedDesiredPackageSources().ToList();
+            Assert.Single(feedSources);
         }
         finally
         {
             Cleanup(root);
         }
+    }
+
+    [Fact]
+    public async Task AddNuplane_BuilderOnly_ManifestEnabledViaCodeConfigure_ResolvedSourceYieldsManifestPackages()
+    {
+        using var manifestFile = new TempManifestFile(new[] { new { Id = "Lib.Core", Version = "1.0.0" } });
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // The manifest is enabled purely through code, with no IConfiguration involved,
+        // exercising the builder-only AddNuplane overload.
+        services.Configure<ConvergenceOptions>(options =>
+        {
+            options.Manifest.Enabled = true;
+            options.Manifest.Path = manifestFile.Path;
+        });
+
+        services.AddNuplane(_ => { });
+
+        using var provider = services.BuildServiceProvider();
+
+        var source = Assert.Single(provider.GetServices<IDesiredPackageSource>()
+            .OfType<DesiredManifestPackageSource>());
+
+        var desired = await source.GetDesiredAsync(CancellationToken.None);
+        var package = Assert.Single(desired);
+        Assert.Equal("Lib.Core", package.Id);
+    }
+
+    [Fact]
+    public async Task AddNuplane_BuilderOnly_ManifestDisabledByDefault_ResolvedSourceContributesNothing()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(_ => { });
+
+        using var provider = services.BuildServiceProvider();
+
+        var source = Assert.Single(provider.GetServices<IDesiredPackageSource>()
+            .OfType<DesiredManifestPackageSource>());
+
+        var desired = await source.GetDesiredAsync(CancellationToken.None);
+        Assert.Empty(desired);
     }
 
     private static string CreateTempDir(string suffix)
