@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -208,42 +207,29 @@ public sealed class DirectoryBuilderIntegrationTests
     [Fact]
     public async Task AddNuplane_BuilderOnly_ManifestEnabledViaCodeConfigure_ResolvedSourceYieldsManifestPackages()
     {
-        var manifestPath = Path.Combine(Path.GetTempPath(), $"nuplane-manifest-{Guid.NewGuid():N}.json");
-        File.WriteAllText(manifestPath, JsonSerializer.Serialize(new
+        using var manifestFile = new TempManifestFile(new[] { new { Id = "Lib.Core", Version = "1.0.0" } });
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // The manifest is enabled purely through code, with no IConfiguration involved,
+        // exercising the builder-only AddNuplane overload.
+        services.Configure<ConvergenceOptions>(options =>
         {
-            SchemaVersion = "1.0",
-            GeneratedAtUtc = DateTimeOffset.UtcNow,
-            Packages = new[] { new { Id = "Lib.Core", Version = "1.0.0" } }
-        }));
+            options.Manifest.Enabled = true;
+            options.Manifest.Path = manifestFile.Path;
+        });
 
-        try
-        {
-            var services = new ServiceCollection();
-            services.AddLogging();
+        services.AddNuplane(_ => { });
 
-            // The manifest is enabled purely through code, with no IConfiguration involved,
-            // exercising the builder-only AddNuplane overload.
-            services.Configure<ConvergenceOptions>(options =>
-            {
-                options.Manifest.Enabled = true;
-                options.Manifest.Path = manifestPath;
-            });
+        using var provider = services.BuildServiceProvider();
 
-            services.AddNuplane(_ => { });
+        var source = Assert.Single(provider.GetServices<IDesiredPackageSource>()
+            .OfType<DesiredManifestPackageSource>());
 
-            using var provider = services.BuildServiceProvider();
-
-            var source = Assert.Single(provider.GetServices<IDesiredPackageSource>()
-                .OfType<DesiredManifestPackageSource>());
-
-            var desired = await source.GetDesiredAsync(CancellationToken.None);
-            var package = Assert.Single(desired);
-            Assert.Equal("Lib.Core", package.Id);
-        }
-        finally
-        {
-            try { File.Delete(manifestPath); } catch { }
-        }
+        var desired = await source.GetDesiredAsync(CancellationToken.None);
+        var package = Assert.Single(desired);
+        Assert.Equal("Lib.Core", package.Id);
     }
 
     [Fact]

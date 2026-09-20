@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -957,40 +956,33 @@ public sealed class ConfigurationDrivenRegistrationTests
     [Fact]
     public async Task AddNuplane_FromConfiguration_ManifestEnabled_ResolvedSourceYieldsManifestPackages()
     {
-        var manifestPath = WriteManifestFile(new[]
+        using var manifestFile = new TempManifestFile(new[]
         {
             new { Id = "Lib.Core", Version = "1.0.0" }
         });
 
-        try
-        {
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["Nuplane:Convergence:Manifest:Enabled"] = "true",
-                    ["Nuplane:Convergence:Manifest:Path"] = manifestPath
-                })
-                .Build();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Convergence:Manifest:Enabled"] = "true",
+                ["Nuplane:Convergence:Manifest:Path"] = manifestFile.Path
+            })
+            .Build();
 
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddNuplane(configuration.GetSection("Nuplane"));
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
 
-            using var provider = services.BuildServiceProvider();
+        using var provider = services.BuildServiceProvider();
 
-            // DesiredManifestPackageSource is always registered (the manifest gate now lives
-            // solely in ConvergenceOptions.Manifest.Enabled, honored at read time).
-            var source = Assert.Single(provider.GetServices<IDesiredPackageSource>()
-                .OfType<DesiredManifestPackageSource>());
+        // DesiredManifestPackageSource is always registered (the manifest gate now lives
+        // solely in ConvergenceOptions.Manifest.Enabled, honored at read time).
+        var source = Assert.Single(provider.GetServices<IDesiredPackageSource>()
+            .OfType<DesiredManifestPackageSource>());
 
-            var desired = await source.GetDesiredAsync(CancellationToken.None);
-            var package = Assert.Single(desired);
-            Assert.Equal("Lib.Core", package.Id);
-        }
-        finally
-        {
-            try { File.Delete(manifestPath); } catch { }
-        }
+        var desired = await source.GetDesiredAsync(CancellationToken.None);
+        var package = Assert.Single(desired);
+        Assert.Equal("Lib.Core", package.Id);
     }
 
     [Fact]
@@ -1011,18 +1003,6 @@ public sealed class ConfigurationDrivenRegistrationTests
 
         var desired = await source.GetDesiredAsync(CancellationToken.None);
         Assert.Empty(desired);
-    }
-
-    private static string WriteManifestFile(object packages)
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"nuplane-manifest-{Guid.NewGuid():N}.json");
-        File.WriteAllText(path, JsonSerializer.Serialize(new
-        {
-            SchemaVersion = "1.0",
-            GeneratedAtUtc = DateTimeOffset.UtcNow,
-            Packages = packages
-        }));
-        return path;
     }
 
     private sealed class CapturingLoggerProvider(List<string> messages) : ILoggerProvider

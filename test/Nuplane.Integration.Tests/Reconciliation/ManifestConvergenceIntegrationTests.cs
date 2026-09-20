@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Abstractions;
 using Nuplane.Feeds;
 using Nuplane.Reconciliation;
@@ -210,5 +212,84 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
 
         var state = await store.GetStateAsync(CancellationToken.None);
         Assert.Contains(state.LastSuccessfulSourceSnapshots.Keys, key => key.Contains(nameof(DesiredManifestPackageSource), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AddNuplane_FromConfiguration_ManifestEnabled_ReconciliationCycleIncludesManifestPackage()
+    {
+        var manifestPath = WriteManifestFile(new
+        {
+            SchemaVersion = "1.0",
+            GeneratedAtUtc = DateTimeOffset.UtcNow,
+            Packages = new[]
+            {
+                new { Id = "Lib.Core", Version = "1.0.0" }
+            }
+        });
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Convergence:Manifest:Enabled"] = "true",
+                ["Nuplane:Convergence:Manifest:Path"] = manifestPath,
+                ["Nuplane:Setup:UseInMemoryStore"] = "true"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        var added = await ResolveAndTriggerCycleAsync(services);
+        Assert.Equal("Lib.Core", added.Id);
+    }
+
+    [Fact]
+    public async Task AddNuplane_BuilderOnly_ManifestEnabledViaCodeConfigure_ReconciliationCycleIncludesManifestPackage()
+    {
+        var manifestPath = WriteManifestFile(new
+        {
+            SchemaVersion = "1.0",
+            GeneratedAtUtc = DateTimeOffset.UtcNow,
+            Packages = new[]
+            {
+                new { Id = "Lib.Core", Version = "1.0.0" }
+            }
+        });
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // The manifest is enabled purely through code, with no IConfiguration involved, exercising
+        // the builder-only AddNuplane overload.
+        services.Configure<ConvergenceOptions>(options =>
+        {
+            options.Manifest.Enabled = true;
+            options.Manifest.Path = manifestPath;
+        });
+        services.AddNuplane(nuplane => nuplane.UseInMemoryStore());
+
+        var added = await ResolveAndTriggerCycleAsync(services);
+        Assert.Equal("Lib.Core", added.Id);
+    }
+
+    /// <summary>
+    /// Resolves a DI-composed <see cref="ReconciliationService"/> from <paramref name="services"/>
+    /// and runs one reconciliation cycle, returning the single package the cycle added. Package
+    /// resolution is swapped for the deterministic, offline <see cref="NuGetPackageResolver"/> (the
+    /// last registration wins over the <c>MultiFeedPackageResolver</c> that <c>AddNuplane</c>
+    /// registers by default) so the cycle needs no configured feed and makes no network calls, and
+    /// the store is kept in memory so the cycle never sees state left behind by another test run.
+    /// </summary>
+    private static async Task<ResolvedPackage> ResolveAndTriggerCycleAsync(ServiceCollection services)
+    {
+        services.AddSingleton<IPackageResolver>(new NuGetPackageResolver());
+
+        await using var provider = services.BuildServiceProvider();
+        var reconciliation = provider.GetRequiredService<ReconciliationService>();
+
+        var result = await reconciliation.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
+
+        return Assert.Single(result.ChangeSet.Added);
     }
 }
