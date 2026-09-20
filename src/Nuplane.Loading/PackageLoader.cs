@@ -25,6 +25,7 @@ internal sealed class PackageLoader : IPackageLoader
     private readonly LoadingOptions _options;
     private readonly ILogger<PackageLoader> _logger;
     private readonly HostIntegratedAssemblyResolver? _hostIntegratedAssemblyResolver;
+    private readonly string? _hostTargetFrameworkOverride;
     private readonly ConcurrentDictionary<string, AssemblyLoadContext> _contexts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, PackageLoadSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, LoadedGraphCacheEntry> _loadedGraphs = new(StringComparer.OrdinalIgnoreCase);
@@ -33,6 +34,9 @@ internal sealed class PackageLoader : IPackageLoader
     /// <summary>
     /// Initializes a new instance of <see cref="PackageLoader"/> with an optional shared assembly policy matcher
     /// and an optional set of activation gates consulted before any package graph is loaded.
+    /// The trailing <c>hostTargetFrameworkOverride</c> replaces the current process's target framework for
+    /// asset selection; it is <see langword="null"/> for a host, which always resolves assets for the
+    /// framework it is itself running on.
     /// </summary>
     public PackageLoader(
         SharedAssemblyPolicyMatcher? matcher = null,
@@ -42,7 +46,8 @@ internal sealed class PackageLoader : IPackageLoader
         IOptions<LoadingOptions>? options = null,
         ILogger<PackageLoader>? logger = null,
         HostIntegratedAssemblyResolver? hostIntegratedAssemblyResolver = null,
-        IEnumerable<IPackageActivationGate>? activationGates = null)
+        IEnumerable<IPackageActivationGate>? activationGates = null,
+        string? hostTargetFrameworkOverride = null)
     {
         _matcher = matcher ?? new SharedAssemblyPolicyMatcher();
         _hostIntegratedResolutionCatalog = hostIntegratedResolutionCatalog ?? new HostIntegratedAssemblyResolutionCatalog();
@@ -51,6 +56,9 @@ internal sealed class PackageLoader : IPackageLoader
         _options = options?.Value ?? new LoadingOptions();
         _logger = logger ?? NullLogger<PackageLoader>.Instance;
         _hostIntegratedAssemblyResolver = hostIntegratedAssemblyResolver;
+        _hostTargetFrameworkOverride = string.IsNullOrWhiteSpace(hostTargetFrameworkOverride)
+            ? null
+            : hostTargetFrameworkOverride.Trim();
     }
 
     /// <summary>
@@ -72,7 +80,7 @@ internal sealed class PackageLoader : IPackageLoader
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
 
-        var selection = ResolveAssemblySelection(installPath, packageId, hostTargetFrameworkOverride: null);
+        var selection = ResolveAssemblySelection(installPath, packageId, _hostTargetFrameworkOverride);
         var assemblyPaths = EnumerateAssemblyCandidatesExcludingNativeAssets(selection.CandidateSearchRoot, installPath)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -288,7 +296,7 @@ internal sealed class PackageLoader : IPackageLoader
 
             try
             {
-                var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath, package.Id);
+                var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath, package.Id, _hostTargetFrameworkOverride);
                 if (HostRuntimeAssemblyCatalog.Contains(mainAssemblyPath))
                 {
                     MarkInert(key);
@@ -609,7 +617,7 @@ internal sealed class PackageLoader : IPackageLoader
         {
             try
             {
-                var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath, package.Id);
+                var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath, package.Id, _hostTargetFrameworkOverride);
                 if (HostRuntimeAssemblyCatalog.Contains(mainAssemblyPath))
                 {
                     hostRuntimePackages.Add(new(package.Id, package.Version, package.InstallPath));
@@ -825,7 +833,12 @@ internal sealed class PackageLoader : IPackageLoader
             .ToArray();
     }
 
-    private static string BuildGraphKey(IReadOnlyList<ResolvedPackage> packages) =>
+    /// <summary>
+    /// The single definition of the deterministic load-context key of a package graph. It is stable for
+    /// the same set of package identities regardless of which code path assembles the graph, which is what
+    /// lets a caller outside this class recognise a graph that is already loaded into this process.
+    /// </summary>
+    internal static string BuildGraphKey(IReadOnlyList<ResolvedPackage> packages) =>
         "graph:" + string.Join('|', packages
             .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
@@ -927,9 +940,6 @@ internal sealed class PackageLoader : IPackageLoader
 
         return null;
     }
-
-    private static string ResolveMainAssemblyPath(string installPath, string packageId) =>
-        ResolveMainAssemblyPath(installPath, packageId, hostTargetFrameworkOverride: null);
 
     private static string ResolveMainAssemblyPath(string installPath, string packageId, string? hostTargetFrameworkOverride)
         => ResolveAssemblySelection(installPath, packageId, hostTargetFrameworkOverride).MainAssemblyPath;
@@ -1193,6 +1203,15 @@ internal sealed class PackageLoader : IPackageLoader
     }
 
     private static string GetFrameworkDisplayName(FrameworkTarget framework) => framework.DisplayName;
+
+    /// <summary>
+    /// Determines whether <paramref name="targetFrameworkMoniker"/> is a moniker this loader's asset
+    /// selection understands, so a caller supplying a target framework override can be rejected up front
+    /// instead of silently resolving assets for no framework at all.
+    /// </summary>
+    internal static bool IsSupportedTargetFrameworkMoniker(string targetFrameworkMoniker) =>
+        !string.IsNullOrWhiteSpace(targetFrameworkMoniker)
+        && TryParseFrameworkTarget(targetFrameworkMoniker.Trim(), out _);
 
     private enum FrameworkKind
     {

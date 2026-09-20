@@ -265,108 +265,17 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
         return (graphsRequiringLoad, inertPackageCount);
     }
 
+    /// <summary>
+    /// Builds the package graphs to load from the authoritative post-reconcile store state, through the
+    /// one grouping rule the host-free entry point also uses. Without a store there is no activation
+    /// record to group by, so each package loads on its own.
+    /// </summary>
     private async Task<IReadOnlyList<IReadOnlyList<ResolvedPackage>>> BuildPackageGraphsAsync(
         IReadOnlyList<ResolvedPackage> packagesToLoad,
-        CancellationToken cancellationToken)
-    {
-        if (_storeRegistry is null)
-        {
-            return packagesToLoad.Select(static package => (IReadOnlyList<ResolvedPackage>)[package]).ToArray();
-        }
-
-        var state = await _storeRegistry.GetStateAsync(cancellationToken);
-        packagesToLoad = packagesToLoad
-            .Where(package => state.ActiveVersionById.TryGetValue(package.Id, out var activeVersion)
-                && string.Equals(activeVersion, package.Version, StringComparison.OrdinalIgnoreCase)
-                && state.ActivePackageDescriptorsByIdNormalized.TryGetValue(package.Id, out var descriptor)
-                && string.Equals(descriptor.Version, package.Version, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-
-        if (packagesToLoad.Count <= 1)
-        {
-            return packagesToLoad.Select(static package => (IReadOnlyList<ResolvedPackage>)[package]).ToArray();
-        }
-
-        var activeGraphs = state.ActiveGraphsByIdNormalized.Values
-            .Where(static graph => graph.Status == GraphActivationStatus.Active)
-            .OrderBy(static graph => graph.GraphId, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static graph => graph.GenerationId, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (activeGraphs.Length > 0)
-        {
-            return BuildPackageGraphsFromActiveGraphs(packagesToLoad, activeGraphs);
-        }
-
-        var descriptors = state.ActivePackageDescriptorsByIdNormalized;
-        return packagesToLoad
-            .GroupBy(package => descriptors.TryGetValue(package.Id, out var descriptor)
-                    && string.Equals(descriptor.Version, package.Version, StringComparison.OrdinalIgnoreCase)
-                    ? descriptor.GraphGenerationId
-                    : BuildKey(package.Id, package.Version),
-                StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static group => group.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(static group => (IReadOnlyList<ResolvedPackage>)group
-                .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
-                .ToArray())
-            .ToArray();
-    }
-
-    private static IReadOnlyList<IReadOnlyList<ResolvedPackage>> BuildPackageGraphsFromActiveGraphs(
-        IReadOnlyList<ResolvedPackage> packagesToLoad,
-        IReadOnlyList<GraphActivationRecord> activeGraphs)
-    {
-        var packagesById = packagesToLoad.ToDictionary(static package => package.Id, StringComparer.OrdinalIgnoreCase);
-        var packageIdsToLoad = new HashSet<string>(packagesById.Keys, StringComparer.OrdinalIgnoreCase);
-        var graphGroups = new List<HashSet<string>>();
-
-        foreach (var graph in activeGraphs)
-        {
-            var graphPackageIds = graph.NodePackageIds
-                .Where(packageIdsToLoad.Contains)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            if (graphPackageIds.Count == 0)
-            {
-                continue;
-            }
-
-            var overlappingGroups = graphGroups
-                .Where(group => group.Overlaps(graphPackageIds))
-                .ToArray();
-
-            if (overlappingGroups.Length == 0)
-            {
-                graphGroups.Add(graphPackageIds);
-                continue;
-            }
-
-            var mergedGroup = overlappingGroups[0];
-            mergedGroup.UnionWith(graphPackageIds);
-
-            foreach (var overlappingGroup in overlappingGroups.Skip(1))
-            {
-                mergedGroup.UnionWith(overlappingGroup);
-                graphGroups.Remove(overlappingGroup);
-            }
-        }
-
-        var groupedPackageIds = graphGroups
-            .SelectMany(static group => group)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var packageId in packageIdsToLoad.Where(packageId => !groupedPackageIds.Contains(packageId)))
-        {
-            graphGroups.Add(new(StringComparer.OrdinalIgnoreCase) { packageId });
-        }
-
-        return graphGroups
-            .OrderBy(static group => group.Min(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase)
-            .Select(group => (IReadOnlyList<ResolvedPackage>)group
-                .Select(packageId => packagesById[packageId])
-                .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
-                .ToArray())
-            .ToArray();
-    }
+        CancellationToken cancellationToken) =>
+        _storeRegistry is null
+            ? PackageGraphGrouping.AsSinglePackageGraphs(packagesToLoad)
+            : PackageGraphGrouping.ForActiveState(
+                packagesToLoad,
+                await _storeRegistry.GetStateAsync(cancellationToken));
 }

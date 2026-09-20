@@ -91,6 +91,12 @@ var activePackages = await NuplaneStore.ReadActivePackagesAsync(
     new StoreRegistryOptions { StateFilePath = configuredPath });
 ```
 
+When a tool needs more than the active package set — the graph activation records that say which
+packages were activated together, for instance — `NuplaneStore.ReadStateAsync` performs the same
+read and returns the whole `StoreStateRecord`, and `NuplaneStore.GetActivePackages(state)` projects
+the active packages from it. Reading once and projecting keeps every part of the answer on one
+snapshot of the file; a missing state file yields `StoreStateRecord.Empty()`.
+
 Both overloads are strictly read-only — they open `store-state.json` for reading only, sharing the
 file with a concurrent writer, and never create, rewrite, or migrate the file or its directory, so
 it is safe to call them while a running host owns the file. A missing state file or a state file
@@ -104,6 +110,128 @@ concurrent write can observe one of two transient outcomes instead of a consiste
 `IOException` (a sharing violation, if the write briefly holds an exclusive lock) or a
 `JsonException` (torn or partial JSON content, if the read observes a write in progress). Both are
 safe to retry; the reader itself does not retry on the caller's behalf.
+
+### Host-free loading of the active package set
+
+- **Applicability:** `Optional Module`
+- **Stability note:** `Recently Changed`
+
+`Nuplane.Loading.NuplaneHostIntegratedLoader` is the second half of the offline flow: it loads an
+already-resolved active package set into assemblies exactly the way `PackageLoadMode.HostIntegrated`
+loading does inside a running host — without a host, hosted services, reconciliation, a DI container,
+or network access. Tooling that has to resolve a Nuplane host's module or provider assemblies the way
+that host's own process resolves them uses it instead of re-implementing the loader.
+
+`LoadFromStateAsync` is the entry point to reach for. Point it at the host's `store-state.json` and
+it performs both steps — the same strictly read-only offline read `NuplaneStore` performs, then the
+load:
+
+```csharp
+var result = await NuplaneHostIntegratedLoader.LoadFromStateAsync(
+    "/var/lib/nuplane/.nuplane/store-state.json");
+
+foreach (var package in result.Packages.Where(p => p.Status == PackageLoadStatus.Loaded))
+{
+    Console.WriteLine($"{package.PackageId} {package.Version} -> {package.LoadMode}");
+}
+
+// Resolvable by name from the default context, through the same Default.Resolving hook a host installs.
+var providerType = Type.GetType("Acme.Provider.SqlProvider, Acme.Provider");
+```
+
+An overload accepts a `StoreRegistryOptions` and resolves the effective state file path the same way a
+running host does, mirroring `NuplaneStore.ReadStateAsync`:
+
+```csharp
+var result = await NuplaneHostIntegratedLoader.LoadFromStateAsync(
+    new StoreRegistryOptions { StateFilePath = configuredPath });
+```
+
+**`LoadFromStateAsync` is the only entry point with guaranteed grouping parity.** It groups packages
+into load graphs exactly as the host groups them — from the `Active` graph activation records the state
+records, merging records that share a package, and falling back to the graph generation identity on
+each active package descriptor only when the state holds no active graph record. Only the state carries
+those records. The state is read once, so the package set and the graph records always come from one
+snapshot of the file.
+
+Each graph is loaded into one non-collectible context, so a package and its dependencies resolve each
+other exactly as they do in the host. Because the loaded assemblies are published through the same
+assembly-resolution catalog and the same `AssemblyLoadContext.Default.Resolving` hook, `Type.GetType`,
+`Assembly.Load`, and a scan of `AppDomain.CurrentDomain.GetAssemblies()` all see them.
+
+`LoadActivePackagesAsync` takes an `IReadOnlyList<ActivePackage>` instead, for callers that filter or
+assemble the set themselves — for example after reading it with `NuplaneStore.ReadActivePackagesAsync`:
+
+```csharp
+var activePackages = await NuplaneStore.ReadActivePackagesAsync(stateFilePath);
+var result = await NuplaneHostIntegratedLoader.LoadActivePackagesAsync(
+    activePackages.Where(p => p.PackageRole == ActivePackageRole.Root).ToArray());
+```
+
+An `ActivePackage` carries its graph generation identity but not the store's graph activation records,
+so that entry point groups by graph generation identity alone. It matches the host whenever the state
+holds no active graph record, and whenever every active graph record's node set matches the generations
+the descriptors carry — the ordinary case after a single reconcile. It can differ when the store holds
+several active graph records that share packages, because a record from an earlier reconcile survives
+until a newer graph with the same root set replaces it: packages the host would load into one context
+can then be split across two. Use `LoadFromStateAsync` when grouping parity with the host matters.
+
+**The load is irreversible for the lifetime of the process.** Host-integrated assemblies go into
+non-collectible load contexts and the resolving hook is never removed, so nothing loaded this way can
+be unloaded, replaced, or hidden again. Use it from short-lived worker processes that exit after doing
+their work, not from a long-running process that expects to reload a package set. The entry point
+never writes: it does not touch the store, the state file, completion markers, or install directories.
+
+Per-package problems are reported, not thrown. A graph whose install path is missing on disk, which
+contains no loadable assembly, or which an activation gate refuses is reported as an ordinary load
+failure for every package in it, in `result.Packages` (status `Failed`, with the reason in
+`Diagnostics`) and in `result.FailedByPackageId`. A missing state file loads nothing and returns an
+empty result, the same "nothing persisted yet" outcome the offline reader reports. Only a malformed
+request throws: a null argument, a blank state file path, a package with a blank identifier, version,
+or install path, duplicate package identifiers, or an unrecognized target framework override.
+
+Options mirror what a host can configure:
+
+```csharp
+var options = new HostIntegratedLoadOptions
+{
+    // Resolve assets for the framework the host that installed the packages ran on,
+    // instead of the framework of this process. Defaults to the current process.
+    TargetFrameworkOverride = "net8.0",
+    LoggerFactory = loggerFactory
+};
+
+// The same refusal logic a host applies before activating a graph.
+options.ActivationGates.Add(new SchemaVersionActivationGate());
+
+// Supply the same shared assemblies the host configures, or the two processes can bind
+// different copies of a shared assembly.
+options.SharedAssemblies.Add(new SharedAssemblyIdentity("Acme.Contracts", "", 1));
+
+var result = await NuplaneHostIntegratedLoader.LoadFromStateAsync(stateFilePath, options);
+```
+
+A gate must not call back into `NuplaneHostIntegratedLoader`: a load holds a process-wide lock while
+its gates run, so a nested call throws `InvalidOperationException` rather than waiting for a lock that
+can never be released. Because gates fail closed, that throw refuses the graph the gate was evaluating and
+is reported as an ordinary load failure naming the gate. Concurrent calls from unrelated flows are
+safe and are serialized.
+
+`TargetFrameworkOverride` overrides only the target framework. Runtime-identifier-specific assets —
+both `runtimes/<rid>/lib` managed assets and native libraries — are still selected for the runtime
+identifier of the current process, because they have to be loadable by it; there is no
+runtime-identifier override.
+
+Calling the entry point more than once in a process is safe: the resolving hook is installed exactly
+once, and a package graph that is already loaded is reported from the load that loaded it rather than
+loaded a second time. Asking for an already-loaded graph under a different `TargetFrameworkOverride`
+throws `InvalidOperationException` instead, because the requested assets can never be the ones the
+process already holds. A graph that another Nuplane composition in the same process has already loaded
+host-integrated — a composed host, typically — is refused as an ordinary load failure instead of being
+loaded into a second context, because two copies of the same assemblies in one process can silently
+disagree about type identity. A host-free load is therefore for processes that do not compose a
+Nuplane host; in a process that does, read the assemblies from that host's `IPackageAssemblyCatalog`
+instead.
 
 ## Configuration-driven adoption
 
