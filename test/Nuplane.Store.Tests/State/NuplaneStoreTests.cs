@@ -48,6 +48,17 @@ public sealed class NuplaneStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task ReadActivePackagesAsync_WhenParentDirectoryMissing_ReturnsEmptyCollection()
+    {
+        var stateFilePath = Path.Combine(_tempRoot, "nested", "store-state.json");
+
+        var packages = await NuplaneStore.ReadActivePackagesAsync(stateFilePath, CancellationToken.None);
+
+        Assert.Empty(packages);
+        Assert.False(Directory.Exists(_tempRoot));
+    }
+
+    [Fact]
     public async Task ReadActivePackagesAsync_WhenNoActivePackagesRecorded_ReturnsEmptyCollection()
     {
         var stateFilePath = await WriteStateAsync(StoreStateRecord.Empty());

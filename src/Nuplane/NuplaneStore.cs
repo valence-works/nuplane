@@ -73,16 +73,21 @@ public static class NuplaneStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stateFilePath);
 
-        if (!File.Exists(stateFilePath))
+        FileStream stream;
+        try
+        {
+            stream = new FileStream(
+                stateFilePath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
             return [];
         }
 
-        await using var stream = new FileStream(
-            stateFilePath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite | FileShare.Delete);
+        await using var _ = stream;
 
         var state = await StoreStateSerializer.DeserializeAsync(stream, cancellationToken).ConfigureAwait(false);
 
