@@ -73,4 +73,26 @@ internal static partial class LoadingLogger
         this ILogger logger,
         string packageKeys,
         string correlationId);
+
+    [LoggerMessage(
+        EventId = 2108,
+        Level = LogLevel.Warning,
+        Message = "Package activation gate {GateType} blocked graph {GraphKey} containing {PackageKeys} before loading: {Reason}")]
+    public static partial void PackageActivationGateBlocked(
+        this ILogger logger,
+        string gateType,
+        string graphKey,
+        string packageKeys,
+        string reason);
+
+    [LoggerMessage(
+        EventId = 2109,
+        Level = LogLevel.Warning,
+        Message = "Package activation gate {GateType} failed while evaluating graph {GraphKey} containing {PackageKeys} and was treated as a block.")]
+    public static partial void PackageActivationGateFailed(
+        this ILogger logger,
+        string gateType,
+        string graphKey,
+        string packageKeys,
+        Exception exception);
 }

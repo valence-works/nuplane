@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
@@ -20,6 +21,7 @@ internal sealed class PackageLoader : IPackageLoader
     private readonly SharedAssemblyPolicyMatcher _matcher;
     private readonly HostIntegratedAssemblyResolutionCatalog _hostIntegratedResolutionCatalog;
     private readonly PackageLoadModeSelector _loadModeSelector;
+    private readonly IReadOnlyList<IPackageActivationGate> _activationGates;
     private readonly LoadingOptions _options;
     private readonly ILogger<PackageLoader> _logger;
     private readonly HostIntegratedAssemblyResolver? _hostIntegratedAssemblyResolver;
@@ -29,7 +31,8 @@ internal sealed class PackageLoader : IPackageLoader
     private readonly ConcurrentDictionary<string, byte> _inertPackages = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Initializes a new instance of <see cref="PackageLoader"/> with an optional shared assembly policy matcher.
+    /// Initializes a new instance of <see cref="PackageLoader"/> with an optional shared assembly policy matcher
+    /// and an optional set of activation gates consulted before any package graph is loaded.
     /// </summary>
     public PackageLoader(
         SharedAssemblyPolicyMatcher? matcher = null,
@@ -38,11 +41,13 @@ internal sealed class PackageLoader : IPackageLoader
         IEnumerable<IPackageLoadModeAdvisor>? loadModeAdvisors = null,
         IOptions<LoadingOptions>? options = null,
         ILogger<PackageLoader>? logger = null,
-        HostIntegratedAssemblyResolver? hostIntegratedAssemblyResolver = null)
+        HostIntegratedAssemblyResolver? hostIntegratedAssemblyResolver = null,
+        IEnumerable<IPackageActivationGate>? activationGates = null)
     {
         _matcher = matcher ?? new SharedAssemblyPolicyMatcher();
         _hostIntegratedResolutionCatalog = hostIntegratedResolutionCatalog ?? new HostIntegratedAssemblyResolutionCatalog();
         _loadModeSelector = loadModeSelector ?? new PackageLoadModeSelector(loadModeAdvisors);
+        _activationGates = activationGates?.ToArray() ?? [];
         _options = options?.Value ?? new LoadingOptions();
         _logger = logger ?? NullLogger<PackageLoader>.Instance;
         _hostIntegratedAssemblyResolver = hostIntegratedAssemblyResolver;
@@ -122,8 +127,34 @@ internal sealed class PackageLoader : IPackageLoader
             var graphKey = BuildGraphKey(packageGraph);
             var graphDecision = await _loadModeSelector.SelectGraphAsync(packageGraph, _options, graphKey, cancellationToken).ConfigureAwait(false);
             var selections = graphDecision.Selections;
+            var usesPerPackageContexts = UsesPerPackageContexts(packageGraph, selections);
+            var graphLoadMode = ResolveGraphLoadMode(selections);
 
-            if (packageGraph.Count <= 1 && selections.All(static selection => selection.LoadMode == PackageLoadMode.Collectible))
+            // Activation gates are consulted after the load mode is decided and before either load path runs,
+            // so nothing of a blocked graph is ever resolved, loaded, or published.
+            var activationBlockMessage = await EvaluateActivationGatesAsync(
+                packageGraph,
+                graphKey,
+                graphLoadMode,
+                usesPerPackageContexts,
+                cancellationToken).ConfigureAwait(false);
+
+            if (activationBlockMessage is not null)
+            {
+                // Recorded through the same bookkeeping a load failure uses, so a block is indistinguishable
+                // from an ordinary load failure for every caller downstream.
+                RecordGraphFailure(
+                    packageGraph,
+                    graphKey,
+                    graphLoadMode,
+                    usesPerPackageContexts,
+                    activationBlockMessage,
+                    failed,
+                    graphDecision.DiagnosticsByPackageKey);
+                continue;
+            }
+
+            if (usesPerPackageContexts)
             {
                 EnsurePackagesLoaded(packageGraph, sharedPolicy, cancellationToken, loaded, failed, graphDecision.DiagnosticsByPackageKey);
                 continue;
@@ -134,6 +165,107 @@ internal sealed class PackageLoader : IPackageLoader
 
         return new(loaded, failed);
     }
+
+    // The single definition of the load-path dispatch rule: a single-package, all-collectible graph is loaded
+    // through per-package contexts instead of one shared graph context. Both the dispatch itself and the
+    // activation-gate pre-check ask this, so they always agree on which path a graph would take.
+    private static bool UsesPerPackageContexts(
+        IReadOnlyList<ResolvedPackage> packageGraph,
+        IReadOnlyList<PackageLoadModeSelection> selections) =>
+        packageGraph.Count <= 1 && selections.All(static selection => selection.LoadMode == PackageLoadMode.Collectible);
+
+    private static PackageLoadMode ResolveGraphLoadMode(IReadOnlyList<PackageLoadModeSelection> selections) =>
+        selections.Any(static selection => selection.LoadMode == PackageLoadMode.HostIntegrated)
+            ? PackageLoadMode.HostIntegrated
+            : PackageLoadMode.Collectible;
+
+    /// <summary>
+    /// Consults every registered activation gate for a graph that is about to be loaded, in registration
+    /// order and sequentially. Returns the failure message that must be surfaced for the graph, or
+    /// <see langword="null"/> when no gate refused it and loading may proceed.
+    /// </summary>
+    private async ValueTask<string?> EvaluateActivationGatesAsync(
+        IReadOnlyList<ResolvedPackage> packageGraph,
+        string graphKey,
+        PackageLoadMode graphLoadMode,
+        bool usesPerPackageContexts,
+        CancellationToken cancellationToken)
+    {
+        // Without a gate there is nothing to decide; an empty graph activates nothing; and a graph
+        // generation that is already loaded is not being activated again, so its gates already ran.
+        if (_activationGates.Count == 0
+            || packageGraph.Count == 0
+            || IsGraphAlreadyLoaded(packageGraph, graphKey, graphLoadMode, usesPerPackageContexts))
+        {
+            return null;
+        }
+
+        var context = new PackageActivationContext(
+            graphKey,
+            graphLoadMode,
+            packageGraph
+                .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
+                .ToArray());
+        var packageKeys = string.Join(", ", context.Packages.Select(static package => BuildKey(package.Id, package.Version)));
+
+        // Every gate is consulted even after one blocks, so an operator sees every blocker at once.
+        var blockReasons = new List<string>();
+        foreach (var gate in _activationGates)
+        {
+            var gateType = gate.GetType().FullName ?? gate.GetType().Name;
+            PackageActivationGateResult? result;
+
+            try
+            {
+                result = await gate.EvaluateAsync(context, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // The caller asked to stop. That is not a gate decision and must stay a cancellation.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Fail closed: a gate that cannot answer never means "allow".
+                _logger.PackageActivationGateFailed(gateType, graphKey, packageKeys, ex);
+                blockReasons.Add($"gate '{gateType}' failed to evaluate activation and was treated as a block: {ex.GetType().Name}: {ex.Message}");
+                continue;
+            }
+
+            if (result is null)
+            {
+                const string missingResultReason = "the gate returned no activation result";
+                _logger.PackageActivationGateBlocked(gateType, graphKey, packageKeys, missingResultReason);
+                blockReasons.Add($"gate '{gateType}' was treated as a block because {missingResultReason}");
+                continue;
+            }
+
+            if (result.IsAllowed)
+            {
+                continue;
+            }
+
+            var reason = result.Reason ?? "no reason was supplied";
+            _logger.PackageActivationGateBlocked(gateType, graphKey, packageKeys, reason);
+            blockReasons.Add($"gate '{gateType}' blocked activation: {reason}");
+        }
+
+        return blockReasons.Count == 0
+            ? null
+            : $"Activation of package graph '{graphKey}' ({packageKeys}) was blocked before loading. {string.Join(" ", blockReasons)}";
+    }
+
+    // Asks the very predicates the load paths themselves use, so gate evaluation and the load short-circuits
+    // can never disagree about whether a graph is about to be really loaded.
+    private bool IsGraphAlreadyLoaded(
+        IReadOnlyList<ResolvedPackage> packageGraph,
+        string graphKey,
+        PackageLoadMode graphLoadMode,
+        bool usesPerPackageContexts) =>
+        usesPerPackageContexts
+            ? packageGraph.All(package => TryGetLoadedSession(BuildKey(package.Id, package.Version), out _))
+            : TryGetLoadedGraphSessions(graphKey, graphLoadMode, out _);
 
     private void EnsurePackagesLoaded(
         IReadOnlyList<ResolvedPackage> packages,
@@ -148,7 +280,7 @@ internal sealed class PackageLoader : IPackageLoader
             cancellationToken.ThrowIfCancellationRequested();
 
             var key = BuildKey(package.Id, package.Version);
-            if (_sessions.TryGetValue(key, out var existing) && existing.IsLoaded)
+            if (TryGetLoadedSession(key, out var existing))
             {
                 loaded.Add(existing);
                 continue;
@@ -192,21 +324,15 @@ internal sealed class PackageLoader : IPackageLoader
             }
             catch (Exception ex)
             {
-                // A package reported as failed must stay retryable, so it can never remain marked inert.
-                ClearInert(key);
-
-                failed[package.Id] = ex.Message;
-                _sessions[key] = new(
+                RecordPackageFailure(
                     package.Id,
                     package.Version,
                     package.InstallPath,
                     key,
-                    DateTimeOffset.UtcNow,
-                    IsLoaded: false,
-                    LastError: ex.Message,
                     PackageLoadMode.Collectible,
-                    FrameworkIntegrationSafe: false,
-                    LoadModeDiagnostics: ResolveLoadModeDiagnostics(diagnosticsByPackageKey, key));
+                    ex.Message,
+                    failed,
+                    diagnosticsByPackageKey);
             }
         }
     }
@@ -220,13 +346,9 @@ internal sealed class PackageLoader : IPackageLoader
         IReadOnlyDictionary<string, IReadOnlyList<LoadModeDecisionDiagnostic>> diagnosticsByPackageKey)
     {
         var graphKey = BuildGraphKey(packages);
-        var graphLoadMode = selections.Any(static selection => selection.LoadMode == PackageLoadMode.HostIntegrated)
-            ? PackageLoadMode.HostIntegrated
-            : PackageLoadMode.Collectible;
+        var graphLoadMode = ResolveGraphLoadMode(selections);
 
-        if (_loadedGraphs.TryGetValue(graphKey, out var cachedGraph)
-            && cachedGraph.LoadMode == graphLoadMode
-            && TryGetLoadedGraphSessions(cachedGraph, graphKey, graphLoadMode, out var existingGraphSessions))
+        if (TryGetLoadedGraphSessions(graphKey, graphLoadMode, out var existingGraphSessions))
         {
             loaded.AddRange(existingGraphSessions);
             return new(loaded, failed);
@@ -354,42 +476,57 @@ internal sealed class PackageLoader : IPackageLoader
                     _hostIntegratedResolutionCatalog.RemovePackage(package.Id, package.Version);
                 }
 
-                // A package reported as failed must stay retryable, so it can never remain marked inert.
-                ClearInert(key);
-
-                failed[package.Id] = ex.Message;
-                _sessions[key] = new(
+                RecordPackageFailure(
                     package.Id,
                     package.Version,
                     package.InstallPath,
                     graphKey,
-                    DateTimeOffset.UtcNow,
-                    IsLoaded: false,
-                    LastError: ex.Message,
                     graphLoadMode,
-                    FrameworkIntegrationSafe: false,
-                    LoadModeDiagnostics: ResolveLoadModeDiagnostics(diagnosticsByPackageKey, key));
+                    ex.Message,
+                    failed,
+                    diagnosticsByPackageKey);
             }
         }
 
         return new(loaded, failed);
     }
 
+    /// <summary>
+    /// The single definition of "this package version is already loaded", used both by the per-package load
+    /// path and by the activation-gate pre-check.
+    /// </summary>
+    private bool TryGetLoadedSession(string packageKey, [NotNullWhen(true)] out PackageLoadSession? session)
+    {
+        session = _sessions.TryGetValue(packageKey, out var existing) && existing.IsLoaded
+            ? existing
+            : null;
+
+        return session is not null;
+    }
+
+    /// <summary>
+    /// The single definition of "this graph generation is already loaded in this mode", used both by the
+    /// graph load path and by the activation-gate pre-check.
+    /// </summary>
     private bool TryGetLoadedGraphSessions(
-        LoadedGraphCacheEntry cachedGraph,
         string graphKey,
         PackageLoadMode graphLoadMode,
         out IReadOnlyList<PackageLoadSession> existingGraphSessions)
     {
+        existingGraphSessions = [];
+
+        if (!_loadedGraphs.TryGetValue(graphKey, out var cachedGraph) || cachedGraph.LoadMode != graphLoadMode)
+        {
+            return false;
+        }
+
         var sessions = new List<PackageLoadSession>(cachedGraph.LoadablePackageKeys.Count);
         foreach (var key in cachedGraph.LoadablePackageKeys)
         {
-            if (!_sessions.TryGetValue(key, out var session)
-                || !session.IsLoaded
+            if (!TryGetLoadedSession(key, out var session)
                 || !string.Equals(session.ContextKey, graphKey, StringComparison.OrdinalIgnoreCase)
                 || session.LoadMode != graphLoadMode)
             {
-                existingGraphSessions = [];
                 return false;
             }
 
@@ -398,6 +535,66 @@ internal sealed class PackageLoader : IPackageLoader
 
         existingGraphSessions = sessions;
         return true;
+    }
+
+    /// <summary>
+    /// The single definition of how a package that could not be loaded is recorded: the failure reason for the
+    /// caller, a non-loaded session carrying the same reason, and a cleared inert marker so the package stays
+    /// retryable. Every load failure and every activation block goes through here.
+    /// </summary>
+    private void RecordPackageFailure(
+        string packageId,
+        string version,
+        string installPath,
+        string contextKey,
+        PackageLoadMode loadMode,
+        string message,
+        Dictionary<string, string> failed,
+        IReadOnlyDictionary<string, IReadOnlyList<LoadModeDecisionDiagnostic>>? diagnosticsByPackageKey)
+    {
+        var key = BuildKey(packageId, version);
+
+        // A package reported as failed must stay retryable, so it can never remain marked inert.
+        ClearInert(key);
+
+        failed[packageId] = message;
+        _sessions[key] = new(
+            packageId,
+            version,
+            installPath,
+            contextKey,
+            DateTimeOffset.UtcNow,
+            IsLoaded: false,
+            LastError: message,
+            loadMode,
+            FrameworkIntegrationSafe: false,
+            LoadModeDiagnostics: ResolveLoadModeDiagnostics(diagnosticsByPackageKey, key));
+    }
+
+    // Fails every member of a graph that was refused before loading started: there is no load context, no
+    // published catalog entry, and no cached graph generation to unwind, so only the per-package failure
+    // bookkeeping applies — the same bookkeeping the load paths use when they fail.
+    private void RecordGraphFailure(
+        IReadOnlyList<ResolvedPackage> packages,
+        string graphKey,
+        PackageLoadMode graphLoadMode,
+        bool usesPerPackageContexts,
+        string message,
+        Dictionary<string, string> failed,
+        IReadOnlyDictionary<string, IReadOnlyList<LoadModeDecisionDiagnostic>> diagnosticsByPackageKey)
+    {
+        foreach (var package in packages)
+        {
+            RecordPackageFailure(
+                package.Id,
+                package.Version,
+                package.InstallPath,
+                usesPerPackageContexts ? BuildKey(package.Id, package.Version) : graphKey,
+                usesPerPackageContexts ? PackageLoadMode.Collectible : graphLoadMode,
+                message,
+                failed,
+                diagnosticsByPackageKey);
+        }
     }
 
     private GraphPackageResolution ResolveGraphPackages(IReadOnlyList<ResolvedPackage> packages)
@@ -458,7 +655,19 @@ internal sealed class PackageLoader : IPackageLoader
         }
     }
 
-    private void MarkInert(string packageKey) => _inertPackages[packageKey] = 0;
+    private void MarkInert(string packageKey)
+    {
+        _inertPackages[packageKey] = 0;
+
+        // A package the loader has just evaluated as an inert graph member has no outstanding failure. Drop a
+        // failed session left by an earlier attempt — for example a graph an activation gate refused before it
+        // could be resolved — so read surfaces report the package as skipped, exactly as they would had the
+        // earlier attempt never happened.
+        if (_sessions.TryGetValue(packageKey, out var session) && !session.IsLoaded)
+        {
+            _sessions.TryRemove(new KeyValuePair<string, PackageLoadSession>(packageKey, session));
+        }
+    }
 
     private void ClearInert(string packageKey) => _inertPackages.TryRemove(packageKey, out _);
 

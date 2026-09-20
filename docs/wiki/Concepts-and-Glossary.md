@@ -120,6 +120,15 @@ The built-in advisor reads Nuplane package metadata; future advisors can inspect
 - Applied in: [Usage Guide](Usage-Guide.md), [Package Authoring](Package-Authoring.md)
 - Canonical anchors: `src/Nuplane.Loading.Abstractions/IPackageLoadModeAdvisor.cs`
 
+### Package activation gate
+
+A host-owned extension point that can refuse to activate a resolved package graph.
+Gates are consulted after load-mode selection and before any load context exists, they are fail-closed (a gate that throws or answers nothing blocks), and a block surfaces as an ordinary load failure that is re-evaluated on the next load attempt.
+
+- **Applicability:** `Optional Module`
+- Applied in: [Usage Guide](Usage-Guide.md)
+- Canonical anchors: `src/Nuplane.Loading.Abstractions/IPackageActivationGate.cs`, `src/Nuplane.Loading/PackageLoader.cs`
+
 ### Nuplane package metadata
 
 Package-authored metadata stored in package-root `nuplane.json`.

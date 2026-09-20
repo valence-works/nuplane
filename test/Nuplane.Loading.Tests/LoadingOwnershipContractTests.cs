@@ -30,6 +30,9 @@ public sealed class LoadingOwnershipContractTests
         Assert.Contains(nameof(PackageAssemblyReference), exportedTypeNames);
         Assert.Contains(nameof(PackageAssemblies), exportedTypeNames);
         Assert.Contains(nameof(IPackageLoadModeAdvisor), exportedTypeNames);
+        Assert.Contains(nameof(IPackageActivationGate), exportedTypeNames);
+        Assert.Contains(nameof(PackageActivationContext), exportedTypeNames);
+        Assert.Contains(nameof(PackageActivationGateResult), exportedTypeNames);
         Assert.Contains(nameof(LoadModeAdvisorContext), exportedTypeNames);
         Assert.Contains(nameof(LoadModeAdvisorResult), exportedTypeNames);
         Assert.Contains(nameof(LoadModeDecisionDiagnostic), exportedTypeNames);

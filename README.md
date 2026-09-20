@@ -167,6 +167,8 @@ Package authors can declare Nuplane loading metadata once in package-root `nupla
 
 Nuplane reads this metadata only from packages that have already been resolved and installed through the configured source and integrity paths. Metadata is trusted only as much as the package itself; it does not bypass source trust, package validation, or host-owned activation decisions.
 
+A host can also refuse activation outright. A registered `IPackageActivationGate` is consulted for each package graph that is about to load — after the load mode is decided and before any load context exists — and can return `Block(reason)` to stop that graph. A block fails every package in that graph as an ordinary load failure and leaves other graphs alone; gates are fail-closed, so a gate that throws also blocks; and a blocked graph is re-evaluated on the next attempt. This is what keeps a process restart or reconcile from silently reactivating a package whose host-side pre-condition, such as a database schema version, is no longer met.
+
 ### Module registration
 
 Each optional Nuplane module (loading, directory-source) provides its own direct `IServiceCollection` registration extension.

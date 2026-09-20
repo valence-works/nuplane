@@ -125,6 +125,38 @@ public sealed class LoadingRegistrationDeterminismTests
     }
 
     [Fact]
+    public void Register_WithoutActivationGateRegistration_RegistersNoActivationGate()
+    {
+        var services = new ServiceCollection();
+
+        LoadingRegistrationServices.Register(services);
+
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(IPackageActivationGate));
+
+        using var provider = services.BuildServiceProvider();
+        Assert.Empty(provider.GetRequiredService<IEnumerable<IPackageActivationGate>>());
+    }
+
+    [Fact]
+    public void NuplaneLoadingBuilder_AddActivationGate_CalledTwice_RegistersConcreteGateOnceBehindTheInterface()
+    {
+        var services = new ServiceCollection();
+        LoadingRegistrationServices.Register(services);
+        var builder = new NuplaneLoadingBuilder(services);
+
+        builder.AddActivationGate<StubActivationGate>();
+        builder.AddActivationGate<StubActivationGate>();
+
+        Assert.Single(services, d => d.ServiceType == typeof(StubActivationGate));
+        Assert.Single(services, d => d.ServiceType == typeof(IPackageActivationGate));
+
+        using var provider = services.BuildServiceProvider();
+        var concreteGate = provider.GetRequiredService<StubActivationGate>();
+        var interfaceGate = Assert.Single(provider.GetRequiredService<IEnumerable<IPackageActivationGate>>());
+        Assert.Same(concreteGate, interfaceGate);
+    }
+
+    [Fact]
     public void NuplaneLoadingBuilder_PackageLoadMode_ConfiguresPackageOverride()
     {
         var services = new ServiceCollection();
@@ -137,5 +169,13 @@ public sealed class LoadingRegistrationDeterminismTests
         var packageOverride = Assert.Single(provider.GetRequiredService<IOptions<LoadingOptions>>().Value.PackageLoadModes);
         Assert.Equal("pkg-a", packageOverride.PackageId);
         Assert.Equal(PackageLoadMode.HostIntegrated, packageOverride.LoadMode);
+    }
+
+    private sealed class StubActivationGate : IPackageActivationGate
+    {
+        public ValueTask<PackageActivationGateResult> EvaluateAsync(
+            PackageActivationContext context,
+            CancellationToken cancellationToken) =>
+            new(PackageActivationGateResult.Allow);
     }
 }
