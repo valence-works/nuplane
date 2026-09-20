@@ -34,7 +34,7 @@ internal sealed class LoadingCatalog(
         if (!_options.Enabled)
         {
             var disabledPackages = activeSnapshot.Packages
-                .Select(package => CreateDescriptor(package, PackageLoadStatus.Disabled, null, ["loading-disabled"], []))
+                .Select(static package => PackageLoadStateProjection.Create(package, PackageLoadStatus.Disabled, null, ["loading-disabled"], []))
                 .ToArray();
 
             _logger.LogLoadingCatalogRead(correlationId, LoadingCatalogAvailability.Disabled.ToString(), disabledPackages.Length, "loading-disabled");
@@ -52,7 +52,7 @@ internal sealed class LoadingCatalog(
         if (!_refreshTracker.HasRefreshed)
         {
             var stalePackages = activeSnapshot.Packages
-                .Select(package => CreateDescriptor(package, PackageLoadStatus.Stale, null, ["loading-not-refreshed-for-current-process"], []))
+                .Select(static package => PackageLoadStateProjection.Create(package, PackageLoadStatus.Stale, null, ["loading-not-refreshed-for-current-process"], []))
                 .ToArray();
 
             _logger.LogLoadingCatalogRead(correlationId, LoadingCatalogAvailability.Stale.ToString(), stalePackages.Length, "loading-stale");
@@ -74,32 +74,18 @@ internal sealed class LoadingCatalog(
 
         foreach (var package in activeSnapshot.Packages)
         {
-            var key = $"{package.PackageId}@{package.Version}";
-            if (_packageLoader.Sessions.TryGetValue(key, out var session))
+            var state = PackageLoadStateProjection.Project(package, _packageLoader, _candidateProjector);
+            if (state.Status == PackageLoadStatus.Failed)
             {
-                if (session.IsLoaded)
-                {
-                    var candidates = _candidateProjector.Project(package);
-                    descriptors.Add(CreateDescriptor(package, PackageLoadStatus.Loaded, session.LoadedAt, [], candidates, session));
-                    continue;
-                }
-
                 issueCount++;
                 divergenceCount++;
-                descriptors.Add(CreateDescriptor(package, PackageLoadStatus.Failed, session.LoadedAt, BuildDiagnostics(session.LastError), [], session));
-                continue;
             }
-
-            if (_packageLoader.IsInertPackage(package.PackageId, package.Version))
+            else if (state.Status == PackageLoadStatus.Stale)
             {
-                // Evaluated and deliberately not loaded because it contributes no assemblies. This is a
-                // settled outcome, not missing state, so it must not read as stale or degrade the surface.
-                descriptors.Add(CreateDescriptor(package, PackageLoadStatus.Skipped, null, ["loading-no-assemblies-to-load"], []));
-                continue;
+                staleCount++;
             }
 
-            staleCount++;
-            descriptors.Add(CreateDescriptor(package, PackageLoadStatus.Stale, null, ["loading-state-missing-for-active-package"], []));
+            descriptors.Add(state);
         }
 
         var degraded = issueCount > 0 || staleCount > 0 || divergenceCount > 0;
@@ -156,38 +142,6 @@ internal sealed class LoadingCatalog(
                 package.LoadModeDiagnostics)).ToArray(),
             snapshot.Reason,
             snapshot.CorrelationId);
-    }
-
-    private static PackageLoadState CreateDescriptor(
-        ActivePackage package,
-        PackageLoadStatus status,
-        DateTimeOffset? loadedAtUtc,
-        IReadOnlyList<string> diagnostics,
-        IReadOnlyList<PackageAssemblyReference> assemblyReferences,
-        PackageLoadSession? session = null) =>
-        new PackageLoadState(
-            package.PackageId,
-            package.Version,
-            status,
-            package.InstallPath,
-            loadedAtUtc,
-            diagnostics,
-            assemblyReferences.ToArray(),
-            package.Discoverable,
-            session?.LoadMode ?? PackageLoadMode.Collectible,
-            session?.FrameworkIntegrationSafe ?? false)
-        {
-            LoadModeDiagnostics = session?.LoadModeDiagnostics ?? []
-        };
-
-    private static IReadOnlyList<string> BuildDiagnostics(string? message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return ["loading-failed"]; 
-        }
-
-        return [message.Trim()];
     }
 
     private static string? ResolveAvailableReasonCode(int issueCount, int staleCount, int divergenceCount)

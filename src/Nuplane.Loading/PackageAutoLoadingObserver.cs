@@ -299,18 +299,12 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
         }
 
         var descriptors = state.ActivePackageDescriptorsByIdNormalized;
-        return packagesToLoad
-            .GroupBy(package => descriptors.TryGetValue(package.Id, out var descriptor)
-                    && string.Equals(descriptor.Version, package.Version, StringComparison.OrdinalIgnoreCase)
-                    ? descriptor.GraphGenerationId
-                    : BuildKey(package.Id, package.Version),
-                StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static group => group.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(static group => (IReadOnlyList<ResolvedPackage>)group
-                .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
-                .ToArray())
-            .ToArray();
+        return PackageGraphGrouping.ByGraphGeneration(
+            packagesToLoad,
+            package => descriptors.TryGetValue(package.Id, out var descriptor)
+                && string.Equals(descriptor.Version, package.Version, StringComparison.OrdinalIgnoreCase)
+                ? descriptor.GraphGenerationId
+                : BuildKey(package.Id, package.Version));
     }
 
     private static IReadOnlyList<IReadOnlyList<ResolvedPackage>> BuildPackageGraphsFromActiveGraphs(
