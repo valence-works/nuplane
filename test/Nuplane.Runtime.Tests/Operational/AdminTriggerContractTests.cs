@@ -56,6 +56,31 @@ public sealed class AdminTriggerContractTests
     }
 
     [Fact]
+    public async Task Trigger_SkippedForStoreContention_ReportsStoreLockRatherThanSingleFlight()
+    {
+        var service = new FakeReconciliationService(
+            new ReconciliationRunResult(true, EmptyChangeSet(), [], false)
+            {
+                SkipReason = ReconciliationSkipReason.StoreLockUnavailable
+            });
+        var logger = new SpyLogger();
+        var (coordinator, dispatcher) = await CreateCoordinatorAsync(service, logger);
+
+        try
+        {
+            var outcome = await coordinator.TriggerAsync("corr-store-lock", CancellationToken.None);
+
+            Assert.Equal(ManualReconcileOutcomeCode.Rejected, outcome.OutcomeCode);
+            Assert.Equal("store-lock-unavailable", outcome.ReasonCode);
+            Assert.Equal("store-lock-unavailable", Assert.Single(logger.AdminTriggerOutcomes).ReasonCode);
+        }
+        finally
+        {
+            await dispatcher.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task Trigger_ServiceThrows_ReturnsUnavailable()
     {
         var service = new ThrowingReconciliationService(new InvalidOperationException("service crash"));

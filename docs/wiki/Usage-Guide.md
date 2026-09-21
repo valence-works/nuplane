@@ -233,6 +233,150 @@ disagree about type identity. A host-free load is therefore for processes that d
 Nuplane host; in a process that does, read the assemblies from that host's `IPackageAssemblyCatalog`
 instead.
 
+### Host-free restore of the package set
+
+- **Applicability:** `Core`
+- **Stability note:** `Recently Changed`
+
+`Nuplane.NuplaneRestore` is the writing half of the host-free trio: `NuplaneStore` reads a store,
+`NuplaneHostIntegratedLoader` loads what a store records, and `NuplaneRestore` populates a store from
+a host's own configuration without starting that host. Out-of-process tooling uses it when a
+deployment step, a CLI, or a container build has to get a host's packages onto disk before the host
+ever runs.
+
+```csharp
+var nuplane = configuration.GetSection("Nuplane");
+
+var result = await NuplaneRestore.RestoreAsync(nuplane, new NuplaneRestoreOptions
+{
+    BasePath = hostContentRoot,
+    InstallRoot = "/srv/app/.nuplane/packages",
+    StateFilePath = "/srv/app/.nuplane/store-state.json",
+    LoggerFactory = loggerFactory,
+    // Directory feeds belong to Nuplane.Sources.Directory, so the caller adds them.
+    ConfigureBuilder = builder => builder.AddDirectoryFeedsFromConfiguration(nuplane)
+});
+
+Console.WriteLine($"restored into {result.InstallRoot}; state at {result.StateFilePath}");
+foreach (var package in result.ActivePackages)
+{
+    Console.WriteLine($"{package.PackageId} {package.Version} -> {package.InstallPath}");
+}
+```
+
+`NuplaneHostIntegratedLoader.LoadFromStateAsync(result.StateFilePath)` then loads exactly what the
+restore installed, so the two entry points compose into "populate, then use" inside one tool.
+
+**One cycle, no host, nothing loaded.** The entry point composes a throwaway service provider, runs
+one manual reconciliation cycle through `IReconciliationService` directly, and disposes everything.
+No hosted service starts, nothing polls, no directory is watched, and the loading module's
+auto-loading observer is never registered — so no assembly from a restored package enters the calling
+process. The queue-and-wait trigger ingress a host uses is deliberately not used: only the dispatcher
+hosted service completes it, so without a started host it would never return.
+
+**Write set.** A restore writes only under the resolved install root (extracted packages and its
+`.tmp` staging directory), the resolved state file, and the store lock file beside that state file.
+It never deletes an installed package: cleanup during a cycle records decisions and removes nothing
+from disk, so a package that leaves the desired set stays extracted.
+
+**Path defaults and overrides.** This is where a hand-rolled composition silently goes wrong. A
+running host resolves `FeedResolution:PackageInstallRoot` and the state file against its own
+`AppContext.BaseDirectory`, and relative configured values against its current directory. For a
+restoring tool both of those name the tool, so `NuplaneRestore` never falls back to them:
+
+| Path | Resolution order |
+|---|---|
+| Install root | `NuplaneRestoreOptions.InstallRoot` (must be absolute) → absolute `Nuplane:FeedResolution:PackageInstallRoot` → relative configured value against `BasePath` → `BasePath/.nuplane/packages` → **refused** |
+| State file | `NuplaneRestoreOptions.StateFilePath` (must be absolute) → absolute `Nuplane:StoreRegistry:StateFilePath`, or the `Nuplane:Setup:StateFilePath` shorthand → relative configured value against `BasePath` → `BasePath/.nuplane/store-state.json` → **refused** |
+| Package lock file | `NuplaneRestoreOptions.LockFilePath` (must be absolute) → absolute `Nuplane:LockFile:Path` → relative value against `BasePath`, otherwise against the resolved state file's directory |
+
+"Refused" is an `InvalidOperationException` naming the path and telling you to set `BasePath` or the
+matching override. A restore that quietly populates the wrong directory reports success and leaves
+the host empty, which is worse than a loud failure. The package lock file is the one path that never
+refuses, because its configured default is the bare relative name `nuplane.lock.json` that no
+operator typed; it anchors to the store instead of to the restoring process. A non-absolute override
+throws `ArgumentException`, and a configuration selecting `UseInMemoryStore` throws
+`InvalidOperationException`, because a restore into a store that persists nothing would report
+success and write nothing.
+
+`result.StateFilePath` and `result.InstallRoot` report the paths the runtime itself derived, so a
+caller can prove which store it populated instead of inferring it from configuration.
+
+**Failures are reported, not thrown.** A degraded cycle sets `IsDegraded`; packages that could not be
+applied are listed in `FailedPackages`; a feed configuring `Credentials` is named in
+`CredentialRefusedFeeds`. Nuplane has no credential resolver yet, so such a feed is dropped from
+resolution before the first network call rather than contacted and then rejected by the acquirer — a
+package that could only have come from it is also reported as a failed package. Only a malformed
+request throws: a null configuration, a non-absolute override, a path nothing pins, in-memory
+persistence, or configuration that fails Nuplane's own options validation.
+
+**Pre-flight.** `DescribeDesiredAsync` answers "what would this restore ask for, and where would it
+put it?" without doing any of it:
+
+```csharp
+var description = await NuplaneRestore.DescribeDesiredAsync(nuplane, options);
+
+foreach (var request in description.Requests)
+{
+    Console.WriteLine($"{request.PackageId} {request.VersionRange} from {request.FeedName} " +
+                      (request.IsPinned ? $"(pinned to {request.PinnedVersion})" : "(not pinned)"));
+}
+```
+
+It writes nothing — no install root, no state file, no lock file — and contacts no remote feed. It
+touches local disk only where a desired source already lives: a directory-backed feed enumerates its
+own `.nupkg` files, and a convergence manifest source reads its manifest. A remote feed's requests
+come from its configured include patterns alone, so no service index, version list, or package is
+fetched. A source that throws is reported in `SourceErrors` rather than propagating, so an empty
+request list with an error in it means "could not tell", not "nothing is desired".
+
+`IsPinned` is the answer that cannot be computed outside the package, because the include-pattern
+parser and the version-request classifier that decide it are internal. `Package [1.2.3]` and a bare
+`1.2.3` are pinned; a bare package identifier, a range such as `[1.0.0,2.0.0)`, and a floating `1.*`
+are not. A wildcard include pattern against a remote feed contributes no request at all, because
+there is no catalog to expand it against without contacting the feed.
+
+Set `NuplaneRestoreOptions.RequirePinnedVersions` when a restore has to be reproducible. Any unpinned
+request then makes the restore do nothing: it returns `Skipped` with
+`NuplaneRestoreSkipReason.UnpinnedRequests` and lists the offenders in `UnpinnedRequests`, before
+anything is resolved, downloaded, installed, or written.
+
+### The store lock
+
+- **Applicability:** `Core`
+- **Stability note:** `Recently Changed`
+
+Every reconciliation cycle — a running host's and a host-free restore's alike — now holds an exclusive
+lock on the store it writes, for the whole cycle. A cycle is a read-modify-write of
+`store-state.json`, and the file is rewritten with a truncating exclusive `File.Create`, so two
+processes reconciling one store could tear it; `EnableSingleFlight` only ever serialized cycles inside
+a single reconciliation service. The lock is an exclusive handle on a zero-length file beside the
+state file (`store-state.json.lock`) — nothing in Nuplane enumerates the state directory, and every
+install-directory enumeration filters by extension, so it cannot be mistaken for a package, a
+completion marker, or a state artefact.
+
+It is **on by default**, behind `Nuplane:Reconciliation:EnableStoreLock`. The failure it prevents is
+silent corruption that outlives the process; the behaviour it introduces is a reported, retryable
+skip. A store with a single writer never contends, so its behaviour is unchanged.
+
+Acquisition never waits. A cycle that cannot take the lock returns immediately with `Skipped` and
+`ReconciliationSkipReason.StoreLockUnavailable`, logs a warning, and does nothing at all — no read, no
+resolve, no write. `NuplaneRestore` surfaces the same outcome as
+`NuplaneRestoreSkipReason.StoreLockUnavailable` and leaves `ActivePackages` empty, because no
+read-back is attempted while whoever holds the store may be rewriting its state file. Callers retry.
+
+Retrying is the caller's job. A host with automatic reconciliation enabled retries on its next poll.
+A host whose *startup* cycle is skipped this way starts against whatever the store already records
+and — with automatic reconciliation off, which is the default — does not reconcile again on its own;
+startup is not failed for contention, because that would break rolling restarts of replicas sharing
+one store. The warning naming the lock file is the signal to watch for.
+
+Two cases deliberately do not refuse. An in-memory store has no file to lock and behaves exactly as
+before. A store whose lock file cannot be created or opened at all — a read-only state directory, or
+a lock file this process may not write — is reconciled unprotected with a warning rather than refused,
+so a deployment that works today keeps working. Set `EnableStoreLock` to `false` to restore the
+pre-lock behaviour exactly.
+
 ## Configuration-driven adoption
 
 - **Applicability:** `Core`

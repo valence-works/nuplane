@@ -24,6 +24,7 @@ public sealed class ReconciliationService : IReconciliationService
     private readonly ReconciliationOptions _reconciliationOptions;
     private readonly ReconciliationPipeline _pipeline;
     private readonly SemaphoreSlim _cycleLock = new(1, 1);
+    private readonly IStoreLock? _storeLock;
     private int _inFlight;
 
     /// <summary>
@@ -50,6 +51,12 @@ public sealed class ReconciliationService : IReconciliationService
     /// <param name="observationDegradationTracker">The observation degradation tracker.</param>
     /// <param name="cycleFailureContributor">Optional contributor of per-cycle failure information from external modules.</param>
     /// <param name="startupRecoveryState">Optional startup recovery state to clear after a healthy cycle.</param>
+    /// <param name="storeLock">
+    /// Optional cross-process lock on the store this service writes. Dependency injection always
+    /// supplies it. When it is <see langword="null"/> — the low-level test-composition path, which
+    /// passes collaborators directly and so names no resolved state file — cycles run exactly as
+    /// they did before the store lock existed.
+    /// </param>
     public ReconciliationService(
         IEnumerable<IDesiredPackageSource> sources,
         IDesiredStateAggregator desiredStateAggregator,
@@ -70,8 +77,11 @@ public sealed class ReconciliationService : IReconciliationService
         IFailureRecorder failureRecorder,
         ObservationDegradationTracker observationDegradationTracker,
         ICycleFailureContributor? cycleFailureContributor = null,
-        StartupRecoveryState? startupRecoveryState = null)
+        StartupRecoveryState? startupRecoveryState = null,
+        IStoreLock? storeLock = null)
     {
+        _storeLock = storeLock;
+
         // DesiredManifestPackageSource is always registered so code-based and configuration-based
         // hosts behave identically; it is excluded here when disabled so it leaves no
         // snapshot/state footprint on hosts that never opted into manifest convergence.
@@ -122,12 +132,23 @@ public sealed class ReconciliationService : IReconciliationService
 
         if (_reconciliationOptions.EnableSingleFlight && Interlocked.CompareExchange(ref _inFlight, 1, 0) != 0)
         {
-            return new(true, EmptyChangeSet, [], IsDegraded: false);
+            return Skipped(ReconciliationSkipReason.SingleFlight);
         }
 
         await _cycleLock.WaitAsync(cancellationToken);
         try
         {
+            // The store lock spans the whole pipeline, because a cycle is a read-modify-write of the
+            // state file and every middleware between the read and the write is part of it. `using`
+            // releases it on every exit path: normal completion, a pipeline exception, and
+            // cancellation. A store that is already owned elsewhere yields a reported skip rather
+            // than a second writer.
+            using var storeLock = _storeLock?.Acquire() ?? StoreLockHandle.NotRequired();
+            if (!storeLock.CanProceed)
+            {
+                return Skipped(ReconciliationSkipReason.StoreLockUnavailable);
+            }
+
             var cycleStartedAt = DateTimeOffset.UtcNow;
             var correlationId = trigger.CorrelationId ?? CorrelationContext.CreateNew();
             using var scope = CorrelationContext.BeginScope(correlationId);
@@ -152,4 +173,7 @@ public sealed class ReconciliationService : IReconciliationService
             Interlocked.Exchange(ref _inFlight, 0);
         }
     }
+
+    private static ReconciliationRunResult Skipped(ReconciliationSkipReason reason) =>
+        new(true, EmptyChangeSet, [], IsDegraded: false) { SkipReason = reason };
 }

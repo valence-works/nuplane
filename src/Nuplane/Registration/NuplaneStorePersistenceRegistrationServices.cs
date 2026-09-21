@@ -30,5 +30,7 @@ internal static class NuplaneStorePersistenceRegistrationServices
                 sp.GetRequiredService<EffectiveStorePersistenceSettings>(),
                 sp.GetRequiredService<ILogger<StoreRegistry>>()));
         services.AddSingleton<IStoreRegistry>(sp => sp.GetRequiredService<StoreRegistry>());
+        services.AddSingleton<StoreLock>();
+        services.AddSingleton<IStoreLock>(sp => sp.GetRequiredService<StoreLock>());
     }
 }

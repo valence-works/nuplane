@@ -39,7 +39,8 @@ internal static class ReconciliationServiceFactory
         IPackageLoader? packageLoader = null,
         IPackageUnloadCoordinator? packageUnloadCoordinator = null,
         ObservationDegradationTracker? observationDegradationTracker = null,
-        ILoadingFailureTracker? loadingFailureTracker = null)
+        ILoadingFailureTracker? loadingFailureTracker = null,
+        IStoreLock? storeLock = null)
     {
         var desiredStateAgg = desiredStateAggregator ?? new DesiredStateAggregator();
         var diffEngine = desiredActualDiffEngine ?? new DesiredActualDiffEngine();
@@ -69,6 +70,8 @@ internal static class ReconciliationServiceFactory
             packageCleanupService ?? new PackageCleanupService(new()),
             failureRecorder ?? new FailureRecorder(store),
             observationDegradationTracker ?? new ObservationDegradationTracker(),
-            loadingFailureTracker);
+            loadingFailureTracker,
+            startupRecoveryState: null,
+            storeLock);
     }
 }
