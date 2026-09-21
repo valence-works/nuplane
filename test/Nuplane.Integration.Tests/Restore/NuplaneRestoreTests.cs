@@ -479,7 +479,7 @@ public sealed class NuplaneRestoreTests : IDisposable
     }
 
     [Fact]
-    public async Task RestoreAsync_WithTheConfigurationRoot_YieldsTheSameResultAsItsNuplaneSection()
+    public async Task RestoreAsync_WithARealisticHostConfigurationRoot_YieldsTheSameResultAsItsNuplaneSection()
     {
         HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory);
         var section = Configure();
@@ -496,7 +496,7 @@ public sealed class NuplaneRestoreTests : IDisposable
     }
 
     [Fact]
-    public async Task DescribeDesiredAsync_WithTheConfigurationRoot_YieldsTheSameResultAsItsNuplaneSection()
+    public async Task DescribeDesiredAsync_WithARealisticHostConfigurationRoot_YieldsTheSameResultAsItsNuplaneSection()
     {
         HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory, version: "2.5.0");
         var section = Configure();
@@ -512,34 +512,98 @@ public sealed class NuplaneRestoreTests : IDisposable
             fromRoot.Requests.Select(static request => (request.PackageId, request.PinnedVersion)));
     }
 
-    private static string? Pin(NuplaneDesiredDescription description, string packageId) =>
-        description.Requests.Single(request => request.PackageId == packageId).PinnedVersion;
-
-    private IConfigurationSection Configure(params (string Key, string? Value)[] settings) =>
-        BuildConfiguration(
-            new Dictionary<string, string?>
-            {
-                ["Nuplane:Setup:Feeds:" + FeedName + ":DirectoryPath"] = _feedDirectory,
-                ["Nuplane:Setup:Feeds:" + FeedName + ":IncludeAll"] = "true",
-                ["Nuplane:Setup:Feeds:" + FeedName + ":Directory:Watch"] = "false"
-            },
-            settings)
-            .GetSection("Nuplane");
-
-    /// <summary>
-    /// Builds the same feed settings unnested, the shape a configuration root dedicated entirely to
-    /// Nuplane takes, and returns it directly — the other value <see cref="NuplaneRestore"/> accepts
-    /// in place of a <c>Nuplane</c> section (see its XML docs).
-    /// </summary>
-    private IConfigurationRoot ConfigureAsRoot(params (string Key, string? Value)[] settings) =>
-        BuildConfiguration(
+    [Fact]
+    public async Task RestoreAsync_WithAnUnnestedConfigurationRootDedicatedToNuplane_Restores()
+    {
+        // AddNuplane genuinely supports being handed configuration already scoped to its own keys,
+        // with no "Nuplane" wrapper at all — one cheap assertion covers that shape.
+        var package = HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory);
+        var root = BuildConfiguration(
             new Dictionary<string, string?>
             {
                 ["Setup:Feeds:" + FeedName + ":DirectoryPath"] = _feedDirectory,
                 ["Setup:Feeds:" + FeedName + ":IncludeAll"] = "true",
                 ["Setup:Feeds:" + FeedName + ":Directory:Watch"] = "false"
             },
+            []);
+
+        var result = await NuplaneRestore.RestoreAsync(root, Options(root));
+
+        Assert.Equal(package.PackageId, Assert.Single(result.ActivePackages).PackageId);
+    }
+
+    public static IEnumerable<object[]> EntryPoints()
+    {
+        yield return [true];
+        yield return [false];
+    }
+
+    [Theory]
+    [MemberData(nameof(EntryPoints))]
+    public async Task EntryPoint_WithNeitherAConfigurationRootNorItsNuplaneSection_RefusesNamingBothShapes(bool describeOnly)
+    {
+        var configuration = ConfigureWithoutANuplaneSection();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => InvokeEntryPoint(describeOnly, configuration, Options(configuration)));
+
+        Assert.Contains("configuration root", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains($"'{RestoreConfigurationResolver.NuplaneSectionName}' section", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [MemberData(nameof(EntryPoints))]
+    public async Task EntryPoint_WhenTheNuplaneSectionConfiguresNoFeeds_Refuses(bool describeOnly)
+    {
+        var configuration = ConfigureWithoutAnyFeeds();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => InvokeEntryPoint(describeOnly, configuration, Options(configuration)));
+
+        Assert.Contains("No feed and no desired package source", exception.Message, StringComparison.Ordinal);
+    }
+
+    private static Task InvokeEntryPoint(bool describeOnly, IConfiguration configuration, NuplaneRestoreOptions options) =>
+        describeOnly
+            ? NuplaneRestore.DescribeDesiredAsync(configuration, options)
+            : NuplaneRestore.RestoreAsync(configuration, options);
+
+    private static string? Pin(NuplaneDesiredDescription description, string packageId) =>
+        description.Requests.Single(request => request.PackageId == packageId).PinnedVersion;
+
+    private IConfigurationSection Configure(params (string Key, string? Value)[] settings) =>
+        ConfigureAsRoot(settings).GetSection(RestoreConfigurationResolver.NuplaneSectionName);
+
+    /// <summary>
+    /// Builds a realistic host configuration root: the feed settings nested under a
+    /// <c>Nuplane</c> section, beside an unrelated sibling section a real host's own
+    /// <c>appsettings</c> would also carry.
+    /// </summary>
+    private IConfigurationRoot ConfigureAsRoot(params (string Key, string? Value)[] settings) =>
+        BuildConfiguration(
+            new Dictionary<string, string?>
+            {
+                ["Nuplane:Setup:Feeds:" + FeedName + ":DirectoryPath"] = _feedDirectory,
+                ["Nuplane:Setup:Feeds:" + FeedName + ":IncludeAll"] = "true",
+                ["Nuplane:Setup:Feeds:" + FeedName + ":Directory:Watch"] = "false",
+                ["Logging:LogLevel:Default"] = "Information"
+            },
             settings);
+
+    /// <summary>
+    /// A host configuration root that carries neither a <c>Nuplane</c> section nor Nuplane's own
+    /// keys at its top level — the shape both entry points must refuse rather than silently restore
+    /// nothing from.
+    /// </summary>
+    private static IConfigurationRoot ConfigureWithoutANuplaneSection() =>
+        BuildConfiguration(new Dictionary<string, string?> { ["Logging:LogLevel:Default"] = "Information" }, []);
+
+    /// <summary>
+    /// A host root whose <c>Nuplane</c> section exists but configures no feed — the composition an
+    /// otherwise-valid configuration yields when a host genuinely has nothing to restore.
+    /// </summary>
+    private static IConfigurationRoot ConfigureWithoutAnyFeeds() =>
+        BuildConfiguration(new Dictionary<string, string?> { ["Nuplane:Reconciliation:PollInterval"] = "00:05:00" }, []);
 
     private static IConfigurationRoot BuildConfiguration(
         Dictionary<string, string?> baseSettings,
@@ -567,9 +631,11 @@ public sealed class NuplaneRestoreTests : IDisposable
     /// <summary>
     /// The caller-supplied hook that adds the module-owned directory feeds the core package
     /// deliberately skips — the reason <see cref="NuplaneRestoreOptions.ConfigureBuilder"/> exists.
+    /// A real caller resolves the same <c>Nuplane</c> section it passes to the entry point itself
+    /// before handing it to a module registration helper, so this does too.
     /// </summary>
     private static Action<NuplaneBuilder> DirectoryFeeds(IConfiguration configuration) =>
-        builder => builder.AddDirectoryFeedsFromConfiguration(configuration);
+        builder => builder.AddDirectoryFeedsFromConfiguration(RestoreConfigurationResolver.ResolveNuplaneSection(configuration));
 
     /// <summary>
     /// Holds one restore inside its reconciliation cycle — and therefore inside its store lock —

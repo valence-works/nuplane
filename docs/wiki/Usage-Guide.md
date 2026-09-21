@@ -299,6 +299,13 @@ throws `ArgumentException`, and a configuration selecting `UseInMemoryStore` thr
 `InvalidOperationException`, because a restore into a store that persists nothing would report
 success and write nothing.
 
+The keys in the table above are relative to the `Nuplane` section: pass either the host's
+configuration root — the one that nests them under a `Nuplane` section, beside the host's other
+sections — or that `Nuplane` section itself, to `RestoreAsync` and `DescribeDesiredAsync`; whichever
+is given, its `Nuplane` child section is used when one exists. A configuration that, once composed,
+names no feed and no desired package source at all is refused the same way, rather than reported as
+a restore that quietly did nothing.
+
 `result.StateFilePath` and `result.InstallRoot` report the paths the runtime itself derived, so a
 caller can prove which store it populated instead of inferring it from configuration.
 

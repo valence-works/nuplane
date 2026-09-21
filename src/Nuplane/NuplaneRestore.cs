@@ -53,6 +53,22 @@ namespace Nuplane;
 /// adds them, without the core package depending on it.
 /// </description></item>
 /// <item><description>
+/// <b>Either configuration shape is accepted.</b> The <c>configuration</c> parameter on
+/// <see cref="RestoreAsync"/> and <see cref="DescribeDesiredAsync"/> may be the host's configuration
+/// root — the one that nests Nuplane's own keys under a <c>Nuplane</c> section, beside the host's
+/// other sections — or that <c>Nuplane</c> section itself. Whichever is given, if it has a child
+/// section named <c>Nuplane</c> that exists, that section is what actually gets composed; otherwise
+/// the value is used as given. <c>AddNuplane</c> itself is never handed an unresolved root: a host
+/// that calls it directly still resolves its own <c>Nuplane</c> section first, exactly as before.
+/// </description></item>
+/// <item><description>
+/// <b>An empty composition is refused.</b> A configuration that, once composed, names no feed and no
+/// desired package source — because neither accepted shape was actually present, or because the
+/// resolved <c>Nuplane</c> section genuinely configures nothing — is refused as malformed rather than
+/// reported as a restore that quietly did nothing. A configuration whose only feed was refused for
+/// declaring credentials does not trip this: that outcome is reported on the result instead.
+/// </description></item>
+/// <item><description>
 /// <b>Pinned-ness is answerable.</b> The include-pattern parser and version-request classifier that
 /// decide whether a request names exactly one version are internal;
 /// <see cref="DescribeDesiredAsync"/> and
@@ -100,15 +116,17 @@ public static class NuplaneRestore
     /// </para>
     /// </remarks>
     /// <param name="configuration">
-    /// The host's configuration root, or its <c>Nuplane</c> section — the same value the host passes
-    /// to <c>AddNuplane</c>.
+    /// The host's configuration root — the one that nests Nuplane's own keys under a <c>Nuplane</c>
+    /// section — or that <c>Nuplane</c> section itself, the same value the host passes to
+    /// <c>AddNuplane</c>. Whichever is given, a child section named <c>Nuplane</c> is used when one
+    /// exists; otherwise the value is used as given.
     /// </param>
     /// <param name="options">The restore options, or <see langword="null"/> to use configuration alone, which requires every path to be configured absolutely.</param>
     /// <param name="cancellationToken">A token to cancel the cycle. Cancellation releases the store lock and surfaces as an <see cref="OperationCanceledException"/>, never as a failed package.</param>
     /// <returns>What the cycle did, what it could not do, the store's active package set afterwards, and the resolved paths it wrote to.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when an absolute override in <paramref name="options"/> is not an absolute path.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the configuration selects in-memory persistence, or when the install root or state file is neither configured absolutely, nor overridden, nor resolvable against <see cref="NuplaneRestoreOptions.BasePath"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the configuration selects in-memory persistence, when the install root or state file is neither configured absolutely, nor overridden, nor resolvable against <see cref="NuplaneRestoreOptions.BasePath"/>, or when the resolved configuration names no feed and no desired package source at all.</exception>
     /// <exception cref="Microsoft.Extensions.Options.OptionsValidationException">Thrown when the configuration fails Nuplane's own options validation, exactly as it would when a host starts.</exception>
     /// <exception cref="IOException">Thrown when the state file written by the cycle cannot be read back, for example while another process holds it mid-write.</exception>
     /// <exception cref="System.Text.Json.JsonException">Thrown when the state file read back after the cycle is torn or otherwise not valid JSON.</exception>
@@ -183,13 +201,17 @@ public static class NuplaneRestore
     /// request list with an error in it means "could not tell", not "nothing is desired".
     /// </para>
     /// </remarks>
-    /// <param name="configuration">The host's configuration root, or its <c>Nuplane</c> section.</param>
+    /// <param name="configuration">
+    /// The host's configuration root — the one that nests Nuplane's own keys under a <c>Nuplane</c>
+    /// section — or that <c>Nuplane</c> section itself. Whichever is given, a child section named
+    /// <c>Nuplane</c> is used when one exists; otherwise the value is used as given.
+    /// </param>
     /// <param name="options">The restore options, or <see langword="null"/>. Only the path, builder, and logging options matter here; <see cref="NuplaneRestoreOptions.RequirePinnedVersions"/> does not, because this method reports pinned-ness rather than acting on it.</param>
     /// <param name="cancellationToken">A token to cancel the read.</param>
     /// <returns>The desired requests with their pinned-ness, the feeds refused for declaring credentials, any source read errors, and the resolved state file and install root.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when an absolute override in <paramref name="options"/> is not an absolute path.</exception>
-    /// <exception cref="InvalidOperationException">Thrown for the same unresolvable-path and in-memory-persistence reasons as <see cref="RestoreAsync"/>, so a pre-flight catches them before the restore does.</exception>
+    /// <exception cref="InvalidOperationException">Thrown for the same unresolvable-path, in-memory-persistence, and empty-composition reasons as <see cref="RestoreAsync"/>, so a pre-flight catches them before the restore does.</exception>
     /// <exception cref="Microsoft.Extensions.Options.OptionsValidationException">Thrown when the configuration fails Nuplane's own options validation.</exception>
     public static async Task<NuplaneDesiredDescription> DescribeDesiredAsync(
         IConfiguration configuration,

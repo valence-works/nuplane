@@ -31,6 +31,13 @@ public sealed class ReconciliationService : IReconciliationService
     /// Initializes a new instance of the reconciliation service with the runtime collaborators,
     /// policies, and optional loading services required to execute reconciliation cycles.
     /// </summary>
+    /// <remarks>
+    /// An instance built through this constructor never takes the cross-process store lock, even
+    /// when <see cref="ReconciliationOptions.EnableStoreLock"/> is <see langword="true"/>: it is the
+    /// low-level, test-composition path that passes collaborators directly, and it names no
+    /// <see cref="IStoreLock"/> to take one with. <c>AddNuplane</c> is the path that supplies the
+    /// lock, through dependency injection.
+    /// </remarks>
     /// <param name="sources">The desired package sources.</param>
     /// <param name="desiredStateAggregator">The desired state aggregator.</param>
     /// <param name="desiredActualDiffEngine">The desired-actual difference engine.</param>

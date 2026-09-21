@@ -48,6 +48,10 @@ internal sealed class RestoreComposition : IAsyncDisposable
     /// </summary>
     public static RestoreComposition Create(IConfiguration configuration, NuplaneRestoreOptions options)
     {
+        // Accepts the host's configuration root or its own Nuplane section — the same value passed
+        // to AddNuplane — without changing AddNuplane itself, which still expects to be handed
+        // configuration already scoped to Nuplane's own keys.
+        var nuplaneConfiguration = RestoreConfigurationResolver.ResolveNuplaneSection(configuration);
         var paths = new RestorePathResolver(options);
         var credentialRefusedFeeds = new List<string>();
 
@@ -60,7 +64,7 @@ internal sealed class RestoreComposition : IAsyncDisposable
 
         // Loading is deliberately not registered: PackageAutoLoadingObserver is only ever added by
         // Nuplane.Loading's AutoloadPackages, so a composition that never calls it loads nothing.
-        services.AddNuplane(configuration, builder => options.ConfigureBuilder?.Invoke(builder));
+        services.AddNuplane(nuplaneConfiguration, builder => options.ConfigureBuilder?.Invoke(builder));
 
         // These post-configure callbacks are registered after AddNuplane, and therefore run after
         // every Configure and PostConfigure the configuration and the builder callback registered —
@@ -98,6 +102,17 @@ internal sealed class RestoreComposition : IAsyncDisposable
             var persistence = provider.GetRequiredService<EffectiveStorePersistenceSettings>();
             _ = provider.GetRequiredService<IOptions<LockFileOptions>>().Value;
             var feedOptions = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
+
+            // A feed refused for declaring credentials is a legitimate, already-reported outcome —
+            // not "no feeds" — so it does not trip this refusal on its own.
+            if (feedOptions.Feeds.Count == 0
+                && credentialRefusedFeeds.Count == 0
+                && HasNoDesiredPackageSources(provider))
+            {
+                throw new InvalidOperationException(
+                    $"No feed and no desired package source is configured. Pass either the host's configuration root — the one containing a '{RestoreConfigurationResolver.NuplaneSectionName}' section — or that '{RestoreConfigurationResolver.NuplaneSectionName}' section itself, with at least one feed configured under it. "
+                    + "A host that genuinely configures no feeds has nothing for a restore to populate, so this is refused rather than reported as an empty success.");
+            }
 
             return new(
                 provider,
@@ -153,6 +168,15 @@ internal sealed class RestoreComposition : IAsyncDisposable
             versionRequest.IsExact,
             versionRequest.IsExact ? versionRequest.ExactVersion : null);
     }
+
+    /// <summary>
+    /// Whether no registered <see cref="IDesiredPackageSource"/> would contribute anything — the
+    /// same exclusion <see cref="DescribeDesiredAsync"/> and a reconciliation cycle apply, since the
+    /// manifest source is always registered but does nothing unless convergence is configured.
+    /// </summary>
+    private static bool HasNoDesiredPackageSources(IServiceProvider provider) =>
+        !provider.GetServices<IDesiredPackageSource>()
+            .Any(static source => source is not DesiredManifestPackageSource { IsEnabled: false });
 
     /// <summary>
     /// Drops every feed that declares credentials, recording its name. Nuplane has no credential
