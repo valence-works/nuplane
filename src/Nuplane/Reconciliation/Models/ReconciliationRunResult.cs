@@ -13,5 +13,13 @@ public sealed record ReconciliationRunResult(
     bool Skipped,
     PackageChangeSet ChangeSet,
     IReadOnlyList<string> FailedPackages,
-    bool IsDegraded);
+    bool IsDegraded)
+{
+    /// <summary>
+    /// Gets why the cycle was skipped, or <see cref="ReconciliationSkipReason.None"/> when it ran.
+    /// Declared outside the primary constructor deliberately: every existing four-argument
+    /// construction and deconstruction of this record keeps compiling and keeps binding.
+    /// </summary>
+    public ReconciliationSkipReason SkipReason { get; init; } = ReconciliationSkipReason.None;
+}
 

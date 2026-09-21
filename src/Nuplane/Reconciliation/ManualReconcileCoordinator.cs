@@ -43,13 +43,19 @@ public sealed class ManualReconcileCoordinator
 
             if (result.Skipped)
             {
-                _logger.LogAdminTriggerOutcome(correlationId, nameof(ManualReconcileOutcomeCode.Rejected), "single-flight-active");
+                // A skip no longer means only "a cycle is already running here": it can also mean
+                // another process owns the store. Reporting the wrong one would hide a real cause.
+                var reasonCode = result.SkipReason == ReconciliationSkipReason.StoreLockUnavailable
+                    ? "store-lock-unavailable"
+                    : "single-flight-active";
+
+                _logger.LogAdminTriggerOutcome(correlationId, nameof(ManualReconcileOutcomeCode.Rejected), reasonCode);
                 _metrics?.RecordAdminTrigger(rejected: true);
                 return new(
                     ManualReconcileOutcomeCode.Rejected,
                     correlationId,
                     result,
-                    "single-flight-active");
+                    reasonCode);
             }
 
             _logger.LogAdminTriggerOutcome(correlationId, nameof(ManualReconcileOutcomeCode.Completed), null);

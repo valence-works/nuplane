@@ -268,6 +268,7 @@ app.MapSampleCatalog();
 - Use `NuplaneStore.ReadActivePackagesAsync(stateFilePath, ct)` when you need the same active package id/version/install-path data without a running host, a DI container, or network access — see [Usage Guide: Offline reads of the active package set](docs/wiki/Usage-Guide.md#offline-reads-of-the-active-package-set).
 - Use `NuplaneHostIntegratedLoader.LoadFromStateAsync(stateFilePath, options, ct)` — or its `StoreRegistryOptions` overload — when a short-lived worker process must load the host's active package set into assemblies exactly the way that host's `HostIntegrated` loading does: same graph grouping, same load contexts, same asset selection, same `Default.Resolving` hook, without a running host.
 - Use `NuplaneHostIntegratedLoader.LoadActivePackagesAsync(activePackages, options, ct)` when the caller assembles or filters the package set itself; it groups by graph generation identity, which is all an `ActivePackage` carries, so only `LoadFromStateAsync` guarantees the host's grouping. Either way the load is irreversible for the process; see [Usage Guide: Host-free loading of the active package set](docs/wiki/Usage-Guide.md#host-free-loading-of-the-active-package-set).
+- Use `NuplaneRestore.RestoreAsync(configuration, options, ct)` when out-of-process tooling must populate a never-started host's install root and store from that host's own configuration: one reconciliation cycle, no host, nothing loaded, and the resolved state file and install root reported back so the caller can prove where it wrote. Use `NuplaneRestore.DescribeDesiredAsync(configuration, options, ct)` for the side-effect-free, network-free pre-flight that lists what a restore would ask for and whether each request is a single-point pin. See [Usage Guide: Host-free restore of the package set](docs/wiki/Usage-Guide.md#host-free-restore-of-the-package-set).
 - Use `IPackageLoadStateCatalog.GetLoadStateAsync(ct)` when the optional loading module is installed and you need current-process load-state availability or per-package load status.
 - Use `IPackageAssemblyCatalog` as the default loading-enabled host integration surface when you want sane-default access to loaded `Assembly` instances for the current active package set without manually filtering load-state snapshots first.
 - Use `IPackageAssemblyCatalog.GetAssembliesAsync(packageId, ct)` when you want the currently active loaded version for one package identifier.
@@ -534,6 +535,13 @@ Nuplane runs a polling loop (configurable interval):
 * Emit change events
 
 The process is idempotent and safe to retry.
+
+Each cycle holds an exclusive lock on the store it writes — a file beside `store-state.json` — so two
+processes never interleave their read-modify-write of one store. A cycle that cannot take the lock
+does nothing and reports `Skipped` with `ReconciliationSkipReason.StoreLockUnavailable` instead of
+waiting or becoming a second writer. It is on by default; see
+[Usage Guide: The store lock](docs/wiki/Usage-Guide.md#the-store-lock) for the default's rationale,
+the in-memory and unlockable-store exemptions, and `Nuplane:Reconciliation:EnableStoreLock`.
 
 ---
 

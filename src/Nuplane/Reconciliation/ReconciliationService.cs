@@ -24,12 +24,20 @@ public sealed class ReconciliationService : IReconciliationService
     private readonly ReconciliationOptions _reconciliationOptions;
     private readonly ReconciliationPipeline _pipeline;
     private readonly SemaphoreSlim _cycleLock = new(1, 1);
+    private readonly IStoreLock? _storeLock;
     private int _inFlight;
 
     /// <summary>
     /// Initializes a new instance of the reconciliation service with the runtime collaborators,
     /// policies, and optional loading services required to execute reconciliation cycles.
     /// </summary>
+    /// <remarks>
+    /// An instance built through this constructor never takes the cross-process store lock, even
+    /// when <see cref="ReconciliationOptions.EnableStoreLock"/> is <see langword="true"/>: it is the
+    /// low-level, test-composition path that passes collaborators directly, and it names no
+    /// <see cref="IStoreLock"/> to take one with. <c>AddNuplane</c> is the path that supplies the
+    /// lock, through dependency injection.
+    /// </remarks>
     /// <param name="sources">The desired package sources.</param>
     /// <param name="desiredStateAggregator">The desired state aggregator.</param>
     /// <param name="desiredActualDiffEngine">The desired-actual difference engine.</param>
@@ -71,7 +79,86 @@ public sealed class ReconciliationService : IReconciliationService
         ObservationDegradationTracker observationDegradationTracker,
         ICycleFailureContributor? cycleFailureContributor = null,
         StartupRecoveryState? startupRecoveryState = null)
+        : this(
+            sources,
+            desiredStateAggregator,
+            desiredActualDiffEngine,
+            packageResolver,
+            storeRegistry,
+            reconciliationOptions,
+            observerEventDispatcher,
+            healthEvaluator,
+            logger,
+            metrics,
+            feedResolutionOptions,
+            lockFileCoordinator,
+            cleanupPolicyOptions,
+            retryPolicy,
+            dryRunPlanner,
+            packageCleanupService,
+            failureRecorder,
+            observationDegradationTracker,
+            cycleFailureContributor,
+            startupRecoveryState,
+            storeLock: null)
     {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the reconciliation service with the runtime collaborators,
+    /// policies, optional loading services, and the cross-process store lock. Used by dependency
+    /// injection, which always supplies <paramref name="storeLock"/>.
+    /// </summary>
+    /// <param name="sources">The desired package sources.</param>
+    /// <param name="desiredStateAggregator">The desired state aggregator.</param>
+    /// <param name="desiredActualDiffEngine">The desired-actual difference engine.</param>
+    /// <param name="packageResolver">The package resolver.</param>
+    /// <param name="storeRegistry">The store registry.</param>
+    /// <param name="reconciliationOptions">The reconciliation options.</param>
+    /// <param name="observerEventDispatcher">The observer event dispatcher.</param>
+    /// <param name="healthEvaluator">The health evaluator.</param>
+    /// <param name="logger">The reconciliation logger.</param>
+    /// <param name="metrics">The reconciliation metrics.</param>
+    /// <param name="feedResolutionOptions">The feed resolution options.</param>
+    /// <param name="lockFileCoordinator">The lock file coordinator.</param>
+    /// <param name="cleanupPolicyOptions">The cleanup policy options.</param>
+    /// <param name="retryPolicy">The reconciliation retry policy.</param>
+    /// <param name="dryRunPlanner">The dry run planner.</param>
+    /// <param name="packageCleanupService">The package cleanup service.</param>
+    /// <param name="failureRecorder">The failure recorder.</param>
+    /// <param name="observationDegradationTracker">The observation degradation tracker.</param>
+    /// <param name="cycleFailureContributor">Optional contributor of per-cycle failure information from external modules.</param>
+    /// <param name="startupRecoveryState">Optional startup recovery state to clear after a healthy cycle.</param>
+    /// <param name="storeLock">
+    /// Cross-process lock on the store this service writes, or <see langword="null"/> on the
+    /// low-level test-composition path, which passes collaborators directly and so names no
+    /// resolved state file. Cycles then run exactly as they did before the store lock existed.
+    /// </param>
+    internal ReconciliationService(
+        IEnumerable<IDesiredPackageSource> sources,
+        IDesiredStateAggregator desiredStateAggregator,
+        IDesiredActualDiffEngine desiredActualDiffEngine,
+        IPackageResolver packageResolver,
+        IStoreRegistry storeRegistry,
+        IOptions<ReconciliationOptions> reconciliationOptions,
+        IObserverEventDispatcher observerEventDispatcher,
+        IReconciliationHealthEvaluator healthEvaluator,
+        IReconciliationLogger logger,
+        ReconciliationMetrics metrics,
+        IOptions<FeedResolutionOptions> feedResolutionOptions,
+        ILockFileCoordinator lockFileCoordinator,
+        IOptions<CleanupPolicyOptions> cleanupPolicyOptions,
+        IReconciliationRetryPolicy retryPolicy,
+        IDryRunPlanner dryRunPlanner,
+        IPackageCleanupService packageCleanupService,
+        IFailureRecorder failureRecorder,
+        ObservationDegradationTracker observationDegradationTracker,
+        ICycleFailureContributor? cycleFailureContributor,
+        StartupRecoveryState? startupRecoveryState,
+        IStoreLock? storeLock)
+    {
+        _storeLock = storeLock;
+
         // DesiredManifestPackageSource is always registered so code-based and configuration-based
         // hosts behave identically; it is excluded here when disabled so it leaves no
         // snapshot/state footprint on hosts that never opted into manifest convergence.
@@ -122,12 +209,23 @@ public sealed class ReconciliationService : IReconciliationService
 
         if (_reconciliationOptions.EnableSingleFlight && Interlocked.CompareExchange(ref _inFlight, 1, 0) != 0)
         {
-            return new(true, EmptyChangeSet, [], IsDegraded: false);
+            return Skipped(ReconciliationSkipReason.SingleFlight);
         }
 
         await _cycleLock.WaitAsync(cancellationToken);
         try
         {
+            // The store lock spans the whole pipeline, because a cycle is a read-modify-write of the
+            // state file and every middleware between the read and the write is part of it. `using`
+            // releases it on every exit path: normal completion, a pipeline exception, and
+            // cancellation. A store that is already owned elsewhere yields a reported skip rather
+            // than a second writer.
+            using var storeLock = _storeLock?.Acquire() ?? StoreLockHandle.NotRequired();
+            if (!storeLock.CanProceed)
+            {
+                return Skipped(ReconciliationSkipReason.StoreLockUnavailable);
+            }
+
             var cycleStartedAt = DateTimeOffset.UtcNow;
             var correlationId = trigger.CorrelationId ?? CorrelationContext.CreateNew();
             using var scope = CorrelationContext.BeginScope(correlationId);
@@ -152,4 +250,7 @@ public sealed class ReconciliationService : IReconciliationService
             Interlocked.Exchange(ref _inFlight, 0);
         }
     }
+
+    private static ReconciliationRunResult Skipped(ReconciliationSkipReason reason) =>
+        new(true, EmptyChangeSet, [], IsDegraded: false) { SkipReason = reason };
 }
