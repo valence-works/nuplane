@@ -5,7 +5,7 @@ namespace Nuplane.Store.State;
 /// only one process at a time runs the reconciliation pipeline against a given
 /// <c>store-state.json</c>.
 /// </summary>
-public enum StoreLockOutcome
+internal enum StoreLockOutcome
 {
     /// <summary>
     /// There is nothing to lock: the store is in-memory only, or the store lock is switched off by

@@ -5,7 +5,7 @@ namespace Nuplane.Store.State;
 /// file handle, which is why callers take it with <c>using</c>: the lock is then released on every
 /// exit path, including an exception out of the reconciliation pipeline and cancellation.
 /// </summary>
-public sealed class StoreLockHandle : IDisposable
+internal sealed class StoreLockHandle : IDisposable
 {
     private readonly FileStream? _stream;
 

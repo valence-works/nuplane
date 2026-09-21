@@ -141,13 +141,15 @@ public sealed class ReconciliationServiceStoreLockTests : IDisposable
     [Fact]
     public async Task TriggerAsync_WhenSingleFlightDeclinesACycle_ReportsSingleFlightRatherThanStoreContention()
     {
-        var service = CreateService(sources: [new ReentrantSource(_source)]);
+        var reentrantSource = new ReentrantSource(_source);
+        var service = CreateService(sources: [reentrantSource]);
+        reentrantSource.Host = service;
 
         var result = await service.TriggerManualAsync(CancellationToken.None);
 
         Assert.False(result.Skipped);
-        Assert.Equal(ReconciliationSkipReason.SingleFlight, ReentrantSource.LastNestedResult!.SkipReason);
-        Assert.True(ReentrantSource.LastNestedResult.Skipped);
+        Assert.Equal(ReconciliationSkipReason.SingleFlight, reentrantSource.LastNestedResult!.SkipReason);
+        Assert.True(reentrantSource.LastNestedResult.Skipped);
     }
 
     private ReconciliationService CreateService(
@@ -163,7 +165,6 @@ public sealed class ReconciliationServiceStoreLockTests : IDisposable
             packageCleanupService: packageCleanupService,
             storeLock: storeLock ?? CreateStoreLock());
 
-        ReentrantSource.Host = service;
         return service;
     }
 
@@ -199,9 +200,9 @@ public sealed class ReconciliationServiceStoreLockTests : IDisposable
     /// </summary>
     private sealed class ReentrantSource(IDesiredPackageSource inner) : IDesiredPackageSource
     {
-        public static ReconciliationService? Host { get; set; }
+        public ReconciliationService? Host { get; set; }
 
-        public static ReconciliationRunResult? LastNestedResult { get; private set; }
+        public ReconciliationRunResult? LastNestedResult { get; private set; }
 
         public async Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
         {

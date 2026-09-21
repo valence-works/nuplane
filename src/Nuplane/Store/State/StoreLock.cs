@@ -30,7 +30,7 @@ namespace Nuplane.Store.State;
 /// failure on the second step is a capability problem too, and is classified as such.
 /// </para>
 /// </remarks>
-public sealed partial class StoreLock : IStoreLock
+internal sealed partial class StoreLock : IStoreLock
 {
     /// <summary>
     /// The suffix appended to a resolved state file path to name its lock file.

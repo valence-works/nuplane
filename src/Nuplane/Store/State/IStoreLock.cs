@@ -17,7 +17,7 @@ namespace Nuplane.Store.State;
 /// contention and does nothing, rather than waiting or writing.
 /// </para>
 /// </remarks>
-public interface IStoreLock
+internal interface IStoreLock
 {
     /// <summary>
     /// Tries once, without waiting, to take exclusive use of the store.

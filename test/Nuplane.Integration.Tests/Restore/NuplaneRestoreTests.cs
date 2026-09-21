@@ -2,9 +2,12 @@ using System.Runtime.Loader;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 using Nuplane.Abstractions;
 using Nuplane.Builder;
+using Nuplane.Feeds;
 using Nuplane.Feeds.Configuration;
+using Nuplane.Feeds.Versioning;
 using Nuplane.Loading;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Restore;
@@ -276,6 +279,41 @@ public sealed class NuplaneRestoreTests : IDisposable
     }
 
     [Fact]
+    public async Task RestoreAsync_WhenAFeedConfiguresCredentials_NeverEnumeratesOrAcquiresAgainstIt()
+    {
+        // A reserved, unroutable address (RFC 2606) so that a resolver which contacted it despite
+        // the refusal would fail loudly instead of this test passing by luck or by timing out.
+        var configuration = Configure(
+            ("Nuplane:Setup:Feeds:private-feed:ServiceIndex", "https://credentialed.invalid/index.json"),
+            ("Nuplane:Setup:Feeds:private-feed:Credentials", "secrets://packages/token"),
+            ("Nuplane:Setup:Feeds:private-feed:IncludePatterns:0", "Ghost.Package [1.0.0]"));
+        var versionEnumerator = Substitute.For<IFeedVersionEnumerator>();
+        versionEnumerator
+            .EnumerateVersionsAsync(default!, default!, default)
+            .ReturnsForAnyArgs<Task<PackageVersionList>>(_ => throw new InvalidOperationException(
+                "The credentialed feed must never be enumerated."));
+        var remoteAcquirer = Substitute.For<IRemotePackageAcquirer>();
+        remoteAcquirer
+            .AcquireAsync(default!, default!, default!, default)
+            .ReturnsForAnyArgs<Task<string>>(_ => throw new InvalidOperationException(
+                "The credentialed feed must never be acquired from."));
+        var options = Options(configuration, restore => restore.ConfigureBuilder += builder =>
+        {
+            builder.Services.AddSingleton(versionEnumerator);
+            builder.Services.AddSingleton(remoteAcquirer);
+        });
+
+        var result = await NuplaneRestore.RestoreAsync(configuration, options);
+
+        Assert.Equal("private-feed", Assert.Single(result.CredentialRefusedFeeds));
+        // The desired source still asks for it — the feed is missing from resolution, not from the
+        // desired set — so the refusal is what stops resolution, not an absence of anything to do.
+        Assert.Equal("Ghost.Package", Assert.Single(result.FailedPackages));
+        await versionEnumerator.DidNotReceiveWithAnyArgs().EnumerateVersionsAsync(default!, default!, default);
+        await remoteAcquirer.DidNotReceiveWithAnyArgs().AcquireAsync(default!, default!, default!, default);
+    }
+
+    [Fact]
     public async Task DescribeDesiredAsync_WhenAFeedConfiguresCredentials_NamesItWithoutContactingIt()
     {
         var configuration = Configure(
@@ -440,21 +478,77 @@ public sealed class NuplaneRestoreTests : IDisposable
         Assert.NotNull(Type.GetType(package.MarkerTypeName));
     }
 
+    [Fact]
+    public async Task RestoreAsync_WithTheConfigurationRoot_YieldsTheSameResultAsItsNuplaneSection()
+    {
+        HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory);
+        var section = Configure();
+        var root = ConfigureAsRoot();
+
+        var fromSection = await NuplaneRestore.RestoreAsync(section, Options(section));
+        var fromRoot = await NuplaneRestore.RestoreAsync(root, Options(root));
+
+        Assert.Equal(fromSection.InstallRoot, fromRoot.InstallRoot);
+        Assert.Equal(fromSection.StateFilePath, fromRoot.StateFilePath);
+        Assert.Equal(
+            fromSection.ActivePackages.Select(static active => (active.PackageId, active.Version)),
+            fromRoot.ActivePackages.Select(static active => (active.PackageId, active.Version)));
+    }
+
+    [Fact]
+    public async Task DescribeDesiredAsync_WithTheConfigurationRoot_YieldsTheSameResultAsItsNuplaneSection()
+    {
+        HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory, version: "2.5.0");
+        var section = Configure();
+        var root = ConfigureAsRoot();
+
+        var fromSection = await NuplaneRestore.DescribeDesiredAsync(section, Options(section));
+        var fromRoot = await NuplaneRestore.DescribeDesiredAsync(root, Options(root));
+
+        Assert.Equal(fromSection.InstallRoot, fromRoot.InstallRoot);
+        Assert.Equal(fromSection.StateFilePath, fromRoot.StateFilePath);
+        Assert.Equal(
+            fromSection.Requests.Select(static request => (request.PackageId, request.PinnedVersion)),
+            fromRoot.Requests.Select(static request => (request.PackageId, request.PinnedVersion)));
+    }
+
     private static string? Pin(NuplaneDesiredDescription description, string packageId) =>
         description.Requests.Single(request => request.PackageId == packageId).PinnedVersion;
 
     private IConfigurationSection Configure(params (string Key, string? Value)[] settings) =>
+        BuildConfiguration(
+            new Dictionary<string, string?>
+            {
+                ["Nuplane:Setup:Feeds:" + FeedName + ":DirectoryPath"] = _feedDirectory,
+                ["Nuplane:Setup:Feeds:" + FeedName + ":IncludeAll"] = "true",
+                ["Nuplane:Setup:Feeds:" + FeedName + ":Directory:Watch"] = "false"
+            },
+            settings)
+            .GetSection("Nuplane");
+
+    /// <summary>
+    /// Builds the same feed settings unnested, the shape a configuration root dedicated entirely to
+    /// Nuplane takes, and returns it directly — the other value <see cref="NuplaneRestore"/> accepts
+    /// in place of a <c>Nuplane</c> section (see its XML docs).
+    /// </summary>
+    private IConfigurationRoot ConfigureAsRoot(params (string Key, string? Value)[] settings) =>
+        BuildConfiguration(
+            new Dictionary<string, string?>
+            {
+                ["Setup:Feeds:" + FeedName + ":DirectoryPath"] = _feedDirectory,
+                ["Setup:Feeds:" + FeedName + ":IncludeAll"] = "true",
+                ["Setup:Feeds:" + FeedName + ":Directory:Watch"] = "false"
+            },
+            settings);
+
+    private static IConfigurationRoot BuildConfiguration(
+        Dictionary<string, string?> baseSettings,
+        (string Key, string? Value)[] settings) =>
         new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["Nuplane:Setup:Feeds:" + FeedName + ":DirectoryPath"] = _feedDirectory,
-                    ["Nuplane:Setup:Feeds:" + FeedName + ":IncludeAll"] = "true",
-                    ["Nuplane:Setup:Feeds:" + FeedName + ":Directory:Watch"] = "false"
-                }
+            .AddInMemoryCollection(baseSettings
                 .Concat(settings.Select(static setting => new KeyValuePair<string, string?>(setting.Key, setting.Value)))
                 .ToDictionary(static setting => setting.Key, static setting => setting.Value))
-            .Build()
-            .GetSection("Nuplane");
+            .Build();
 
     private NuplaneRestoreOptions Options(IConfiguration configuration, Action<NuplaneRestoreOptions>? configure = null)
     {

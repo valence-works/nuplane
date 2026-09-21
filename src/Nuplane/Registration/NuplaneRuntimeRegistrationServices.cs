@@ -2,12 +2,16 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Events;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Health;
 using Nuplane.Hosting;
+using Nuplane.Observability;
 using Nuplane.Operational;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Configuration;
+using Nuplane.Sources;
+using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
 using Polly;
 
@@ -58,7 +62,28 @@ public static class NuplaneRuntimeRegistrationServices
         services.AddSingleton<IActivePackageCatalog>(sp => sp.GetRequiredService<ActivePackageCatalog>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, PackageCatalogOperationalStateContributor>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, StartupRecoveryOperationalStateContributor>());
-        services.AddSingleton<ReconciliationService>();
+        services.AddSingleton(sp => new ReconciliationService(
+            sp.GetServices<IDesiredPackageSource>(),
+            sp.GetRequiredService<IDesiredStateAggregator>(),
+            sp.GetRequiredService<IDesiredActualDiffEngine>(),
+            sp.GetRequiredService<IPackageResolver>(),
+            sp.GetRequiredService<IStoreRegistry>(),
+            sp.GetRequiredService<IOptions<ReconciliationOptions>>(),
+            sp.GetRequiredService<IObserverEventDispatcher>(),
+            sp.GetRequiredService<IReconciliationHealthEvaluator>(),
+            sp.GetRequiredService<IReconciliationLogger>(),
+            sp.GetRequiredService<ReconciliationMetrics>(),
+            sp.GetRequiredService<IOptions<FeedResolutionOptions>>(),
+            sp.GetRequiredService<ILockFileCoordinator>(),
+            sp.GetRequiredService<IOptions<CleanupPolicyOptions>>(),
+            sp.GetRequiredService<IReconciliationRetryPolicy>(),
+            sp.GetRequiredService<IDryRunPlanner>(),
+            sp.GetRequiredService<IPackageCleanupService>(),
+            sp.GetRequiredService<IFailureRecorder>(),
+            sp.GetRequiredService<ObservationDegradationTracker>(),
+            sp.GetService<ICycleFailureContributor>(),
+            sp.GetService<StartupRecoveryState>(),
+            sp.GetService<IStoreLock>()));
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
     }
 
