@@ -50,7 +50,10 @@ namespace Nuplane;
 /// <b>Module feeds come from the caller.</b> Core <c>AddNuplane</c> skips every configured feed that
 /// declares a directory path, because directory feeds belong to <c>Nuplane.Sources.Directory</c>.
 /// <see cref="NuplaneRestoreOptions.ConfigureBuilder"/> is how a caller that references that module
-/// adds them, without the core package depending on it.
+/// adds them, without the core package depending on it — its second argument is the resolved
+/// Nuplane configuration a module registration helper such as
+/// <c>AddDirectoryFeedsFromConfiguration</c> expects, whether the caller passed the root or the
+/// section to the entry point itself.
 /// </description></item>
 /// <item><description>
 /// <b>Either configuration shape is accepted.</b> The <c>configuration</c> parameter on
@@ -138,7 +141,7 @@ public static class NuplaneRestore
         ArgumentNullException.ThrowIfNull(configuration);
         options ??= new NuplaneRestoreOptions();
 
-        await using var composition = RestoreComposition.Create(configuration, options);
+        await using var composition = await RestoreComposition.Create(configuration, options).ConfigureAwait(false);
 
         if (options.RequirePinnedVersions)
         {
@@ -220,7 +223,7 @@ public static class NuplaneRestore
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        await using var composition = RestoreComposition.Create(configuration, options ?? new NuplaneRestoreOptions());
+        await using var composition = await RestoreComposition.Create(configuration, options ?? new NuplaneRestoreOptions()).ConfigureAwait(false);
 
         return await composition.DescribeDesiredAsync(cancellationToken).ConfigureAwait(false);
     }

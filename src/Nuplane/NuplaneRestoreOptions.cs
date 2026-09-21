@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Nuplane.Builder;
 
@@ -81,16 +82,22 @@ public sealed class NuplaneRestoreOptions
 
     /// <summary>
     /// Gets or sets a callback that runs against the same <see cref="NuplaneBuilder"/> a host's
-    /// <c>AddNuplane</c> callback runs against, after configuration has been applied.
+    /// <c>AddNuplane</c> callback runs against, after configuration has been applied. The second
+    /// argument is the already-resolved Nuplane configuration — the <c>Nuplane</c> section, whether
+    /// <c>RestoreAsync</c>/<c>DescribeDesiredAsync</c> were given that section directly or the host's
+    /// configuration root that nests it.
     /// </summary>
     /// <remarks>
     /// This is how a caller adds the module-owned pieces the core package deliberately does not
     /// know about. Directory-backed feeds are the usual one: core <c>AddNuplane</c> skips every
     /// feed declaring <c>DirectoryPath</c>, so a caller that references
     /// <c>Nuplane.Sources.Directory</c> passes
-    /// <c>builder =&gt; builder.AddDirectoryFeedsFromConfiguration(configuration)</c> here and the
-    /// same feeds the host would have are registered — without the core package taking a dependency
-    /// on that module.
+    /// <c>(builder, configuration) =&gt; builder.AddDirectoryFeedsFromConfiguration(configuration)</c>
+    /// here and the same feeds the host would have are registered — without the core package taking a
+    /// dependency on that module. Use the callback's own <c>configuration</c> parameter rather than a
+    /// configuration captured from the call to <c>RestoreAsync</c>/<c>DescribeDesiredAsync</c>: when
+    /// that call was given the host's configuration root, the captured value is still the unresolved
+    /// root, and a module registration helper expecting Nuplane's own keys would find none.
     /// </remarks>
-    public Action<NuplaneBuilder>? ConfigureBuilder { get; set; }
+    public Action<NuplaneBuilder, IConfiguration>? ConfigureBuilder { get; set; }
 }

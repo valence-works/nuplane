@@ -42,16 +42,21 @@ internal sealed class RestoreComposition : IAsyncDisposable
     public IServiceProvider Services => _provider;
 
     /// <summary>
-    /// Composes the provider and pins its paths. Everything that can refuse — a non-absolute
-    /// override, a path that nothing pins, in-memory persistence, invalid options — refuses here,
-    /// before any store, feed, or package is touched.
+    /// The name of the section a configuration root nests Nuplane's own configuration under.
     /// </summary>
-    public static RestoreComposition Create(IConfiguration configuration, NuplaneRestoreOptions options)
+    internal const string NuplaneSectionName = "Nuplane";
+
+    /// <summary>
+    /// Composes the provider and pins its paths. Everything that can refuse — a non-absolute
+    /// override, a path that nothing pins, in-memory persistence, invalid options, an empty
+    /// composition — refuses here, before any store, feed, or package is touched.
+    /// </summary>
+    public static async Task<RestoreComposition> Create(IConfiguration configuration, NuplaneRestoreOptions options)
     {
         // Accepts the host's configuration root or its own Nuplane section — the same value passed
         // to AddNuplane — without changing AddNuplane itself, which still expects to be handed
         // configuration already scoped to Nuplane's own keys.
-        var nuplaneConfiguration = RestoreConfigurationResolver.ResolveNuplaneSection(configuration);
+        var nuplaneConfiguration = ResolveNuplaneSection(configuration);
         var paths = new RestorePathResolver(options);
         var credentialRefusedFeeds = new List<string>();
 
@@ -64,7 +69,11 @@ internal sealed class RestoreComposition : IAsyncDisposable
 
         // Loading is deliberately not registered: PackageAutoLoadingObserver is only ever added by
         // Nuplane.Loading's AutoloadPackages, so a composition that never calls it loads nothing.
-        services.AddNuplane(nuplaneConfiguration, builder => options.ConfigureBuilder?.Invoke(builder));
+        // The callback is handed the already-resolved Nuplane configuration, not the value the
+        // caller passed in, so a closure that captured the caller's unresolved root — the trap
+        // NuplaneRestoreOptions.ConfigureBuilder's docs warn about — is never the reason a module
+        // registration helper finds nothing.
+        services.AddNuplane(nuplaneConfiguration, builder => options.ConfigureBuilder?.Invoke(builder, nuplaneConfiguration));
 
         // These post-configure callbacks are registered after AddNuplane, and therefore run after
         // every Configure and PostConfigure the configuration and the builder callback registered —
@@ -110,7 +119,7 @@ internal sealed class RestoreComposition : IAsyncDisposable
                 && HasNoDesiredPackageSources(provider))
             {
                 throw new InvalidOperationException(
-                    $"No feed and no desired package source is configured. Pass either the host's configuration root — the one containing a '{RestoreConfigurationResolver.NuplaneSectionName}' section — or that '{RestoreConfigurationResolver.NuplaneSectionName}' section itself, with at least one feed configured under it. "
+                    $"No feed and no desired package source is configured. Pass either the host's configuration root — the one containing a '{NuplaneSectionName}' section — or that '{NuplaneSectionName}' section itself, with at least one feed configured under it. "
                     + "A host that genuinely configures no feeds has nothing for a restore to populate, so this is refused rather than reported as an empty success.");
             }
 
@@ -124,9 +133,23 @@ internal sealed class RestoreComposition : IAsyncDisposable
         }
         catch
         {
-            provider.Dispose();
+            // Async disposal throughout, matching the DisposeAsync a successfully composed instance
+            // is disposed through: the container may hold a service that is only IAsyncDisposable, for
+            // which the synchronous Dispose() a catch block reaches for by habit would throw.
+            await provider.DisposeAsync().ConfigureAwait(false);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Returns <paramref name="configuration"/>'s own <see cref="NuplaneSectionName"/> child section
+    /// when it exists, and <paramref name="configuration"/> itself otherwise — so a configuration
+    /// root and the <c>Nuplane</c> section it nests both resolve to the same effective configuration.
+    /// </summary>
+    private static IConfiguration ResolveNuplaneSection(IConfiguration configuration)
+    {
+        var section = configuration.GetSection(NuplaneSectionName);
+        return section.Exists() ? section : configuration;
     }
 
     /// <summary>

@@ -245,16 +245,16 @@ deployment step, a CLI, or a container build has to get a host's packages onto d
 ever runs.
 
 ```csharp
-var nuplane = configuration.GetSection("Nuplane");
-
-var result = await NuplaneRestore.RestoreAsync(nuplane, new NuplaneRestoreOptions
+var result = await NuplaneRestore.RestoreAsync(configuration, new NuplaneRestoreOptions
 {
     BasePath = hostContentRoot,
     InstallRoot = "/srv/app/.nuplane/packages",
     StateFilePath = "/srv/app/.nuplane/store-state.json",
     LoggerFactory = loggerFactory,
-    // Directory feeds belong to Nuplane.Sources.Directory, so the caller adds them.
-    ConfigureBuilder = builder => builder.AddDirectoryFeedsFromConfiguration(nuplane)
+    // Directory feeds belong to Nuplane.Sources.Directory, so the caller adds them. The second
+    // argument is the already-resolved Nuplane configuration — use it, not a captured `configuration`,
+    // or the module registration helper finds nothing when `configuration` is the host's root.
+    ConfigureBuilder = (builder, nuplane) => builder.AddDirectoryFeedsFromConfiguration(nuplane)
 });
 
 Console.WriteLine($"restored into {result.InstallRoot}; state at {result.StateFilePath}");
@@ -263,6 +263,10 @@ foreach (var package in result.ActivePackages)
     Console.WriteLine($"{package.PackageId} {package.Version} -> {package.InstallPath}");
 }
 ```
+
+`configuration` may be the host's configuration root or its own `Nuplane` section; `RestoreAsync`
+resolves the `Nuplane` section itself when the root is given, which is why `ConfigureBuilder`
+receives the resolved section as its own argument rather than requiring the caller to pre-resolve it.
 
 `NuplaneHostIntegratedLoader.LoadFromStateAsync(result.StateFilePath)` then loads exactly what the
 restore installed, so the two entry points compose into "populate, then use" inside one tool.
