@@ -324,12 +324,15 @@ a restore that quietly did nothing.
 caller can prove which store it populated instead of inferring it from configuration.
 
 **Failures are reported, not thrown.** A degraded cycle sets `IsDegraded`; packages that could not be
-applied are listed in `FailedPackages`; a feed configuring `Credentials` is named in
-`CredentialRefusedFeeds`. Nuplane has no credential resolver yet, so such a feed is dropped from
-resolution before the first network call rather than contacted and then rejected by the acquirer — a
-package that could only have come from it is also reported as a failed package. Only a malformed
-request throws: a null configuration, a non-absolute override, a path nothing pins, in-memory
-persistence, or configuration that fails Nuplane's own options validation.
+applied are listed in `FailedPackages`; a feed whose `Credentials` reference could not be resolved is
+named in `CredentialRefusedFeeds`. Such a feed is dropped from resolution before the first network
+call rather than contacted without credentials and rejected by the feed — a package that could only
+have come from it is also reported as a failed package. A feed whose reference *does* resolve is
+restored from like any other feed and is not named there; see [Feed credentials](#feed-credentials),
+whose built-in `env` provider needs no registration and therefore works in a host-free tool exactly
+as it does in a host. Only a malformed request throws: a null configuration, a non-absolute override,
+a path nothing pins, in-memory persistence, or configuration that fails Nuplane's own options
+validation — which now includes a `Credentials` value that is not a well-formed `secrets://` reference.
 
 **Pre-flight.** `DescribeDesiredAsync` answers "what would this restore ask for, and where would it
 put it?" without doing any of it:
@@ -504,6 +507,100 @@ docker run --read-only \
 Only `PackageInstallRoot` (and the store state file path) has to be writable. Earlier versions
 extracted into a `.installed/` subdirectory of the feed directory; hosts upgrading from those
 versions can delete that directory, and packages are re-extracted once under the install root.
+
+### Feed credentials
+
+- **Applicability:** `Core`
+- **Stability note:** `Recently Changed`
+
+A private feed is configured with a *reference* to its secret, never with the secret:
+
+```json
+{
+  "Nuplane": {
+    "Setup": {
+      "Feeds": {
+        "private-feed": {
+          "ServiceIndex": "https://packages.example.com/v3/index.json",
+          "Credentials": "secrets://env/MY_FEED_TOKEN",
+          "IncludePatterns": [ "Acme.Plugins.*" ]
+        }
+      }
+    }
+  }
+}
+```
+
+**Reference syntax.** `secrets://<provider>/<name>`. The provider segment selects a registered
+provider and is matched case-insensitively; everything after the first slash is the name, passed to
+that provider unchanged — so a provider addressing secrets by path takes
+`secrets://vault/apps/nuplane/feed-token` without further syntax. A `Credentials` value that is not
+of this shape fails options validation at startup, and the rejected value is never echoed in the
+error, because a host that pasted the token itself into `Credentials` is exactly the case that rule
+catches. Credentials remain forbidden on `file://` feeds, and every credentialed feed still has to be
+an HTTPS service index.
+
+**Built-in provider: `env`.** `AddNuplane` registers it, so `secrets://env/MY_FEED_TOKEN` reads that
+process environment variable with no further setup — in a host, and equally in a host-free
+`NuplaneRestore` tool. A variable that is unset or empty is not an error; it refuses the feed (below).
+
+**Secret shape.** Whatever the provider returns is either `user:password` — split at the first colon,
+so a password may contain colons — or a bare token, which Nuplane sends as the password under the
+fixed placeholder user name `nuplane`, the form Azure Artifacts, Feedz and other token-issuing feeds
+accept. A value whose colon leaves either half empty is refused rather than sent half-formed. Both
+the version enumeration and the package download authenticate, each with credentials attached to that
+one feed; Nuplane never installs a process-global NuGet credential provider, so one feed's secret is
+never offered to another.
+
+**Adding a provider.** Implement `ISecretReferenceProvider` and register it; the resolver is the only
+composition point, and nothing else in Nuplane knows how a secret is stored:
+
+```csharp
+public sealed class VaultSecretReferenceProvider(IVaultClient client) : ISecretReferenceProvider
+{
+    public string Scheme => "vault";
+
+    public async ValueTask<string?> ResolveAsync(string name, CancellationToken cancellationToken) =>
+        await client.TryReadAsync(name, cancellationToken);   // null when there is no such secret
+}
+
+services.AddSingleton<ISecretReferenceProvider, VaultSecretReferenceProvider>();
+```
+
+Return `null` (or an empty string) when the provider holds nothing under that name: that is an
+ordinary answer that refuses the feed, not a failure. Throw only when the lookup itself failed, and
+never with the secret in the message.
+
+**Replacing the built-in `env` provider.** Remove its descriptor, then register your own for the same
+name:
+
+```csharp
+services.Remove(services.Single(descriptor =>
+    descriptor.ServiceType == typeof(ISecretReferenceProvider)
+    && descriptor.ImplementationType == typeof(EnvironmentSecretReferenceProvider)));
+services.AddSingleton<ISecretReferenceProvider, MyEnvProvider>();
+```
+
+`services.RemoveAll<ISecretReferenceProvider>()` removes every provider, built-in included. Adding a
+second provider that claims `env` *without* removing the first is refused when the resolver is built,
+rather than silently resolved in favour of one of them: a replacement that did not take effect must
+not look like one that did.
+
+**When a reference cannot be resolved** — no registered provider claims its provider segment, the
+provider holds no value, or reading it failed — the feed is refused by name. It is not contacted at
+all: not for version enumeration, not for a download, and not even to serve a package an earlier,
+authenticated run already installed from it. A host-free restore reports the feed in
+`NuplaneRestoreResult.CredentialRefusedFeeds` and drops it before its first network call; a running
+host fails the packages that could only have come from it, naming the feed in the failure. With no
+provider able to resolve anything, behaviour is exactly what it was before credentials could be
+resolved at all: the feed is refused, and every other feed is unaffected.
+
+**What is logged, and what is not.** The reference is configuration and may appear in logs; the
+secret never does. Resolved secrets are wrapped so that logging, interpolating or including one in an
+exception prints `***`, and refusal and failure messages name the feed only — never the value, the
+reference, or the provider. Nothing resolved is written to the store, and a resolved secret is cached
+for the duration of one reconciliation cycle and dropped with it, so one feed's secret is read once
+per cycle and no longer than that.
 
 ## Code-driven adoption
 
