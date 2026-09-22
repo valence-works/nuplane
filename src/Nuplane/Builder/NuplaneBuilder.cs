@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Nuplane.Abstractions;
+using Nuplane.Capabilities;
 using Nuplane.Feeds.Builder;
 using Nuplane.Feeds.Registration;
 using Nuplane.Hosting;
@@ -150,6 +151,38 @@ public sealed class NuplaneBuilder
     public NuplaneBuilder OnPackagesChanged<T>() where T : class, INuplaneObserver
     {
         Services.AddSingleton<INuplaneObserver, T>();
+        return this;
+    }
+
+    /// <summary>
+    /// Selects <paramref name="option"/> for the capability named <paramref name="name"/>, the same
+    /// selection <c>Nuplane:Capabilities:&lt;name&gt;</c> makes from configuration. Called after
+    /// configuration binds, so a builder call always overrides a configured selection for the same
+    /// capability, the same "builder calls run last" rule <see cref="WithStateFile"/> and
+    /// <see cref="UseInMemoryStore"/> follow.
+    /// </summary>
+    /// <param name="name">The capability's name, matched case-insensitively.</param>
+    /// <param name="option">The option's name, matched case-insensitively against the declaring package's declared options.</param>
+    public NuplaneBuilder SelectCapability(string name, string option)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(option);
+        return SelectCapability(name, new CapabilitySelection { Options = [option] });
+    }
+
+    /// <summary>
+    /// Selects <paramref name="selection"/> for the capability named <paramref name="name"/>,
+    /// including any <see cref="CapabilitySelection.Version"/> or <see cref="CapabilitySelection.Feed"/>
+    /// override, the same shape <c>Nuplane:Capabilities:&lt;name&gt;</c>'s object form configures.
+    /// See <see cref="SelectCapability(string, string)"/> for the precedence rule.
+    /// </summary>
+    /// <param name="name">The capability's name, matched case-insensitively.</param>
+    /// <param name="selection">The selected option(s) and any overrides.</param>
+    public NuplaneBuilder SelectCapability(string name, CapabilitySelection selection)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(selection);
+        Services.Configure<CapabilityOptions>(options => options.Selections[name] = selection);
         return this;
     }
 }

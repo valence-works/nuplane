@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Capabilities;
 using Nuplane.Feeds;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Credentials;
@@ -195,7 +196,10 @@ internal sealed class RestoreComposition : IAsyncDisposable
                 static error => error.Value.Message,
                 StringComparer.Ordinal),
             StateFilePath,
-            InstallRoot);
+            InstallRoot,
+            new Dictionary<string, CapabilitySelection>(
+                _provider.GetRequiredService<IOptions<CapabilityOptions>>().Value.Selections,
+                StringComparer.OrdinalIgnoreCase));
     }
 
     public ValueTask DisposeAsync() => _provider.DisposeAsync();

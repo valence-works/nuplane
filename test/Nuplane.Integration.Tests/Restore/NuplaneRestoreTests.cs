@@ -356,6 +356,32 @@ public sealed class NuplaneRestoreTests : IDisposable
     }
 
     [Fact]
+    public async Task DescribeDesiredAsync_ReportsTheHostsConfiguredCapabilitySelections()
+    {
+        var configuration = Configure(
+            ("Nuplane:Capabilities:ef-provider", "PostgreSql,Sqlite"),
+            ("Nuplane:Capabilities:message-broker:Option", "RabbitMq"),
+            ("Nuplane:Capabilities:message-broker:Version", "[6.0.0]"));
+
+        var description = await NuplaneRestore.DescribeDesiredAsync(configuration, Options());
+
+        Assert.Equal(2, description.CapabilitySelections.Count);
+        Assert.Equal(["PostgreSql", "Sqlite"], description.CapabilitySelections["ef-provider"].Options);
+        Assert.Equal("RabbitMq", Assert.Single(description.CapabilitySelections["message-broker"].Options));
+        Assert.Equal("[6.0.0]", description.CapabilitySelections["message-broker"].Version);
+    }
+
+    [Fact]
+    public async Task DescribeDesiredAsync_WithNoConfiguredCapabilities_ReportsNoCapabilitySelections()
+    {
+        var configuration = Configure();
+
+        var description = await NuplaneRestore.DescribeDesiredAsync(configuration, Options());
+
+        Assert.Empty(description.CapabilitySelections);
+    }
+
+    [Fact]
     public async Task DescribeDesiredAsync_ForEveryShapeOfVersionConstraint_TellsPinnedFromUnpinned()
     {
         var configuration = Configure(

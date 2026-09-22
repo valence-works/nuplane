@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Nuplane.Capabilities;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Convergence;
@@ -23,6 +24,7 @@ internal static class NuplaneOptionsRegistrationServices
     private const string CleanupPolicySectionName = "CleanupPolicy";
     private const string ConvergenceSectionName = "Convergence";
     internal const string StoreRegistrySectionName = "StoreRegistry";
+    internal const string CapabilitiesSectionName = "Capabilities";
 
     private static readonly Action<IServiceCollection, IConfiguration>[] ConfiguredOptionBinders =
     [
@@ -32,7 +34,8 @@ internal static class NuplaneOptionsRegistrationServices
         static (services, configuration) => ConfigureBoundOptions<LockFileOptions>(services, configuration, LockFileSectionName),
         static (services, configuration) => ConfigureBoundOptions<CleanupPolicyOptions>(services, configuration, CleanupPolicySectionName),
         static (services, configuration) => ConfigureBoundOptions<ConvergenceOptions>(services, configuration, ConvergenceSectionName),
-        static (services, configuration) => ConfigureBoundOptions<StoreRegistryOptions>(services, configuration, StoreRegistrySectionName)
+        static (services, configuration) => ConfigureBoundOptions<StoreRegistryOptions>(services, configuration, StoreRegistrySectionName),
+        static (services, configuration) => ConfigureCapabilityOptions(services, configuration)
     ];
 
     internal static void RegisterValidators(this IServiceCollection services)
@@ -45,6 +48,7 @@ internal static class NuplaneOptionsRegistrationServices
         services.AddSingleton<FeedCredentialOptionsValidator>();
         services.AddSingleton<IValidateOptions<ConvergenceOptions>, ConvergenceOptionsValidator>();
         services.AddSingleton<IValidateOptions<StoreRegistryOptions>, StoreRegistryOptionsValidator>();
+        services.AddSingleton<IValidateOptions<CapabilityOptions>, CapabilityOptionsValidator>();
     }
 
     internal static void RegisterOptions(this IServiceCollection services)
@@ -56,6 +60,7 @@ internal static class NuplaneOptionsRegistrationServices
         services.AddOptions<CleanupPolicyOptions>().ValidateOnStart();
         services.AddOptions<ConvergenceOptions>().ValidateOnStart();
         services.AddOptions<StoreRegistryOptions>().ValidateOnStart();
+        services.AddOptions<CapabilityOptions>().ValidateOnStart();
     }
 
     internal static void BindConfiguredOptions(IServiceCollection services, IConfiguration configuration)
@@ -69,6 +74,12 @@ internal static class NuplaneOptionsRegistrationServices
         {
             bindOptions(services, configuration);
         }
+    }
+
+    private static void ConfigureCapabilityOptions(IServiceCollection services, IConfiguration configuration)
+    {
+        var capabilitiesSection = GetNamedSectionOrSelf(configuration, CapabilitiesSectionName);
+        services.Configure<CapabilityOptions>(options => CapabilitySelectionConfigurationReader.Populate(options, capabilitiesSection));
     }
 
     internal static IConfigurationSection GetNamedSectionOrSelf(IConfiguration configuration, string sectionName)
