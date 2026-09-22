@@ -233,6 +233,83 @@ disagree about type identity. A host-free load is therefore for processes that d
 Nuplane host; in a process that does, read the assemblies from that host's `IPackageAssemblyCatalog`
 instead.
 
+### Packages the host already provides
+
+- **Applicability:** `Core`
+- **Stability note:** `Recently Changed`
+
+The dependency graph resolver already skips acquiring a *dependency* when it finds a matching
+package, at a satisfying version, in the host's own `*.deps.json` — the general rule, unchanged by
+this section. `Nuplane:HostProvidedPackages` is for the narrower case: a dependency the host
+guarantees it supplies that the resolver cannot confirm from `*.deps.json` alone (for example a
+contract assembly the host loads outside the ordinary deps graph).
+
+```json
+{
+  "Nuplane": {
+    "HostProvidedPackages": ["Acme.Contracts", "Acme.Plugins."]
+  }
+}
+```
+
+Each entry is either an exact package id (`"Acme.Contracts"`) or a prefix (`"Acme.Plugins."`, a
+trailing `.` marks it): a prefix matches every dependency package id that starts with it, including
+the dot, case-insensitively, so `"Acme.Plugins."` matches `Acme.Plugins.Sql` but not
+`Acme.PluginsExtra` or bare `Acme.Plugins`. Both forms are matched case-insensitively, and duplicate
+entries are harmless. This list, like the `*.deps.json` rule it sits beside, is consulted only for
+**dependencies**; it is never applied to a root package, explicit or contributed — a root is always
+acquired however it is named.
+
+Left unconfigured, only Nuplane's own contract package ids are treated as host-provided. Every other
+package a dependency edge names — including your own product's ids — is acquired unless it is
+already in the host's `*.deps.json` at a satisfying version. Declare your product's own
+long-lived contracts here if a plugin's dependency on them should never be re-acquired.
+
+**This is not `Loading:SharedAssemblies`.** The two configure different stages and answer different
+questions. `HostProvidedPackages` decides, before a package is ever on disk, which *dependencies*
+the resolver skips acquiring at all. `Loading:SharedAssemblies` (the `options.SharedAssemblies` list
+just above) decides, after a package has been acquired and is being loaded, which of its
+*assemblies* resolve from the host's own load context instead of a package-specific one, so that a
+type from that assembly is assignable across package boundaries. A package id can belong on one
+list, the other, both, or neither — being host-provided does not make an assembly shared, and a
+shared assembly need not be host-provided (it may still be acquired as an ordinary dependency and
+simply loaded from the host's context).
+
+Earlier versions matched a fixed, product-specific allowlist in code (`CShells.*`, thirteen `Elsa.*`
+ids, and the `Microsoft.Extensions.` prefix) in addition to Nuplane's own contract ids. That
+allowlist is gone; only Nuplane's own ids are host-provided by default now, and a dependency on any
+of the removed ids is acquired like any other unless it also appears in the host's `*.deps.json` at
+a satisfying version. A host that relied on the fixed list restores the exact previous skip
+decisions by configuring it explicitly:
+
+```json
+{
+  "Nuplane": {
+    "HostProvidedPackages": [
+      "CShells.Abstractions",
+      "CShells.AspNetCore.Abstractions",
+      "CShells.FastEndpoints.Abstractions",
+      "Nuplane.Abstractions",
+      "Nuplane.Loading.Abstractions",
+      "Elsa.Api.Common",
+      "Elsa.Caching",
+      "Elsa.Common",
+      "Elsa.Expressions",
+      "Elsa.Features",
+      "Elsa.KeyValues",
+      "Elsa.Mediator",
+      "Elsa.Resilience",
+      "Elsa.Resilience.Core",
+      "Elsa.Tenants",
+      "Elsa.Workflows.Core",
+      "Elsa.Workflows.Management",
+      "Elsa.Workflows.Runtime",
+      "Microsoft.Extensions."
+    ]
+  }
+}
+```
+
 ### Host-free restore of the package set
 
 - **Applicability:** `Core`
@@ -546,82 +623,9 @@ against the declaring package and visible in the store's failure record:
 declaring package in the cycle breaks nothing, so nothing fails; it is logged as a warning, which is
 how a typo in the key becomes visible.
 
-### Packages the host already provides
-
-- **Applicability:** `Core`
-- **Stability note:** `Breaking Change`
-
-The dependency graph resolver already skips acquiring a *dependency* when it finds a matching
-package, at a satisfying version, in the host's own `*.deps.json` — the general rule, unchanged by
-this section. `Nuplane:HostProvidedPackages` is for the narrower case: a dependency the host
-guarantees it supplies that the resolver cannot confirm from `*.deps.json` alone (for example a
-contract assembly the host loads outside the ordinary deps graph).
-
-```json
-{
-  "Nuplane": {
-    "HostProvidedPackages": ["Acme.Contracts", "Acme.Plugins."]
-  }
-}
-```
-
-Each entry is either an exact package id (`"Acme.Contracts"`) or a prefix (`"Acme.Plugins."`, a
-trailing `.` marks it): a prefix matches every dependency package id that starts with it, including
-the dot, case-insensitively, so `"Acme.Plugins."` matches `Acme.Plugins.Sql` but not
-`Acme.PluginsExtra` or bare `Acme.Plugins`. Both forms are matched case-insensitively, and duplicate
-entries are harmless. This list, like the `*.deps.json` rule it sits beside, is consulted only for
-**dependencies**; it is never applied to a root package, explicit or contributed — a root is always
-acquired however it is named.
-
-Left unconfigured, only Nuplane's own contract package ids are treated as host-provided. Every other
-package a dependency edge names — including your own product's ids — is acquired unless it is
-already in the host's `*.deps.json` at a satisfying version. Declare your product's own
-long-lived contracts here if a plugin's dependency on them should never be re-acquired.
-
-**This is not `Loading:SharedAssemblies`.** The two configure different stages and answer different
-questions. `HostProvidedPackages` decides, before a package is ever on disk, which *dependencies*
-the resolver skips acquiring at all. `Loading:SharedAssemblies`
-(see [shared assemblies](#host-free-loading-of-the-active-package-set)) decides, after a package has
-been acquired and is being loaded, which of its *assemblies* resolve from the host's own load
-context instead of a package-specific one, so that a type from that assembly is assignable across
-package boundaries. A package id can belong on one list, the other, both, or neither — being
-host-provided does not make an assembly shared, and a shared assembly need not be host-provided
-(it may still be acquired as an ordinary dependency and simply loaded from the host's context).
-
-**Breaking change.** Earlier versions matched a fixed, product-specific allowlist in code
-(`CShells.*`, thirteen `Elsa.*` ids, and the `Microsoft.Extensions.` prefix) in addition to Nuplane's
-own contract ids. That allowlist is gone; only Nuplane's own ids are host-provided by default now,
-and a dependency on any of the removed ids is acquired like any other unless it also appears in the
-host's `*.deps.json` at a satisfying version. A host that relied on the fixed list restores the exact
-previous skip decisions by configuring it explicitly:
-
-```json
-{
-  "Nuplane": {
-    "HostProvidedPackages": [
-      "CShells.Abstractions",
-      "CShells.AspNetCore.Abstractions",
-      "CShells.FastEndpoints.Abstractions",
-      "Nuplane.Abstractions",
-      "Nuplane.Loading.Abstractions",
-      "Elsa.Api.Common",
-      "Elsa.Caching",
-      "Elsa.Common",
-      "Elsa.Expressions",
-      "Elsa.Features",
-      "Elsa.KeyValues",
-      "Elsa.Mediator",
-      "Elsa.Resilience",
-      "Elsa.Resilience.Core",
-      "Elsa.Tenants",
-      "Elsa.Workflows.Core",
-      "Elsa.Workflows.Management",
-      "Elsa.Workflows.Runtime",
-      "Microsoft.Extensions."
-    ]
-  }
-}
-```
+A capability's injected root is acquired like any other package — it is never subject to
+`Nuplane:HostProvidedPackages` (see [Packages the host already provides](#packages-the-host-already-provides)),
+which is consulted only for dependencies.
 
 ### Directory feeds as an offline package source
 

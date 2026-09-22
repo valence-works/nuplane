@@ -1,10 +1,10 @@
 using Nuplane.Abstractions;
 using Nuplane.Reconciliation;
-using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Runtime.Tests.TestSupport;
 using System.Reflection;
 using System.Reflection.Emit;
+using static Nuplane.Runtime.Tests.TestSupport.HostProvidedPackagesTestSupport;
 
 namespace Nuplane.Runtime.Tests.Feeds;
 
@@ -298,9 +298,7 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     [Fact]
     public async Task ResolveAsync_ConfiguredExactHostProvidedPackageEntry_SkipsMatchingDependencyCaseInsensitively()
     {
-        var options = new HostProvidedPackagesOptions();
-        options.Entries.Clear();
-        options.Entries.Add("acme.contracts");
+        var options = WithEntries("acme.contracts");
 
         var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Acme.Contracts", dependencyVersionRange: "[1.0.0]");
         var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
@@ -320,9 +318,7 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     [Fact]
     public async Task ResolveAsync_ConfiguredPrefixHostProvidedPackageEntry_SkipsDependenciesUnderThatPrefixOnly()
     {
-        var options = new HostProvidedPackagesOptions();
-        options.Entries.Clear();
-        options.Entries.Add("ACME.");
+        var options = WithEntries("ACME.");
 
         var root = CreateInstalledPackage(
             "Plugin.Root",
@@ -361,8 +357,7 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
         // Nuplane:HostProvidedPackages list (no declared ids or prefixes at all), the separate
         // deps.json rule is the only thing left that can skip it, and it does: valence-works/nuplane#90
         // keeps that rule exactly as it was.
-        var options = new HostProvidedPackagesOptions();
-        options.Entries.Clear();
+        var options = WithEntries();
 
         var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Microsoft.Extensions.Options", dependencyVersionRange: "1.0.0");
         var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
@@ -414,12 +409,7 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     [InlineData("Microsoft.Extensions.Options")]
     public async Task ResolveAsync_LegacySharedHostContractEntriesConfigured_ReproducesPreviousSkipDecision(string dependencyId)
     {
-        var options = new HostProvidedPackagesOptions();
-        options.Entries.Clear();
-        foreach (var entry in LegacySharedHostContractEntries)
-        {
-            options.Entries.Add(entry);
-        }
+        var options = WithEntries(LegacySharedHostContractEntries.ToArray());
 
         var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: dependencyId, dependencyVersionRange: "[1.0.0]");
         var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
@@ -439,12 +429,7 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     [Fact]
     public async Task ResolveAsync_LegacySharedHostContractEntriesConfigured_UnrelatedDependencyIsStillAcquired()
     {
-        var options = new HostProvidedPackagesOptions();
-        options.Entries.Clear();
-        foreach (var entry in LegacySharedHostContractEntries)
-        {
-            options.Entries.Add(entry);
-        }
+        var options = WithEntries(LegacySharedHostContractEntries.ToArray());
 
         var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Contoso.Widgets", dependencyVersionRange: "[1.0.0]");
         var dependency = CreateInstalledPackage("Contoso.Widgets", "1.0.0");

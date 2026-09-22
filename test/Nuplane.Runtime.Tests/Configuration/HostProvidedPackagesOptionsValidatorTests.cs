@@ -1,23 +1,12 @@
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Validation;
+using static Nuplane.Runtime.Tests.TestSupport.HostProvidedPackagesTestSupport;
 
 namespace Nuplane.Runtime.Tests.Configuration;
 
 public sealed class HostProvidedPackagesOptionsValidatorTests
 {
     private readonly HostProvidedPackagesOptionsValidator _sut = new();
-
-    private static HostProvidedPackagesOptions WithEntries(params string[] entries)
-    {
-        var options = new HostProvidedPackagesOptions();
-        options.Entries.Clear();
-        foreach (var entry in entries)
-        {
-            options.Entries.Add(entry);
-        }
-
-        return options;
-    }
 
     [Fact]
     public void Validate_DefaultOptions_Succeeds()
