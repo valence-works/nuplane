@@ -9,6 +9,7 @@ using NuGet.Protocol.Core.Types;
 using NuGet.Resolver;
 using NuGet.Versioning;
 using Nuplane.Abstractions;
+using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Reconciliation;
@@ -16,10 +17,15 @@ namespace Nuplane.Reconciliation;
 /// <summary>
 /// Resolves the dependency closure for desired root packages from installed NuGet metadata.
 /// </summary>
-public sealed class PackageDependencyGraphResolver(IPackageResolver packageResolver, IReconciliationRetryPolicy retryPolicy)
+public sealed class PackageDependencyGraphResolver(
+    IPackageResolver packageResolver,
+    IReconciliationRetryPolicy retryPolicy,
+    HostProvidedPackagesOptions? hostProvidedPackagesOptions = null)
 {
     private readonly IPackageResolver _packageResolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver));
     private readonly IReconciliationRetryPolicy _retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
+    private readonly HostProvidedPackageDeclarationIndex _hostProvidedPackageDeclarations =
+        HostProvidedPackageDeclarationIndex.Build((IEnumerable<string>?)hostProvidedPackagesOptions?.Entries ?? HostProvidedPackagesOptions.DefaultEntries);
 
     /// <summary>
     /// Resolves desired roots and their package dependencies into deterministic graph records.
@@ -160,7 +166,7 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
             [graph]);
     }
 
-    private static IReadOnlyList<ResolvedPackage> SelectNuGetResolvedPackages(
+    private IReadOnlyList<ResolvedPackage> SelectNuGetResolvedPackages(
         IReadOnlyList<ResolvedPackage> rootPackages,
         IEnumerable<ResolvedPackage> candidatePackages,
         CancellationToken cancellationToken)
@@ -185,7 +191,7 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
                 package.Id,
                 ParsePackageVersion(package),
                 ReadDependencyMetadata(package)
-                    .Where(static dependency => !IsHostProvidedDependency(dependency.PackageId, dependency.VersionRange))
+                    .Where(dependency => !IsHostProvidedDependency(dependency.PackageId, dependency.VersionRange))
                     .Select(static dependency => TryCreatePackageDependency(dependency))
                     .OfType<PackageDependency>()
                     .ToArray(),
@@ -495,14 +501,14 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
 
     private static readonly Lazy<IReadOnlyDictionary<string, string>> HostPackageVersions = new(LoadHostPackageVersions);
 
-    private static bool IsHostProvidedDependency(string packageId, string versionRange)
+    private bool IsHostProvidedDependency(string packageId, string versionRange)
     {
         if (string.IsNullOrWhiteSpace(packageId))
         {
             return false;
         }
 
-        if (IsSharedHostContractPackage(packageId))
+        if (_hostProvidedPackageDeclarations.Matches(packageId))
         {
             return true;
         }
@@ -510,27 +516,6 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
         return HostPackageVersions.Value.TryGetValue(packageId, out var hostVersion) &&
             VersionSatisfiesRange(hostVersion, versionRange);
     }
-
-    private static bool IsSharedHostContractPackage(string packageId) =>
-        packageId.Equals("CShells.Abstractions", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("CShells.AspNetCore.Abstractions", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("CShells.FastEndpoints.Abstractions", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Nuplane.Abstractions", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Nuplane.Loading.Abstractions", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Elsa.Api.Common", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Elsa.Caching", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Elsa.Common", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Elsa.Expressions", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Elsa.Features", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Elsa.KeyValues", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Elsa.Mediator", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Elsa.Resilience", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Elsa.Resilience.Core", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Elsa.Tenants", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Elsa.Workflows.Core", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Elsa.Workflows.Management", StringComparison.OrdinalIgnoreCase) ||
-        packageId.Equals("Elsa.Workflows.Runtime", StringComparison.OrdinalIgnoreCase) ||
-        packageId.StartsWith("Microsoft.Extensions.", StringComparison.OrdinalIgnoreCase);
 
     private static bool VersionSatisfiesRange(string version, string versionRange)
     {
@@ -595,6 +580,57 @@ public sealed class PackageDependencyGraphResolver(IPackageResolver packageResol
 
     private sealed record PackageDependencyMetadata(string PackageId, string VersionRange, string? TargetFramework);
 
+    /// <summary>
+    /// A matcher built once from <see cref="HostProvidedPackagesOptions.Entries"/>: exact package ids
+    /// and <c>Prefix.</c>-style prefixes, both matched case-insensitively. Duplicate entries collapse
+    /// to one, so a host that lists the same id or prefix twice sees no different a result than
+    /// listing it once.
+    /// </summary>
+    private sealed class HostProvidedPackageDeclarationIndex
+    {
+        private readonly IReadOnlySet<string> _exactIds;
+        private readonly IReadOnlyList<string> _prefixes;
+
+        private HostProvidedPackageDeclarationIndex(IReadOnlySet<string> exactIds, IReadOnlyList<string> prefixes)
+        {
+            _exactIds = exactIds;
+            _prefixes = prefixes;
+        }
+
+        internal static HostProvidedPackageDeclarationIndex Build(IEnumerable<string> entries)
+        {
+            var exactIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var prefixes = new List<string>();
+            var seenPrefixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var entry in entries)
+            {
+                if (string.IsNullOrWhiteSpace(entry))
+                {
+                    continue;
+                }
+
+                var trimmed = entry.Trim();
+                if (trimmed.EndsWith('.'))
+                {
+                    if (seenPrefixes.Add(trimmed))
+                    {
+                        prefixes.Add(trimmed);
+                    }
+                }
+                else
+                {
+                    exactIds.Add(trimmed);
+                }
+            }
+
+            return new(exactIds, prefixes);
+        }
+
+        internal bool Matches(string packageId) =>
+            _exactIds.Contains(packageId) ||
+            _prefixes.Any(prefix => packageId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    }
 }
 
 /// <summary>

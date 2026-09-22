@@ -25,6 +25,7 @@ internal static class NuplaneOptionsRegistrationServices
     private const string ConvergenceSectionName = "Convergence";
     internal const string StoreRegistrySectionName = "StoreRegistry";
     internal const string CapabilitiesSectionName = "Capabilities";
+    internal const string HostProvidedPackagesSectionName = "HostProvidedPackages";
 
     private static readonly Action<IServiceCollection, IConfiguration>[] ConfiguredOptionBinders =
     [
@@ -35,7 +36,8 @@ internal static class NuplaneOptionsRegistrationServices
         static (services, configuration) => ConfigureBoundOptions<CleanupPolicyOptions>(services, configuration, CleanupPolicySectionName),
         static (services, configuration) => ConfigureBoundOptions<ConvergenceOptions>(services, configuration, ConvergenceSectionName),
         static (services, configuration) => ConfigureBoundOptions<StoreRegistryOptions>(services, configuration, StoreRegistrySectionName),
-        static (services, configuration) => ConfigureCapabilityOptions(services, configuration)
+        static (services, configuration) => ConfigureCapabilityOptions(services, configuration),
+        static (services, configuration) => ConfigureHostProvidedPackagesOptions(services, configuration)
     ];
 
     internal static void RegisterValidators(this IServiceCollection services)
@@ -49,6 +51,7 @@ internal static class NuplaneOptionsRegistrationServices
         services.AddSingleton<IValidateOptions<ConvergenceOptions>, ConvergenceOptionsValidator>();
         services.AddSingleton<IValidateOptions<StoreRegistryOptions>, StoreRegistryOptionsValidator>();
         services.AddSingleton<IValidateOptions<CapabilityOptions>, CapabilityOptionsValidator>();
+        services.AddSingleton<IValidateOptions<HostProvidedPackagesOptions>, HostProvidedPackagesOptionsValidator>();
     }
 
     internal static void RegisterOptions(this IServiceCollection services)
@@ -61,6 +64,7 @@ internal static class NuplaneOptionsRegistrationServices
         services.AddOptions<ConvergenceOptions>().ValidateOnStart();
         services.AddOptions<StoreRegistryOptions>().ValidateOnStart();
         services.AddOptions<CapabilityOptions>().ValidateOnStart();
+        services.AddOptions<HostProvidedPackagesOptions>().ValidateOnStart();
     }
 
     internal static void BindConfiguredOptions(IServiceCollection services, IConfiguration configuration)
@@ -80,6 +84,13 @@ internal static class NuplaneOptionsRegistrationServices
     {
         var capabilitiesSection = GetNamedSectionOrSelf(configuration, CapabilitiesSectionName);
         services.Configure<CapabilityOptions>(options => CapabilitySelectionConfigurationReader.Populate(options, capabilitiesSection));
+    }
+
+    private static void ConfigureHostProvidedPackagesOptions(IServiceCollection services, IConfiguration configuration)
+    {
+        var hostProvidedPackagesSection = GetNamedSectionOrSelf(configuration, HostProvidedPackagesSectionName);
+        services.Configure<HostProvidedPackagesOptions>(options =>
+            HostProvidedPackagesConfigurationReader.Populate(options, hostProvidedPackagesSection));
     }
 
     internal static IConfigurationSection GetNamedSectionOrSelf(IConfiguration configuration, string sectionName)

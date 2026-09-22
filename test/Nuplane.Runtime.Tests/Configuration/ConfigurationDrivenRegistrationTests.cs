@@ -10,6 +10,7 @@ using Nuplane.Feeds.Registration;
 using Nuplane.Hosting;
 using Nuplane.Loading;
 using Nuplane.Loading.Hosting.Builder;
+using Nuplane.Reconciliation.Configuration;
 using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Setup;
 using Nuplane.Sources;
@@ -1196,6 +1197,62 @@ public sealed class ConfigurationDrivenRegistrationTests
         var concrete = provider.GetRequiredService<CapabilityDesiredStateContributor>();
         Assert.Same(concrete, Assert.Single(provider.GetServices<IDesiredStateContributor>()));
         Assert.NotNull(provider.GetRequiredService<CapabilityContributionLedger>());
+    }
+
+    [Fact]
+    public void AddNuplane_WithoutHostProvidedPackagesConfigured_BindsDefaultEntries()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(_ => { });
+
+        using var provider = services.BuildServiceProvider();
+        var hostProvidedPackages = provider.GetRequiredService<IOptions<HostProvidedPackagesOptions>>().Value;
+
+        Assert.Equal(HostProvidedPackagesOptions.DefaultEntries, hostProvidedPackages.Entries);
+    }
+
+    [Fact]
+    public void AddNuplane_FromConfiguration_HostProvidedPackages_BindsConfiguredEntriesInPlaceOfDefaults()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:HostProvidedPackages:0"] = "Acme.Contracts",
+                ["Nuplane:HostProvidedPackages:1"] = "Acme.Plugins."
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+        var hostProvidedPackages = provider.GetRequiredService<IOptions<HostProvidedPackagesOptions>>().Value;
+
+        Assert.Equal(["Acme.Contracts", "Acme.Plugins."], hostProvidedPackages.Entries);
+    }
+
+    [Fact]
+    public void AddNuplane_FromConfiguration_HostProvidedPackagesWithBlankEntry_FailsValidationNamingTheKey()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:HostProvidedPackages:0"] = " "
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(() =>
+            provider.GetRequiredService<IOptions<HostProvidedPackagesOptions>>().Value);
+
+        Assert.Contains("Nuplane:HostProvidedPackages", ex.Message);
     }
 
     private sealed class CapturingLoggerProvider(List<string> messages) : ILoggerProvider

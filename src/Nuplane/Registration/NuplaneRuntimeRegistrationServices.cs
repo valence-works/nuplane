@@ -96,7 +96,8 @@ public static class NuplaneRuntimeRegistrationServices
             sp.GetService<ICycleFailureContributor>(),
             sp.GetService<StartupRecoveryState>(),
             sp.GetService<IStoreLock>(),
-            sp.GetServices<IDesiredStateContributor>()));
+            sp.GetServices<IDesiredStateContributor>(),
+            sp.GetRequiredService<IOptions<HostProvidedPackagesOptions>>()));
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
     }
 
