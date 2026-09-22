@@ -376,6 +376,14 @@ state file (`store-state.json.lock`) — nothing in Nuplane enumerates the state
 install-directory enumeration filters by extension, so it cannot be mistaken for a package, a
 completion marker, or a state artefact.
 
+A host's last-known-good startup recovery holds the same lock around its own read-then-republish of
+the state file, for the same reason: recovery can transitively write the store too — republishing the
+last-known-good packages as reconciled can drive a load failure back into a failure record — and it
+must not act on a state file a concurrent cycle or restore is mid-rewrite on. A recovery that cannot
+take the lock does nothing and reports the skip on its result, exactly as a reconciliation cycle
+reports `ReconciliationSkipReason.StoreLockUnavailable`; `StartupFailurePolicy.UseLastKnownGood` then
+falls through to whatever policy would apply had recovery not run at all.
+
 It is **on by default**, behind `Nuplane:Reconciliation:EnableStoreLock`. The failure it prevents is
 silent corruption that outlives the process; the behaviour it introduces is a reported, retryable
 skip. A store with a single writer never contends, so its behaviour is unchanged.

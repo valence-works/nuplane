@@ -4,22 +4,52 @@ using Nuplane.Store.State;
 
 namespace Nuplane.Hosting;
 
+/// <summary>
+/// Recovers a degraded startup cycle by re-activating the last-known-good package set recorded in
+/// the store.
+/// </summary>
+/// <remarks>
+/// Recovery reads the store and, on success, republishes the last-known-good packages as reconciled
+/// — the same read-then-act shape as a reconciliation cycle. It therefore takes the same
+/// cross-process <see cref="IStoreLock"/> a reconciliation cycle takes, for the same reason: without
+/// it, a startup recovery could act on a state file a concurrent <c>NuplaneRestore</c> run or a
+/// second host process is mid-write on. When the lock cannot be taken, recovery does nothing —
+/// no read, no republish — and reports <see cref="LastKnownGoodStartupRecoveryResult.StoreLockUnavailableReason"/>
+/// instead. A host configured with <c>StartupFailurePolicy.UseLastKnownGood</c> should treat that the
+/// same as any other failed recovery: the startup cycle fails over to whatever
+/// <c>StartupFailurePolicy</c> would otherwise do, and a subsequent automatic reconciliation cycle
+/// (if enabled) retries.
+/// </remarks>
 internal sealed class LastKnownGoodStartupRecoveryService(
     IStoreRegistry storeRegistry,
     IObserverEventDispatcher observerEventDispatcher,
     StartupRecoveryState startupRecoveryState,
-    IEnumerable<ICycleFailureContributor>? cycleFailureContributors = null) : ILastKnownGoodStartupRecoveryService
+    IEnumerable<ICycleFailureContributor>? cycleFailureContributors = null,
+    IStoreLock? storeLock = null) : ILastKnownGoodStartupRecoveryService
 {
     private readonly IStoreRegistry _storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
     private readonly IObserverEventDispatcher _observerEventDispatcher = observerEventDispatcher ?? throw new ArgumentNullException(nameof(observerEventDispatcher));
     private readonly StartupRecoveryState _startupRecoveryState = startupRecoveryState ?? throw new ArgumentNullException(nameof(startupRecoveryState));
     private readonly IReadOnlyList<ICycleFailureContributor> _cycleFailureContributors = cycleFailureContributors?.ToArray() ?? [];
+    private readonly IStoreLock? _storeLock = storeLock;
 
     public async Task<LastKnownGoodStartupRecoveryResult> TryRecoverAsync(
         string correlationId,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+
+        // The store lock spans the whole read-then-act cycle below, for the same reason it spans a
+        // reconciliation cycle: everything between the read and the republish is part of it. A store
+        // already owned elsewhere yields a reported skip rather than acting on a file another writer
+        // may be mid-rewrite on.
+        using var storeLockHandle = _storeLock?.Acquire() ?? StoreLockHandle.NotRequired();
+        if (!storeLockHandle.CanProceed)
+        {
+            var skipped = LastKnownGoodStartupRecoveryResult.Failed([], LastKnownGoodStartupRecoveryResult.StoreLockUnavailableReason);
+            _startupRecoveryState.MarkFailed(correlationId, skipped.Reason);
+            return skipped;
+        }
 
         var state = await _storeRegistry.GetStateAsync(cancellationToken);
         var validation = Validate(state);
