@@ -94,7 +94,10 @@ public sealed class NuplaneRestoreOptions
     /// <c>Nuplane.Sources.Directory</c> passes
     /// <c>(builder, configuration) =&gt; builder.AddDirectoryFeedsFromConfiguration(configuration)</c>
     /// here and the same feeds the host would have are registered — without the core package taking a
-    /// dependency on that module. Use the callback's own <c>configuration</c> parameter rather than a
+    /// dependency on that module. It is also where a caller registers an
+    /// <c>ISecretReferenceProvider</c> of its own, so a feed can reference a secret that lives
+    /// somewhere other than the process environment; the built-in <c>env</c> provider is registered
+    /// without any of this and needs no callback at all. Use the callback's own <c>configuration</c> parameter rather than a
     /// configuration captured from the call to <c>RestoreAsync</c>/<c>DescribeDesiredAsync</c>: when
     /// that call was given the host's configuration root, the captured value is still the unresolved
     /// root, and a module registration helper expecting Nuplane's own keys would find none.

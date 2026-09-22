@@ -28,10 +28,12 @@ namespace Nuplane;
 /// <see cref="NuplaneRestoreOptions.RequirePinnedVersions"/> refused the restore; empty otherwise.
 /// </param>
 /// <param name="CredentialRefusedFeeds">
-/// The names of configured feeds that declare <c>Credentials</c>. Nuplane has no credential
-/// resolver, so these feeds were removed before any network call rather than left to fail
-/// mid-acquisition. A package that could only have come from one of them is also reported in
-/// <paramref name="FailedPackages"/>.
+/// The names of configured feeds whose <c>secrets://</c> credential reference could not be resolved —
+/// no registered <c>ISecretReferenceProvider</c> claims its provider, the provider holds no value
+/// under that name, or reading it failed. These feeds were removed before any network call rather
+/// than contacted without credentials, and a package that could only have come from one of them is
+/// also reported in <paramref name="FailedPackages"/>. A feed whose reference does resolve is used
+/// like any other feed and is not named here.
 /// </param>
 /// <param name="StateFilePath">The resolved state file this restore wrote.</param>
 /// <param name="InstallRoot">The resolved install root this restore extracted packages into.</param>

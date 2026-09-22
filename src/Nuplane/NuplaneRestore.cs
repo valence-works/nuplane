@@ -41,8 +41,8 @@ namespace Nuplane;
 /// </description></item>
 /// <item><description>
 /// <b>Failures are reported, not thrown.</b> A degraded cycle, a package that could not be
-/// acquired, a feed refused for declaring credentials, and a store another process is already
-/// reconciling are all fields on <see cref="NuplaneRestoreResult"/>. Only a malformed request — a
+/// acquired, a feed whose credential reference could not be resolved, and a store another process is
+/// already reconciling are all fields on <see cref="NuplaneRestoreResult"/>. Only a malformed request — a
 /// null argument, a relative override, a path nothing pins, in-memory persistence, invalid
 /// configuration — throws.
 /// </description></item>
@@ -69,7 +69,8 @@ namespace Nuplane;
 /// desired package source — because neither accepted shape was actually present, or because the
 /// resolved <c>Nuplane</c> section genuinely configures nothing — is refused as malformed rather than
 /// reported as a restore that quietly did nothing. A configuration whose only feed was refused for
-/// declaring credentials does not trip this: that outcome is reported on the result instead.
+/// an unresolvable credential reference does not trip this: that outcome is reported on the result
+/// instead.
 /// </description></item>
 /// <item><description>
 /// <b>Pinned-ness is answerable.</b> The include-pattern parser and version-request classifier that
@@ -211,7 +212,7 @@ public static class NuplaneRestore
     /// </param>
     /// <param name="options">The restore options, or <see langword="null"/>. Only the path, builder, and logging options matter here; <see cref="NuplaneRestoreOptions.RequirePinnedVersions"/> does not, because this method reports pinned-ness rather than acting on it.</param>
     /// <param name="cancellationToken">A token to cancel the read.</param>
-    /// <returns>The desired requests with their pinned-ness, the feeds refused for declaring credentials, any source read errors, and the resolved state file and install root.</returns>
+    /// <returns>The desired requests with their pinned-ness, the feeds refused for an unresolvable credential reference, any source read errors, and the resolved state file and install root.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when an absolute override in <paramref name="options"/> is not an absolute path.</exception>
     /// <exception cref="InvalidOperationException">Thrown for the same unresolvable-path, in-memory-persistence, and empty-composition reasons as <see cref="RestoreAsync"/>, so a pre-flight catches them before the restore does.</exception>

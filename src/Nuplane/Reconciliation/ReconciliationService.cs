@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Events;
 using Nuplane.Feeds.Configuration;
+using Nuplane.Feeds.Credentials;
 using Nuplane.Health;
 using Nuplane.Hosting;
 using Nuplane.Observability;
@@ -229,6 +230,12 @@ public sealed class ReconciliationService : IReconciliationService
             var cycleStartedAt = DateTimeOffset.UtcNow;
             var correlationId = trigger.CorrelationId ?? CorrelationContext.CreateNew();
             using var scope = CorrelationContext.BeginScope(correlationId);
+
+            // Feed credentials resolved during this cycle are cached for its duration and dropped
+            // with it: every package acquired from one feed resolves its secret once, and no secret
+            // outlives the cycle that needed it. `using` ends the scope on every exit path,
+            // including a pipeline exception and cancellation.
+            using var feedCredentials = FeedCredentials.BeginCycle();
 
             var effectiveCorrelationId = System.Diagnostics.Activity.Current?.Id ?? correlationId;
 

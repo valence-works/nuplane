@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Feeds;
 using Nuplane.Feeds.Configuration;
+using Nuplane.Feeds.Credentials;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Sources;
 using Nuplane.Store.State;
@@ -101,10 +102,7 @@ internal sealed class RestoreComposition : IAsyncDisposable
         });
 
         services.PostConfigure<FeedResolutionOptions>(feedOptions =>
-        {
-            feedOptions.PackageInstallRoot = paths.ResolveInstallRoot(feedOptions.PackageInstallRoot);
-            RefuseCredentialFeeds(feedOptions, credentialRefusedFeeds);
-        });
+            feedOptions.PackageInstallRoot = paths.ResolveInstallRoot(feedOptions.PackageInstallRoot));
 
         // Taking IOptions<StoreRegistryOptions> as a dependency is what orders the two: the state
         // file is resolved before the lock file that anchors to its directory.
@@ -122,6 +120,11 @@ internal sealed class RestoreComposition : IAsyncDisposable
             var persistence = provider.GetRequiredService<EffectiveStorePersistenceSettings>();
             _ = provider.GetRequiredService<IOptions<LockFileOptions>>().Value;
             var feedOptions = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
+
+            // After validation, and before anything reads the feed list: a feed whose secret
+            // reference resolves stays and is used authenticated; one that cannot be resolved is
+            // dropped and named here, before the first network call.
+            await RefuseUnresolvableCredentialFeedsAsync(provider, feedOptions, credentialRefusedFeeds).ConfigureAwait(false);
 
             // A feed refused for declaring credentials is a legitimate, already-reported outcome —
             // not "no feeds" — so it does not trip this refusal on its own.
@@ -213,19 +216,55 @@ internal sealed class RestoreComposition : IAsyncDisposable
             .Any(static source => source is not DesiredManifestPackageSource { IsEnabled: false });
 
     /// <summary>
-    /// Drops every feed that declares credentials, recording its name. Nuplane has no credential
-    /// resolver — <c>NuGetRemotePackageAcquirer</c> throws <see cref="NotSupportedException"/> for
-    /// any credential — and version enumeration would contact the feed before that throw, so the
-    /// refusal has to happen here, before the first network call.
+    /// Drops every feed whose configured secret reference no registered
+    /// <see cref="ISecretReferenceProvider"/> could resolve, recording its name. A feed whose
+    /// reference does resolve is left in place and contacted with credentials, like any other feed.
     /// </summary>
-    private static void RefuseCredentialFeeds(FeedResolutionOptions feedOptions, List<string> refusedFeeds)
+    /// <remarks>
+    /// This runs while composing, rather than during the cycle, because version enumeration would
+    /// otherwise contact the feed before the acquirer could refuse it. A provider that throws —
+    /// an unreachable secret store, say — refuses the feed too: a restore reports its failures
+    /// rather than throwing them, and a feed whose secret could not be read is exactly the case
+    /// <see cref="CredentialRefusedFeeds"/> exists to report.
+    /// </remarks>
+    private static async Task RefuseUnresolvableCredentialFeedsAsync(
+        IServiceProvider provider,
+        FeedResolutionOptions feedOptions,
+        List<string> refusedFeeds)
     {
         var credentialFeeds = feedOptions.Feeds
             .Where(static feed => !string.IsNullOrWhiteSpace(feed.Credentials))
             .ToArray();
 
+        if (credentialFeeds.Length == 0)
+        {
+            return;
+        }
+
+        var resolver = provider.GetRequiredService<ISecretReferenceResolver>();
+        var logger = provider.GetRequiredService<ILoggerFactory>().CreateLogger<RestoreComposition>();
+
         foreach (var feed in credentialFeeds)
         {
+            FeedCredentialLookup lookup;
+            try
+            {
+                lookup = await FeedCredentials.ResolveAsync(resolver, feed, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(
+                    exception,
+                    "Resolving the configured credentials of feed {FeedName} failed, so the feed is refused for this restore.",
+                    feed.Name);
+                lookup = FeedCredentialLookup.Refused;
+            }
+
+            if (!lookup.IsRefused)
+            {
+                continue;
+            }
+
             feedOptions.Feeds.Remove(feed);
             refusedFeeds.Add(feed.Name);
         }

@@ -9,9 +9,9 @@ namespace Nuplane;
 /// and ordered by the same aggregator, each carrying whether it is a single-point pin.
 /// </param>
 /// <param name="CredentialRefusedFeeds">
-/// The names of configured feeds that declare <c>Credentials</c>. Nuplane has no credential
-/// resolver, so a restore refuses these feeds up front instead of contacting them; they are named
-/// here so the refusal is visible before anything runs.
+/// The names of configured feeds whose <c>secrets://</c> credential reference could not be resolved.
+/// A restore refuses these feeds up front instead of contacting them; they are named here so the
+/// refusal is visible before anything runs. A feed whose reference resolves is not named here.
 /// </param>
 /// <param name="SourceErrors">
 /// The message of every desired-state source that failed while being read, keyed by source type
