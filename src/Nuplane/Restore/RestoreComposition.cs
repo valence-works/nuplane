@@ -73,7 +73,16 @@ internal sealed class RestoreComposition : IAsyncDisposable
         // caller passed in, so a closure that captured the caller's unresolved root — the trap
         // NuplaneRestoreOptions.ConfigureBuilder's docs warn about — is never the reason a module
         // registration helper finds nothing.
-        services.AddNuplane(nuplaneConfiguration, builder => options.ConfigureBuilder?.Invoke(builder, nuplaneConfiguration));
+        //
+        // NuplaneBuilder.BasePath is set before the callback runs, not after, so a module
+        // registration helper the callback calls — AddDirectoryFeedsFromConfiguration is the current
+        // one — resolves its own relative configured paths against the host's BasePath without the
+        // callback having to forward it itself.
+        services.AddNuplane(nuplaneConfiguration, builder =>
+        {
+            builder.BasePath = paths.BasePath;
+            options.ConfigureBuilder?.Invoke(builder, nuplaneConfiguration);
+        });
 
         // These post-configure callbacks are registered after AddNuplane, and therefore run after
         // every Configure and PostConfigure the configuration and the builder callback registered —

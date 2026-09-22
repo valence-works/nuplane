@@ -28,6 +28,14 @@ internal sealed class RestorePathResolver
             : RequireAbsolute(options.BasePath, nameof(NuplaneRestoreOptions.BasePath));
     }
 
+    /// <summary>
+    /// The already-validated, absolute form of <see cref="NuplaneRestoreOptions.BasePath"/>, or
+    /// <see langword="null"/> when it was not set — the same value every other path on this resolver
+    /// anchors to, exposed so <see cref="RestoreComposition"/> can hand it to
+    /// <see cref="Builder.NuplaneBuilder.BasePath"/> for module-owned builder extensions to read.
+    /// </summary>
+    public string? BasePath => _basePath;
+
     public string ResolveInstallRoot(string? configuredValue) =>
         Resolve(
             _options.InstallRoot,

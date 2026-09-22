@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nuplane.Abstractions;
+using Nuplane.Builder;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Registration;
 using Nuplane.Feeds.Setup;
@@ -22,12 +23,25 @@ public static class DirectorySourceRegistrationServices
     /// Registers a directory-backed feed and its desired-state source.
     /// If the same feed name was previously registered, the prior registration is replaced.
     /// </summary>
+    /// <param name="services">The service collection to register into.</param>
+    /// <param name="feedName">The unique name of the feed.</param>
+    /// <param name="options">The directory feed's configuration, including its <c>DirectoryPath</c>.</param>
+    /// <param name="includePatterns">The package identifier patterns this feed contributes to the source-trust configuration.</param>
+    /// <param name="credentials">Feed credentials, if any — directory feeds have none today, but the parameter mirrors the shared feed registration shape.</param>
+    /// <param name="basePath">
+    /// The absolute directory a relative <c>DirectoryPath</c> on <paramref name="options"/> resolves
+    /// against, or <see langword="null"/> to resolve it against the current directory — the behavior
+    /// an already-absolute <c>DirectoryPath</c> keeps either way. Callers going through
+    /// <see cref="NuplaneBuilder"/> pass <see cref="NuplaneBuilder.BasePath"/>, which is
+    /// <see langword="null"/> for a normally-composed host and set by a host-free restore.
+    /// </param>
     public static void RegisterFeed(
         IServiceCollection services,
         string feedName,
         NuplaneDirectoryFeedOptions options,
         IEnumerable<string> includePatterns,
-        string? credentials)
+        string? credentials,
+        string? basePath = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentException.ThrowIfNullOrWhiteSpace(feedName);
@@ -41,7 +55,7 @@ public static class DirectorySourceRegistrationServices
         // ── Replace prior registration for the same feed name ─────────────────────
         RemovePriorFeedRegistration(services, feedName);
 
-        var normalizedPath = Path.GetFullPath(options.DirectoryPath);
+        var normalizedPath = ResolveDirectoryPath(options.DirectoryPath, basePath);
         var feedUri = new Uri("file:///" + normalizedPath.Replace('\\', '/').TrimStart('/'));
 
         services.PostConfigure<FeedResolutionOptions>(opts =>
@@ -138,6 +152,34 @@ public static class DirectorySourceRegistrationServices
         }
 
         services.Remove(markerDescriptor);
+    }
+
+    /// <summary>
+    /// Resolves a directory feed's configured path: an absolute <paramref name="directoryPath"/> is
+    /// normalized and returned unchanged regardless of <paramref name="basePath"/>; a relative one
+    /// resolves against <paramref name="basePath"/> when given, and against the current directory
+    /// otherwise — the resolution a directory feed has always had.
+    /// </summary>
+    private static string ResolveDirectoryPath(string directoryPath, string? basePath)
+    {
+        if (Path.IsPathRooted(directoryPath))
+        {
+            return Path.GetFullPath(directoryPath);
+        }
+
+        if (basePath is null)
+        {
+            return Path.GetFullPath(directoryPath);
+        }
+
+        if (!Path.IsPathRooted(basePath))
+        {
+            throw new ArgumentException(
+                $"The directory feed base path must be an absolute path, but was '{basePath}'.",
+                nameof(basePath));
+        }
+
+        return Path.GetFullPath(directoryPath, Path.GetFullPath(basePath));
     }
 
     private static IEnumerable<string> DistinctNonBlank(IEnumerable<string>? values) =>

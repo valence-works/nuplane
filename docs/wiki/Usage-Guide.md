@@ -253,7 +253,10 @@ var result = await NuplaneRestore.RestoreAsync(configuration, new NuplaneRestore
     LoggerFactory = loggerFactory,
     // Directory feeds belong to Nuplane.Sources.Directory, so the caller adds them. The second
     // argument is the already-resolved Nuplane configuration — use it, not a captured `configuration`,
-    // or the module registration helper finds nothing when `configuration` is the host's root.
+    // or the module registration helper finds nothing when `configuration` is the host's root. A
+    // relative `DirectoryPath` in that configuration resolves against `BasePath` above, not against
+    // this process's own current directory — AddDirectoryFeedsFromConfiguration reads it from the
+    // same NuplaneBuilder this callback receives, so nothing here has to pass it along.
     ConfigureBuilder = (builder, nuplane) => builder.AddDirectoryFeedsFromConfiguration(nuplane)
 });
 
@@ -293,6 +296,13 @@ restoring tool both of those name the tool, so `NuplaneRestore` never falls back
 | Install root | `NuplaneRestoreOptions.InstallRoot` (must be absolute) → absolute `Nuplane:FeedResolution:PackageInstallRoot` → relative configured value against `BasePath` → `BasePath/.nuplane/packages` → **refused** |
 | State file | `NuplaneRestoreOptions.StateFilePath` (must be absolute) → absolute `Nuplane:StoreRegistry:StateFilePath`, or the `Nuplane:Setup:StateFilePath` shorthand → relative configured value against `BasePath` → `BasePath/.nuplane/store-state.json` → **refused** |
 | Package lock file | `NuplaneRestoreOptions.LockFilePath` (must be absolute) → absolute `Nuplane:LockFile:Path` → relative value against `BasePath`, otherwise against the resolved state file's directory |
+
+A directory feed's own `DirectoryPath` is not one of the three paths above — it belongs to
+`Nuplane.Sources.Directory`, not the core package, so it is resolved separately by that module
+against the same `BasePath`, and never refuses: a relative `DirectoryPath` falls back to resolving
+against the current directory instead, exactly like a running host. See
+[Directory feeds as an offline package source](#directory-feeds-as-an-offline-package-source) for
+that resolution in both the host and the host-free case.
 
 "Refused" is an `InvalidOperationException` naming the path and telling you to set `BasePath` or the
 matching override. A restore that quietly populates the wrong directory reports success and leaves
@@ -424,6 +434,17 @@ configuration. Builder calls run last, so `WithStateFile(...)` and `UseInMemoryS
 A directory feed declared with `DirectoryPath` both contributes desired roots and resolves packages,
 so pre-populating it with the full dependency closure removes the boot-time network dependency —
 useful when baking packages into a container image.
+
+**Where a relative `DirectoryPath` resolves from.** A host that composes Nuplane directly — through
+`AddNuplane`'s configuration binding or the `AddDirectoryFeed`/`AddDirectoryFeedsFromConfiguration`
+builder calls — resolves it against the process's own current directory, exactly as it always has.
+A [host-free restore](#host-free-restore-of-the-package-set) through `NuplaneRestore` resolves it
+against `NuplaneRestoreOptions.BasePath` instead, the same base its other paths anchor to, because a
+restoring tool's own current directory is never the right answer for the host it restores on behalf
+of. Both `AddDirectoryFeed` and `AddDirectoryFeedsFromConfiguration` read the base from the
+`NuplaneBuilder` they are called on, so the `ConfigureBuilder` callback in that section's example
+needs nothing beyond what it already shows for `BasePath` to apply. An already-absolute
+`DirectoryPath` is unaffected either way.
 
 Resolution reads the directory itself: package identifiers are matched case-insensitively and
 versions are matched in normalized form. A `.nupkg` written by `dotnet restore` under a lower-cased

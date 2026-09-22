@@ -19,6 +19,25 @@ public sealed class NuplaneBuilder
     /// <summary>Gets the underlying <see cref="IServiceCollection"/>.</summary>
     public IServiceCollection Services { get; }
 
+    /// <summary>
+    /// Gets the absolute directory a module-owned builder extension should resolve its own relative
+    /// configured paths against instead of the current directory, or <see langword="null"/> when
+    /// nothing pins one. <c>Nuplane.Restore.RestoreComposition</c> sets this to
+    /// <c>NuplaneRestoreOptions.BasePath</c> for a host-free restore; a host composing Nuplane
+    /// directly leaves it <see langword="null"/>, so a normally-composed host keeps resolving those
+    /// paths against its own current directory exactly as before.
+    /// </summary>
+    /// <remarks>
+    /// This is a general seam, not a directory-feed-specific one: the core <c>Nuplane</c> package
+    /// deliberately does not reference module packages such as <c>Nuplane.Sources.Directory</c>, so it
+    /// cannot pass a base path into their registration helpers directly. Exposing it here instead lets
+    /// any module-owned builder extension read the same base a host-free restore already resolved,
+    /// without the restore's <c>ConfigureBuilder</c> callback having to forward it itself. Directory
+    /// feeds are the first, and so far only, consumer — see
+    /// <c>Nuplane.Sources.Directory.Builder.NuplaneBuilderDirectoryExtensions.AddDirectoryFeed</c>.
+    /// </remarks>
+    public string? BasePath { get; internal set; }
+
     internal NuplaneBuilder(IServiceCollection services)
     {
         Services = services;

@@ -168,6 +168,34 @@ public sealed class NuplaneRestoreTests : IDisposable
     }
 
     [Fact]
+    public async Task RestoreAsync_WithARelativeDirectoryFeedPath_ResolvesItAgainstBasePathNotTheCurrentDirectory()
+    {
+        var package = HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory);
+        var configuration = ConfigureWithRelativeDirectoryPath("drop");
+        var elsewhere = Path.Combine(Path.GetTempPath(), "nuplane-host-free-restore-elsewhere", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(elsewhere);
+        var originalDirectory = Environment.CurrentDirectory;
+        // Proves resolution follows BasePath rather than the process's own directory: if it fell back
+        // to the current directory instead, "drop" would resolve under `elsewhere`, find no feed
+        // directory there, and the restore would report no active packages instead of the one written
+        // to _feedDirectory.
+        Environment.CurrentDirectory = elsewhere;
+
+        try
+        {
+            var result = await NuplaneRestore.RestoreAsync(configuration, Options(o => o.BasePath = _root));
+
+            Assert.False(result.IsDegraded);
+            Assert.Equal(package.PackageId, Assert.Single(result.ActivePackages).PackageId);
+        }
+        finally
+        {
+            Environment.CurrentDirectory = originalDirectory;
+            Directory.Delete(elsewhere, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RestoreAsync_WithNoConfiguredPathsAndABasePath_UsesTheHostDefaultLayoutUnderIt()
     {
         HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory);
@@ -621,6 +649,23 @@ public sealed class NuplaneRestoreTests : IDisposable
                 ["Logging:LogLevel:Default"] = "Information"
             },
             settings);
+
+    /// <summary>
+    /// Builds a configuration section whose directory feed's <c>DirectoryPath</c> is
+    /// <paramref name="relativeDirectoryPath"/> instead of the absolute <see cref="_feedDirectory"/>
+    /// <see cref="ConfigureAsRoot"/> uses, so a restore's resolution of it against
+    /// <see cref="NuplaneRestoreOptions.BasePath"/> can be exercised end to end.
+    /// </summary>
+    private IConfigurationSection ConfigureWithRelativeDirectoryPath(string relativeDirectoryPath) =>
+        BuildConfiguration(
+            new Dictionary<string, string?>
+            {
+                ["Nuplane:Setup:Feeds:" + FeedName + ":DirectoryPath"] = relativeDirectoryPath,
+                ["Nuplane:Setup:Feeds:" + FeedName + ":IncludeAll"] = "true",
+                ["Nuplane:Setup:Feeds:" + FeedName + ":Directory:Watch"] = "false"
+            },
+            [])
+            .GetSection(RestoreComposition.NuplaneSectionName);
 
     /// <summary>
     /// A host configuration root that carries neither a <c>Nuplane</c> section nor Nuplane's own
