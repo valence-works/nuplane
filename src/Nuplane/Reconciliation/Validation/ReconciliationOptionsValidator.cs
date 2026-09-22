@@ -29,6 +29,11 @@ internal sealed class ReconciliationOptionsValidator : IValidateOptions<Reconcil
             errors.Add("Reconciliation MaxRetryBackoff must be greater than or equal to InitialRetryBackoff.");
         }
 
+        if (options.StartupRecoveryStoreLockTimeout < TimeSpan.Zero)
+        {
+            errors.Add("Reconciliation StartupRecoveryStoreLockTimeout must be greater than or equal to zero.");
+        }
+
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
     }
 }

@@ -44,5 +44,22 @@ public sealed class ReconciliationOptionsValidatorTests
         Assert.True(result.Failed);
         Assert.Contains("MaxRetryBackoff must be greater than or equal to InitialRetryBackoff", result.FailureMessage);
     }
+
+    [Fact]
+    public void Validate_NegativeStartupRecoveryStoreLockTimeout_Fails()
+    {
+        var result = _sut.Validate(null, new() { StartupRecoveryStoreLockTimeout = TimeSpan.FromSeconds(-1) });
+
+        Assert.True(result.Failed);
+        Assert.Contains("StartupRecoveryStoreLockTimeout must be greater than or equal to zero", result.FailureMessage);
+    }
+
+    [Fact]
+    public void Validate_ZeroStartupRecoveryStoreLockTimeout_Succeeds()
+    {
+        var result = _sut.Validate(null, new() { StartupRecoveryStoreLockTimeout = TimeSpan.Zero });
+
+        Assert.True(result.Succeeded);
+    }
 }
 
