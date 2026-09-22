@@ -19,9 +19,57 @@ public sealed class NuplaneBuilder
     /// <summary>Gets the underlying <see cref="IServiceCollection"/>.</summary>
     public IServiceCollection Services { get; }
 
+    /// <summary>
+    /// Gets the absolute directory a module-owned builder extension should resolve its own relative
+    /// configured paths against instead of the current directory, or <see langword="null"/> when
+    /// nothing has set one. Set it with <see cref="UseBasePath"/>; a normally-composed host that
+    /// never calls it keeps resolving those paths against its own current directory exactly as
+    /// before. <c>Nuplane.Restore.RestoreComposition</c> sets this to
+    /// <c>NuplaneRestoreOptions.BasePath</c> for a host-free restore, before its
+    /// <c>ConfigureBuilder</c> callback runs — a callback that calls <see cref="UseBasePath"/> itself
+    /// overrides the restore's base rather than being overridden by it, since the last call wins.
+    /// </summary>
+    /// <remarks>
+    /// This is a general seam, not a directory-feed-specific one: the core <c>Nuplane</c> package
+    /// deliberately does not reference module packages such as <c>Nuplane.Sources.Directory</c>, so it
+    /// cannot pass a base path into their registration helpers directly. Exposing it here instead lets
+    /// any module-owned builder extension read the same base a host or a host-free restore resolved,
+    /// without either one having to forward it itself. Directory feeds are the first, and so far only,
+    /// consumer — see
+    /// <c>Nuplane.Sources.Directory.Builder.NuplaneBuilderDirectoryExtensions.AddDirectoryFeed</c>.
+    /// </remarks>
+    public string? BasePath { get; internal set; }
+
     internal NuplaneBuilder(IServiceCollection services)
     {
         Services = services;
+    }
+
+    /// <summary>
+    /// Sets <see cref="BasePath"/>, the directory a module-owned builder extension resolves its own
+    /// relative configured paths against instead of the current directory. A host composing Nuplane
+    /// directly calls this with its own content root — for example an ASP.NET Core host's
+    /// <c>IHostEnvironment.ContentRootPath</c> — so a relative <c>DirectoryPath</c> anchors to the
+    /// host rather than to whatever the process's current directory happens to be when it starts;
+    /// see the wiki's "Directory feeds as an offline package source" section. The last call wins: a
+    /// host-free restore's own base is set before its <c>ConfigureBuilder</c> callback runs, so a
+    /// callback that calls this overrides it, and calling it more than once keeps only the final
+    /// value.
+    /// </summary>
+    /// <param name="absolutePath">An absolute directory.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="absolutePath"/> is null, blank, or not an absolute path.</exception>
+    public NuplaneBuilder UseBasePath(string absolutePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(absolutePath);
+        if (!Path.IsPathRooted(absolutePath))
+        {
+            throw new ArgumentException(
+                $"{nameof(UseBasePath)} requires an absolute path, but was '{absolutePath}'.",
+                nameof(absolutePath));
+        }
+
+        BasePath = Path.GetFullPath(absolutePath);
+        return this;
     }
 
     /// <summary>

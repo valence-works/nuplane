@@ -17,6 +17,12 @@ public static class NuplaneBuilderDirectoryExtensions
     /// <param name="path">The directory path containing <c>.nupkg</c> files.</param>
     /// <param name="configure">An optional callback to configure directory feed options.</param>
     /// <returns>The same <see cref="NuplaneBuilder"/> for chaining.</returns>
+    /// <remarks>
+    /// A relative <paramref name="path"/> resolves against <see cref="NuplaneBuilder.BasePath"/> when
+    /// the builder has one, and against the current directory otherwise — the same resolution
+    /// <c>AddDirectoryFeedsFromConfiguration</c> gets by calling this method, so a host-free restore's
+    /// <c>BasePath</c> applies without either caller doing anything extra for it.
+    /// </remarks>
     public static NuplaneBuilder AddDirectoryFeed(
         this NuplaneBuilder builder,
         string name,
@@ -43,7 +49,8 @@ public static class NuplaneBuilderDirectoryExtensions
             name,
             dirOptions,
             config.IncludePatterns,
-            config.Credentials);
+            config.Credentials,
+            builder.BasePath);
 
         DirectorySourceRegistrationServices.AddRegistrationMarkerFromModule(
             builder.Services,
