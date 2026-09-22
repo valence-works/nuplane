@@ -64,6 +64,11 @@ public sealed class ReconciliationService : IReconciliationService
     /// require. With none supplied, resolution expands the dependency closure once, exactly as it
     /// did before contributors existed.
     /// </param>
+    /// <param name="hostProvidedPackagesOptions">
+    /// Optional host-provided-package declarations the dependency graph resolver uses to skip
+    /// dependencies the host already supplies. With none supplied, only Nuplane's own contract
+    /// package ids are treated as host-provided.
+    /// </param>
     public ReconciliationService(
         IEnumerable<IDesiredPackageSource> sources,
         IDesiredStateAggregator desiredStateAggregator,
@@ -85,7 +90,8 @@ public sealed class ReconciliationService : IReconciliationService
         ObservationDegradationTracker observationDegradationTracker,
         ICycleFailureContributor? cycleFailureContributor = null,
         StartupRecoveryState? startupRecoveryState = null,
-        IEnumerable<IDesiredStateContributor>? desiredStateContributors = null)
+        IEnumerable<IDesiredStateContributor>? desiredStateContributors = null,
+        IOptions<HostProvidedPackagesOptions>? hostProvidedPackagesOptions = null)
         : this(
             sources,
             desiredStateAggregator,
@@ -108,7 +114,8 @@ public sealed class ReconciliationService : IReconciliationService
             cycleFailureContributor,
             startupRecoveryState,
             storeLock: null,
-            desiredStateContributors)
+            desiredStateContributors,
+            hostProvidedPackagesOptions)
     {
     }
 
@@ -147,6 +154,11 @@ public sealed class ReconciliationService : IReconciliationService
     /// require. With none supplied, resolution expands the dependency closure once, exactly as it
     /// did before contributors existed.
     /// </param>
+    /// <param name="hostProvidedPackagesOptions">
+    /// Optional host-provided-package declarations the dependency graph resolver uses to skip
+    /// dependencies the host already supplies. With none supplied, only Nuplane's own contract
+    /// package ids are treated as host-provided.
+    /// </param>
     internal ReconciliationService(
         IEnumerable<IDesiredPackageSource> sources,
         IDesiredStateAggregator desiredStateAggregator,
@@ -169,7 +181,8 @@ public sealed class ReconciliationService : IReconciliationService
         ICycleFailureContributor? cycleFailureContributor,
         StartupRecoveryState? startupRecoveryState,
         IStoreLock? storeLock,
-        IEnumerable<IDesiredStateContributor>? desiredStateContributors = null)
+        IEnumerable<IDesiredStateContributor>? desiredStateContributors = null,
+        IOptions<HostProvidedPackagesOptions>? hostProvidedPackagesOptions = null)
     {
         _storeLock = storeLock;
 
@@ -206,7 +219,8 @@ public sealed class ReconciliationService : IReconciliationService
             retry,
             failureRec,
             desiredStateContributors,
-            loggerInstance);
+            loggerInstance,
+            hostProvidedPackagesOptions?.Value);
 
         _pipeline = new();
         _pipeline.Use(new DesiredStateReadMiddleware(sourcesList, desiredStateAgg, retry, snapshotCache, failureRec, loggerInstance, metricsInstance));

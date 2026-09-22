@@ -3,6 +3,7 @@ using Nuplane.Capabilities;
 using Nuplane.Feeds;
 using Nuplane.Feeds.Policy;
 using Nuplane.Observability;
+using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Store.State;
 using Nuplane.Store.Transactions;
@@ -30,7 +31,8 @@ public sealed class PackageApplyExecutor(
     IReconciliationRetryPolicy retryPolicy,
     IFailureRecorder failureRecorder,
     IEnumerable<IDesiredStateContributor>? desiredStateContributors = null,
-    IReconciliationLogger? reconciliationLogger = null) : IPackageApplyExecutor
+    IReconciliationLogger? reconciliationLogger = null,
+    HostProvidedPackagesOptions? hostProvidedPackagesOptions = null) : IPackageApplyExecutor
 {
     /// <summary>
     /// How many contribution rounds may add roots before resolution refuses instead of continuing.
@@ -45,7 +47,7 @@ public sealed class PackageApplyExecutor(
     private readonly PackageTransactionCoordinator _transactionCoordinator = transactionCoordinator ?? throw new ArgumentNullException(nameof(transactionCoordinator));
     private readonly IReconciliationRetryPolicy _retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
     private readonly IFailureRecorder _failureRecorder = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
-    private readonly PackageDependencyGraphResolver _graphResolver = new(packageResolver, retryPolicy);
+    private readonly PackageDependencyGraphResolver _graphResolver = new(packageResolver, retryPolicy, hostProvidedPackagesOptions);
     private readonly IDesiredStateContributor[] _desiredStateContributors = desiredStateContributors?.ToArray() ?? [];
     private readonly IReconciliationLogger _reconciliationLogger = reconciliationLogger ?? new ReconciliationLogger();
 

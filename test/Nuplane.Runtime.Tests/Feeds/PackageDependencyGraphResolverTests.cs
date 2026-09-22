@@ -4,6 +4,7 @@ using Nuplane.Reconciliation.Models;
 using Nuplane.Runtime.Tests.TestSupport;
 using System.Reflection;
 using System.Reflection.Emit;
+using static Nuplane.Runtime.Tests.TestSupport.HostProvidedPackagesTestSupport;
 
 namespace Nuplane.Runtime.Tests.Feeds;
 
@@ -227,10 +228,59 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
         Assert.Empty(graph.Edges);
     }
 
+    // Microsoft.Extensions.* was part of the removed hard-coded IsSharedHostContractPackage
+    // allowlist (valence-works/nuplane#90). With no Nuplane:HostProvidedPackages configured, the
+    // resolver's default entries are Nuplane's own contract ids only, so this product-specific
+    // prefix no longer skips acquisition by default.
     [Fact]
-    public async Task ResolveAsync_MicrosoftExtensionsDependency_DoesNotAcquireDependencyNode()
+    public async Task ResolveAsync_MicrosoftExtensionsDependency_WithoutHostProvidedPackagesConfigured_AcquiresDependencyNode()
     {
         var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Microsoft.Extensions.Options", dependencyVersionRange: "[8.0.0]");
+        var dependency = CreateInstalledPackage("Microsoft.Extensions.Options", "8.0.0");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Microsoft.Extensions.Options"] = dependency
+        });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "root-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        Assert.Single(resolver.Requests, static request => request.Id == "Microsoft.Extensions.Options");
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Contains(graph.Nodes, static node => node.PackageId == "Microsoft.Extensions.Options" && node.Role == PackageNodeRole.Dependency);
+    }
+
+    // Elsa.* was part of the removed hard-coded IsSharedHostContractPackage allowlist
+    // (valence-works/nuplane#90). With no Nuplane:HostProvidedPackages configured, this
+    // product-specific id no longer skips acquisition by default.
+    [Fact]
+    public async Task ResolveAsync_ElsaFrameworkDependency_WithoutHostProvidedPackagesConfigured_AcquiresDependencyNode()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Elsa.Api.Common", dependencyVersionRange: "[3.7.0-rc1]");
+        var dependency = CreateInstalledPackage("Elsa.Api.Common", "3.7.0-rc1");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Elsa.Api.Common"] = dependency
+        });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "root-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        Assert.Single(resolver.Requests, static request => request.Id == "Elsa.Api.Common");
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Contains(graph.Nodes, static node => node.PackageId == "Elsa.Api.Common" && node.Role == PackageNodeRole.Dependency);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_DefaultHostProvidedPackages_SkipsNuplaneLoadingAbstractionsDependency()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Nuplane.Loading.Abstractions", dependencyVersionRange: "[1.0.0]");
         var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
         var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
 
@@ -246,11 +296,13 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     }
 
     [Fact]
-    public async Task ResolveAsync_ElsaFrameworkDependency_DoesNotAcquireDependencyNode()
+    public async Task ResolveAsync_ConfiguredExactHostProvidedPackageEntry_SkipsMatchingDependencyCaseInsensitively()
     {
-        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Elsa.Api.Common", dependencyVersionRange: "[3.7.0-rc1]");
+        var options = WithEntries("acme.contracts");
+
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Acme.Contracts", dependencyVersionRange: "[1.0.0]");
         var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
-        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy(), options);
 
         var result = await sut.ResolveAsync(
             [new PackageRequest("Plugin.Root", "[1.0.0]", "root-feed", PackageUpdatePolicy.Exact, "test-source")],
@@ -261,6 +313,138 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
         var graph = Assert.Single(result.ResolvedGraphs);
         Assert.Single(graph.Nodes);
         Assert.Empty(graph.Edges);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ConfiguredPrefixHostProvidedPackageEntry_SkipsDependenciesUnderThatPrefixOnly()
+    {
+        var options = WithEntries("ACME.");
+
+        var root = CreateInstalledPackage(
+            "Plugin.Root",
+            "1.0.0",
+            dependenciesXml: """
+                <dependencies>
+                  <dependency id="Acme.Widgets" version="[1.0.0]" />
+                  <dependency id="AcmeToolkit" version="[1.0.0]" />
+                </dependencies>
+                """);
+        var acmeToolkit = CreateInstalledPackage("AcmeToolkit", "1.0.0");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["AcmeToolkit"] = acmeToolkit
+        });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy(), options);
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "root-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        // "ACME." matches "Acme.Widgets" (case-insensitive prefix) but not "AcmeToolkit": the
+        // dependency id must start with the literal prefix, dot included, not merely the letters.
+        Assert.Single(resolver.Requests, static request => request.Id == "AcmeToolkit");
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.DoesNotContain(graph.Nodes, static node => node.PackageId == "Acme.Widgets");
+        Assert.Contains(graph.Nodes, static node => node.PackageId == "AcmeToolkit");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_EmptyHostProvidedPackagesList_DependencyInHostDepsJsonIsStillSkipped()
+    {
+        // Microsoft.Extensions.Options is an ordinary transitive dependency of this test host and
+        // therefore appears in its own *.deps.json. With an explicitly empty
+        // Nuplane:HostProvidedPackages list (no declared ids or prefixes at all), the separate
+        // deps.json rule is the only thing left that can skip it, and it does: valence-works/nuplane#90
+        // keeps that rule exactly as it was.
+        var options = WithEntries();
+
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Microsoft.Extensions.Options", dependencyVersionRange: "1.0.0");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy(), options);
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "root-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        Assert.Empty(resolver.Requests);
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Single(graph.Nodes);
+        Assert.Empty(graph.Edges);
+    }
+
+    // The exact entries the removed IsSharedHostContractPackage allowlist matched, verbatim, so a
+    // host that relied on any of them can paste this list into Nuplane:HostProvidedPackages and
+    // reproduce the previous skip decisions exactly (valence-works/nuplane#90 breaking-change note).
+    private static readonly IReadOnlyList<string> LegacySharedHostContractEntries =
+    [
+        "CShells.Abstractions",
+        "CShells.AspNetCore.Abstractions",
+        "CShells.FastEndpoints.Abstractions",
+        "Nuplane.Abstractions",
+        "Nuplane.Loading.Abstractions",
+        "Elsa.Api.Common",
+        "Elsa.Caching",
+        "Elsa.Common",
+        "Elsa.Expressions",
+        "Elsa.Features",
+        "Elsa.KeyValues",
+        "Elsa.Mediator",
+        "Elsa.Resilience",
+        "Elsa.Resilience.Core",
+        "Elsa.Tenants",
+        "Elsa.Workflows.Core",
+        "Elsa.Workflows.Management",
+        "Elsa.Workflows.Runtime",
+        "Microsoft.Extensions."
+    ];
+
+    [Theory]
+    [InlineData("CShells.Abstractions")]
+    [InlineData("CShells.AspNetCore.Abstractions")]
+    [InlineData("CShells.FastEndpoints.Abstractions")]
+    [InlineData("Elsa.Api.Common")]
+    [InlineData("Elsa.Workflows.Runtime")]
+    [InlineData("Microsoft.Extensions.Options")]
+    public async Task ResolveAsync_LegacySharedHostContractEntriesConfigured_ReproducesPreviousSkipDecision(string dependencyId)
+    {
+        var options = WithEntries(LegacySharedHostContractEntries.ToArray());
+
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: dependencyId, dependencyVersionRange: "[1.0.0]");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy(), options);
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "root-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        Assert.Empty(resolver.Requests);
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Single(graph.Nodes);
+        Assert.Empty(graph.Edges);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_LegacySharedHostContractEntriesConfigured_UnrelatedDependencyIsStillAcquired()
+    {
+        var options = WithEntries(LegacySharedHostContractEntries.ToArray());
+
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Contoso.Widgets", dependencyVersionRange: "[1.0.0]");
+        var dependency = CreateInstalledPackage("Contoso.Widgets", "1.0.0");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Contoso.Widgets"] = dependency
+        });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy(), options);
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Plugin.Root", "[1.0.0]", "root-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
+
+        Assert.Single(resolver.Requests, static request => request.Id == "Contoso.Widgets");
     }
 
     [Fact]
