@@ -379,20 +379,28 @@ completion marker, or a state artefact.
 A host's last-known-good startup recovery holds the same lock around its own read-then-republish of
 the state file, for the same reason: recovery can transitively write the store too — republishing the
 last-known-good packages as reconciled can drive a load failure back into a failure record — and it
-must not act on a state file a concurrent cycle or restore is mid-rewrite on. A recovery that cannot
-take the lock does nothing and reports the skip on its result, exactly as a reconciliation cycle
-reports `ReconciliationSkipReason.StoreLockUnavailable`; `StartupFailurePolicy.UseLastKnownGood` then
-falls through to whatever policy would apply had recovery not run at all.
+must not act on a state file a concurrent cycle or restore is mid-rewrite on. Recovery does not skip
+the instant the lock is unavailable, though: a periodic reconciliation cycle that skips simply tries
+again on its next poll, but startup recovery has no next poll, so treating an ordinary, short-lived
+race (a concurrent `NuplaneRestore` run, a second host process starting at the same time) as an
+immediate failure would turn a race into an outage. Recovery instead polls the lock — every 250 ms —
+for up to `Nuplane:Reconciliation:StartupRecoveryStoreLockTimeout` (default 30 seconds; `Zero` means
+recovery does not wait either), honouring cancellation throughout. Only once that timeout elapses does
+recovery give up, doing nothing and reporting the skip on its result — the same
+`last-known-good-store-lock-unavailable` shape as `ReconciliationSkipReason.StoreLockUnavailable` on a
+reconciliation cycle. `StartupFailurePolicy.UseLastKnownGood` then fails startup for that reason,
+because recovery genuinely could not establish a package set.
 
 It is **on by default**, behind `Nuplane:Reconciliation:EnableStoreLock`. The failure it prevents is
 silent corruption that outlives the process; the behaviour it introduces is a reported, retryable
 skip. A store with a single writer never contends, so its behaviour is unchanged.
 
-Acquisition never waits. A cycle that cannot take the lock returns immediately with `Skipped` and
-`ReconciliationSkipReason.StoreLockUnavailable`, logs a warning, and does nothing at all — no read, no
-resolve, no write. `NuplaneRestore` surfaces the same outcome as
-`NuplaneRestoreSkipReason.StoreLockUnavailable` and leaves `ActivePackages` empty, because no
-read-back is attempted while whoever holds the store may be rewriting its state file. Callers retry.
+Acquisition never waits — except for startup recovery, above. A reconciliation cycle that cannot take
+the lock returns immediately with `Skipped` and `ReconciliationSkipReason.StoreLockUnavailable`, logs
+a warning, and does nothing at all — no read, no resolve, no write. `NuplaneRestore` surfaces the same
+outcome as `NuplaneRestoreSkipReason.StoreLockUnavailable` and leaves `ActivePackages` empty, because
+no read-back is attempted while whoever holds the store may be rewriting its state file. Callers
+retry.
 
 Retrying is the caller's job. A host with automatic reconciliation enabled retries on its next poll.
 A host whose *startup* cycle is skipped this way starts against whatever the store already records

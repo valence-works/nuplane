@@ -33,14 +33,55 @@ public sealed class LastKnownGoodStartupRecoveryServiceStoreLockTests : IDisposa
     public void Dispose() => _root.Dispose();
 
     [Fact]
-    public async Task TryRecoverAsync_WhenAnotherHandleHoldsTheLock_LeavesStateFileByteIdenticalAndReportsSkip()
+    public async Task TryRecoverAsync_WhenAnotherHandleHoldsTheLockAndTimeoutIsZero_LeavesStateFileByteIdenticalAndReportsSkipImmediately()
     {
         await SeedValidLastKnownGoodStateAsync();
         var bytesBefore = await File.ReadAllBytesAsync(_stateFilePath);
 
         using var heldElsewhere = CreateStoreLock().Acquire();
         var dispatcher = new WritingObserverDispatcher(CreateStoreRegistry());
-        var recovery = CreateRecoveryService(dispatcher, CreateStoreLock());
+        var recovery = CreateRecoveryService(dispatcher, CreateStoreLock(), TimeSpan.Zero);
+
+        var result = await recovery.TryRecoverAsync(CorrelationId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(LastKnownGoodStartupRecoveryResult.StoreLockUnavailableReason, result.Reason);
+        Assert.False(dispatcher.Invoked);
+        Assert.Equal(bytesBefore, await File.ReadAllBytesAsync(_stateFilePath));
+    }
+
+    [Fact]
+    public async Task TryRecoverAsync_WhenAnotherHandleReleasesTheLockBeforeTheTimeout_RecoversAndWrites()
+    {
+        await SeedValidLastKnownGoodStateAsync();
+
+        var heldElsewhere = CreateStoreLock().Acquire();
+        var releaseTask = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50));
+            heldElsewhere.Dispose();
+        });
+        var dispatcher = new WritingObserverDispatcher(CreateStoreRegistry());
+        var recovery = CreateRecoveryService(dispatcher, CreateStoreLock(), TimeSpan.FromSeconds(2));
+
+        var result = await recovery.TryRecoverAsync(CorrelationId, CancellationToken.None);
+        await releaseTask;
+
+        Assert.True(result.Succeeded);
+        Assert.True(dispatcher.Invoked);
+        var stateAfter = await CreateStoreRegistry().GetStateAsync(CancellationToken.None);
+        Assert.True(stateAfter.LastFailureById.ContainsKey("pkg-a"));
+    }
+
+    [Fact]
+    public async Task TryRecoverAsync_WhenAnotherHandleHoldsTheLockPastTheTimeout_ReportsSkipAfterWaiting()
+    {
+        await SeedValidLastKnownGoodStateAsync();
+        var bytesBefore = await File.ReadAllBytesAsync(_stateFilePath);
+
+        using var heldElsewhere = CreateStoreLock().Acquire();
+        var dispatcher = new WritingObserverDispatcher(CreateStoreRegistry());
+        var recovery = CreateRecoveryService(dispatcher, CreateStoreLock(), TimeSpan.FromMilliseconds(50));
 
         var result = await recovery.TryRecoverAsync(CorrelationId, CancellationToken.None);
 
@@ -104,8 +145,17 @@ public sealed class LastKnownGoodStartupRecoveryServiceStoreLockTests : IDisposa
             });
     }
 
-    private LastKnownGoodStartupRecoveryService CreateRecoveryService(IObserverEventDispatcher dispatcher, IStoreLock storeLock) =>
-        new(CreateStoreRegistry(), dispatcher, new StartupRecoveryState(), cycleFailureContributors: null, storeLock);
+    private LastKnownGoodStartupRecoveryService CreateRecoveryService(
+        IObserverEventDispatcher dispatcher,
+        IStoreLock storeLock,
+        TimeSpan? storeLockTimeout = null) =>
+        new(
+            CreateStoreRegistry(),
+            dispatcher,
+            new StartupRecoveryState(),
+            cycleFailureContributors: null,
+            new OptionsWrapper<ReconciliationOptions>(new() { StartupRecoveryStoreLockTimeout = storeLockTimeout ?? TimeSpan.FromSeconds(2) }),
+            storeLock);
 
     private StoreRegistry CreateStoreRegistry() => new(new StoreStateSerializer(), _stateFilePath);
 

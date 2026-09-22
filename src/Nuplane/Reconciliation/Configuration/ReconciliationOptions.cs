@@ -51,6 +51,32 @@ public sealed class ReconciliationOptions
     public bool EnableStoreLock { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets how long last-known-good startup recovery waits for the store lock before
+    /// giving up. Defaults to 30 seconds. <see cref="TimeSpan.Zero"/> means recovery does not wait
+    /// at all — it takes the lock or fails immediately, the same no-wait behaviour a reconciliation
+    /// cycle's own <see cref="Models.ReconciliationSkipReason.StoreLockUnavailable"/> skip has.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A periodic reconciliation cycle that loses the store lock skips and simply tries again on its
+    /// next poll, so it never waits. Startup recovery has no "next poll": it is the host's last
+    /// attempt to establish a package set before <c>StartupFailurePolicy</c> decides what happens
+    /// next, so failing startup the instant a concurrent <c>NuplaneRestore</c> run or a second host
+    /// process happens to be mid-cycle would turn an ordinary, short-lived race into an outage.
+    /// Recovery instead polls <c>IStoreLock.Acquire()</c> — briefly, every 250 ms — until it succeeds
+    /// or this timeout elapses, honouring cancellation throughout. Only once the timeout elapses does
+    /// recovery report <c>LastKnownGoodStartupRecoveryResult.StoreLockUnavailableReason</c> and give
+    /// up: at that point the host genuinely could not establish its package set, and startup fails
+    /// for that reason.
+    /// </para>
+    /// <para>
+    /// This has no effect when <see cref="EnableStoreLock"/> is <see langword="false"/>, or when the
+    /// store is in-memory: there is nothing to wait for.
+    /// </para>
+    /// </remarks>
+    public TimeSpan StartupRecoveryStoreLockTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
     /// Gets or sets how startup reconciliation failures affect host startup.
     /// Defaults to failing host startup when required startup reconciliation fails.
     /// </summary>
