@@ -9,6 +9,13 @@ public sealed class CapabilityOptionsValidatorTests
 {
     private readonly CapabilityOptionsValidator _sut = new();
 
+    private static CapabilityOptions WithEfProviderSelection(IReadOnlyList<string> optionNames, string? version = null, string? feed = null)
+    {
+        var options = new CapabilityOptions();
+        options.Selections["ef-provider"] = new CapabilitySelection { Options = optionNames, Version = version, Feed = feed };
+        return options;
+    }
+
     [Fact]
     public void Validate_DefaultOptions_Succeeds()
     {
@@ -32,8 +39,7 @@ public sealed class CapabilityOptionsValidatorTests
     [Fact]
     public void Validate_EmptyOptionsList_FailsNamingTheKey()
     {
-        var options = new CapabilityOptions();
-        options.Selections["ef-provider"] = new CapabilitySelection { Options = [] };
+        var options = WithEfProviderSelection([]);
 
         var result = _sut.Validate(null, options);
 
@@ -44,8 +50,7 @@ public sealed class CapabilityOptionsValidatorTests
     [Fact]
     public void Validate_EmptyOptionName_FailsNamingTheKey()
     {
-        var options = new CapabilityOptions();
-        options.Selections["ef-provider"] = new CapabilitySelection { Options = [" "] };
+        var options = WithEfProviderSelection([" "]);
 
         var result = _sut.Validate(null, options);
 
@@ -56,8 +61,7 @@ public sealed class CapabilityOptionsValidatorTests
     [Fact]
     public void Validate_OptionNameHasInvalidCharacters_FailsNamingTheKeyAndOptionName()
     {
-        var options = new CapabilityOptions();
-        options.Selections["ef-provider"] = new CapabilitySelection { Options = ["Postgre Sql!"] };
+        var options = WithEfProviderSelection(["Postgre Sql!"]);
 
         var result = _sut.Validate(null, options);
 
@@ -69,8 +73,7 @@ public sealed class CapabilityOptionsValidatorTests
     [Fact]
     public void Validate_ValidOptionNames_Succeeds()
     {
-        var options = new CapabilityOptions();
-        options.Selections["ef-provider"] = new CapabilitySelection { Options = ["PostgreSql", "Sqlite"] };
+        var options = WithEfProviderSelection(["PostgreSql", "Sqlite"]);
 
         var result = _sut.Validate(null, options);
 
@@ -80,8 +83,7 @@ public sealed class CapabilityOptionsValidatorTests
     [Fact]
     public void Validate_BlankVersion_FailsNamingTheKey()
     {
-        var options = new CapabilityOptions();
-        options.Selections["ef-provider"] = new CapabilitySelection { Options = ["PostgreSql"], Version = "  " };
+        var options = WithEfProviderSelection(["PostgreSql"], version: "  ");
 
         var result = _sut.Validate(null, options);
 
@@ -92,8 +94,7 @@ public sealed class CapabilityOptionsValidatorTests
     [Fact]
     public void Validate_VersionDoesNotParse_FailsNamingTheKey()
     {
-        var options = new CapabilityOptions();
-        options.Selections["ef-provider"] = new CapabilitySelection { Options = ["PostgreSql"], Version = "not-a-version" };
+        var options = WithEfProviderSelection(["PostgreSql"], version: "not-a-version");
 
         var result = _sut.Validate(null, options);
 
@@ -104,8 +105,7 @@ public sealed class CapabilityOptionsValidatorTests
     [Fact]
     public void Validate_FloatingVersion_FailsNamingTheKey()
     {
-        var options = new CapabilityOptions();
-        options.Selections["ef-provider"] = new CapabilitySelection { Options = ["PostgreSql"], Version = "10.0.*" };
+        var options = WithEfProviderSelection(["PostgreSql"], version: "10.0.*");
 
         var result = _sut.Validate(null, options);
 
@@ -116,8 +116,7 @@ public sealed class CapabilityOptionsValidatorTests
     [Fact]
     public void Validate_PinnedVersionRange_Succeeds()
     {
-        var options = new CapabilityOptions();
-        options.Selections["ef-provider"] = new CapabilitySelection { Options = ["PostgreSql"], Version = "[10.0.0]" };
+        var options = WithEfProviderSelection(["PostgreSql"], version: "[10.0.0]");
 
         var result = _sut.Validate(null, options);
 
@@ -127,8 +126,7 @@ public sealed class CapabilityOptionsValidatorTests
     [Fact]
     public void Validate_BlankFeed_FailsNamingTheKey()
     {
-        var options = new CapabilityOptions();
-        options.Selections["ef-provider"] = new CapabilitySelection { Options = ["PostgreSql"], Feed = " " };
+        var options = WithEfProviderSelection(["PostgreSql"], feed: " ");
 
         var result = _sut.Validate(null, options);
 
@@ -141,9 +139,7 @@ public sealed class CapabilityOptionsValidatorTests
     {
         var feedOptions = Options.Create(new FeedResolutionOptions());
         var validator = new CapabilityOptionsValidator(feedOptions);
-
-        var options = new CapabilityOptions();
-        options.Selections["ef-provider"] = new CapabilitySelection { Options = ["PostgreSql"], Feed = "nuget" };
+        var options = WithEfProviderSelection(["PostgreSql"], feed: "nuget");
 
         var result = validator.Validate(null, options);
 
@@ -157,9 +153,7 @@ public sealed class CapabilityOptionsValidatorTests
         var feedResolutionOptions = new FeedResolutionOptions();
         feedResolutionOptions.Feeds.Add(new FeedDefinition("nuget", new Uri("https://api.nuget.org/v3/index.json")));
         var validator = new CapabilityOptionsValidator(Options.Create(feedResolutionOptions));
-
-        var options = new CapabilityOptions();
-        options.Selections["ef-provider"] = new CapabilitySelection { Options = ["PostgreSql"], Feed = "NUGET" };
+        var options = WithEfProviderSelection(["PostgreSql"], feed: "NUGET");
 
         var result = validator.Validate(null, options);
 
@@ -169,8 +163,7 @@ public sealed class CapabilityOptionsValidatorTests
     [Fact]
     public void Validate_NoFeedContext_SkipsFeedNameCheck()
     {
-        var options = new CapabilityOptions();
-        options.Selections["ef-provider"] = new CapabilitySelection { Options = ["PostgreSql"], Feed = "unknown" };
+        var options = WithEfProviderSelection(["PostgreSql"], feed: "unknown");
 
         var result = _sut.Validate(null, options);
 

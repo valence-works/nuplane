@@ -27,6 +27,25 @@ public sealed class CapabilitySelectionResolverTests
         bool requirePinned = false) =>
         CapabilitySelectionResolver.Resolve(declarationsByPackage, selections, explicitRoots ?? [], requirePinned);
 
+    /// <summary>Every ordering of <paramref name="items"/>, for permutation-based determinism tests.</summary>
+    private static IEnumerable<T[]> Permutations<T>(IReadOnlyList<T> items)
+    {
+        if (items.Count == 0)
+        {
+            yield return [];
+            yield break;
+        }
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            var remaining = items.Where((_, index) => index != i).ToArray();
+            foreach (var permutation in Permutations(remaining))
+            {
+                yield return [items[i], .. permutation];
+            }
+        }
+    }
+
     [Fact]
     public void Resolve_NoDeclarationsAndNoSelections_ReturnsEmptyResolution()
     {
@@ -238,6 +257,54 @@ public sealed class CapabilitySelectionResolverTests
     }
 
     [Fact]
+    public void Resolve_ExplicitRootRangeIntersectsDeclaredRange_SatisfiesWithNoInjection()
+    {
+        var declaration = Declaration("ef-provider", Option("PostgreSql", "Npgsql.EntityFrameworkCore.PostgreSQL", "[10.0.0,11.0.0)"));
+        var package = Package("Acme.Module", "1.2.0", declaration);
+        var selections = new Dictionary<string, CapabilitySelection> { ["ef-provider"] = Selection("PostgreSql") };
+        var explicitRoots = new[] { ExplicitRoot("Npgsql.EntityFrameworkCore.PostgreSQL", "[10.5.0,10.8.0)") };
+
+        var result = Resolve([package], selections, explicitRoots);
+
+        Assert.Empty(result.Injections);
+        Assert.Empty(result.Refusals);
+    }
+
+    [Fact]
+    public void Resolve_ExplicitRootRangeIsDisjointFromDeclaredRange_RefusesConflict()
+    {
+        var declaration = Declaration("ef-provider", Option("PostgreSql", "Npgsql.EntityFrameworkCore.PostgreSQL", "[10.0.0,11.0.0)"));
+        var package = Package("Acme.Module", "1.2.0", declaration);
+        var explicitRoots = new[] { ExplicitRoot("Npgsql.EntityFrameworkCore.PostgreSQL", "[12.0.0,13.0.0)") };
+
+        var result = Resolve([package], new Dictionary<string, CapabilitySelection>(), explicitRoots);
+
+        Assert.Empty(result.Injections);
+        var refusal = Assert.Single(result.Refusals);
+        Assert.Equal(CapabilityRefusalStage.Conflict, refusal.Stage);
+        Assert.Contains("[12.0.0,13.0.0)", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("[10.0.0,11.0.0)", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("does not satisfy", refusal.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Resolve_ExplicitRootVersionIsFloating_RefusesConflictAskingToPinIt()
+    {
+        var declaration = Declaration("ef-provider", Option("PostgreSql", "Npgsql.EntityFrameworkCore.PostgreSQL", "[10.0.0]"));
+        var package = Package("Acme.Module", "1.2.0", declaration);
+        var explicitRoots = new[] { ExplicitRoot("Npgsql.EntityFrameworkCore.PostgreSQL", "10.0.*") };
+
+        var result = Resolve([package], new Dictionary<string, CapabilitySelection>(), explicitRoots);
+
+        Assert.Empty(result.Injections);
+        var refusal = Assert.Single(result.Refusals);
+        Assert.Equal(CapabilityRefusalStage.Conflict, refusal.Stage);
+        Assert.Contains("10.0.*", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("cannot be verified", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("pin", refusal.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Resolve_RequirePinnedAndSelectedOptionIsARange_RefusesUnpinnedWithNoInjection()
     {
         var declaration = Declaration("ef-provider", Option("PostgreSql", "Npgsql.EntityFrameworkCore.PostgreSQL", "[10.0.0,11.0.0)"));
@@ -354,30 +421,81 @@ public sealed class CapabilitySelectionResolverTests
     [Fact]
     public void Resolve_IsDeterministicRegardlessOfInputOrder()
     {
+        // Three declaring packages across two capabilities, two selections, and an explicit-root list
+        // that includes both a matching and an irrelevant root, so permuting each of the three inputs
+        // independently exercises capability-name canonicalization (mixed casing across packageA and
+        // packageB's declarations), option-name canonicalization, explicit-root matching, and the
+        // selection-map walk all at once.
         var declarationA = Declaration("Ef-Provider",
             Option("PostgreSql", "Npgsql.EntityFrameworkCore.PostgreSQL", "[10.0.0]"),
             Option("Sqlite", "Microsoft.EntityFrameworkCore.Sqlite", "[10.0.10]"));
         var declarationB = Declaration("ef-provider",
             Option("postgresql", "Npgsql.EntityFrameworkCore.PostgreSQL", "[10.0.0]"),
             Option("SQLITE", "Microsoft.EntityFrameworkCore.Sqlite", "[10.0.10]"));
-        var packageA = Package("Acme.ModuleA", "1.0.0", declarationA);
-        var packageB = Package("Acme.ModuleB", "2.0.0", declarationB);
-        var selections = new Dictionary<string, CapabilitySelection> { ["ef-provider"] = Selection("Sqlite", "PostgreSql") };
-        var explicitRoots = new[] { ExplicitRoot("Microsoft.EntityFrameworkCore.Sqlite", "[10.0.10]") };
+        var declarationC = Declaration("message-broker", Option("RabbitMq", "RabbitMQ.Client", "[6.0.0]"));
 
-        var forward = CapabilitySelectionResolver.Resolve([packageA, packageB], selections, explicitRoots, requirePinned: true);
-        var reversed = CapabilitySelectionResolver.Resolve([packageB, packageA], selections, explicitRoots, requirePinned: true);
+        var packages = new[]
+        {
+            Package("Acme.ModuleA", "1.0.0", declarationA),
+            Package("Acme.ModuleB", "2.0.0", declarationB),
+            Package("Acme.ModuleC", "1.0.0", declarationC)
+        };
 
-        // CapabilityResolution's list-typed properties do not carry structural equality themselves
-        // (List<T> equality is reference equality), so the "byte-identical output" contract is
-        // asserted element-by-element instead of via record equality.
-        Assert.Equal(forward.Injections, reversed.Injections);
-        Assert.Equal(forward.Refusals, reversed.Refusals);
-        Assert.Equal(forward.Diagnostics, reversed.Diagnostics);
+        var selectionEntries = new[]
+        {
+            new KeyValuePair<string, CapabilitySelection>("ef-provider", Selection("Sqlite", "PostgreSql")),
+            new KeyValuePair<string, CapabilitySelection>("message-broker", Selection("RabbitMq"))
+        };
+
+        var explicitRoots = new[]
+        {
+            ExplicitRoot("Microsoft.EntityFrameworkCore.Sqlite", "[10.0.10]"),
+            ExplicitRoot("Some.Unrelated.Package", "[1.0.0]")
+        };
+
+        CapabilityResolution? baseline = null;
+        var permutationCount = 0;
+
+        foreach (var packagePermutation in Permutations(packages))
+        {
+            foreach (var selectionPermutation in Permutations(selectionEntries))
+            {
+                var selections = new Dictionary<string, CapabilitySelection>();
+                foreach (var entry in selectionPermutation)
+                {
+                    selections[entry.Key] = entry.Value;
+                }
+
+                foreach (var rootPermutation in Permutations(explicitRoots))
+                {
+                    permutationCount++;
+                    var result = CapabilitySelectionResolver.Resolve(packagePermutation, selections, rootPermutation, requirePinned: true);
+
+                    if (baseline is null)
+                    {
+                        baseline = result;
+                        continue;
+                    }
+
+                    // CapabilityResolution's list-typed properties do not carry structural equality
+                    // themselves (List<T> equality is reference equality), so the "byte-identical
+                    // output" contract is asserted element-by-element instead of via record equality.
+                    Assert.Equal(baseline.Injections, result.Injections);
+                    Assert.Equal(baseline.Refusals, result.Refusals);
+                    Assert.Equal(baseline.Diagnostics, result.Diagnostics);
+                }
+            }
+        }
+
+        Assert.Equal(6 * 2 * 2, permutationCount);
+        Assert.NotNull(baseline);
+        Assert.Empty(baseline!.Refusals);
 
         // Canonicalization picks the ordinally-smallest casing observed across every source
-        // ('E' sorts before 'e'), independent of which package the resolver saw first.
-        var injection = Assert.Single(forward.Injections);
-        Assert.Equal("capability:Ef-Provider=PostgreSql", injection.SourceName);
+        // ('E' sorts before 'e'), independent of which package the resolver saw first. Sqlite is
+        // satisfied by the explicit root, so only PostgreSql and message-broker's RabbitMq inject.
+        Assert.Equal(2, baseline.Injections.Count);
+        Assert.Equal("capability:Ef-Provider=PostgreSql", baseline.Injections[0].SourceName);
+        Assert.Equal("capability:message-broker=RabbitMq", baseline.Injections[1].SourceName);
     }
 }

@@ -1083,6 +1083,39 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
+    public void AddNuplane_CapabilitiesFromARealEnvironmentVariable_BindsTheSimpleForm()
+    {
+        // A real environment variable, not an in-memory stand-in: proves the standard "__" section
+        // mapping the design promises actually binds Nuplane:Capabilities through
+        // EnvironmentVariablesConfigurationProvider, not just through IConfiguration's general
+        // colon-keyed shape every other test in this file exercises. A GUID-derived prefix keeps this
+        // process-global mutation from colliding with anything else running in the same process, and
+        // the variable is always removed again, pass or fail.
+        var prefix = $"NUPLANE_CAPABILITY_TEST_{Guid.NewGuid():N}__";
+        var variableName = $"{prefix}Nuplane__Capabilities__ef-provider";
+        Environment.SetEnvironmentVariable(variableName, "PostgreSql");
+        try
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddEnvironmentVariables(prefix)
+                .Build();
+
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddNuplane(configuration.GetSection("Nuplane"));
+
+            using var provider = services.BuildServiceProvider();
+            var capabilities = provider.GetRequiredService<IOptions<CapabilityOptions>>().Value;
+
+            Assert.Equal("PostgreSql", Assert.Single(capabilities.Selections["ef-provider"].Options));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variableName, null);
+        }
+    }
+
+    [Fact]
     public void SelectCapability_FromBuilder_OverridesConfiguredSelection()
     {
         var configuration = new ConfigurationBuilder()

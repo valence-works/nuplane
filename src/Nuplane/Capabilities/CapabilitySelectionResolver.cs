@@ -24,9 +24,12 @@ namespace Nuplane.Capabilities;
 /// </description></item>
 /// <item><description>
 /// Explicit-root satisfaction — an explicit desired root whose id equals a declared option's
-/// <c>packageId</c> satisfies that option, unless its version request does not satisfy the option's
-/// effective range, which is also a <see cref="CapabilityRefusalStage.Conflict"/> refusal and also
-/// stops the capability.
+/// <c>packageId</c> satisfies that option when its version request is compatible with the option's
+/// effective range: an exact request is checked with <c>VersionRange.Satisfies</c>, a bounded range
+/// request is checked by intersecting the two ranges (<c>VersionRange.CommonSubSet</c>). A disjoint
+/// range, a floating request, or any request this resolver cannot bind to a concrete range is never
+/// guessed at: both are a <see cref="CapabilityRefusalStage.Conflict"/> refusal that also stops the
+/// capability.
 /// </description></item>
 /// <item><description>
 /// No selection: satisfied by an explicit root (a diagnostic, no injection) or refused as
@@ -188,15 +191,18 @@ internal static class CapabilitySelectionResolver
             }
 
             var effectiveRange = selection?.Version ?? option.VersionRange;
-            if (!ExplicitRootSatisfies(effectiveRange, matchingRoot.VersionRange))
+            var satisfaction = EvaluateExplicitRootSatisfaction(effectiveRange, matchingRoot.VersionRange);
+            if (satisfaction != ExplicitRootSatisfaction.Satisfied)
             {
-                refusals.Add(new(
-                    capabilityName,
-                    CapabilityRefusalStage.Conflict,
-                    $"Explicit root '{option.PackageId} {matchingRoot.VersionRange}' ({matchingRoot.SourceName}) does not satisfy " +
-                    $"capability '{capabilityName}' option '{optionName}' '{effectiveRange}' declared by " +
-                    $"{string.Join(", ", declaringPackageIds.Select(id => $"'{id}'"))}.",
-                    declaringPackageIds));
+                var message = satisfaction == ExplicitRootSatisfaction.Unverifiable
+                    ? $"Explicit root '{option.PackageId} {matchingRoot.VersionRange}' ({matchingRoot.SourceName}) cannot be verified against " +
+                      $"capability '{capabilityName}' option '{optionName}' '{effectiveRange}' declared by " +
+                      $"{string.Join(", ", declaringPackageIds.Select(id => $"'{id}'"))}; pin the explicit root to a single version or a bounded range."
+                    : $"Explicit root '{option.PackageId} {matchingRoot.VersionRange}' ({matchingRoot.SourceName}) does not satisfy " +
+                      $"capability '{capabilityName}' option '{optionName}' '{effectiveRange}' declared by " +
+                      $"{string.Join(", ", declaringPackageIds.Select(id => $"'{id}'"))}.";
+
+                refusals.Add(new(capabilityName, CapabilityRefusalStage.Conflict, message, declaringPackageIds));
                 return;
             }
 
@@ -282,27 +288,56 @@ internal static class CapabilitySelectionResolver
         }
     }
 
+    /// <summary>The three answers <see cref="EvaluateExplicitRootSatisfaction"/> can give.</summary>
+    private enum ExplicitRootSatisfaction
+    {
+        /// <summary>The explicit root's requested version is compatible with the effective range.</summary>
+        Satisfied,
+
+        /// <summary>The explicit root's requested version cannot satisfy the effective range.</summary>
+        Disjoint,
+
+        /// <summary>
+        /// The explicit root's requested version cannot be bound to a concrete range at all (floating,
+        /// or unparseable), so compatibility cannot be shown either way.
+        /// </summary>
+        Unverifiable
+    }
+
     /// <summary>
-    /// Whether an explicit root's requested version satisfies <paramref name="effectiveRange"/>. An
-    /// explicit request that classifies as an exact version is checked directly; a request this
-    /// resolver cannot classify as exact (a range, a floating request, or "latest") is treated as
-    /// compatible rather than refused, since satisfiability between two ranges — as opposed to a
-    /// concrete version and a range — is not the scenario the design's conflict rule describes.
+    /// Whether an explicit root's requested version is compatible with <paramref name="effectiveRange"/>.
+    /// An exact request (a bare version, or a single-point range) is checked directly against
+    /// <paramref name="effectiveRange"/> with <c>VersionRange.Satisfies</c>, the same check this
+    /// resolver has always made. A bounded, non-floating range request is checked by intersecting the
+    /// two ranges with <c>VersionRange.CommonSubSet</c>: disjoint ranges never satisfy the option. A
+    /// floating request, an empty/"latest" request, or anything else that does not parse to a concrete
+    /// range is never guessed at either way — it is <see cref="ExplicitRootSatisfaction.Unverifiable"/>,
+    /// which the caller treats as a refusal, not a silent pass, per the design's "never guess" rule.
     /// </summary>
-    private static bool ExplicitRootSatisfies(string effectiveRange, string explicitVersionRequest)
+    private static ExplicitRootSatisfaction EvaluateExplicitRootSatisfaction(string effectiveRange, string explicitVersionRequest)
     {
         if (!VersionRange.TryParse(effectiveRange, out var effective))
         {
-            return true;
+            // Defensive: the declared option version (N1's reader) and any host Version override
+            // (CapabilityOptionsValidator) are both validated to parse before reaching this resolver.
+            // If one somehow doesn't, there is nothing to check the explicit root against, so nothing
+            // is refused on its account.
+            return ExplicitRootSatisfaction.Satisfied;
         }
 
         var classified = NuGetVersionRequestClassifier.Classify(explicitVersionRequest);
-        if (!classified.IsExact || !NuGetVersion.TryParse(classified.ExactVersion, out var exactVersion))
+        if (classified.IsExact && NuGetVersion.TryParse(classified.ExactVersion, out var exactVersion))
         {
-            return true;
+            return effective.Satisfies(exactVersion) ? ExplicitRootSatisfaction.Satisfied : ExplicitRootSatisfaction.Disjoint;
         }
 
-        return effective.Satisfies(exactVersion);
+        if (!VersionRange.TryParse(explicitVersionRequest, out var explicitRange) || explicitRange.IsFloating)
+        {
+            return ExplicitRootSatisfaction.Unverifiable;
+        }
+
+        var commonRange = VersionRange.CommonSubSet([effective, explicitRange]);
+        return commonRange.Equals(VersionRange.None) ? ExplicitRootSatisfaction.Disjoint : ExplicitRootSatisfaction.Satisfied;
     }
 
     private static Dictionary<string, List<(CapabilityDeclaringPackage Package, PackageCapabilityDeclaration Declaration)>>
