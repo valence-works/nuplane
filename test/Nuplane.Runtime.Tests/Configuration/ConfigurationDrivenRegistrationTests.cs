@@ -28,7 +28,7 @@ public sealed class ConfigurationDrivenRegistrationTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Nuplane:Setup:Feeds:nuget.org:ServiceIndex"] = "https://api.nuget.org/v3/index.json",
-                ["Nuplane:Setup:Feeds:nuget.org:Credentials"] = "secrets://nuget",
+                ["Nuplane:Setup:Feeds:nuget.org:Credentials"] = "secrets://env/NUGET_FEED_TOKEN",
                 ["Nuplane:Setup:Feeds:nuget.org:IncludePatterns:0"] = "Elsa.*"
             })
             .Build();
@@ -43,7 +43,7 @@ public sealed class ConfigurationDrivenRegistrationTests
 
         Assert.Equal("nuget.org", feed.Name);
         Assert.Equal(new Uri("https://api.nuget.org/v3/index.json"), feed.ServiceIndex);
-        Assert.Equal("secrets://nuget", feed.Credentials);
+        Assert.Equal("secrets://env/NUGET_FEED_TOKEN", feed.Credentials);
         Assert.Equal("nuget.org", registration.Name);
         Assert.Equal("Elsa.*", Assert.Single(registration.IncludePatterns));
     }

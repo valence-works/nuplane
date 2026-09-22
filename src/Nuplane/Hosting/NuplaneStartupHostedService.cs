@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Nuplane.Feeds.Credentials;
 using Nuplane.Observability;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Configuration;
@@ -17,15 +18,33 @@ namespace Nuplane.Hosting;
 /// Must be registered after <see cref="ReconciliationTriggerDispatcherHostedService"/> so the
 /// dispatcher's background loop is running when the startup trigger is enqueued.
 /// </remarks>
+/// <param name="triggerIngress">The queue the startup cycle is enqueued on.</param>
+/// <param name="options">The reconciliation options, for the startup failure policy.</param>
+/// <param name="logger">Logger for startup diagnostics.</param>
+/// <param name="secretReferenceResolver">
+/// Taken as a dependency, and reported below, purely so that the secret reference composition is
+/// built while the host is starting. A composition error it can only discover then — two registered
+/// providers claiming one provider name — would otherwise first surface inside whichever later
+/// reconciliation cycle happened to touch a credentialed feed, as a failed package rather than as a
+/// misconfigured host.
+/// </param>
+/// <param name="lastKnownGoodStartupRecovery">Optional last-known-good recovery service.</param>
 internal sealed class NuplaneStartupHostedService(
     IReconciliationTriggerIngress triggerIngress,
     IOptions<ReconciliationOptions> options,
     ILogger<NuplaneStartupHostedService> logger,
+    ISecretReferenceResolver secretReferenceResolver,
     ILastKnownGoodStartupRecoveryService? lastKnownGoodStartupRecovery = null)
     : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        // Before the cycle, not during it: resolving the secret reference resolver here is what
+        // makes an ambiguous provider registration a startup failure instead of a package failure.
+        logger.LogDebug(
+            "Nuplane feed credential references resolve through {SecretReferenceResolver}",
+            secretReferenceResolver.GetType().Name);
+
         logger.LogInformation("Nuplane startup reconciliation starting");
 
         var correlationId = CorrelationContext.CreateNew();

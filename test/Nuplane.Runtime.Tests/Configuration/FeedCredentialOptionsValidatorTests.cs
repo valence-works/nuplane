@@ -58,6 +58,31 @@ public sealed class FeedCredentialOptionsValidatorTests
     }
 
     [Fact]
+    public void HttpsFeed_WithAWellFormedSecretReference_IsValid()
+    {
+        var feed = new FeedDefinition("private", new("https://packages.example.com/v3/index.json"), "secrets://env/MY_FEED_TOKEN");
+        var errors = _validator.Validate(FeedOptions(feed));
+        Assert.Empty(errors);
+    }
+
+    [Theory]
+    [InlineData("a-raw-token")]
+    [InlineData("secrets://env")]
+    [InlineData("secrets://env/")]
+    [InlineData("secrets:///MY_FEED_TOKEN")]
+    public void HttpsFeed_WithAMalformedSecretReference_IsRejectedWithoutEchoingTheValue(string credentials)
+    {
+        // A host that pasted the token itself into Credentials lands here, so the rejected value
+        // must not appear in the error that is logged and surfaced.
+        var feed = new FeedDefinition("private", new("https://packages.example.com/v3/index.json"), credentials);
+
+        var error = Assert.Single(_validator.Validate(FeedOptions(feed)));
+
+        Assert.Contains("secrets://<provider>/<name>", error, StringComparison.Ordinal);
+        Assert.DoesNotContain(credentials, error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MixedFeeds_ValidatesEachCorrectly()
     {
         var localFeed = new FeedDefinition("local", new("file:///tmp/packages/"));

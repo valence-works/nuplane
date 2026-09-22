@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Events;
+using Nuplane.Feeds.Credentials;
 using Nuplane.Hosting;
 using Nuplane.Observability;
 using Nuplane.Reconciliation;
@@ -386,6 +387,7 @@ public sealed class StartupCycleTests
                 queue,
                 new OptionsWrapper<ReconciliationOptions>(options),
                 NullLogger<NuplaneStartupHostedService>.Instance,
+                new SecretReferenceResolver([]),
                 lastKnownGoodStartupRecovery));
     }
 

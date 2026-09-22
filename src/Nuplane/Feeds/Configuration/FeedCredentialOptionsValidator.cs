@@ -1,3 +1,5 @@
+using Nuplane.Feeds.Credentials;
+
 namespace Nuplane.Feeds.Configuration;
 
 /// <summary>
@@ -47,12 +49,13 @@ public sealed class FeedCredentialOptionsValidator
                     errors.Add($"Feed '{feed.Name}' service index must be an absolute HTTPS URI.");
                 }
 
-                if (!string.IsNullOrWhiteSpace(feed.Credentials))
+                // The shape is checked here, where it is still configuration, so that the resolver
+                // never has to throw at acquisition time. The offending value is never echoed: a
+                // host that pasted a raw token in place of a reference lands here, and repeating it
+                // in a validation message would print the secret.
+                if (!string.IsNullOrWhiteSpace(feed.Credentials) && !SecretReference.TryParse(feed.Credentials, out _))
                 {
-                    if (!feed.Credentials.StartsWith("secrets://", StringComparison.OrdinalIgnoreCase))
-                    {
-                        errors.Add($"Feed '{feed.Name}' credentials must use a secret reference (secrets://...).");
-                    }
+                    errors.Add($"Feed '{feed.Name}' credentials must use a secret reference of the form '{SecretReference.ExpectedShape}'.");
                 }
             }
         }

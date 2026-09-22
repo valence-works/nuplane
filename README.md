@@ -92,6 +92,7 @@ Nuplane compares actual state with desired state during each reconciliation cycl
 A named package source Nuplane can resolve from.
 A feed can point at a NuGet v3 service index or at a local directory containing `.nupkg` files.
 Feeds can also define trust level, credentials, and include patterns.
+A private feed's credentials are a `secrets://<provider>/<name>` reference — never the secret itself — resolved at runtime by a registered provider, with a built-in `env` provider reading `secrets://env/MY_FEED_TOKEN` from the process environment; see [Usage Guide: Feed credentials](docs/wiki/Usage-Guide.md#feed-credentials).
 
 ### Include pattern
 

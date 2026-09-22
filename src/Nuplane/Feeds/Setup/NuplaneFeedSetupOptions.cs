@@ -26,7 +26,10 @@ public sealed class NuplaneFeedSetupOptions
     public string? DirectoryPath { get; set; }
 
     /// <summary>
-    /// Gets or sets the optional credential reference for authenticated feeds.
+    /// Gets or sets the optional credential reference for authenticated feeds, of the form
+    /// <c>secrets://&lt;provider&gt;/&lt;name&gt;</c> — for example <c>secrets://env/MY_FEED_TOKEN</c>, which
+    /// the built-in <c>env</c> provider reads from the process environment. The secret itself never
+    /// appears in configuration.
     /// </summary>
     public string? Credentials { get; set; }
 
