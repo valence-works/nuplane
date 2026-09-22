@@ -21,7 +21,12 @@ public sealed class NuplaneFeedBuilder
     /// Configures this feed to resolve packages from a remote NuGet V3 service index.
     /// </summary>
     /// <param name="serviceIndex">The absolute HTTPS URI of the NuGet V3 service index.</param>
-    /// <param name="credentials">Optional secret reference for authenticated feed access (e.g., <c>secrets://...</c>).</param>
+    /// <param name="credentials">
+    /// Optional secret reference for authenticated feed access, of the form
+    /// <c>secrets://&lt;provider&gt;/&lt;name&gt;</c> — for example <c>secrets://env/MY_FEED_TOKEN</c>. The
+    /// secret it resolves to is either <c>user:password</c> or a bare token. A reference no
+    /// registered provider resolves refuses this feed by name.
+    /// </param>
     public NuplaneFeedBuilder FromUri(Uri serviceIndex, string? credentials = null)
     {
         ArgumentNullException.ThrowIfNull(serviceIndex);

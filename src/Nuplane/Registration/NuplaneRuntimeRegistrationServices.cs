@@ -28,6 +28,7 @@ public static class NuplaneRuntimeRegistrationServices
     public static IServiceCollection RegisterRuntime(this IServiceCollection services)
     {
         services.RegisterCoreServices();
+        services.RegisterSecretReferences();
         services.RegisterDesiredStateAggregationAndDryRunPlanning();
         services.RegisterPolicyAndVersioning();
         services.RegisterLockingAndCleanup();
