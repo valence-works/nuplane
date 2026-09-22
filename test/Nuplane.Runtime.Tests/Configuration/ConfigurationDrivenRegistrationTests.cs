@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Capabilities;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Registration;
 using Nuplane.Hosting;
@@ -1003,6 +1004,151 @@ public sealed class ConfigurationDrivenRegistrationTests
 
         var desired = await source.GetDesiredAsync(CancellationToken.None);
         Assert.Empty(desired);
+    }
+
+    [Fact]
+    public void AddNuplane_FromConfiguration_CapabilitiesSimpleForm_BindsSelection()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Capabilities:ef-provider"] = "PostgreSql"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+        var capabilities = provider.GetRequiredService<IOptions<CapabilityOptions>>().Value;
+
+        var selection = Assert.Single(capabilities.Selections);
+        Assert.Equal("ef-provider", selection.Key);
+        Assert.Equal("PostgreSql", Assert.Single(selection.Value.Options));
+    }
+
+    [Fact]
+    public void AddNuplane_FromConfiguration_CapabilitiesObjectForm_BindsOptionVersionAndFeed()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Capabilities:ef-provider:Option"] = "PostgreSql",
+                ["Nuplane:Capabilities:ef-provider:Version"] = "[10.0.0]",
+                ["Nuplane:Capabilities:ef-provider:Feed"] = "nuget.org",
+                ["Nuplane:Setup:Feeds:nuget.org:ServiceIndex"] = "https://api.nuget.org/v3/index.json"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+        var capabilities = provider.GetRequiredService<IOptions<CapabilityOptions>>().Value;
+
+        var selection = capabilities.Selections["ef-provider"];
+        Assert.Equal("PostgreSql", Assert.Single(selection.Options));
+        Assert.Equal("[10.0.0]", selection.Version);
+        Assert.Equal("nuget.org", selection.Feed);
+    }
+
+    [Fact]
+    public void AddNuplane_CapabilitiesConfigurationLayeredLikeEnvironmentVariables_BindsTheLayeredValue()
+    {
+        // Environment variables map Nuplane__Capabilities__ef-provider to the same
+        // "Nuplane:Capabilities:ef-provider" key an in-memory provider sets directly, so layering two
+        // in-memory collections exercises the same last-provider-wins binding an appsettings.json plus
+        // environment-variable override would produce, without depending on process-global env state.
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Capabilities:ef-provider"] = "Sqlite"
+            })
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Capabilities:ef-provider"] = "PostgreSql"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+        var capabilities = provider.GetRequiredService<IOptions<CapabilityOptions>>().Value;
+
+        Assert.Equal("PostgreSql", Assert.Single(capabilities.Selections["ef-provider"].Options));
+    }
+
+    [Fact]
+    public void SelectCapability_FromBuilder_OverridesConfiguredSelection()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Capabilities:ef-provider"] = "Sqlite"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
+        {
+            nuplane.SelectCapability("ef-provider", "PostgreSql");
+        });
+
+        using var provider = services.BuildServiceProvider();
+        var capabilities = provider.GetRequiredService<IOptions<CapabilityOptions>>().Value;
+
+        Assert.Equal("PostgreSql", Assert.Single(capabilities.Selections["ef-provider"].Options));
+    }
+
+    [Fact]
+    public void SelectCapability_WithCapabilitySelection_BindsVersionAndFeedOverrides()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(nuplane =>
+        {
+            nuplane.AddFeed("internal", feed => feed.FromUri(new Uri("https://internal.example/v3/index.json")).IncludeAll());
+            nuplane.SelectCapability("ef-provider", new CapabilitySelection
+            {
+                Options = ["PostgreSql", "Sqlite"],
+                Version = "[10.0.0]",
+                Feed = "internal"
+            });
+        });
+
+        using var provider = services.BuildServiceProvider();
+        var selection = provider.GetRequiredService<IOptions<CapabilityOptions>>().Value.Selections["ef-provider"];
+
+        Assert.Equal(["PostgreSql", "Sqlite"], selection.Options);
+        Assert.Equal("[10.0.0]", selection.Version);
+        Assert.Equal("internal", selection.Feed);
+    }
+
+    [Fact]
+    public void AddNuplane_InvalidCapabilitiesConfiguration_FailsOnStartupNamingTheKey()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:Capabilities:ef-provider"] = "Postgre Sql!"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(() =>
+            provider.GetRequiredService<IOptions<CapabilityOptions>>().Value);
+
+        Assert.Contains("Nuplane:Capabilities:ef-provider", ex.Message);
     }
 
     private sealed class CapturingLoggerProvider(List<string> messages) : ILoggerProvider

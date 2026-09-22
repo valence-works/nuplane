@@ -38,7 +38,9 @@ public sealed class NuplanePackageMetadataReader
     // reason, and is pinned by the same guard test (NuplanePackageMetadataReaderLoadingVocabularySyncTests).
     internal static readonly string[] KnownLoadingScopes = ["DependencyClosure", "PackageOnly"];
 
-    private static readonly Regex NamePattern = new("^[A-Za-z0-9._-]{1,64}$", RegexOptions.Compiled);
+    // Internal (rather than private) so Nuplane.Capabilities.CapabilityOptionsValidator can apply the
+    // same character rules to a host-selected option name, instead of duplicating the pattern.
+    internal static readonly Regex NamePattern = new("^[A-Za-z0-9._-]{1,64}$", RegexOptions.Compiled);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
