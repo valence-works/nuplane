@@ -1,112 +1,58 @@
-using System.Text.Json;
+using Nuplane.Metadata;
 
 namespace Nuplane.Loading;
 
+/// <summary>
+/// Adapts the shared <see cref="NuplanePackageMetadataReader"/> to the loading module's own result
+/// and diagnostics shape. The shared reader parses and validates package-root <c>nuplane.json</c>
+/// (schema 1 or 2) once; this adapter maps its <c>loading</c> section into
+/// <see cref="PackageMetadataLoadModeReadResult"/> exactly as the loading module always has.
+/// Nuplane.Loading understands schema 1 only: a valid schema-2 document is package metadata other
+/// consumers (reconciliation) can use, but it carries no load-mode decision here until this module
+/// itself becomes schema-2 aware.
+/// </summary>
 internal sealed class PackageMetadataLoadModeReader
 {
-    internal const string MetadataFileName = "nuplane.json";
-    private const long MaxMetadataBytes = 64 * 1024;
-    private const int MaxReasonLength = 512;
+    internal const string MetadataFileName = NuplanePackageMetadataReader.MetadataFileName;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        ReadCommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true
-    };
+    private readonly NuplanePackageMetadataReader _reader = new();
 
     public PackageMetadataLoadModeReadResult Read(string packageId, string version, string installPath)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(version);
-        ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
-
-        var metadataPath = Path.Combine(installPath, MetadataFileName);
-        if (!File.Exists(metadataPath))
+        var result = _reader.Read(packageId, version, installPath);
+        if (!result.MetadataFound)
         {
             return PackageMetadataLoadModeReadResult.Missing;
         }
 
-        try
+        if (!result.IsValid)
         {
-            using var stream = File.OpenRead(metadataPath);
-            if (stream.Length > MaxMetadataBytes)
-            {
-                return PackageMetadataLoadModeReadResult.Invalid($"Package metadata for '{packageId}@{version}' exceeds the {MaxMetadataBytes} byte limit.");
-            }
-
-            var document = JsonSerializer.Deserialize<NuplanePackageMetadataDocument>(stream, JsonOptions);
-            if (document is null)
-            {
-                return PackageMetadataLoadModeReadResult.Invalid($"Package metadata for '{packageId}@{version}' is empty.");
-            }
-
-            if (document.SchemaVersion != 1)
-            {
-                return PackageMetadataLoadModeReadResult.Invalid($"Package metadata for '{packageId}@{version}' uses unsupported schema version '{document.SchemaVersion}'.");
-            }
-
-            if (document.Loading is null)
-            {
-                return PackageMetadataLoadModeReadResult.Invalid($"Package metadata for '{packageId}@{version}' is missing loading metadata.");
-            }
-
-            if (string.IsNullOrWhiteSpace(document.Loading.LoadMode))
-            {
-                return PackageMetadataLoadModeReadResult.Invalid($"Package metadata for '{packageId}@{version}' is missing loading.loadMode.");
-            }
-
-            var loadModeName = document.Loading.LoadMode.Trim();
-            if (!Enum.GetNames<PackageLoadMode>().Any(name => string.Equals(name, loadModeName, StringComparison.OrdinalIgnoreCase))
-                || !Enum.TryParse<PackageLoadMode>(loadModeName, ignoreCase: true, out var loadMode))
-            {
-                return PackageMetadataLoadModeReadResult.Invalid($"Package metadata for '{packageId}@{version}' uses unsupported loading.loadMode '{document.Loading.LoadMode}'.");
-            }
-
-            if (string.IsNullOrWhiteSpace(document.Loading.Scope))
-            {
-                return PackageMetadataLoadModeReadResult.Invalid($"Package metadata for '{packageId}@{version}' is missing loading.scope.");
-            }
-
-            var scope = document.Loading.Scope.Trim();
-            if (!string.Equals(scope, LoadModeScopes.DependencyClosure, StringComparison.Ordinal)
-                && !string.Equals(scope, LoadModeScopes.PackageOnly, StringComparison.Ordinal))
-            {
-                return PackageMetadataLoadModeReadResult.Invalid($"Package metadata for '{packageId}@{version}' uses unsupported loading.scope '{document.Loading.Scope}'.");
-            }
-
-            var reason = string.IsNullOrWhiteSpace(document.Loading.Reason)
-                ? null
-                : document.Loading.Reason.Trim();
-            if (reason?.Length > MaxReasonLength)
-            {
-                reason = reason[..MaxReasonLength];
-            }
-
-            return PackageMetadataLoadModeReadResult.Valid(new(
-                document.SchemaVersion,
-                new(loadMode, scope, reason)));
+            return PackageMetadataLoadModeReadResult.Invalid(result.Diagnostic!);
         }
-        catch (JsonException ex)
+
+        var metadata = result.Metadata!;
+        if (metadata.SchemaVersion != 1)
         {
-            return PackageMetadataLoadModeReadResult.Invalid($"Package metadata for '{packageId}@{version}' is not valid JSON: {ex.Message}");
+            return PackageMetadataLoadModeReadResult.Invalid(
+                $"Package metadata for '{packageId}@{version}' uses unsupported schema version '{metadata.SchemaVersion}'.");
         }
-        catch (IOException ex)
+
+        // A valid schema-1 document always carries loading metadata: the shared reader refuses a
+        // schema-1 document without one, so this is an invariant, not a case this adapter validates.
+        var loading = metadata.Loading
+            ?? throw new InvalidOperationException(
+                $"Shared metadata reader returned a valid schema-1 result for '{packageId}@{version}' without loading metadata.");
+
+        // Likewise, the shared reader already restricted loading.loadMode to this module's known
+        // names before returning a valid result.
+        if (!Enum.TryParse<PackageLoadMode>(loading.LoadMode, ignoreCase: true, out var loadMode))
         {
-            return PackageMetadataLoadModeReadResult.Invalid($"Package metadata for '{packageId}@{version}' could not be read: {ex.Message}");
+            throw new InvalidOperationException(
+                $"Shared metadata reader accepted loading.loadMode '{loading.LoadMode}' for '{packageId}@{version}' that Nuplane.Loading does not recognize.");
         }
-        catch (UnauthorizedAccessException ex)
-        {
-            return PackageMetadataLoadModeReadResult.Invalid($"Package metadata for '{packageId}@{version}' could not be accessed: {ex.Message}");
-        }
+
+        return PackageMetadataLoadModeReadResult.Valid(new(
+            metadata.SchemaVersion,
+            new(loadMode, loading.Scope, loading.Reason)));
     }
-
-    private sealed record NuplanePackageMetadataDocument(
-        int SchemaVersion,
-        NuplanePackageLoadingMetadataDocument? Loading);
-
-    private sealed record NuplanePackageLoadingMetadataDocument(
-        string? LoadMode,
-        string? Scope,
-        string? Reason);
 }
