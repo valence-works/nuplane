@@ -6,10 +6,12 @@ namespace Nuplane.Loading;
 /// Adapts the shared <see cref="NuplanePackageMetadataReader"/> to the loading module's own result
 /// and diagnostics shape. The shared reader parses and validates package-root <c>nuplane.json</c>
 /// (schema 1 or 2) once; this adapter maps its <c>loading</c> section into
-/// <see cref="PackageMetadataLoadModeReadResult"/> exactly as the loading module always has.
-/// Nuplane.Loading understands schema 1 only: a valid schema-2 document is package metadata other
-/// consumers (reconciliation) can use, but it carries no load-mode decision here until this module
-/// itself becomes schema-2 aware.
+/// <see cref="PackageMetadataLoadModeReadResult"/> using the same mapping rules regardless of
+/// schema version, not a schema-version gate: a schema-2 document with a <c>loading</c> section
+/// produces the identical result an equivalent schema-1 document would, and a schema-2 document
+/// that omits <c>loading</c> (capabilities-only) carries no load-mode decision here and is treated
+/// exactly as if the metadata file were absent — no diagnostic, nothing for a load-mode advisor to
+/// act on. Schema 3+ is refused by the shared reader itself before this adapter ever sees it.
 /// </summary>
 internal sealed class PackageMetadataLoadModeReader
 {
@@ -31,20 +33,18 @@ internal sealed class PackageMetadataLoadModeReader
         }
 
         var metadata = result.Metadata!;
-        if (metadata.SchemaVersion != 1)
+        if (metadata.Loading is null)
         {
-            return PackageMetadataLoadModeReadResult.Invalid(
-                $"Package metadata for '{packageId}@{version}' uses unsupported schema version '{metadata.SchemaVersion}'.");
+            // A valid schema-2 document can declare capabilities only. That is not a metadata
+            // problem, so this is not Invalid; it simply carries no loading requirement, so this
+            // module treats it exactly as if there were no metadata file at all.
+            return PackageMetadataLoadModeReadResult.Missing;
         }
 
-        // A valid schema-1 document always carries loading metadata: the shared reader refuses a
-        // schema-1 document without one, so this is an invariant, not a case this adapter validates.
-        var loading = metadata.Loading
-            ?? throw new InvalidOperationException(
-                $"Shared metadata reader returned a valid schema-1 result for '{packageId}@{version}' without loading metadata.");
+        var loading = metadata.Loading;
 
-        // Likewise, the shared reader already restricted loading.loadMode to this module's known
-        // names before returning a valid result.
+        // The shared reader already restricted loading.loadMode to this module's known names
+        // before returning a valid result, for both schema versions.
         if (!Enum.TryParse<PackageLoadMode>(loading.LoadMode, ignoreCase: true, out var loadMode))
         {
             throw new InvalidOperationException(
