@@ -204,6 +204,13 @@ public static class NuplaneRestore
     /// <see cref="NuplaneDesiredDescription.SourceErrors"/> rather than propagating, so an empty
     /// request list with an error in it means "could not tell", not "nothing is desired".
     /// </para>
+    /// <para>
+    /// <see cref="NuplaneDesiredDescription.CapabilitySelections"/> reports the host's configured
+    /// capability selections, not the roots they would contribute: a capability's injected root only
+    /// exists once a reconciliation cycle has read the declaring package's <c>nuplane.json</c> from a
+    /// resolved install path, which this pre-flight — resolving no package — cannot do. Contributed
+    /// roots appear only in a cycle, never in this description.
+    /// </para>
     /// </remarks>
     /// <param name="configuration">
     /// The host's configuration root — the one that nests Nuplane's own keys under a <c>Nuplane</c>
@@ -212,7 +219,7 @@ public static class NuplaneRestore
     /// </param>
     /// <param name="options">The restore options, or <see langword="null"/>. Only the path, builder, and logging options matter here; <see cref="NuplaneRestoreOptions.RequirePinnedVersions"/> does not, because this method reports pinned-ness rather than acting on it.</param>
     /// <param name="cancellationToken">A token to cancel the read.</param>
-    /// <returns>The desired requests with their pinned-ness, the feeds refused for an unresolvable credential reference, any source read errors, and the resolved state file and install root.</returns>
+    /// <returns>The desired requests with their pinned-ness, the feeds refused for an unresolvable credential reference, any source read errors, the resolved state file and install root, and the host's configured capability selections.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when an absolute override in <paramref name="options"/> is not an absolute path.</exception>
     /// <exception cref="InvalidOperationException">Thrown for the same unresolvable-path, in-memory-persistence, and empty-composition reasons as <see cref="RestoreAsync"/>, so a pre-flight catches them before the restore does.</exception>

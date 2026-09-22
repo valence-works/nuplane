@@ -1,3 +1,5 @@
+using Nuplane.Capabilities;
+
 namespace Nuplane;
 
 /// <summary>
@@ -20,9 +22,17 @@ namespace Nuplane;
 /// </param>
 /// <param name="StateFilePath">The resolved state file a restore would write.</param>
 /// <param name="InstallRoot">The resolved install root a restore would extract packages into.</param>
+/// <param name="CapabilitySelections">
+/// The host's configured capability selections (<c>Nuplane:Capabilities</c>, plus any builder
+/// <c>SelectCapability</c> override), keyed by capability name. This reports what the host asks
+/// for, not what a cycle would inject: a capability's contributed root only exists once a
+/// reconciliation cycle reads the declaring package's <c>nuplane.json</c> from disk, which this
+/// description — contacting no feed and resolving no package — cannot do.
+/// </param>
 public sealed record NuplaneDesiredDescription(
     IReadOnlyList<DesiredPackageDescription> Requests,
     IReadOnlyList<string> CredentialRefusedFeeds,
     IReadOnlyDictionary<string, string> SourceErrors,
     string StateFilePath,
-    string InstallRoot);
+    string InstallRoot,
+    IReadOnlyDictionary<string, CapabilitySelection> CapabilitySelections);
