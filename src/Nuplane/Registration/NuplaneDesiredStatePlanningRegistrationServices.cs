@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Capabilities;
+using Nuplane.Metadata;
 using Nuplane.Observability;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Convergence;
@@ -24,6 +25,8 @@ internal static class NuplaneDesiredStatePlanningRegistrationServices
         // host wants before anything is resolved, a contributor says what the resolved packages
         // additionally require. Registered concrete-first so the ledger it writes — the only channel
         // that carries a refused unpinned contribution out of a cycle — can be resolved on its own.
+        services.AddSingleton<NuplanePackageMetadataReader>();
+        services.AddSingleton<IPackageMetadataReader>(sp => sp.GetRequiredService<NuplanePackageMetadataReader>());
         services.AddSingleton<CapabilityContributionLedger>();
         services.AddSingleton<CapabilityDesiredStateContributor>();
         services.AddSingleton<IDesiredStateContributor>(sp => sp.GetRequiredService<CapabilityDesiredStateContributor>());

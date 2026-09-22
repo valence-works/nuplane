@@ -40,14 +40,15 @@ internal sealed class CapabilityDesiredStateContributor(
     IOptions<CapabilityOptions> capabilityOptions,
     IOptions<ReconciliationOptions> reconciliationOptions,
     CapabilityContributionLedger ledger,
-    IReconciliationLogger logger) : IDesiredStateContributor
+    IReconciliationLogger logger,
+    IPackageMetadataReader metadataReader) : IDesiredStateContributor
 {
     private readonly IOptions<CapabilityOptions> _capabilityOptions = capabilityOptions ?? throw new ArgumentNullException(nameof(capabilityOptions));
     private readonly IOptions<ReconciliationOptions> _reconciliationOptions = reconciliationOptions ?? throw new ArgumentNullException(nameof(reconciliationOptions));
     private readonly CapabilityContributionLedger _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
     private readonly IReconciliationLogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private readonly NuplanePackageMetadataReader _metadataReader = new();
-    private readonly CycleLogGate _logGate = new();
+    private readonly IPackageMetadataReader _metadataReader = metadataReader ?? throw new ArgumentNullException(nameof(metadataReader));
+    private readonly CycleMemo _cycle = new();
 
     /// <inheritdoc />
     public Task<DesiredStateContribution> ContributeAsync(DesiredStateContributionContext context, CancellationToken ct)
@@ -113,6 +114,14 @@ internal sealed class CapabilityDesiredStateContributor(
     /// the resolver names packages by back to the package id a failure is recorded under. An invalid
     /// schema-2 document contributes a refusal instead of a declaration.
     /// </summary>
+    /// <remarks>
+    /// Each package's file is read once per cycle, not once per contribution round: a cycle that
+    /// contributes anything runs at least two rounds over a closure that only grows, so re-reading
+    /// would re-parse and re-validate every package's metadata for every round. The memo is keyed by
+    /// package identity and install path and is dropped when a new cycle starts, so a file that
+    /// changes on disk between cycles is picked up — within one cycle an install path's contents are
+    /// already fixed, because a cycle installs a package once.
+    /// </remarks>
     private (List<CapabilityDeclaringPackage> DeclaringPackages, Dictionary<string, string> PackageIdByIdentity) ReadDeclarations(
         DesiredStateContributionContext context,
         List<ContributionRefusal> refusals)
@@ -129,7 +138,10 @@ internal sealed class CapabilityDesiredStateContributor(
 
         foreach (var package in packages)
         {
-            var read = _metadataReader.Read(package.Id, package.Version, package.InstallPath);
+            var read = _cycle.ReadOnce(
+                context.CorrelationId,
+                $"{package.Id}@{package.Version}|{package.InstallPath}",
+                () => _metadataReader.Read(package.Id, package.Version, package.InstallPath));
             if (!read.MetadataFound)
             {
                 continue;
@@ -179,7 +191,7 @@ internal sealed class CapabilityDesiredStateContributor(
             requests.Add(new(injection, FindDeclaringPackageIds(declaringPackages, injection.SourceName)));
 
             if (CapabilitySourceName.TryParse(injection.SourceName, out var capabilityName, out var optionName)
-                && _logGate.TryEnter(correlationId, injection.SourceName))
+                && _cycle.LogOnce(correlationId, injection.SourceName))
             {
                 _logger.LogCapabilitySelected(
                     correlationId,
@@ -226,7 +238,7 @@ internal sealed class CapabilityDesiredStateContributor(
     {
         foreach (var diagnostic in resolution.Diagnostics)
         {
-            if (!_logGate.TryEnter(correlationId, $"{diagnostic.Kind}:{diagnostic.CapabilityName}:{diagnostic.PackageId}"))
+            if (!_cycle.LogOnce(correlationId, $"{diagnostic.Kind}:{diagnostic.CapabilityName}:{diagnostic.PackageId}"))
             {
                 continue;
             }
@@ -244,29 +256,67 @@ internal sealed class CapabilityDesiredStateContributor(
     }
 
     /// <summary>
-    /// Keeps each capability log line to one occurrence per reconciliation cycle. Contributors run
-    /// once per contribution round, and a cycle that injects anything runs at least two rounds — the
-    /// second only to confirm the fixpoint — so without this a host that names its engine by hand
-    /// would see the one promised Information line twice.
+    /// What this contributor remembers for the duration of one reconciliation cycle: the metadata it
+    /// has already read, and the log lines it has already emitted. Both exist because contributors
+    /// run once per contribution round and a cycle that contributes anything runs at least two
+    /// rounds — the second only to confirm the fixpoint. Without the first, every package's
+    /// <c>nuplane.json</c> would be re-read and re-validated per round; without the second, a host
+    /// that names its engine by hand would see the one promised Information line twice.
     /// </summary>
-    private sealed class CycleLogGate
+    /// <remarks>
+    /// Everything is dropped the moment a new correlation id appears, so nothing a cycle observed
+    /// outlives it. One lock covers both, because they share that single rule.
+    /// </remarks>
+    private sealed class CycleMemo
     {
         private readonly object _gate = new();
-        private readonly HashSet<string> _entered = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, NuplanePackageMetadataReadResult> _reads = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _logged = new(StringComparer.Ordinal);
         private string? _correlationId;
 
-        internal bool TryEnter(string correlationId, string key)
+        /// <summary>
+        /// The metadata read for <paramref name="key"/> in this cycle, performing
+        /// <paramref name="read"/> only the first time the key is seen.
+        /// </summary>
+        internal NuplanePackageMetadataReadResult ReadOnce(
+            string correlationId,
+            string key,
+            Func<NuplanePackageMetadataReadResult> read)
         {
             lock (_gate)
             {
-                if (!string.Equals(_correlationId, correlationId, StringComparison.Ordinal))
+                Enter(correlationId);
+                if (_reads.TryGetValue(key, out var cached))
                 {
-                    _correlationId = correlationId;
-                    _entered.Clear();
+                    return cached;
                 }
 
-                return _entered.Add(key);
+                var result = read();
+                _reads[key] = result;
+                return result;
             }
+        }
+
+        /// <summary>Whether <paramref name="key"/> has not been logged yet in this cycle.</summary>
+        internal bool LogOnce(string correlationId, string key)
+        {
+            lock (_gate)
+            {
+                Enter(correlationId);
+                return _logged.Add(key);
+            }
+        }
+
+        private void Enter(string correlationId)
+        {
+            if (string.Equals(_correlationId, correlationId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _correlationId = correlationId;
+            _reads.Clear();
+            _logged.Clear();
         }
     }
 }

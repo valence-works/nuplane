@@ -12,7 +12,7 @@ namespace Nuplane.Metadata;
 /// validation of the file. A document is valid or invalid as a whole; partial results are never
 /// returned.
 /// </summary>
-public sealed class NuplanePackageMetadataReader
+public sealed class NuplanePackageMetadataReader : IPackageMetadataReader
 {
     /// <summary>The file name Nuplane reads from a resolved package's install root.</summary>
     public const string MetadataFileName = "nuplane.json";

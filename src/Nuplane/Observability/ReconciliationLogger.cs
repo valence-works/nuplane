@@ -385,8 +385,11 @@ public sealed partial class ReconciliationLogger : IReconciliationLogger
         CapabilitySelectionUnmatchedLog(_logger, correlationId, capabilityName);
     }
 
+    // 1030-1033: the capability block. It starts at 1030 rather than continuing from this type's
+    // own 1021, because 1022 belongs to NuplaneSetupFeedDiagnosticReporter — event ids are unique
+    // per assembly, not per logger type, and LoggerMessageEventIdUniquenessTests now enforces that.
     [LoggerMessage(
-        EventId = 1022,
+        EventId = 1030,
         Level = LogLevel.Information,
         Message = "Capability option selected [CorrelationId={CorrelationId}, Capability={CapabilityName}, Option={OptionName}, PackageId={PackageId}, VersionRange={VersionRange}]")]
     private static partial void CapabilitySelectedLog(
@@ -398,7 +401,7 @@ public sealed partial class ReconciliationLogger : IReconciliationLogger
         string versionRange);
 
     [LoggerMessage(
-        EventId = 1023,
+        EventId = 1031,
         Level = LogLevel.Information,
         Message = "Capability satisfied by explicit root [CorrelationId={CorrelationId}, Capability={CapabilityName}, PackageId={PackageId}]")]
     private static partial void CapabilitySatisfiedByExplicitRootLog(
@@ -408,7 +411,7 @@ public sealed partial class ReconciliationLogger : IReconciliationLogger
         string packageId);
 
     [LoggerMessage(
-        EventId = 1024,
+        EventId = 1032,
         Level = LogLevel.Warning,
         Message = "Capability refused [CorrelationId={CorrelationId}, PackageId={PackageId}, Stage={Stage}]: {RefusalMessage}")]
     private static partial void CapabilityRefusedLog(
@@ -419,7 +422,7 @@ public sealed partial class ReconciliationLogger : IReconciliationLogger
         string refusalMessage);
 
     [LoggerMessage(
-        EventId = 1025,
+        EventId = 1033,
         Level = LogLevel.Warning,
         Message = "Capability selection matched no declaring package [CorrelationId={CorrelationId}, Capability={CapabilityName}]")]
     private static partial void CapabilitySelectionUnmatchedLog(ILogger logger, string correlationId, string capabilityName);

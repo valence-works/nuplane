@@ -22,6 +22,19 @@ namespace Nuplane.Capabilities;
 /// records on every contribution round, so an empty round for a new correlation clears the previous
 /// cycle even when nothing was refused.
 /// </para>
+/// <para>
+/// <b>Precondition: cycles do not overlap.</b> "The latest cycle" is a well-defined thing to report
+/// only because a store has one writer at a time.
+/// <c>ReconciliationOptions.EnableSingleFlight</c> serializes cycles inside one reconciliation
+/// service and <c>ReconciliationOptions.EnableStoreLock</c> serializes them across processes; both
+/// default on, and a host-free restore runs exactly one cycle inside that lock, which is the caller
+/// that reads this. A host that switches both off gets last-writer-wins: every operation here is
+/// still taken under a lock, so two interleaved cycles can never tear the list or read a
+/// half-written one, but the list then describes whichever cycle wrote last rather than the cycle
+/// the reader has in hand. What cannot happen either way is a stale entry passing for a new cycle's:
+/// a new correlation id clears what the previous one left, so a cycle that refused nothing reports
+/// nothing.
+/// </para>
 /// </remarks>
 internal sealed class CapabilityContributionLedger
 {

@@ -30,6 +30,7 @@ public sealed class PackageApplyExecutorCapabilityTests : IDisposable
     private readonly CapabilityContributionLedger _ledger = new();
     private readonly RecordingReconciliationLogger _logger = new();
     private readonly RecordingFailureRecorder _recorder = new();
+    private readonly RecordingPackageMetadataReader _reader = new();
 
     public void Dispose() => _packages.Dispose();
 
@@ -280,6 +281,47 @@ public sealed class PackageApplyExecutorCapabilityTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveAsync_WhenAContributorThrows_PropagatesAndAppliesNothing()
+    {
+        // The dangerous alternative is a caught exception: "could not work out what this package
+        // requires" would then be indistinguishable from "it required nothing", and the cycle would
+        // report a healthy closure that is missing a root. So the cycle fails loudly instead —
+        // nothing is resolved as a contribution, nothing is recorded as a failure that a degraded
+        // result would later have to explain, and no transaction runs because ResolveAsync never
+        // returns a resolution to apply.
+        Select("PostgreSql");
+        DeclareModule();
+        Install(PostgreSqlEngineId, "10.0.0");
+        var contributor = new ThrowingContributor();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ResolveWithAsync(contributor, Root(ModuleId)));
+
+        Assert.Equal(ThrowingContributor.Message, ex.Message);
+        Assert.True(contributor.WasCalled);
+        Assert.Empty(_recorder.Records);
+        Assert.DoesNotContain(PostgreSqlEngineId, _resolvedRequestIds);
+        Assert.Equal([ModuleId], _resolvedRequestIds);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_OverTwoContributionRounds_ReadsEachPackagesMetadataOnce()
+    {
+        // The cycle runs a second round to confirm the fixpoint, over a closure that now also holds
+        // the contributed root. Re-reading and re-validating every package's nuplane.json per round
+        // is work that grows with the closure for no new information.
+        Select("PostgreSql");
+        DeclareModule();
+        Install(PostgreSqlEngineId, "10.0.0");
+
+        var result = await ResolveAsync(Root(ModuleId));
+
+        Assert.Empty(result.FailedPackageIds);
+        Assert.Equal(1, _reader.CountFor(ModuleId));
+        Assert.Equal(1, _reader.CountFor(PostgreSqlEngineId));
+    }
+
+    [Fact]
     public async Task ResolveAsync_WithNoContributorsRegistered_ExpandsTheClosureExactlyOnce()
     {
         Select("PostgreSql");
@@ -339,7 +381,19 @@ public sealed class PackageApplyExecutorCapabilityTests : IDisposable
             static candidate => (IReadOnlyList<ResolvedPackage>)candidate.Value,
             StringComparer.OrdinalIgnoreCase);
 
-    private async Task<PackageResolutionResult> ResolveAsync(params PackageRequest[] desiredRequests)
+    private Task<PackageResolutionResult> ResolveAsync(params PackageRequest[] desiredRequests) =>
+        ResolveWithAsync(
+            new CapabilityDesiredStateContributor(
+                new OptionsWrapper<CapabilityOptions>(_capabilityOptions),
+                new OptionsWrapper<ReconciliationOptions>(_reconciliationOptions),
+                _ledger,
+                _logger,
+                _reader),
+            desiredRequests);
+
+    private async Task<PackageResolutionResult> ResolveWithAsync(
+        IDesiredStateContributor contributor,
+        params PackageRequest[] desiredRequests)
     {
         var resolver = new VersionRangePackageResolver(Candidates());
         var executor = new PackageApplyExecutor(
@@ -347,22 +401,39 @@ public sealed class PackageApplyExecutorCapabilityTests : IDisposable
             new PackageTransactionCoordinator(new AtomicPointerSwitcher(), _recorder),
             new PassthroughRetryPolicy(),
             _recorder,
-            [new CapabilityDesiredStateContributor(
-                new OptionsWrapper<CapabilityOptions>(_capabilityOptions),
-                new OptionsWrapper<ReconciliationOptions>(_reconciliationOptions),
-                _ledger,
-                _logger)],
+            [contributor],
             _logger);
 
-        var result = await executor.ResolveAsync(desiredRequests, CorrelationId, CancellationToken.None);
-        _resolvedRequestIds.AddRange(resolver.Requests.Select(static request => request.Id));
-        return result;
+        try
+        {
+            return await executor.ResolveAsync(desiredRequests, CorrelationId, CancellationToken.None);
+        }
+        finally
+        {
+            _resolvedRequestIds.AddRange(resolver.Requests.Select(static request => request.Id));
+        }
     }
 
     private sealed class PassthroughRetryPolicy : IReconciliationRetryPolicy
     {
         public Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken) =>
             operation(cancellationToken);
+    }
+
+    /// <summary>
+    /// A contributor that cannot answer at all — the shape a faulty host-supplied contributor has.
+    /// </summary>
+    private sealed class ThrowingContributor : IDesiredStateContributor
+    {
+        internal const string Message = "This contributor could not determine what the closure requires.";
+
+        public bool WasCalled { get; private set; }
+
+        public Task<DesiredStateContribution> ContributeAsync(DesiredStateContributionContext context, CancellationToken ct)
+        {
+            WasCalled = true;
+            throw new InvalidOperationException(Message);
+        }
     }
 
     /// <summary>

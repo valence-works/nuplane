@@ -22,6 +22,7 @@ public sealed class CapabilityDesiredStateContributorTests : IDisposable
     private readonly ReconciliationOptions _reconciliationOptions = new();
     private readonly CapabilityContributionLedger _ledger = new();
     private readonly RecordingReconciliationLogger _logger = new();
+    private readonly RecordingPackageMetadataReader _reader = new();
     private readonly CapabilityDesiredStateContributor _sut;
 
     public CapabilityDesiredStateContributorTests() =>
@@ -29,7 +30,8 @@ public sealed class CapabilityDesiredStateContributorTests : IDisposable
             new OptionsWrapper<CapabilityOptions>(_capabilityOptions),
             new OptionsWrapper<ReconciliationOptions>(_reconciliationOptions),
             _ledger,
-            _logger);
+            _logger,
+            _reader);
 
     public void Dispose() => _packages.Dispose();
 
@@ -306,6 +308,35 @@ public sealed class CapabilityDesiredStateContributorTests : IDisposable
         var refusal = Assert.Single(contribution.Refusals);
         Assert.Equal("Acme.OtherModule", refusal.PackageId);
         Assert.Equal("capability-conflict", refusal.Stage);
+    }
+
+    [Fact]
+    public async Task ContributeAsync_TwiceInOneCycle_ReadsEachPackagesMetadataOnce()
+    {
+        Select("PostgreSql");
+        var module = DeclaringModule();
+        var plain = _packages.Install("Acme.Plain");
+        var context = Context([module, plain], ExplicitRoot("Acme.Module"));
+
+        await _sut.ContributeAsync(context, CancellationToken.None);
+        await _sut.ContributeAsync(context, CancellationToken.None);
+
+        Assert.Equal(1, _reader.CountFor("Acme.Module"));
+        Assert.Equal(1, _reader.CountFor("Acme.Plain"));
+    }
+
+    [Fact]
+    public async Task ContributeAsync_InANewCycle_ReadsTheMetadataAgain()
+    {
+        // The memo is per cycle, not per process: a package reinstalled or upgraded between cycles
+        // must not be described by what the previous cycle read.
+        Select("PostgreSql");
+        var module = DeclaringModule();
+        await ContributeAsync([module]);
+
+        await _sut.ContributeAsync(new("corr-second-cycle", [], [module], []), CancellationToken.None);
+
+        Assert.Equal(2, _reader.CountFor("Acme.Module"));
     }
 
     [Fact]
