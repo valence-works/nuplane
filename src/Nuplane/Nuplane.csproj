@@ -9,6 +9,10 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Nuplane.Runtime.Tests" />
     <InternalsVisibleTo Include="Nuplane.Integration.Tests" />
+    <!-- Lets Nuplane.Loading.Tests pin NuplanePackageMetadataReader's known loading vocabulary
+         (duplicated there because core Nuplane cannot reference the optional loading module)
+         against Nuplane.Loading's own PackageLoadMode/LoadModeScopes. -->
+    <InternalsVisibleTo Include="Nuplane.Loading.Tests" />
   </ItemGroup>
 
   <ItemGroup>
