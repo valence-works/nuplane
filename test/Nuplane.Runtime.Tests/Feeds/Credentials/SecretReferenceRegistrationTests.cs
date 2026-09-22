@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Nuplane.Feeds.Credentials;
+using Nuplane.Hosting;
 using Nuplane.Runtime.Tests.TestSupport;
 
 namespace Nuplane.Runtime.Tests.Feeds.Credentials;
@@ -94,5 +96,34 @@ public sealed class SecretReferenceRegistrationTests
 
         var exception = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ISecretReferenceResolver>());
         Assert.Contains("env", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartAsync_WithASecondProviderClaimingEnv_FailsWhileTheHostIsStarting()
+    {
+        // The ambiguity must not wait for the first cycle that happens to touch a credentialed feed:
+        // no feed here references a secret at all, and the host still refuses to start. The startup
+        // hosted service takes the resolver as an explicit dependency so that this stays true
+        // whichever other dependency edge — today the package acquirer's — would have constructed it
+        // first.
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(builder =>
+            builder.Services.AddSingleton<ISecretReferenceProvider>(
+                StubSecretReferenceProvider.Holding("env", _variableName, Sentinel)));
+        await using var provider = services.BuildServiceProvider();
+        // Bounded, so that a startup service which failed to refuse fails this test quickly instead
+        // of waiting forever on a trigger dispatcher the test deliberately never starts.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => provider.GetServices<IHostedService>()
+                .OfType<NuplaneStartupHostedService>()
+                .Single()
+                .StartAsync(timeout.Token));
+
+        // The distinctive wording, so this can only be the resolver refusing the ambiguity rather
+        // than some other startup failure that happens to mention the feed's provider.
+        Assert.Contains("both claim the provider name 'env'", exception.Message, StringComparison.Ordinal);
     }
 }

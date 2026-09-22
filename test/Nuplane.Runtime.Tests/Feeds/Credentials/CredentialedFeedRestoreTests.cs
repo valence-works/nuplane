@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Nuplane.Feeds.Credentials;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Models;
+using Nuplane.Restore;
 using Nuplane.Runtime.Tests.TestSupport;
 
 namespace Nuplane.Runtime.Tests.Feeds.Credentials;
@@ -65,6 +66,56 @@ public sealed class CredentialedFeedRestoreTests : IDisposable
         Assert.Equal(PackageId, Assert.Single(result.FailedPackages));
         Assert.Empty(result.ActivePackages);
         Assert.Equal(0, server.Requests);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_WithAReferenceNoRegisteredProviderClaims_NamesTheFeedAndKeepsTheSecretOutOfEverything()
+    {
+        // The variable the reference names *is* set, so the only reason this feed is refused is that
+        // nothing claims the 'nosuch' provider — an unknown provider, not a missing value. The value
+        // is a sentinel precisely so a resolver that fell back to the environment, or a message that
+        // echoed what it found, would be caught here rather than shipped.
+        await using var server = StartServer();
+        using var variable = new EnvironmentVariableScope(_variableName, Sentinel);
+
+        var result = await NuplaneRestore.RestoreAsync(
+            Configuration(server, reference: $"secrets://nosuch/{_variableName}"),
+            RestoreOptions());
+
+        Assert.Equal(FeedName, Assert.Single(result.CredentialRefusedFeeds));
+        Assert.Equal(PackageId, Assert.Single(result.FailedPackages));
+        Assert.Empty(result.ActivePackages);
+        Assert.Equal(0, server.Requests);
+        Assert.Equal(0, server.PackageDownloads);
+        Assert.DoesNotContain(Sentinel, _logs.AllText, StringComparison.Ordinal);
+        Assert.DoesNotContain(Sentinel, Describe(result), StringComparison.Ordinal);
+        Assert.NotEmpty(_logs.Entries);
+    }
+
+    [Fact]
+    public async Task Create_WithTwoProvidersClaimingOneName_RefusesWhileComposing()
+    {
+        // No feed in this configuration references a secret, so nothing would ever have asked the
+        // resolver for anything — and the composition still refuses, which is the point: an
+        // ambiguous provider registration is a misconfigured host, not a package that failed later.
+        // Asserting on RestoreComposition.Create is what pins the refusal to composition time; the
+        // restore entry point is then checked to have written and fetched nothing.
+        await using var server = StartServer(requireAuth: false);
+        var configuration = Configuration(server, reference: null, declareCredentials: false);
+        var options = RestoreOptions();
+        options.ConfigureBuilder += (builder, _) => builder.Services.AddSingleton<ISecretReferenceProvider>(
+            StubSecretReferenceProvider.Holding("env", _variableName, Sentinel));
+
+        var composing = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => RestoreComposition.Create(configuration, options));
+        var restoring = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => NuplaneRestore.RestoreAsync(configuration, options));
+
+        Assert.Contains("both claim the provider name 'env'", composing.Message, StringComparison.Ordinal);
+        Assert.Contains("both claim the provider name 'env'", restoring.Message, StringComparison.Ordinal);
+        Assert.Equal(0, server.Requests);
+        Assert.False(Directory.Exists(_installRoot));
+        Assert.False(File.Exists(_stateFilePath));
     }
 
     [Fact]
@@ -175,8 +226,17 @@ public sealed class CredentialedFeedRestoreTests : IDisposable
         + $"{string.Join(",", result.ActivePackages.Select(package => $"{package.PackageId}:{package.Version}:{package.InstallPath}"))} "
         + $"{result.InstallRoot} {result.StateFilePath}";
 
-    private TestNuGetFeedServer StartServer() =>
-        new(PackageId, Version, _packageBytes, requiredAuth: new(FeedCredential.TokenUserName, Sentinel));
+    /// <summary>
+    /// The feed, demanding basic authentication unless a test's whole point is that the feed is
+    /// never reached, in which case demanding none keeps "nothing was contacted" the only reason
+    /// nothing was restored.
+    /// </summary>
+    private TestNuGetFeedServer StartServer(bool requireAuth = true) =>
+        new(
+            PackageId,
+            Version,
+            _packageBytes,
+            requiredAuth: requireAuth ? new(FeedCredential.TokenUserName, Sentinel) : null);
 
     private ServiceProvider ComposeHost(TestNuGetFeedServer server, Action<IServiceCollection>? configureServices = null)
     {
@@ -209,12 +269,17 @@ public sealed class CredentialedFeedRestoreTests : IDisposable
     /// secret lives, never the secret. The version range is deliberately not a single pin, so the
     /// cycle goes through version enumeration — its own authenticated call — before acquiring.
     /// </summary>
-    private IConfiguration Configuration(TestNuGetFeedServer server, string? reference = null) =>
+    private IConfiguration Configuration(
+        TestNuGetFeedServer server,
+        string? reference = null,
+        bool declareCredentials = true) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 [$"Setup:Feeds:{FeedName}:ServiceIndex"] = server.ServiceIndexUri.AbsoluteUri,
-                [$"Setup:Feeds:{FeedName}:Credentials"] = reference ?? $"secrets://env/{_variableName}",
+                [$"Setup:Feeds:{FeedName}:Credentials"] = declareCredentials
+                    ? reference ?? $"secrets://env/{_variableName}"
+                    : null,
                 [$"Setup:Feeds:{FeedName}:IncludePatterns:0"] = $"{PackageId} [1.0.0,2.0.0)",
                 ["FeedResolution:PackageInstallRoot"] = _installRoot,
                 ["StoreRegistry:StateFilePath"] = _stateFilePath

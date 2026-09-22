@@ -121,10 +121,17 @@ internal sealed class RestoreComposition : IAsyncDisposable
             _ = provider.GetRequiredService<IOptions<LockFileOptions>>().Value;
             var feedOptions = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
 
+            // Built here even when no feed references a secret, so that an ambiguous provider
+            // registration — two providers claiming one provider name — refuses the restore while it
+            // is still composing, rather than at whichever later moment something first needed a
+            // secret. Nothing has been written or fetched at this point.
+            var secretReferenceResolver = provider.GetRequiredService<ISecretReferenceResolver>();
+
             // After validation, and before anything reads the feed list: a feed whose secret
             // reference resolves stays and is used authenticated; one that cannot be resolved is
             // dropped and named here, before the first network call.
-            await RefuseUnresolvableCredentialFeedsAsync(provider, feedOptions, credentialRefusedFeeds).ConfigureAwait(false);
+            await RefuseUnresolvableCredentialFeedsAsync(provider, secretReferenceResolver, feedOptions, credentialRefusedFeeds)
+                .ConfigureAwait(false);
 
             // A feed refused for declaring credentials is a legitimate, already-reported outcome —
             // not "no feeds" — so it does not trip this refusal on its own.
@@ -229,6 +236,7 @@ internal sealed class RestoreComposition : IAsyncDisposable
     /// </remarks>
     private static async Task RefuseUnresolvableCredentialFeedsAsync(
         IServiceProvider provider,
+        ISecretReferenceResolver resolver,
         FeedResolutionOptions feedOptions,
         List<string> refusedFeeds)
     {
@@ -241,7 +249,6 @@ internal sealed class RestoreComposition : IAsyncDisposable
             return;
         }
 
-        var resolver = provider.GetRequiredService<ISecretReferenceResolver>();
         var logger = provider.GetRequiredService<ILoggerFactory>().CreateLogger<RestoreComposition>();
 
         foreach (var feed in credentialFeeds)
