@@ -27,10 +27,16 @@ public sealed class NuplanePackageMetadataReader
     // loading module: Nuplane.Loading already depends on core Nuplane, so the reference cannot run
     // the other way. Nuplane.Loading's adapter trusts this reader's validation instead of repeating
     // it, so keep this list in sync with the enum if a load mode is ever added or renamed.
-    private static readonly string[] KnownLoadModeNames = ["Collectible", "HostIntegrated"];
+    // Internal (with InternalsVisibleTo to Nuplane.Loading.Tests, see Nuplane.csproj) so drift is
+    // caught by a test instead of trusted to this comment: see
+    // Nuplane.Loading.Tests/NuplanePackageMetadataReaderLoadingVocabularySyncTests.cs, which asserts
+    // this list equals Enum.GetNames<PackageLoadMode>() and round-trips every member through both
+    // this reader and Nuplane.Loading's adapter.
+    internal static readonly string[] KnownLoadModeNames = ["Collectible", "HostIntegrated"];
 
-    // Mirrors Nuplane.Loading.LoadModeScopes (src/Nuplane.Loading/LoadModeReasonCodes.cs) for the same reason.
-    private static readonly string[] KnownLoadingScopes = ["DependencyClosure", "PackageOnly"];
+    // Mirrors Nuplane.Loading.LoadModeScopes (src/Nuplane.Loading/LoadModeReasonCodes.cs) for the same
+    // reason, and is pinned by the same guard test (NuplanePackageMetadataReaderLoadingVocabularySyncTests).
+    internal static readonly string[] KnownLoadingScopes = ["DependencyClosure", "PackageOnly"];
 
     private static readonly Regex NamePattern = new("^[A-Za-z0-9._-]{1,64}$", RegexOptions.Compiled);
 
@@ -275,9 +281,12 @@ public sealed class NuplanePackageMetadataReader
                     $"'{versionText}'; capability options must be pinned.");
             }
 
-            // A bare version (no range syntax) is normalized to an exact single-version range, the
-            // way PackageDependencyGraphResolver.NormalizeDependencyVersionRange normalizes nuspec
-            // ranges; an already-bracketed range passes through as authored.
+            // A bare version (no range syntax) is normalized to an exact single-version range
+            // ("[x]"), unlike PackageDependencyGraphResolver.NormalizeDependencyVersionRange, which
+            // normalizes a bare nuspec dependency version to an open floor ("[x,)"). The two differ
+            // on purpose: a capability option must be pinnable to a version Elsa built against (design
+            // section 5, "pinned-only restores"), so a bare version here means "exactly this version",
+            // not "this version or later". An already-bracketed range passes through as authored.
             var normalizedVersionRange = versionText.StartsWith('[') || versionText.StartsWith('(')
                 ? versionText
                 : $"[{versionRange.MinVersion!.ToNormalizedString()}]";
