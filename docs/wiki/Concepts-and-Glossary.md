@@ -139,6 +139,13 @@ Metadata is trusted only as much as the package itself and does not bypass sourc
 - Applied in: [Usage Guide](Usage-Guide.md), [Package Authoring](Package-Authoring.md)
 - Canonical anchors: `README.md`, `specs/027-auto-load-mode-selection/spec.md`
 
+### Capability
+
+A named choice a package declares in its `capabilities` metadata: exactly one of several candidate packages must become a root in the host's closure for the declaring package to run. Declaring a capability changes nothing by itself; a host selection is what turns it into a resolved root.
+
+- Applied in: [Package Authoring](Package-Authoring.md)
+- Canonical anchors: `README.md`, `src/Nuplane.Abstractions/PackageCapabilityDeclaration.cs`
+
 ### Host-integrated assembly
 
 An active package assembly loaded in `HostIntegrated` mode so framework code can safely hold references to it and resolve it by assembly name without host-owned resolver plumbing.
