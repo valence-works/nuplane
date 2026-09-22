@@ -57,7 +57,18 @@ public static class NuplaneRuntimeRegistrationServices
         services.AddSingleton<IReconciliationRetryPolicy>(sp => sp.GetRequiredService<ReconciliationRetryPolicy>());
         services.TryAddSingleton<ObservationDegradationTracker>();
         services.TryAddSingleton<StartupRecoveryState>();
-        services.TryAddSingleton<ILastKnownGoodStartupRecoveryService, LastKnownGoodStartupRecoveryService>();
+        // Explicit factory, not TryAddSingleton<TService, TImplementation>: the constructor DI would
+        // pick automatically resolves IStoreLock only by argument-type matching against whichever
+        // constructor the container prefers, and a future constructor added to this type could
+        // silently change which one that is. Naming the store-lock-aware constructor here means a
+        // registration-order change can never drop the lock unnoticed.
+        services.TryAddSingleton<ILastKnownGoodStartupRecoveryService>(sp => new LastKnownGoodStartupRecoveryService(
+            sp.GetRequiredService<IStoreRegistry>(),
+            sp.GetRequiredService<IObserverEventDispatcher>(),
+            sp.GetRequiredService<StartupRecoveryState>(),
+            sp.GetServices<ICycleFailureContributor>(),
+            sp.GetRequiredService<IOptions<ReconciliationOptions>>(),
+            sp.GetService<IStoreLock>()));
         services.AddSingleton<ActivePackageCatalog>();
         services.AddSingleton<IActivePackageCatalog>(sp => sp.GetRequiredService<ActivePackageCatalog>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, PackageCatalogOperationalStateContributor>());
