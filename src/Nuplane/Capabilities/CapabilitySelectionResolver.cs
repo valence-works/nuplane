@@ -45,9 +45,11 @@ namespace Nuplane.Capabilities;
 /// </description></item>
 /// <item><description>
 /// When <c>requirePinned</c> and an injection's effective range is not a single pinned version
-/// (<see cref="NuGetVersionRequestClassifier"/>), that one injection is dropped and refused as
-/// <see cref="CapabilityRefusalStage.Unpinned"/> instead; other options of the same capability are
-/// unaffected.
+/// (<see cref="NuGetVersionRequestClassifier"/>), that one injection is dropped, refused as
+/// <see cref="CapabilityRefusalStage.Unpinned"/>, and reported in
+/// <see cref="CapabilityResolution.UnpinnedRequests"/> instead; other options of the same capability
+/// are unaffected. The refusal is decided here, before the resolution executor resolves or downloads
+/// anything the contribution named.
 /// </description></item>
 /// </list>
 /// <para>
@@ -84,7 +86,8 @@ internal static class CapabilitySelectionResolver
 
         var injections = new List<PackageRequest>();
         var refusals = new List<CapabilityRefusal>();
-        var diagnostics = new List<string>();
+        var diagnostics = new List<CapabilityDiagnostic>();
+        var unpinnedRequests = new List<PackageRequest>();
 
         foreach (var capabilityName in capabilityNames)
         {
@@ -96,10 +99,11 @@ internal static class CapabilitySelectionResolver
                 requirePinned,
                 injections,
                 refusals,
-                diagnostics);
+                diagnostics,
+                unpinnedRequests);
         }
 
-        return new(injections, refusals, diagnostics);
+        return new(injections, refusals, diagnostics) { UnpinnedRequests = unpinnedRequests };
     }
 
     private static void ResolveCapability(
@@ -110,7 +114,8 @@ internal static class CapabilitySelectionResolver
         bool requirePinned,
         List<PackageRequest> injections,
         List<CapabilityRefusal> refusals,
-        List<string> diagnostics)
+        List<CapabilityDiagnostic> diagnostics,
+        List<PackageRequest> unpinnedRequests)
     {
         var configurationKey = $"Nuplane:Capabilities:{capabilityName}";
 
@@ -118,7 +123,11 @@ internal static class CapabilitySelectionResolver
         {
             // A selection that matches no declaration in this cycle: nothing to refuse (no package is
             // broken by it), but a typo in the configured name should still be visible.
-            diagnostics.Add($"{configurationKey} selects a capability that no package in this cycle declares.");
+            diagnostics.Add(new(
+                CapabilityDiagnosticKind.SelectionUnmatched,
+                capabilityName,
+                PackageId: null,
+                $"{configurationKey} selects a capability that no package in this cycle declares."));
             return;
         }
 
@@ -215,7 +224,11 @@ internal static class CapabilitySelectionResolver
             {
                 foreach (var (_, root) in satisfiedByExplicitRoot.OrderBy(static kv => kv.Key, StringComparer.Ordinal))
                 {
-                    diagnostics.Add($"Capability '{capabilityName}' satisfied by explicit root '{root.Id}'.");
+                    diagnostics.Add(new(
+                        CapabilityDiagnosticKind.SatisfiedByExplicitRoot,
+                        capabilityName,
+                        root.Id,
+                        $"Capability '{capabilityName}' satisfied by explicit root '{root.Id}'."));
                 }
 
                 return;
@@ -266,6 +279,12 @@ internal static class CapabilitySelectionResolver
             var (option, optionDeclaringPackageIds) = resolvedOptions[optionName];
             var effectiveRange = selection.Version ?? option.VersionRange;
             var classification = NuGetVersionRequestClassifier.Classify(effectiveRange);
+            var request = new PackageRequest(
+                option.PackageId,
+                effectiveRange,
+                selection.Feed,
+                classification.IsExact ? PackageUpdatePolicy.Exact : PackageUpdatePolicy.Range,
+                CapabilitySourceName.Create(capabilityName, optionName));
 
             if (requirePinned && !classification.IsExact)
             {
@@ -276,15 +295,11 @@ internal static class CapabilitySelectionResolver
                     "which is not a single pinned version; restoring with RequirePinnedVersions demands single-point pins. " +
                     $"Declared by {string.Join(", ", optionDeclaringPackageIds.OrderBy(static id => id, StringComparer.Ordinal).Select(id => $"'{id}'"))}.",
                     optionDeclaringPackageIds.OrderBy(static id => id, StringComparer.Ordinal).ToArray()));
+                unpinnedRequests.Add(request);
                 continue;
             }
 
-            injections.Add(new PackageRequest(
-                option.PackageId,
-                effectiveRange,
-                selection.Feed,
-                classification.IsExact ? PackageUpdatePolicy.Exact : PackageUpdatePolicy.Range,
-                $"capability:{capabilityName}={optionName}"));
+            injections.Add(request);
         }
     }
 
