@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nuplane.Feeds.Configuration;
@@ -9,9 +10,10 @@ namespace Nuplane.Sources.Directory.Tests;
 /// <summary>
 /// Covers how <see cref="DirectorySourceRegistrationServices.RegisterFeed"/> resolves a relative
 /// <c>DirectoryPath</c> against the optional <c>basePath</c> parameter, instead of always anchoring
-/// it to the process's current directory.
-/// <see cref="Nuplane.Integration.Tests.Restore.NuplaneRestoreTests"/> covers that base path
-/// actually reaching registration end to end through a host-free restore.
+/// it to the process's current directory, and how that base reaches registration through
+/// <c>NuplaneBuilder.UseBasePath</c> for a normally-composed host.
+/// <see cref="Nuplane.Integration.Tests.Restore.NuplaneRestoreTests"/> covers the same base path
+/// reaching registration end to end through a host-free restore.
 /// </summary>
 public sealed class DirectorySourceRegistrationBasePathTests
 {
@@ -62,6 +64,34 @@ public sealed class DirectorySourceRegistrationBasePathTests
         var exception = Assert.Throws<ArgumentException>(() =>
             DirectorySourceRegistrationServices.RegisterFeed(
                 services, FeedName, CreateOptions(), [], null, "relative-base"));
+
+        Assert.Contains("absolute", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AddDirectoryFeed_ThroughABuilderWhoseHostSetABasePath_ResolvesARelativeDirectoryPathUnderIt()
+    {
+        var basePath = CreateTempDirectoryPath("host-base");
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        services.AddNuplane(new ConfigurationBuilder().Build(), nuplane =>
+        {
+            nuplane.UseBasePath(basePath);
+            nuplane.AddDirectoryFeed(FeedName, RelativeDirectoryPath);
+        });
+
+        Assert.Equal(Path.GetFullPath(Path.Combine(basePath, RelativeDirectoryPath)), ResolvedPath(services));
+    }
+
+    [Fact]
+    public void UseBasePath_WithANonAbsolutePath_ThrowsArgumentExceptionAtTheCallItself()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+            services.AddNuplane(new ConfigurationBuilder().Build(), nuplane => nuplane.UseBasePath("relative-base")));
 
         Assert.Contains("absolute", exception.Message, StringComparison.OrdinalIgnoreCase);
     }

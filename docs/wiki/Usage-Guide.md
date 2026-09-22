@@ -300,9 +300,9 @@ restoring tool both of those name the tool, so `NuplaneRestore` never falls back
 A directory feed's own `DirectoryPath` is not one of the three paths above — it belongs to
 `Nuplane.Sources.Directory`, not the core package, so it is resolved separately by that module
 against the same `BasePath`, and never refuses: a relative `DirectoryPath` falls back to resolving
-against the current directory instead, exactly like a running host. See
-[Directory feeds as an offline package source](#directory-feeds-as-an-offline-package-source) for
-that resolution in both the host and the host-free case.
+against the current directory instead, exactly like a running host that has not set a base of its
+own. See [Directory feeds as an offline package source](#directory-feeds-as-an-offline-package-source)
+for that resolution, including how a host sets one, in both the host and the host-free case.
 
 "Refused" is an `InvalidOperationException` naming the path and telling you to set `BasePath` or the
 matching override. A restore that quietly populates the wrong directory reports success and leaves
@@ -435,16 +435,37 @@ A directory feed declared with `DirectoryPath` both contributes desired roots an
 so pre-populating it with the full dependency closure removes the boot-time network dependency —
 useful when baking packages into a container image.
 
-**Where a relative `DirectoryPath` resolves from.** A host that composes Nuplane directly — through
-`AddNuplane`'s configuration binding or the `AddDirectoryFeed`/`AddDirectoryFeedsFromConfiguration`
-builder calls — resolves it against the process's own current directory, exactly as it always has.
-A [host-free restore](#host-free-restore-of-the-package-set) through `NuplaneRestore` resolves it
-against `NuplaneRestoreOptions.BasePath` instead, the same base its other paths anchor to, because a
-restoring tool's own current directory is never the right answer for the host it restores on behalf
-of. Both `AddDirectoryFeed` and `AddDirectoryFeedsFromConfiguration` read the base from the
-`NuplaneBuilder` they are called on, so the `ConfigureBuilder` callback in that section's example
-needs nothing beyond what it already shows for `BasePath` to apply. An already-absolute
-`DirectoryPath` is unaffected either way.
+**Where a relative `DirectoryPath` resolves from.** Both `AddDirectoryFeed` and
+`AddDirectoryFeedsFromConfiguration` resolve it against `NuplaneBuilder.BasePath` when something has
+set one, and against the process's own current directory otherwise. Nothing sets it by default, so a
+host that composes Nuplane directly and never calls `UseBasePath` keeps resolving it against its own
+current directory exactly as it always has — the right answer only when the host is guaranteed to
+start from its own directory. A host started some other way — as a service from `/`, for example —
+should pass its own content root instead:
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+var nuplaneConfiguration = builder.Configuration.GetSection("Nuplane");
+
+builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
+{
+    nuplane.UseBasePath(builder.Environment.ContentRootPath);
+    nuplane.AddDirectoryFeedsFromConfiguration(nuplaneConfiguration);
+});
+```
+
+`UseBasePath` takes only an absolute path — a relative one throws `ArgumentException` at the point of
+the call, not later when a feed tries to resolve against it — and Nuplane's core package never reads
+`IHostEnvironment` itself, so this stays the host's own line to write rather than a hosting dependency
+Nuplane adds on the host's behalf.
+
+A [host-free restore](#host-free-restore-of-the-package-set) through `NuplaneRestore` sets the same
+`NuplaneBuilder.BasePath` from `NuplaneRestoreOptions.BasePath`, the base its other paths already
+anchor to, before its `ConfigureBuilder` callback runs — so that section's example needs nothing
+beyond what it already shows for `BasePath` to apply to directory feeds too. Because the restore sets
+it first, a `ConfigureBuilder` callback that calls `UseBasePath` itself overrides the restore's base
+rather than being overridden by it; the last call always wins. An already-absolute `DirectoryPath` is
+unaffected by any of this either way.
 
 Resolution reads the directory itself: package identifiers are matched case-insensitively and
 versions are matched in normalized form. A `.nupkg` written by `dotnet restore` under a lower-cased

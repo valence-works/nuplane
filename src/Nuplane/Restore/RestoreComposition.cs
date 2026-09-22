@@ -77,7 +77,9 @@ internal sealed class RestoreComposition : IAsyncDisposable
         // NuplaneBuilder.BasePath is set before the callback runs, not after, so a module
         // registration helper the callback calls — AddDirectoryFeedsFromConfiguration is the current
         // one — resolves its own relative configured paths against the host's BasePath without the
-        // callback having to forward it itself.
+        // callback having to forward it itself. Setting it first rather than last also means a
+        // callback that calls NuplaneBuilder.UseBasePath itself overrides this restore's base
+        // instead of being silently overridden by it.
         services.AddNuplane(nuplaneConfiguration, builder =>
         {
             builder.BasePath = paths.BasePath;
