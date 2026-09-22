@@ -24,8 +24,16 @@ namespace Nuplane;
 /// that store would now see, not the ones this cycle happened to touch.
 /// </param>
 /// <param name="UnpinnedRequests">
-/// The desired requests that name more than one version. Populated only when
-/// <see cref="NuplaneRestoreOptions.RequirePinnedVersions"/> refused the restore; empty otherwise.
+/// The requests that name more than one version, when
+/// <see cref="NuplaneRestoreOptions.RequirePinnedVersions"/> refused them; empty otherwise. A
+/// <i>desired</i> request is judged before the cycle, so an unpinned one makes the restore a skip
+/// (<see cref="NuplaneRestoreSkipReason.UnpinnedRequests"/>) with nothing acquired at all. A
+/// <i>contributed</i> request — a root a resolved package asked for, such as a selected capability
+/// option — can only be judged inside the cycle, because the package that declares it has to be
+/// acquired before its declaration can be read; it therefore appears here on a non-skipped,
+/// degraded result, with the package that declared it in <paramref name="FailedPackages"/> and the
+/// contributed package itself never fetched. Its
+/// <see cref="DesiredPackageDescription.SourceName"/> says which decision produced it.
 /// </param>
 /// <param name="CredentialRefusedFeeds">
 /// The names of configured feeds whose <c>secrets://</c> credential reference could not be resolved —

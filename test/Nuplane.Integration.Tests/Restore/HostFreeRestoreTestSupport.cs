@@ -20,7 +20,18 @@ internal static class HostFreeRestoreTestSupport
     /// Writes a <c>.nupkg</c> into <paramref name="feedDirectory"/> whose payload is one emitted
     /// assembly under <c>lib/net8.0</c>, the layout a real package uses.
     /// </summary>
-    public static PackageFixture WriteNupkg(string feedDirectory, string version = "1.0.0", string prefix = "Restore.Fixture")
+    /// <param name="feedDirectory">The directory feed to write the package into.</param>
+    /// <param name="version">The package version.</param>
+    /// <param name="prefix">A prefix for the generated, per-package-unique id.</param>
+    /// <param name="metadata">
+    /// The package-root <c>nuplane.json</c> to ship, or <see langword="null"/> for a package that
+    /// carries none — the shape every package had before package metadata existed.
+    /// </param>
+    public static PackageFixture WriteNupkg(
+        string feedDirectory,
+        string version = "1.0.0",
+        string prefix = "Restore.Fixture",
+        string? metadata = null)
     {
         var packageId = $"{prefix}.N{Guid.NewGuid():N}";
         Directory.CreateDirectory(feedDirectory);
@@ -30,6 +41,12 @@ internal static class HostFreeRestoreTestSupport
         {
             WriteNuspec(archive, packageId, version);
             WriteAssembly(archive, packageId);
+
+            if (metadata is not null)
+            {
+                using var writer = new StreamWriter(archive.CreateEntry("nuplane.json").Open(), Encoding.UTF8);
+                writer.Write(metadata);
+            }
         }
 
         File.WriteAllBytes(Path.Combine(feedDirectory, $"{packageId}.{version}.nupkg"), buffer.ToArray());

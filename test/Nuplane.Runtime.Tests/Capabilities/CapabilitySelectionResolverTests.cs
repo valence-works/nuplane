@@ -126,8 +126,11 @@ public sealed class CapabilitySelectionResolverTests
         Assert.Empty(result.Injections);
         Assert.Empty(result.Refusals);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Contains("ef-provider", diagnostic, StringComparison.Ordinal);
-        Assert.Contains("Npgsql.EntityFrameworkCore.PostgreSQL", diagnostic, StringComparison.Ordinal);
+        Assert.Equal(CapabilityDiagnosticKind.SatisfiedByExplicitRoot, diagnostic.Kind);
+        Assert.Equal("ef-provider", diagnostic.CapabilityName);
+        Assert.Equal("Npgsql.EntityFrameworkCore.PostgreSQL", diagnostic.PackageId);
+        Assert.Contains("ef-provider", diagnostic.Message, StringComparison.Ordinal);
+        Assert.Contains("Npgsql.EntityFrameworkCore.PostgreSQL", diagnostic.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -374,7 +377,9 @@ public sealed class CapabilitySelectionResolverTests
         Assert.Empty(result.Injections);
         Assert.Empty(result.Refusals);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Contains("Nuplane:Capabilities:message-broker", diagnostic, StringComparison.Ordinal);
+        Assert.Equal(CapabilityDiagnosticKind.SelectionUnmatched, diagnostic.Kind);
+        Assert.Equal("message-broker", diagnostic.CapabilityName);
+        Assert.Contains("Nuplane:Capabilities:message-broker", diagnostic.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -344,4 +344,86 @@ public sealed partial class ReconciliationLogger : IReconciliationLogger
         Level = LogLevel.Information,
         Message = "Runtime exited idle mode: feeds are now configured.")]
     private static partial void IdleModeExitedLog(ILogger logger);
+
+    /// <inheritdoc />
+    public void LogCapabilitySelected(string correlationId, string capabilityName, string optionName, string packageId, string versionRange)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(capabilityName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(optionName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+
+        CapabilitySelectedLog(_logger, correlationId, capabilityName, optionName, packageId, versionRange);
+    }
+
+    /// <inheritdoc />
+    public void LogCapabilitySatisfiedByExplicitRoot(string correlationId, string capabilityName, string packageId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(capabilityName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+
+        CapabilitySatisfiedByExplicitRootLog(_logger, correlationId, capabilityName, packageId);
+    }
+
+    /// <inheritdoc />
+    public void LogCapabilityRefused(string correlationId, string packageId, string stage, string message)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(stage);
+
+        CapabilityRefusedLog(_logger, correlationId, packageId, stage, message);
+    }
+
+    /// <inheritdoc />
+    public void LogCapabilitySelectionUnmatched(string correlationId, string capabilityName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(capabilityName);
+
+        CapabilitySelectionUnmatchedLog(_logger, correlationId, capabilityName);
+    }
+
+    // 1030-1033: the capability block. It starts at 1030 rather than continuing from this type's
+    // own 1021, because 1022 belongs to NuplaneSetupFeedDiagnosticReporter — event ids are unique
+    // per assembly, not per logger type, and LoggerMessageEventIdUniquenessTests now enforces that.
+    [LoggerMessage(
+        EventId = 1030,
+        Level = LogLevel.Information,
+        Message = "Capability option selected [CorrelationId={CorrelationId}, Capability={CapabilityName}, Option={OptionName}, PackageId={PackageId}, VersionRange={VersionRange}]")]
+    private static partial void CapabilitySelectedLog(
+        ILogger logger,
+        string correlationId,
+        string capabilityName,
+        string optionName,
+        string packageId,
+        string versionRange);
+
+    [LoggerMessage(
+        EventId = 1031,
+        Level = LogLevel.Information,
+        Message = "Capability satisfied by explicit root [CorrelationId={CorrelationId}, Capability={CapabilityName}, PackageId={PackageId}]")]
+    private static partial void CapabilitySatisfiedByExplicitRootLog(
+        ILogger logger,
+        string correlationId,
+        string capabilityName,
+        string packageId);
+
+    [LoggerMessage(
+        EventId = 1032,
+        Level = LogLevel.Warning,
+        Message = "Capability refused [CorrelationId={CorrelationId}, PackageId={PackageId}, Stage={Stage}]: {RefusalMessage}")]
+    private static partial void CapabilityRefusedLog(
+        ILogger logger,
+        string correlationId,
+        string packageId,
+        string stage,
+        string refusalMessage);
+
+    [LoggerMessage(
+        EventId = 1033,
+        Level = LogLevel.Warning,
+        Message = "Capability selection matched no declaring package [CorrelationId={CorrelationId}, Capability={CapabilityName}]")]
+    private static partial void CapabilitySelectionUnmatchedLog(ILogger logger, string correlationId, string capabilityName);
 }

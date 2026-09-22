@@ -7,6 +7,7 @@ using Nuplane.Capabilities;
 using Nuplane.Feeds;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Credentials;
+using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Sources;
 using Nuplane.Store.State;
@@ -105,6 +106,18 @@ internal sealed class RestoreComposition : IAsyncDisposable
         services.PostConfigure<FeedResolutionOptions>(feedOptions =>
             feedOptions.PackageInstallRoot = paths.ResolveInstallRoot(feedOptions.PackageInstallRoot));
 
+        // A desired request that names more than one version is refused by RestoreAsync itself,
+        // before the cycle. A contribution cannot be: the package that declares it must be acquired
+        // before its nuplane.json can be read. The demand therefore travels into the cycle, where it
+        // is honoured before the contributed package is resolved or downloaded. Only ever switched
+        // on here, so a configured Reconciliation section that set it for its own reasons is never
+        // switched off by a restore that does not demand pins.
+        if (options.RequirePinnedVersions)
+        {
+            services.PostConfigure<ReconciliationOptions>(reconciliationOptions =>
+                reconciliationOptions.RequirePinnedContributions = true);
+        }
+
         // Taking IOptions<StoreRegistryOptions> as a dependency is what orders the two: the state
         // file is resolved before the lock file that anchors to its directory.
         services.AddOptions<LockFileOptions>().PostConfigure<IOptions<StoreRegistryOptions>>(
@@ -201,6 +214,19 @@ internal sealed class RestoreComposition : IAsyncDisposable
                 _provider.GetRequiredService<IOptions<CapabilityOptions>>().Value.Selections,
                 StringComparer.OrdinalIgnoreCase));
     }
+
+    /// <summary>
+    /// The capability contributions the cycle this composition just ran refused for not naming a
+    /// single version, described the same way an unpinned desired request is. Empty unless
+    /// <see cref="NuplaneRestoreOptions.RequirePinnedVersions"/> refused one, which is why a restore
+    /// that acquired its roots reports these on a degraded result rather than as a skip: the roots
+    /// were acquired, only the contributions were refused.
+    /// </summary>
+    public IReadOnlyList<DesiredPackageDescription> DescribeUnpinnedContributions() =>
+        _provider.GetRequiredService<CapabilityContributionLedger>()
+            .UnpinnedRequests
+            .Select(Describe)
+            .ToArray();
 
     public ValueTask DisposeAsync() => _provider.DisposeAsync();
 

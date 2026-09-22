@@ -1184,6 +1184,20 @@ public sealed class ConfigurationDrivenRegistrationTests
         Assert.Contains("Nuplane:Capabilities:ef-provider", ex.Message);
     }
 
+    [Fact]
+    public void AddNuplane_RegistersTheCapabilityContributorConcreteThenAsTheContributorInterface()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(_ => { });
+
+        using var provider = services.BuildServiceProvider();
+
+        var concrete = provider.GetRequiredService<CapabilityDesiredStateContributor>();
+        Assert.Same(concrete, Assert.Single(provider.GetServices<IDesiredStateContributor>()));
+        Assert.NotNull(provider.GetRequiredService<CapabilityContributionLedger>());
+    }
+
     private sealed class CapturingLoggerProvider(List<string> messages) : ILoggerProvider
     {
         public ILogger CreateLogger(string categoryName) => new CapturingLogger(messages);

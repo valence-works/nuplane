@@ -365,6 +365,22 @@ request then makes the restore do nothing: it returns `Skipped` with
 `NuplaneRestoreSkipReason.UnpinnedRequests` and lists the offenders in `UnpinnedRequests`, before
 anything is resolved, downloaded, installed, or written.
 
+**The pinned rule and contributed roots.** A *desired* request's pinned-ness is answerable before the
+cycle, which is what makes the refusal above a skip. A root contributed by a
+[selected capability](#selecting-a-package-capability) is not: the package that declares it must be
+acquired before its `nuplane.json` can be read. `RequirePinnedVersions` therefore travels into the
+cycle, where each contribution's effective range — the host's `Version` override, else the declared
+option version — is classified by the same rule, and an unpinned one is refused *before* the
+contributed package is resolved or downloaded. So a pinned-only restore never fetches an unpinned
+package either way, but an unpinned contribution is not a skip: the roots were acquired, so the
+result has `Skipped = false`, `IsDegraded = true`, the declaring package in `FailedPackages` (stage
+`capability-unpinned`), and the offending contribution in the same `UnpinnedRequests` list, with the
+`capability:<capability>=<option>` source name that says which decision produced it. A declaration
+that pins its options to exact versions — which is what a package author should write — restores
+without any of this. `DescribeDesiredAsync` cannot list contributions at all, because it resolves no
+package and contacts no feed; it reports the host's configured selections in `CapabilitySelections`
+instead, and contributed roots appear only in a cycle.
+
 ### The store lock
 
 - **Applicability:** `Core`
@@ -447,6 +463,88 @@ in-memory store. Because the two persistence settings are mutually exclusive, an
 `StoreRegistry` also suppresses the opposing shorthand instead of combining into a rejected
 configuration. Builder calls run last, so `WithStateFile(...)` and `UseInMemoryStore()` in the
 `AddNuplane` callback still override both configuration layers.
+
+### Selecting a package capability
+
+- **Applicability:** `Core`
+- **Stability note:** `Recently Changed`
+
+A package can declare a **capability**: a named choice of root package it needs at run time but does
+not depend on. The concrete case is a persistence module that binds one of several database engines
+reflectively, so no dependency edge names the engine and the dependency walk never acquires it. The
+package declares the options in its [`nuplane.json`](Package-Authoring.md#capability-metadata); the
+host decides which one, under its own `Nuplane` section:
+
+```json
+{
+  "Nuplane": {
+    "Capabilities": {
+      "ef-provider": "PostgreSql"
+    }
+  }
+}
+```
+
+The environment-variable form is `Nuplane__Capabilities__ef-provider=PostgreSql`, and the code form
+is `builder.SelectCapability("ef-provider", "PostgreSql")` in the `AddNuplane` callback. Builder
+calls run last, so a `SelectCapability` call overrides a configured selection for the same
+capability.
+
+The object form says more about the same selection:
+
+```json
+{
+  "Nuplane": {
+    "Capabilities": {
+      "ef-provider": { "Option": "PostgreSql", "Version": "[10.0.0]", "Feed": "nuget.org" }
+    }
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `Option` | The option name, matched case-insensitively against the declared options. A host that runs two engines on purpose selects both, as `"PostgreSql,Sqlite"` or as a JSON array. |
+| `Version` | Replaces the version range the declaring package declared for the selected option, for a host that needs a different patch of it. |
+| `Feed` | The feed the contributed root prefers. Package metadata cannot name a feed — which feed supplies a package is a host fact — so this is the only place one can be named. |
+
+**What a selection does.** In every reconciliation cycle, after the desired roots are resolved and
+their dependency closure expanded, Nuplane reads `nuplane.json` from each resolved package and turns
+every selected option into an additional **root** package request whose source name is
+`capability:<capability>=<option>`. From there it is an ordinary root: resolved from a trusted feed
+under the same retry policy, evaluated against the lock file, applied in the same transaction,
+recorded in `store-state.json` with `PackageRole = Root` and that source name, reported by
+`NuplaneStore.ReadActivePackagesAsync`, and loaded and discoverable exactly like a root a desired
+source asked for. Nothing bypasses trust, integrity, or the lock file. A dry run includes it,
+because a dry-run plan is computed from the cycle's own resolved set. An option package that itself
+declares a capability is honoured too: contribution rounds repeat until a round adds nothing,
+bounded at eight rounds. Changing the selection changes the graph, so the next cycle reconciles the
+previous option out of the desired set and the new one in.
+
+**Naming the package by hand still works, and wins.** When one of the option packages is already an
+explicit desired root — a directory-feed drop, an include pattern, a convergence manifest — the
+capability is satisfied by that root, nothing is contributed, and the only difference from before
+this feature existed is one Information log line. A selection whose option package is already an
+explicit root contributes nothing either: the explicit root wins. When that explicit root's version
+cannot satisfy the option's declared range, the declaring package is refused
+(`capability-conflict`), naming both requests, rather than silently bound against a version it
+cannot use — and the explicit root the operator asked for is still applied.
+
+**No selection is a refusal, never a guess.** A package that declares a capability the host has not
+selected, and none of whose option packages is a desired root, fails resolution with stage
+`capability-unselected` and a message naming the capability, every declared option, and the
+configuration key. The cycle is degraded — `Reconciliation:StartupFailurePolicy` then decides what
+that means for host startup — and no option package is installed. Nuplane never picks an option for
+you, and package metadata has no `default`: a silently chosen engine is the failure that surfaces
+much later as a reflection error at load time. The other refusals read the same way, recorded
+against the declaring package and visible in the store's failure record:
+`capability-unknown-option` (the selection names an option the package does not declare),
+`capability-unpinned` (see [the pinned rule](#host-free-restore-of-the-package-set)),
+`capability-unresolved` (no trusted feed has the option package),
+`capability-metadata-invalid` (a schema-2 `nuplane.json` that does not validate), and
+`capability-contribution-limit` (contribution rounds outgrew the bound). A selection that matches no
+declaring package in the cycle breaks nothing, so nothing fails; it is logged as a warning, which is
+how a typo in the key becomes visible.
 
 ### Directory feeds as an offline package source
 

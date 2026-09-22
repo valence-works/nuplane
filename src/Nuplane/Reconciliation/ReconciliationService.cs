@@ -59,6 +59,11 @@ public sealed class ReconciliationService : IReconciliationService
     /// <param name="observationDegradationTracker">The observation degradation tracker.</param>
     /// <param name="cycleFailureContributor">Optional contributor of per-cycle failure information from external modules.</param>
     /// <param name="startupRecoveryState">Optional startup recovery state to clear after a healthy cycle.</param>
+    /// <param name="desiredStateContributors">
+    /// Optional contributors of additional desired roots the packages resolved during a cycle
+    /// require. With none supplied, resolution expands the dependency closure once, exactly as it
+    /// did before contributors existed.
+    /// </param>
     public ReconciliationService(
         IEnumerable<IDesiredPackageSource> sources,
         IDesiredStateAggregator desiredStateAggregator,
@@ -79,7 +84,8 @@ public sealed class ReconciliationService : IReconciliationService
         IFailureRecorder failureRecorder,
         ObservationDegradationTracker observationDegradationTracker,
         ICycleFailureContributor? cycleFailureContributor = null,
-        StartupRecoveryState? startupRecoveryState = null)
+        StartupRecoveryState? startupRecoveryState = null,
+        IEnumerable<IDesiredStateContributor>? desiredStateContributors = null)
         : this(
             sources,
             desiredStateAggregator,
@@ -101,7 +107,8 @@ public sealed class ReconciliationService : IReconciliationService
             observationDegradationTracker,
             cycleFailureContributor,
             startupRecoveryState,
-            storeLock: null)
+            storeLock: null,
+            desiredStateContributors)
     {
     }
 
@@ -135,6 +142,11 @@ public sealed class ReconciliationService : IReconciliationService
     /// low-level test-composition path, which passes collaborators directly and so names no
     /// resolved state file. Cycles then run exactly as they did before the store lock existed.
     /// </param>
+    /// <param name="desiredStateContributors">
+    /// Optional contributors of additional desired roots the packages resolved during a cycle
+    /// require. With none supplied, resolution expands the dependency closure once, exactly as it
+    /// did before contributors existed.
+    /// </param>
     internal ReconciliationService(
         IEnumerable<IDesiredPackageSource> sources,
         IDesiredStateAggregator desiredStateAggregator,
@@ -156,7 +168,8 @@ public sealed class ReconciliationService : IReconciliationService
         ObservationDegradationTracker observationDegradationTracker,
         ICycleFailureContributor? cycleFailureContributor,
         StartupRecoveryState? startupRecoveryState,
-        IStoreLock? storeLock)
+        IStoreLock? storeLock,
+        IEnumerable<IDesiredStateContributor>? desiredStateContributors = null)
     {
         _storeLock = storeLock;
 
@@ -191,7 +204,9 @@ public sealed class ReconciliationService : IReconciliationService
             packageResolver ?? throw new ArgumentNullException(nameof(packageResolver)),
             transactionCoordinator,
             retry,
-            failureRec);
+            failureRec,
+            desiredStateContributors,
+            loggerInstance);
 
         _pipeline = new();
         _pipeline.Use(new DesiredStateReadMiddleware(sourcesList, desiredStateAgg, retry, snapshotCache, failureRec, loggerInstance, metricsInstance));

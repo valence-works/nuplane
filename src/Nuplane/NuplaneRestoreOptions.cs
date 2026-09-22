@@ -64,6 +64,7 @@ public sealed class NuplaneRestoreOptions
     /// acquired. Defaults to <see langword="false"/>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// When <see langword="true"/> and any request carries a bare identifier, a range, or a floating
     /// version, the restore does nothing: it reports
     /// <see cref="NuplaneRestoreResult.Skipped"/> with
@@ -71,6 +72,19 @@ public sealed class NuplaneRestoreOptions
     /// <see cref="NuplaneRestoreResult.UnpinnedRequests"/>, before any package is resolved,
     /// downloaded, installed, or written to the store. Use it when the restore has to be
     /// reproducible — a build or deployment step that must install the same versions every time.
+    /// </para>
+    /// <para>
+    /// Contributed requests — the roots a resolved package itself asks for, such as a selected
+    /// capability option — are checked <i>in</i> the cycle rather than ahead of it, because the
+    /// package that declares one has to be acquired before its declaration can be read. The order
+    /// is: every desired request is checked first, and an unpinned one skips the restore outright;
+    /// then, inside the cycle, a declaring package is acquired, its contributions are read, and an
+    /// unpinned contribution is refused <i>before</i> the contributed package is resolved or
+    /// downloaded. Nothing unpinned is ever fetched either way, but an unpinned contribution yields
+    /// a degraded restore that did acquire its roots rather than a skip, with the offender in
+    /// <see cref="NuplaneRestoreResult.UnpinnedRequests"/> and the package that declared it in
+    /// <see cref="NuplaneRestoreResult.FailedPackages"/>.
+    /// </para>
     /// </remarks>
     public bool RequirePinnedVersions { get; set; }
 

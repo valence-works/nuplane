@@ -59,7 +59,9 @@ Schema 2 is a superset of schema 1: `loading` keeps the same shape and rules, an
 }
 ```
 
-Each capability says: "to run, I need exactly the package of one of these options in the host's closure as a root, and the host decides which." Declaring a capability alone changes nothing — Nuplane parses and validates it, but no root is added and no package is affected until the host selects an option. Selection, and how a selected option becomes a resolved root, is separate follow-on work.
+Each capability says: "to run, I need exactly the package of one of these options in the host's closure as a root, and the host decides which." Declaring one adds nothing to a closure by itself: the host selects an option with `Nuplane:Capabilities:<name>`, and only then is that option's package resolved and installed as a root — with the same trust, lock-file, and transaction path as any other root. A package whose declared capability no host has selected, and none of whose option packages the host named itself, is refused rather than quietly run without what it needs. See [Selecting a package capability](Usage-Guide.md#selecting-a-package-capability) for the host side: the configuration key and its two forms, the `Version` and `Feed` overrides, what happens when a host names an option package by hand, and every refusal an unmet capability produces.
+
+Declare exact versions (`[10.0.10]`) unless a range is genuinely safe for every host: an exact declaration is what lets a host-free restore with `RequirePinnedVersions` install the option package, and it keeps the closure independent of what a feed happens to hold at cycle time.
 
 Allowed values and rules, validated as a whole document (valid or invalid, never partial):
 

@@ -12,7 +12,7 @@ namespace Nuplane.Metadata;
 /// validation of the file. A document is valid or invalid as a whole; partial results are never
 /// returned.
 /// </summary>
-public sealed class NuplanePackageMetadataReader
+public sealed class NuplanePackageMetadataReader : IPackageMetadataReader
 {
     /// <summary>The file name Nuplane reads from a resolved package's install root.</summary>
     public const string MetadataFileName = "nuplane.json";
@@ -102,16 +102,21 @@ public sealed class NuplanePackageMetadataReader
 
     private static NuplanePackageMetadataReadResult Validate(string packageId, string version, MetadataDocument document)
     {
+        // Every refusal below reports the declared schema version, because a consumer's reaction to
+        // an invalid document depends on it: only schema 2 can affect the package closure.
         if (document.SchemaVersion is < MinSchemaVersion or > MaxSchemaVersion)
         {
             return NuplanePackageMetadataReadResult.Invalid(
-                $"Package metadata for '{packageId}@{version}' uses unsupported schema version '{document.SchemaVersion}'.");
+                $"Package metadata for '{packageId}@{version}' uses unsupported schema version '{document.SchemaVersion}'.",
+                document.SchemaVersion);
         }
 
         // Schema 1's only section is `loading`, and it is required, exactly as today.
         if (document.SchemaVersion == 1 && document.Loading is null)
         {
-            return NuplanePackageMetadataReadResult.Invalid($"Package metadata for '{packageId}@{version}' is missing loading metadata.");
+            return NuplanePackageMetadataReadResult.Invalid(
+                $"Package metadata for '{packageId}@{version}' is missing loading metadata.",
+                document.SchemaVersion);
         }
 
         // Schema 2: `loading` and `capabilities` are each optional, but at least one must be present.
@@ -119,7 +124,8 @@ public sealed class NuplanePackageMetadataReader
         if (document.SchemaVersion == 2 && document.Loading is null && !hasCapabilities)
         {
             return NuplanePackageMetadataReadResult.Invalid(
-                $"Package metadata for '{packageId}@{version}' declares neither loading nor capabilities; schema 2 requires at least one.");
+                $"Package metadata for '{packageId}@{version}' declares neither loading nor capabilities; schema 2 requires at least one.",
+                document.SchemaVersion);
         }
 
         PackageLoadingMetadata? loading = null;
@@ -128,7 +134,7 @@ public sealed class NuplanePackageMetadataReader
             var (validatedLoading, loadingDiagnostic) = ValidateLoading(packageId, version, document.Loading);
             if (loadingDiagnostic is not null)
             {
-                return NuplanePackageMetadataReadResult.Invalid(loadingDiagnostic);
+                return NuplanePackageMetadataReadResult.Invalid(loadingDiagnostic, document.SchemaVersion);
             }
 
             loading = validatedLoading;
@@ -140,7 +146,7 @@ public sealed class NuplanePackageMetadataReader
             var (validatedCapabilities, capabilitiesDiagnostic) = ValidateCapabilities(packageId, version, document.Capabilities!);
             if (capabilitiesDiagnostic is not null)
             {
-                return NuplanePackageMetadataReadResult.Invalid(capabilitiesDiagnostic);
+                return NuplanePackageMetadataReadResult.Invalid(capabilitiesDiagnostic, document.SchemaVersion);
             }
 
             capabilities = validatedCapabilities;

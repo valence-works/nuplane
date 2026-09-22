@@ -2,7 +2,6 @@ using Nuplane.Abstractions;
 using Nuplane.Reconciliation;
 using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Store.Activation;
-using Nuplane.Store.State;
 using Nuplane.Store.Transactions;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
@@ -130,17 +129,6 @@ public sealed class PackageApplyExecutorTests : IDisposable
             return packages.TryGetValue(key, out var package)
                 ? Task.FromResult(package)
                 : Task.FromException<ResolvedPackage>(new InvalidOperationException($"Package '{request.Id}' was not configured."));
-        }
-    }
-
-    private sealed class RecordingFailureRecorder : IFailureRecorder
-    {
-        public List<FailureRecord> Records { get; } = [];
-
-        public Task RecordAsync(string packageId, string stage, string message, string correlationId, CancellationToken cancellationToken)
-        {
-            Records.Add(new(packageId, stage, message, DateTimeOffset.UtcNow, correlationId));
-            return Task.CompletedTask;
         }
     }
 

@@ -95,7 +95,8 @@ public static class NuplaneRuntimeRegistrationServices
             sp.GetRequiredService<ObservationDegradationTracker>(),
             sp.GetService<ICycleFailureContributor>(),
             sp.GetService<StartupRecoveryState>(),
-            sp.GetService<IStoreLock>()));
+            sp.GetService<IStoreLock>(),
+            sp.GetServices<IDesiredStateContributor>()));
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
     }
 

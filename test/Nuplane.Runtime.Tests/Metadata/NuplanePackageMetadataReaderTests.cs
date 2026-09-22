@@ -302,4 +302,42 @@ public sealed class NuplanePackageMetadataReaderTests : IDisposable
         Assert.True(result.IsValid);
         Assert.Equal(512, result.Metadata!.Capabilities[0].Description!.Length);
     }
+
+    // A consumer's reaction to an invalid document depends on its schema version — only schema 2 can
+    // affect the package closure — and Metadata is null for an invalid one, so the declared version
+    // is reported separately for exactly that decision.
+    [Theory]
+    [InlineData("""{"schemaVersion":1,"loading":{"loadMode":"NotAMode","scope":"PackageOnly"}}""", 1)]
+    [InlineData("""{"schemaVersion":2,"capabilities":[{"name":"ef-provider","options":[]}]}""", 2)]
+    [InlineData("""{"schemaVersion":3,"loading":{"loadMode":"Collectible","scope":"PackageOnly"}}""", 3)]
+    public void Read_WhenAnInvalidDocumentDeclaresASchemaVersion_ReportsThatVersion(string json, int expectedSchemaVersion)
+    {
+        var result = Read(json);
+
+        Assert.False(result.IsValid);
+        Assert.Equal(expectedSchemaVersion, result.DeclaredSchemaVersion);
+    }
+
+    [Fact]
+    public void Read_WhenADocumentIsNotParseableJson_ReportsNoSchemaVersion()
+    {
+        var result = Read("{");
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.DeclaredSchemaVersion);
+    }
+
+    [Fact]
+    public void Read_WhenADocumentIsValid_ReportsItsSchemaVersion()
+    {
+        var result = Read(
+            """{"schemaVersion":2,"capabilities":[{"name":"ef-provider","options":[{"name":"Sqlite","packageId":"Microsoft.EntityFrameworkCore.Sqlite","version":"[10.0.10]"}]}]}""");
+
+        Assert.True(result.IsValid);
+        Assert.Equal(2, result.DeclaredSchemaVersion);
+    }
+
+    [Fact]
+    public void Read_WhenMetadataIsMissing_ReportsNoSchemaVersion() =>
+        Assert.Null(_sut.Read(PackageId, Version, _tempDir.CreateSubdirectory(Guid.NewGuid().ToString("N"))).DeclaredSchemaVersion);
 }

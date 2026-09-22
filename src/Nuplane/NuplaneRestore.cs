@@ -173,7 +173,12 @@ public static class NuplaneRestore
             run.IsDegraded,
             run.FailedPackages,
             activePackages,
-            UnpinnedRequests: [],
+            // An unpinned desired request skips the restore above, before anything is acquired. A
+            // contribution's pinned-ness can only be judged inside the cycle, so its refusal
+            // arrives here instead: the cycle ran, acquired its roots, refused the contribution
+            // before fetching it, and is degraded — with the offender listed in the same field the
+            // caller already reads for desired requests.
+            composition.DescribeUnpinnedContributions(),
             composition.CredentialRefusedFeeds,
             composition.StateFilePath,
             composition.InstallRoot);

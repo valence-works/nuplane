@@ -83,6 +83,30 @@ public sealed class ReconciliationOptions
     public StartupFailurePolicy StartupFailurePolicy { get; set; } = StartupFailurePolicy.FailHost;
 
     /// <summary>
+    /// Gets or sets whether a desired-state contribution — a root a resolved package asks for, such
+    /// as a host-selected capability option — must name a single version before it is resolved or
+    /// downloaded. Defaults to <see langword="false"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the in-cycle half of <see cref="NuplaneRestoreOptions.RequirePinnedVersions"/>, which
+    /// a host-free restore sets it from. A desired request's pinned-ness can be judged before a
+    /// cycle starts, and a restore refuses one outright. A contribution's cannot: the package that
+    /// declares it must be acquired before its <c>nuplane.json</c> can be read, so the check moves
+    /// into the cycle — but still happens before the contributed package itself is resolved or
+    /// downloaded, so a pinned-only restore never fetches an unpinned contribution.
+    /// </para>
+    /// <para>
+    /// When it is set and a contribution's effective version range is not a single point, every
+    /// package that declared it fails with stage <c>capability-unpinned</c>, the cycle is degraded,
+    /// and the contributed package is not acquired. A running host leaves this off: a host that
+    /// reconciles continuously is not making the reproducibility promise a pinned-only restore
+    /// makes.
+    /// </para>
+    /// </remarks>
+    public bool RequirePinnedContributions { get; set; }
+
+    /// <summary>
     /// Gets or sets the maximum number of retry attempts for transient failures during reconciliation.
     /// </summary>
     public int MaxRetryAttempts { get; set; } = 3;

@@ -116,6 +116,55 @@ public interface IReconciliationLogger
     }
 
     /// <summary>
+    /// Logs that a host-selected capability option contributed a root package to the cycle. Emitted
+    /// once per cycle per selected option, at Information level, because it changes what the closure
+    /// contains.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
+    /// <param name="capabilityName">The declared capability's name.</param>
+    /// <param name="optionName">The selected option's name.</param>
+    /// <param name="packageId">The option's package identifier, now a root.</param>
+    /// <param name="versionRange">The effective version range the contributed root was requested with.</param>
+    void LogCapabilitySelected(string correlationId, string capabilityName, string optionName, string packageId, string versionRange)
+    {
+    }
+
+    /// <summary>
+    /// Logs that a capability needed no contribution because the host had already named one of its
+    /// options as an explicit desired root. This is the one line a host that names its engine by
+    /// hand gains: its behaviour is otherwise unchanged.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
+    /// <param name="capabilityName">The declared capability's name.</param>
+    /// <param name="packageId">The explicit root package that satisfies it.</param>
+    void LogCapabilitySatisfiedByExplicitRoot(string correlationId, string capabilityName, string packageId)
+    {
+    }
+
+    /// <summary>
+    /// Logs that a package was refused over a capability, under the same stage name the failure is
+    /// recorded in the store with.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
+    /// <param name="packageId">The refused package's identifier.</param>
+    /// <param name="stage">The <c>capability-*</c> stage the refusal is recorded under.</param>
+    /// <param name="message">The refusal message, naming the capability and what would satisfy it.</param>
+    void LogCapabilityRefused(string correlationId, string packageId, string stage, string message)
+    {
+    }
+
+    /// <summary>
+    /// Logs that a configured capability selection matched no package in the cycle — nothing is
+    /// broken by it, so nothing fails, but a typo in the configuration key would otherwise be
+    /// invisible.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
+    /// <param name="capabilityName">The selected capability's name, as configured.</param>
+    void LogCapabilitySelectionUnmatched(string correlationId, string capabilityName)
+    {
+    }
+
+    /// <summary>
     /// Logs a reconciliation trigger event with its type and optional source.
     /// </summary>
     /// <param name="correlationId">The unique identifier for this reconciliation cycle.</param>
