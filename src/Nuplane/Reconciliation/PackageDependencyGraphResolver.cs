@@ -17,15 +17,53 @@ namespace Nuplane.Reconciliation;
 /// <summary>
 /// Resolves the dependency closure for desired root packages from installed NuGet metadata.
 /// </summary>
-public sealed class PackageDependencyGraphResolver(
-    IPackageResolver packageResolver,
-    IReconciliationRetryPolicy retryPolicy,
-    HostProvidedPackagesOptions? hostProvidedPackagesOptions = null)
+public sealed class PackageDependencyGraphResolver
 {
-    private readonly IPackageResolver _packageResolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver));
-    private readonly IReconciliationRetryPolicy _retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
-    private readonly HostProvidedPackageDeclarationIndex _hostProvidedPackageDeclarations =
-        HostProvidedPackageDeclarationIndex.Build((IEnumerable<string>?)hostProvidedPackagesOptions?.Entries ?? HostProvidedPackagesOptions.DefaultEntries);
+    /// <summary>
+    /// The stage a package is refused under when it depends on a declared host-provided package the
+    /// host carries at a version outside the range the dependency requires.
+    /// </summary>
+    internal const string HostVersionUnsatisfiedStage = "host-version-unsatisfied";
+
+    private readonly IPackageResolver _packageResolver;
+    private readonly IReconciliationRetryPolicy _retryPolicy;
+    private readonly HostProvidedPackageDeclarationIndex _hostProvidedPackageDeclarations;
+    private readonly IReadOnlyDictionary<string, string>? _hostPackageVersionsOverride;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PackageDependencyGraphResolver"/> class.
+    /// </summary>
+    /// <param name="packageResolver">The resolver used to acquire dependency packages.</param>
+    /// <param name="retryPolicy">The retry policy applied to each dependency acquisition.</param>
+    /// <param name="hostProvidedPackagesOptions">The host-declared package ids and prefixes, or <see langword="null"/> for the defaults.</param>
+    public PackageDependencyGraphResolver(
+        IPackageResolver packageResolver,
+        IReconciliationRetryPolicy retryPolicy,
+        HostProvidedPackagesOptions? hostProvidedPackagesOptions = null)
+        : this(packageResolver, retryPolicy, hostProvidedPackagesOptions, hostPackageVersions: null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a resolver that reads the host's package versions from
+    /// <paramref name="hostPackageVersions"/> instead of the process's own <c>*.deps.json</c>, so a
+    /// test can state what the host carries rather than depend on what the test host happens to.
+    /// </summary>
+    internal PackageDependencyGraphResolver(
+        IPackageResolver packageResolver,
+        IReconciliationRetryPolicy retryPolicy,
+        HostProvidedPackagesOptions? hostProvidedPackagesOptions,
+        IReadOnlyDictionary<string, string>? hostPackageVersions)
+    {
+        _packageResolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver));
+        _retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
+        _hostProvidedPackageDeclarations =
+            HostProvidedPackageDeclarationIndex.Build((IEnumerable<string>?)hostProvidedPackagesOptions?.Entries ?? HostProvidedPackagesOptions.DefaultEntries);
+        _hostPackageVersionsOverride = hostPackageVersions;
+    }
+
+    private IReadOnlyDictionary<string, string> HostPackageVersionsForResolution =>
+        _hostPackageVersionsOverride ?? HostPackageVersions.Value;
 
     /// <summary>
     /// Resolves desired roots and their package dependencies into deterministic graph records.
@@ -63,6 +101,9 @@ public sealed class PackageDependencyGraphResolver(
 
         var queue = new Queue<(ResolvedPackage Parent, PackageDependencyMetadata Dependency, IReadOnlyList<string> Path)>();
         var expandedPackageKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var dependencyKeysByParentKey = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var unsatisfiedHostDependencies = new List<(string DependentKey, HostProvidedDependency Dependency)>();
+        var unverifiedHostDependencies = new List<HostProvidedDependency>();
         foreach (var rootPackage in rootPackages)
         {
             var rootKey = BuildPackageKey(rootPackage.Id, rootPackage.Version);
@@ -75,8 +116,22 @@ public sealed class PackageDependencyGraphResolver(
         while (queue.Count > 0)
         {
             var (parent, dependency, path) = queue.Dequeue();
-            if (IsHostProvidedDependency(dependency.PackageId, dependency.VersionRange))
+            var hostProvision = ClassifyHostProvision(dependency.PackageId, dependency.VersionRange, out var hostVersion);
+            if (hostProvision != HostProvision.NotHostProvided)
             {
+                // A host-provided dependency is never acquired: either the host's copy satisfies
+                // it, or — for a declared package the host carries at an unsatisfying version — the
+                // dependent is refused, because the host has said it supplies that package.
+                var hostDependency = new HostProvidedDependency(parent.Id, parent.Version, dependency.PackageId, dependency.VersionRange, hostVersion);
+                if (hostProvision == HostProvision.Unsatisfied)
+                {
+                    unsatisfiedHostDependencies.Add((BuildPackageKey(parent.Id, parent.Version), hostDependency));
+                }
+                else if (hostProvision == HostProvision.Unverified)
+                {
+                    unverifiedHostDependencies.Add(hostDependency);
+                }
+
                 continue;
             }
 
@@ -103,6 +158,7 @@ public sealed class PackageDependencyGraphResolver(
             }
 
             discoveredEdges.Add(new(parent, dependency));
+            AddDependencyKey(dependencyKeysByParentKey, BuildPackageKey(parent.Id, parent.Version), dependencyKey);
 
             if (!expandedPackageKeys.Add(dependencyKey))
             {
@@ -163,7 +219,80 @@ public sealed class PackageDependencyGraphResolver(
                 .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
-            [graph]);
+            [graph])
+        {
+            HostVersionRefusals = CreateHostVersionRefusals(rootPackages, dependencyKeysByParentKey, unsatisfiedHostDependencies),
+            UnverifiedHostProvidedDependencies = unverifiedHostDependencies
+                .Distinct()
+                .OrderBy(static dependency => dependency.DependentPackageId, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static dependency => dependency.DependencyId, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+        };
+    }
+
+    private static void AddDependencyKey(Dictionary<string, HashSet<string>> dependencyKeysByParentKey, string parentKey, string dependencyKey)
+    {
+        if (!dependencyKeysByParentKey.TryGetValue(parentKey, out var dependencyKeys))
+        {
+            dependencyKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            dependencyKeysByParentKey[parentKey] = dependencyKeys;
+        }
+
+        dependencyKeys.Add(dependencyKey);
+    }
+
+    // Each unsatisfied host dependency refuses the package that declares it and every root whose
+    // closure reaches that package: the graph is all-or-nothing at activation time, so a root that
+    // needs a refused package cannot be applied either. Reachability is read from the edges the
+    // expansion discovered rather than from the path the refusal was found on, because a package
+    // is expanded once however many roots reach it.
+    private static IReadOnlyList<HostVersionRefusal> CreateHostVersionRefusals(
+        IReadOnlyList<ResolvedPackage> rootPackages,
+        IReadOnlyDictionary<string, HashSet<string>> dependencyKeysByParentKey,
+        IReadOnlyList<(string DependentKey, HostProvidedDependency Dependency)> unsatisfiedHostDependencies)
+    {
+        if (unsatisfiedHostDependencies.Count == 0)
+        {
+            return [];
+        }
+
+        var reachableKeysByRoot = rootPackages
+            .Select(root => (root.Id, ReachableKeys: CollectReachableKeys(BuildPackageKey(root.Id, root.Version), dependencyKeysByParentKey)))
+            .ToArray();
+
+        return unsatisfiedHostDependencies
+            .Distinct()
+            .Select(unsatisfied => new HostVersionRefusal(
+                unsatisfied.Dependency,
+                reachableKeysByRoot
+                    .Where(root => root.ReachableKeys.Contains(unsatisfied.DependentKey))
+                    .Select(static root => root.Id)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Order(StringComparer.OrdinalIgnoreCase)
+                    .ToArray()))
+            .OrderBy(static refusal => refusal.Dependency.DependentPackageId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static refusal => refusal.Dependency.DependencyId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static HashSet<string> CollectReachableKeys(string rootKey, IReadOnlyDictionary<string, HashSet<string>> dependencyKeysByParentKey)
+    {
+        var reachable = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { rootKey };
+        var pending = new Stack<string>([rootKey]);
+        while (pending.TryPop(out var key))
+        {
+            if (!dependencyKeysByParentKey.TryGetValue(key, out var dependencyKeys))
+            {
+                continue;
+            }
+
+            foreach (var dependencyKey in dependencyKeys.Where(reachable.Add))
+            {
+                pending.Push(dependencyKey);
+            }
+        }
+
+        return reachable;
     }
 
     private IReadOnlyList<ResolvedPackage> SelectNuGetResolvedPackages(
@@ -191,7 +320,7 @@ public sealed class PackageDependencyGraphResolver(
                 package.Id,
                 ParsePackageVersion(package),
                 ReadDependencyMetadata(package)
-                    .Where(dependency => !IsHostProvidedDependency(dependency.PackageId, dependency.VersionRange))
+                    .Where(dependency => ClassifyHostProvision(dependency.PackageId, dependency.VersionRange, out _) == HostProvision.NotHostProvided)
                     .Select(static dependency => TryCreatePackageDependency(dependency))
                     .OfType<PackageDependency>()
                     .ToArray(),
@@ -501,20 +630,33 @@ public sealed class PackageDependencyGraphResolver(
 
     private static readonly Lazy<IReadOnlyDictionary<string, string>> HostPackageVersions = new(LoadHostPackageVersions);
 
-    private bool IsHostProvidedDependency(string packageId, string versionRange)
+    // A dependency is host-provided when the host's *.deps.json carries it at a satisfying version,
+    // or when the host declares it. Only a declared package is held to the host's version: the
+    // declaration says the host supplies it, so a host version outside the range refuses the
+    // dependent, and a declared package the host's version map does not carry has nothing to check
+    // against and is trusted, which the caller reports rather than leaves silent. An undeclared
+    // package the host carries at an unsatisfying version is not host-provided at all: it is
+    // acquired like any other dependency, and isolated loading gives the package a private copy.
+    private HostProvision ClassifyHostProvision(string packageId, string versionRange, out string? hostVersion)
     {
+        hostVersion = null;
         if (string.IsNullOrWhiteSpace(packageId))
         {
-            return false;
+            return HostProvision.NotHostProvided;
         }
 
-        if (_hostProvidedPackageDeclarations.Matches(packageId))
+        var declared = _hostProvidedPackageDeclarations.Matches(packageId);
+        if (HostPackageVersionsForResolution.TryGetValue(packageId, out hostVersion))
         {
-            return true;
+            if (VersionSatisfiesRange(hostVersion, versionRange))
+            {
+                return HostProvision.Satisfied;
+            }
+
+            return declared ? HostProvision.Unsatisfied : HostProvision.NotHostProvided;
         }
 
-        return HostPackageVersions.Value.TryGetValue(packageId, out var hostVersion) &&
-            VersionSatisfiesRange(hostVersion, versionRange);
+        return declared ? HostProvision.Unverified : HostProvision.NotHostProvided;
     }
 
     private static bool VersionSatisfiesRange(string version, string versionRange)
@@ -572,6 +714,14 @@ public sealed class PackageDependencyGraphResolver(
         }
 
         return packageVersions;
+    }
+
+    private enum HostProvision
+    {
+        NotHostProvided,
+        Satisfied,
+        Unsatisfied,
+        Unverified
     }
 
     private sealed record DiscoveredDependencyEdge(ResolvedPackage Parent, PackageDependencyMetadata Dependency);
@@ -640,7 +790,53 @@ public sealed class PackageDependencyGraphResolver(
 /// <param name="ResolvedGraphs">The resolved dependency graphs.</param>
 public sealed record PackageDependencyGraphResolutionResult(
     IReadOnlyList<ResolvedPackage> ResolvedPackages,
-    IReadOnlyList<ResolvedPackageGraph> ResolvedGraphs);
+    IReadOnlyList<ResolvedPackageGraph> ResolvedGraphs)
+{
+    /// <summary>
+    /// The dependencies on a declared host-provided package whose host version does not satisfy the
+    /// range they require, each with the roots that cannot be applied because of it.
+    /// </summary>
+    internal IReadOnlyList<HostVersionRefusal> HostVersionRefusals { get; init; } = [];
+
+    /// <summary>
+    /// The dependencies on a declared host-provided package whose version the host's package map
+    /// does not carry, trusted as satisfied because there is nothing to compare their range with.
+    /// </summary>
+    internal IReadOnlyList<HostProvidedDependency> UnverifiedHostProvidedDependencies { get; init; } = [];
+}
+
+/// <summary>
+/// One dependency edge onto a package the host provides.
+/// </summary>
+/// <param name="DependentPackageId">The identifier of the package that declares the dependency.</param>
+/// <param name="DependentPackageVersion">The version of the package that declares the dependency.</param>
+/// <param name="DependencyId">The host-provided package's identifier.</param>
+/// <param name="RequiredRange">The version range the dependency requires.</param>
+/// <param name="HostVersion">The version the host carries, or <see langword="null"/> when it is not known.</param>
+internal sealed record HostProvidedDependency(
+    string DependentPackageId,
+    string DependentPackageVersion,
+    string DependencyId,
+    string RequiredRange,
+    string? HostVersion);
+
+/// <summary>
+/// A dependency on a declared host-provided package the host carries at a version outside the
+/// range it requires, and the roots that cannot be applied because their closure contains its dependent.
+/// </summary>
+/// <param name="Dependency">The unsatisfied dependency.</param>
+/// <param name="RootPackageIds">The identifiers of the roots whose closure contains the dependent package, which includes the dependent itself when it is a root.</param>
+internal sealed record HostVersionRefusal(HostProvidedDependency Dependency, IReadOnlyList<string> RootPackageIds)
+{
+    /// <summary>
+    /// The refusal message: the dependent package, the dependency, the range it requires, and the
+    /// version the host actually carries.
+    /// </summary>
+    public string Message =>
+        $"Package '{Dependency.DependentPackageId}@{Dependency.DependentPackageVersion}' requires '{Dependency.DependencyId} {Dependency.RequiredRange}', " +
+        $"but the host provides '{Dependency.DependencyId} {Dependency.HostVersion}'. A package the host declares it provides is never acquired, " +
+        "so the dependent is refused rather than loaded against a version it was not built for.";
+}
 
 internal static class TargetFrameworkMonikerProvider
 {

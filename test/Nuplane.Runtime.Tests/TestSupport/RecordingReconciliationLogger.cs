@@ -4,7 +4,7 @@ using Nuplane.Reconciliation.Models;
 namespace Nuplane.Runtime.Tests.TestSupport;
 
 /// <summary>
-/// An <see cref="IReconciliationLogger"/> that records the capability log lines a cycle emits and
+/// An <see cref="IReconciliationLogger"/> that records the capability and host-version log lines a cycle emits and
 /// ignores everything else, so a test can assert on the lines a host actually reads.
 /// </summary>
 internal sealed class RecordingReconciliationLogger : IReconciliationLogger
@@ -17,6 +17,10 @@ internal sealed class RecordingReconciliationLogger : IReconciliationLogger
 
     public List<string> UnmatchedSelections { get; } = [];
 
+    public List<(string PackageId, string Message)> HostVersionRefused { get; } = [];
+
+    public List<(string DependentPackageId, string DependencyId, string VersionRange)> HostVersionUnknown { get; } = [];
+
     public void LogCapabilitySelected(string correlationId, string capabilityName, string optionName, string packageId, string versionRange) =>
         Selected.Add((capabilityName, optionName, packageId, versionRange));
 
@@ -28,6 +32,12 @@ internal sealed class RecordingReconciliationLogger : IReconciliationLogger
 
     public void LogCapabilitySelectionUnmatched(string correlationId, string capabilityName) =>
         UnmatchedSelections.Add(capabilityName);
+
+    public void LogHostProvidedVersionRefused(string correlationId, string packageId, string message) =>
+        HostVersionRefused.Add((packageId, message));
+
+    public void LogHostProvidedVersionUnknown(string correlationId, string dependentPackageId, string dependencyId, string versionRange) =>
+        HostVersionUnknown.Add((dependentPackageId, dependencyId, versionRange));
 
     public void LogCycleStarted(string correlationId, int requestCount) { }
 

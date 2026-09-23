@@ -31,6 +31,21 @@ namespace Nuplane.Reconciliation.Configuration;
 /// skipped regardless of this list, and that rule is unaffected by anything configured here.
 /// </para>
 /// <para>
+/// A dependency on a package declared here is never acquired, and it is held to the host's version:
+/// where the host's <c>*.deps.json</c> names the package's version, that version is checked against
+/// the range the dependency requires, and a version outside it refuses the dependent package under
+/// the <c>host-version-unsatisfied</c> stage. A declared package the host's deps do not name has
+/// nothing to check against and is trusted as satisfied; each such dependency is logged as a
+/// warning.
+/// </para>
+/// <para>
+/// The check applies to declared packages only. An undeclared package the host's deps carry at a
+/// version outside the range is not host-provided: it is acquired like any other dependency, and
+/// isolated loading gives the dependent a private copy of every assembly not listed in
+/// <c>Loading:SharedAssemblies</c>. Declaring a package is the host's statement that it supplies
+/// that package, so only then is a version the host cannot satisfy a reason to refuse.
+/// </para>
+/// <para>
 /// Defaults to Nuplane's own contract package ids, so an unconfigured host reproduces exactly the
 /// Nuplane-owned part of the fixed allowlist this option replaces.
 /// </para>

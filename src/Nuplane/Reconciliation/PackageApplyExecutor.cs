@@ -64,6 +64,8 @@ public sealed class PackageApplyExecutor(
         var failed = new List<string>();
         var decisions = new List<FeedResolutionDecision>();
         var graphs = new List<ResolvedPackageGraph>();
+        var hostVersionRefusals = new List<ContributionRefusal>();
+        var reportedUnverifiedHostDependencies = new HashSet<HostProvidedDependency>();
 
         var resolvedRootsById = new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase);
         var rootRequests = new List<PackageRequest>();
@@ -160,7 +162,20 @@ public sealed class PackageApplyExecutor(
 
             while (true)
             {
-                if (!await TryExpandGraphAsync() || _desiredStateContributors.Length == 0)
+                if (!await TryExpandGraphAsync())
+                {
+                    return;
+                }
+
+                // A root whose closure needs a host-provided package at a version the host does not
+                // carry is refused like any other refused package: dropped from the root set, with
+                // the closure expanded again without it, so every other root still applies.
+                if (await ApplyRefusalsAsync(hostVersionRefusals))
+                {
+                    continue;
+                }
+
+                if (_desiredStateContributors.Length == 0)
                 {
                     return;
                 }
@@ -216,7 +231,14 @@ public sealed class PackageApplyExecutor(
                     }
 
                     await _failureRecorder.RecordAsync(refusal.PackageId, refusal.Stage, refusal.Message, correlationId, cancellationToken);
-                    _reconciliationLogger.LogCapabilityRefused(correlationId, refusal.PackageId, refusal.Stage, refusal.Message);
+                    if (refusal.Stage == PackageDependencyGraphResolver.HostVersionUnsatisfiedStage)
+                    {
+                        _reconciliationLogger.LogHostProvidedVersionRefused(correlationId, refusal.PackageId, refusal.Message);
+                    }
+                    else
+                    {
+                        _reconciliationLogger.LogCapabilityRefused(correlationId, refusal.PackageId, refusal.Stage, refusal.Message);
+                    }
 
                     // A refused package must not be applied, and the graph is all-or-nothing at
                     // activation time, so it is dropped from the root set and the closure is
@@ -306,6 +328,7 @@ public sealed class PackageApplyExecutor(
         {
             resolved.Clear();
             graphs.Clear();
+            hostVersionRefusals.Clear();
 
             if (rootRequests.Count == 0)
             {
@@ -320,6 +343,24 @@ public sealed class PackageApplyExecutor(
                     cancellationToken);
                 resolved.AddRange(graphResult.ResolvedPackages);
                 graphs.AddRange(graphResult.ResolvedGraphs);
+
+                // The dependent package is refused together with every root that reaches it; when
+                // the dependent is itself a root, those are the same package and it is refused once.
+                hostVersionRefusals.AddRange(graphResult.HostVersionRefusals.SelectMany(static refusal => refusal.RootPackageIds
+                    .Prepend(refusal.Dependency.DependentPackageId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Select(packageId => new ContributionRefusal(packageId, PackageDependencyGraphResolver.HostVersionUnsatisfiedStage, refusal.Message))));
+
+                // Each expansion of the same closure finds the same unverified dependencies again;
+                // they are reported once per cycle.
+                foreach (var dependency in graphResult.UnverifiedHostProvidedDependencies.Where(reportedUnverifiedHostDependencies.Add))
+                {
+                    _reconciliationLogger.LogHostProvidedVersionUnknown(
+                        correlationId,
+                        dependency.DependentPackageId,
+                        dependency.DependencyId,
+                        dependency.RequiredRange);
+                }
 
                 if (_packageResolver is MultiFeedPackageResolver multiFeedResolver)
                 {

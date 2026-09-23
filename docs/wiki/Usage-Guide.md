@@ -265,6 +265,35 @@ package a dependency edge names — including your own product's ids — is acqu
 already in the host's `*.deps.json` at a satisfying version. Declare your product's own
 long-lived contracts here if a plugin's dependency on them should never be re-acquired.
 
+**A declared host-provided dependency is version-checked wherever the host's version is known.** A
+package declared here is never acquired. When the host's `*.deps.json` names its version, that
+version is checked against the range the dependency requires:
+
+- it satisfies the range: the dependency is skipped, as above;
+- it does not: the package that declares the dependency is **refused**, together with every root
+  whose closure contains it. The refusal is recorded under the `host-version-unsatisfied` stage, with
+  a message naming the dependent package, the dependency, the range it requires and the version the
+  host provides. Every other root still applies. So a module built against
+  `Elsa.Workflows.Core [4.1.0, 5.0.0)` on a host running `4.0.0`, with `Elsa.` declared, is refused at
+  reconciliation rather than loaded against the older assembly to fail later at a missing member.
+
+A **declared** package the host's `*.deps.json` does not name has no version to compare against. It
+is still treated as supplied — the declaration is the host's word for it — and each such dependency
+is logged once per cycle as a warning (event 1035) naming the dependent package, the dependency and
+the range it requires, so a dependency that needs a newer host than the one running is visible
+rather than silent.
+
+**Undeclared packages are not checked.** A package that is not declared here but that the host's
+`*.deps.json` carries at a version outside the required range is not host-provided: it is acquired
+like any other dependency, exactly as before. Under isolated loading the dependent package gets its
+own private copy of every assembly not listed in `Loading:SharedAssemblies`, so a plugin that needs
+a newer `Newtonsoft.Json` than its host still works. Only a declaration says the host supplies a
+package, so only a declared package is refused when the host's version cannot satisfy it.
+
+The versions come from the `*.deps.json` of the process that runs reconciliation. A host-free
+restore (`NuplaneRestore`) runs in its own process, so it checks against *that* process's deps, not
+the host's it restores for.
+
 **This is not `Loading:SharedAssemblies`.** The two configure different stages and answer different
 questions. `HostProvidedPackages` decides, before a package is ever on disk, which *dependencies*
 the resolver skips acquiring at all. `Loading:SharedAssemblies` (the `options.SharedAssemblies` list
@@ -441,6 +470,7 @@ The stages a caller can expect, and what each says:
 | `capability-contribution-limit` | Contribution rounds did not reach a fixpoint within the bound. |
 | `resolve-feed-unavailable`, `resolve-no-eligible-feed`, `resolve-graph-conflict`, `resolve` | The package itself could not be resolved: the feed could not be reached, no configured feed serves it, or its dependency graph could not be unified. |
 | `lock` | The lock file refused the package; the message is the lock outcome's reason code. |
+| `host-version-unsatisfied` | The package, or a package in its closure, depends on a package declared in `Nuplane:HostProvidedPackages` that the host carries at a version outside the range the dependency requires. The message names the dependent package, the dependency, the required range and the host's version. See [Packages the host already provides](#packages-the-host-already-provides). |
 
 Every `capability-*` stage means the package is on a feed and what is missing is a decision the
 host has not made; every `resolve-*` stage means the package could not be fetched. Match on the
