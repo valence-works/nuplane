@@ -60,6 +60,13 @@ public sealed class PackageApplyExecutor(
         ArgumentNullException.ThrowIfNull(desiredRequests);
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
+        var hostPackageVersions = HostPackageVersionReader.Current.Value;
+        _reconciliationLogger.LogHostPackageVersionSource(
+            correlationId,
+            hostPackageVersions.Source.ToString(),
+            hostPackageVersions.DepsFiles,
+            hostPackageVersions.Versions.Count);
+
         var resolved = new List<ResolvedPackage>();
         var failed = new List<string>();
         var decisions = new List<FeedResolutionDecision>();

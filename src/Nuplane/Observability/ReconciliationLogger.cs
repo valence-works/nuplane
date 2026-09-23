@@ -404,6 +404,16 @@ public sealed partial class ReconciliationLogger : IReconciliationLogger
         HostProvidedVersionUnknownLog(_logger, correlationId, dependentPackageId, dependencyId, versionRange);
     }
 
+    /// <inheritdoc />
+    public void LogHostPackageVersionSource(string correlationId, string source, IReadOnlyList<string> depsFiles, int packageCount)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(source);
+        ArgumentNullException.ThrowIfNull(depsFiles);
+
+        HostPackageVersionSourceLog(_logger, correlationId, source, packageCount, string.Join(", ", depsFiles));
+    }
+
     // 1030-1033: the capability block. It starts at 1030 rather than continuing from this type's
     // own 1021, because 1022 belongs to NuplaneSetupFeedDiagnosticReporter — event ids are unique
     // per assembly, not per logger type, and LoggerMessageEventIdUniquenessTests now enforces that.
@@ -446,7 +456,7 @@ public sealed partial class ReconciliationLogger : IReconciliationLogger
         Message = "Capability selection matched no declaring package [CorrelationId={CorrelationId}, Capability={CapabilityName}]")]
     private static partial void CapabilitySelectionUnmatchedLog(ILogger logger, string correlationId, string capabilityName);
 
-    // 1034-1035: host-provided dependency version checks.
+    // 1034-1036: host-provided dependency version checks.
     [LoggerMessage(
         EventId = 1034,
         Level = LogLevel.Warning,
@@ -467,4 +477,15 @@ public sealed partial class ReconciliationLogger : IReconciliationLogger
         string packageId,
         string dependencyId,
         string versionRange);
+
+    [LoggerMessage(
+        EventId = 1036,
+        Level = LogLevel.Debug,
+        Message = "Host package versions read from {Source} [CorrelationId={CorrelationId}, PackageCount={PackageCount}, DepsFiles={DepsFiles}]")]
+    private static partial void HostPackageVersionSourceLog(
+        ILogger logger,
+        string correlationId,
+        string source,
+        int packageCount,
+        string depsFiles);
 }

@@ -190,6 +190,19 @@ public interface IReconciliationLogger
     }
 
     /// <summary>
+    /// Logs where the host's package versions — the versions host-provided dependencies are checked
+    /// against — were read from: the deps files the .NET host loaded, or a scan of the application
+    /// base directory when the host did not report them.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
+    /// <param name="source">The source: <c>LoadedDepsFiles</c> or <c>BaseDirectoryScan</c>.</param>
+    /// <param name="depsFiles">The deps files that were read.</param>
+    /// <param name="packageCount">The number of packages the deps files list.</param>
+    void LogHostPackageVersionSource(string correlationId, string source, IReadOnlyList<string> depsFiles, int packageCount)
+    {
+    }
+
+    /// <summary>
     /// Logs a reconciliation trigger event with its type and optional source.
     /// </summary>
     /// <param name="correlationId">The unique identifier for this reconciliation cycle.</param>

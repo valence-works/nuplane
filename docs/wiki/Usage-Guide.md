@@ -290,9 +290,17 @@ own private copy of every assembly not listed in `Loading:SharedAssemblies`, so 
 a newer `Newtonsoft.Json` than its host still works. Only a declaration says the host supplies a
 package, so only a declared package is refused when the host's version cannot satisfy it.
 
-The versions come from the `*.deps.json` of the process that runs reconciliation. A host-free
-restore (`NuplaneRestore`) runs in its own process, so it checks against *that* process's deps, not
-the host's it restores for.
+The host's versions come from the deps files the .NET host loaded for the process that runs
+reconciliation — the application's own `*.deps.json` and the shared frameworks' (which list only
+their runtime packs), as the runtime reports them in `APP_CONTEXT_DEPS_FILES`. That includes a deps
+file supplied with `--depsfile`, so a host-free restore (`NuplaneRestore`) run in a separate tool
+process launched as `dotnet exec --runtimeconfig <host>.runtimeconfig.json --depsfile
+<host>.deps.json <tool>.dll` checks against the host's versions, not the tool's. Only when the
+runtime reports no loaded deps files does Nuplane fall back to scanning the application base
+directory for `*.deps.json`. A single-file bundle's own deps file is embedded in the bundle and not
+reported, so neither source sees the application's packages there — its declared host-provided
+dependencies are trusted and logged as unverified. Which source was used is logged at Debug
+(event 1036).
 
 **This is not `Loading:SharedAssemblies`.** The two configure different stages and answer different
 questions. `HostProvidedPackages` decides, before a package is ever on disk, which *dependencies*

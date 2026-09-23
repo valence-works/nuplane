@@ -1,5 +1,4 @@
 using System.Runtime.Versioning;
-using System.Text.Json;
 using System.Xml.Linq;
 using NuGet.Common;
 using NuGet.Configuration;
@@ -46,7 +45,7 @@ public sealed class PackageDependencyGraphResolver
 
     /// <summary>
     /// Initializes a resolver that reads the host's package versions from
-    /// <paramref name="hostPackageVersions"/> instead of the process's own <c>*.deps.json</c>, so a
+    /// <paramref name="hostPackageVersions"/> instead of the process's own deps files, so a
     /// test can state what the host carries rather than depend on what the test host happens to.
     /// </summary>
     internal PackageDependencyGraphResolver(
@@ -63,7 +62,7 @@ public sealed class PackageDependencyGraphResolver
     }
 
     private IReadOnlyDictionary<string, string> HostPackageVersionsForResolution =>
-        _hostPackageVersionsOverride ?? HostPackageVersions.Value;
+        _hostPackageVersionsOverride ?? HostPackageVersionReader.Current.Value.Versions;
 
     /// <summary>
     /// Resolves desired roots and their package dependencies into deterministic graph records.
@@ -628,8 +627,6 @@ public sealed class PackageDependencyGraphResolver
         return string.Join(" -> ", path.Skip(cycleStartIndex).Concat([repeatedKey]));
     }
 
-    private static readonly Lazy<IReadOnlyDictionary<string, string>> HostPackageVersions = new(LoadHostPackageVersions);
-
     // A dependency is host-provided when the host's *.deps.json carries it at a satisfying version,
     // or when the host declares it. Only a declared package is held to the host's version: the
     // declaration says the host supplies it, so a host version outside the range refuses the
@@ -674,46 +671,6 @@ public sealed class PackageDependencyGraphResolver
         }
 
         return VersionRange.TryParse(versionRange, out var range) && range.Satisfies(parsedVersion);
-    }
-
-    private static IReadOnlyDictionary<string, string> LoadHostPackageVersions()
-    {
-        var packageVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var depsFile in Directory.EnumerateFiles(AppContext.BaseDirectory, "*.deps.json"))
-        {
-            using var document = JsonDocument.Parse(File.ReadAllBytes(depsFile));
-            if (!document.RootElement.TryGetProperty("libraries", out var libraries) ||
-                libraries.ValueKind != JsonValueKind.Object)
-            {
-                continue;
-            }
-
-            foreach (var library in libraries.EnumerateObject())
-            {
-                var separatorIndex = library.Name.LastIndexOf('/');
-                if (separatorIndex <= 0 || separatorIndex == library.Name.Length - 1)
-                {
-                    continue;
-                }
-
-                var packageId = library.Name[..separatorIndex];
-                var version = library.Name[(separatorIndex + 1)..];
-                if (!NuGetVersion.TryParse(version, out var parsedVersion))
-                {
-                    continue;
-                }
-
-                if (!packageVersions.TryGetValue(packageId, out var existingVersion) ||
-                    !NuGetVersion.TryParse(existingVersion, out var parsedExistingVersion) ||
-                    parsedVersion > parsedExistingVersion)
-                {
-                    packageVersions[packageId] = parsedVersion.ToNormalizedString();
-                }
-            }
-        }
-
-        return packageVersions;
     }
 
     private enum HostProvision
