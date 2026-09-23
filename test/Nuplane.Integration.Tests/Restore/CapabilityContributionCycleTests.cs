@@ -101,6 +101,24 @@ public sealed class CapabilityContributionCycleTests : IDisposable
     }
 
     [Fact]
+    public async Task RestoreAsync_WithNoSelection_ReportsTheRefusalWithItsStageOnTheResult()
+    {
+        var (engine, other) = WriteEngines();
+        var module = WriteModule(engine, other);
+
+        var result = await RestoreAsync();
+
+        // What the store's failure record says, without reading the state file back: the stage
+        // that tells a missing decision from an unreachable feed, and Nuplane's own wording of it.
+        var refusal = Assert.Single(result.Refusals);
+        Assert.Equal(module.PackageId, refusal.PackageId);
+        Assert.Equal("capability-unselected", refusal.Stage);
+        Assert.Contains(Capability, refusal.Message, StringComparison.Ordinal);
+        Assert.Contains($"Nuplane:Capabilities:{Capability}", refusal.Message, StringComparison.Ordinal);
+        Assert.Equal((await LastFailureAsync(module.PackageId)).Message, refusal.Message);
+    }
+
+    [Fact]
     public async Task RestoreAsync_WhenTheHostNamesTheOptionPackageItself_ContributesNothingAndKeepsItsSourceName()
     {
         // The engine written into the module feed is an ordinary desired root, so the capability is
@@ -235,6 +253,7 @@ public sealed class CapabilityContributionCycleTests : IDisposable
         Assert.Equal(module.PackageId, Assert.Single(result.FailedPackages));
         Assert.False(Directory.Exists(engine.InstallDirectory(_installRoot, EngineFeedName)));
 
+        Assert.Equal("capability-unpinned", Assert.Single(result.Refusals, refusal => refusal.PackageId == module.PackageId).Stage);
         var unpinned = Assert.Single(result.UnpinnedRequests);
         Assert.Equal(engine.PackageId, unpinned.PackageId);
         Assert.Equal("[1.0.0,2.0.0)", unpinned.VersionRange);

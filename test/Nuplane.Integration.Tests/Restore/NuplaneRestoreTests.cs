@@ -151,6 +151,24 @@ public sealed class NuplaneRestoreTests : IDisposable
     }
 
     [Fact]
+    public async Task RestoreAsync_WhenAPackageCannotBeResolved_ReportsAResolveStageOnTheResult()
+    {
+        HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory);
+        var configuration = Configure();
+        var options = Options(restore => restore.ConfigureBuilder += (builder, _) =>
+            builder.Services.AddSingleton<IDesiredPackageSource>(new StaticDesiredSource(
+                [new("Absent.Package", "9.9.9", FeedName, PackageUpdatePolicy.Exact, "test-source")])));
+
+        var result = await NuplaneRestore.RestoreAsync(configuration, options);
+
+        // An acquisition failure, not a capability refusal: the stage says so from the result alone.
+        var refusal = Assert.Single(result.Refusals);
+        Assert.Equal("Absent.Package", refusal.PackageId);
+        Assert.StartsWith("resolve-", refusal.Stage, StringComparison.Ordinal);
+        Assert.False(string.IsNullOrWhiteSpace(refusal.Message));
+    }
+
+    [Fact]
     public async Task RestoreAsync_WithRelativeConfiguredPaths_ResolvesThemAgainstBasePath()
     {
         HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory);

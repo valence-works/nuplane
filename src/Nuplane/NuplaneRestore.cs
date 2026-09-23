@@ -127,7 +127,7 @@ public static class NuplaneRestore
     /// </param>
     /// <param name="options">The restore options, or <see langword="null"/> to use configuration alone, which requires every path to be configured absolutely.</param>
     /// <param name="cancellationToken">A token to cancel the cycle. Cancellation releases the store lock and surfaces as an <see cref="OperationCanceledException"/>, never as a failed package.</param>
-    /// <returns>What the cycle did, what it could not do, the store's active package set afterwards, and the resolved paths it wrote to.</returns>
+    /// <returns>What the cycle did, what it could not do and why, the store's active package set afterwards, and the resolved paths it wrote to.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when an absolute override in <paramref name="options"/> is not an absolute path.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the configuration selects in-memory persistence, when the install root or state file is neither configured absolutely, nor overridden, nor resolvable against <see cref="NuplaneRestoreOptions.BasePath"/>, or when the resolved configuration names no feed and no desired package source at all.</exception>
@@ -172,6 +172,7 @@ public static class NuplaneRestore
             NuplaneRestoreSkipReason.None,
             run.IsDegraded,
             run.FailedPackages,
+            await composition.DescribeRefusalsAsync(run, cancellationToken).ConfigureAwait(false),
             activePackages,
             // An unpinned desired request skips the restore above, before anything is acquired. A
             // contribution's pinned-ness can only be judged inside the cycle, so its refusal
@@ -255,6 +256,7 @@ public static class NuplaneRestore
             reason,
             IsDegraded: false,
             FailedPackages: [],
+            Refusals: [],
             ActivePackages: [],
             unpinnedRequests,
             composition.CredentialRefusedFeeds,

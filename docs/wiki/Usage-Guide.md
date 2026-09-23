@@ -401,8 +401,8 @@ a restore that quietly did nothing.
 caller can prove which store it populated instead of inferring it from configuration.
 
 **Failures are reported, not thrown.** A degraded cycle sets `IsDegraded`; packages that could not be
-applied are listed in `FailedPackages`; a feed whose `Credentials` reference could not be resolved is
-named in `CredentialRefusedFeeds`. Such a feed is dropped from resolution before the first network
+applied are listed in `FailedPackages`, and `Refusals` says why each one failed; a feed whose
+`Credentials` reference could not be resolved is named in `CredentialRefusedFeeds`. Such a feed is dropped from resolution before the first network
 call rather than contacted without credentials and rejected by the feed — a package that could only
 have come from it is also reported as a failed package. A feed whose reference *does* resolve is
 restored from like any other feed and is not named there; see [Feed credentials](#feed-credentials),
@@ -410,6 +410,44 @@ whose built-in `env` provider needs no registration and therefore works in a hos
 as it does in a host. Only a malformed request throws: a null configuration, a non-absolute override,
 a path nothing pins, in-memory persistence, or configuration that fails Nuplane's own options
 validation — which now includes a `Credentials` value that is not a well-formed `secrets://` reference.
+
+**Why a package failed.** `FailedPackages` is a list of ids. `Refusals` is the list beside it that
+carries, for each of those packages, the stage the cycle recorded its failure under and the message
+Nuplane wrote for it — the same `FailureRecord` the store's `LastFailureById` holds, joined on this
+cycle's failed ids and its correlation id so that a failure an earlier cycle recorded for a package
+this one installed is never reported as if it had just happened. A caller that used to read the
+state file back to classify a failure reads this instead:
+
+```csharp
+foreach (var refusal in result.Refusals)
+{
+    var kind = refusal.Stage.StartsWith("capability-", StringComparison.Ordinal)
+        ? "a decision this host has not made"
+        : "a package that could not be acquired";
+    Console.WriteLine($"{refusal.PackageId} ({refusal.Stage}, {kind}): {refusal.Message}");
+}
+```
+
+The stages a caller can expect, and what each says:
+
+| Stage | Meaning |
+|---|---|
+| `capability-unselected` | A package declares a capability, no selection is configured for it, and no explicit root satisfies any declared option. The message names the capability, every declared option, and the `Nuplane:Capabilities:<capability>` key that selects one. |
+| `capability-unknown-option` | The configured selection names an option the capability does not declare. |
+| `capability-unpinned` | The selected option's effective version range is not a single pinned version and `RequirePinnedVersions` is set; the contribution is also listed in `UnpinnedRequests`. |
+| `capability-conflict` | Two declarations of the same capability disagree, or an explicit root cannot satisfy a declared option. |
+| `capability-unresolved` | The selected option's package could not be acquired from any eligible feed; recorded against every package that declared the capability. |
+| `capability-metadata-invalid` | The package's schema-2 `nuplane.json` is invalid. |
+| `capability-contribution-limit` | Contribution rounds did not reach a fixpoint within the bound. |
+| `resolve-feed-unavailable`, `resolve-no-eligible-feed`, `resolve-graph-conflict`, `resolve` | The package itself could not be resolved: the feed could not be reached, no configured feed serves it, or its dependency graph could not be unified. |
+| `lock` | The lock file refused the package; the message is the lock outcome's reason code. |
+
+Every `capability-*` stage means the package is on a feed and what is missing is a decision the
+host has not made; every `resolve-*` stage means the package could not be fetched. Match on the
+prefix where that is the distinction that matters, because a later Nuplane may add a stage beside
+these. A restore that was skipped recorded nothing, so `Refusals` is empty there, as it is for a
+package the cycle failed without recording a failure of its own — a graph node that failed only
+because a sibling in its graph did.
 
 **Pre-flight.** `DescribeDesiredAsync` answers "what would this restore ask for, and where would it
 put it?" without doing any of it:
@@ -450,8 +488,8 @@ cycle, where each contribution's effective range — the host's `Version` overri
 option version — is classified by the same rule, and an unpinned one is refused *before* the
 contributed package is resolved or downloaded. So a pinned-only restore never fetches an unpinned
 package either way, but an unpinned contribution is not a skip: the roots were acquired, so the
-result has `Skipped = false`, `IsDegraded = true`, the declaring package in `FailedPackages` (stage
-`capability-unpinned`), and the offending contribution in the same `UnpinnedRequests` list, with the
+result has `Skipped = false`, `IsDegraded = true`, the declaring package in `FailedPackages` with a
+`capability-unpinned` entry in `Refusals`, and the offending contribution in the same `UnpinnedRequests` list, with the
 `capability:<capability>=<option>` source name that says which decision produced it. A declaration
 that pins its options to exact versions — which is what a package author should write — restores
 without any of this. `DescribeDesiredAsync` cannot list contributions at all, because it resolves no
