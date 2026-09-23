@@ -18,6 +18,16 @@ namespace Nuplane;
 /// degraded restore still wrote what it could; it is reported here, never thrown.
 /// </param>
 /// <param name="FailedPackages">The identifiers of packages the cycle could not apply.</param>
+/// <param name="Refusals">
+/// Why each package in <paramref name="FailedPackages"/> failed: the stage and the message the
+/// cycle recorded for it, joined from the same failure records the cycle wrote to the store, so a
+/// caller can tell a <c>capability-*</c> refusal from a <c>resolve-*</c> acquisition failure out of
+/// the result alone, without reading the state file back. Only records this cycle wrote are
+/// included — a failure an earlier cycle recorded for a package this one installed never appears
+/// here — so a package listed in <paramref name="FailedPackages"/> for which the cycle recorded no
+/// failure of its own, such as a node that failed only because a sibling in its graph did, has no
+/// entry. Ordered by package id. Empty on a skipped restore, which recorded nothing.
+/// </param>
 /// <param name="ActivePackages">
 /// The active package set read back from the state file this restore wrote, through the same
 /// offline read <c>NuplaneStore.ReadActivePackagesAsync</c> performs — the packages a host reading
@@ -50,6 +60,7 @@ public sealed record NuplaneRestoreResult(
     NuplaneRestoreSkipReason SkipReason,
     bool IsDegraded,
     IReadOnlyList<string> FailedPackages,
+    IReadOnlyList<PackageRefusal> Refusals,
     IReadOnlyList<ActivePackage> ActivePackages,
     IReadOnlyList<DesiredPackageDescription> UnpinnedRequests,
     IReadOnlyList<string> CredentialRefusedFeeds,

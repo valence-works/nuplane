@@ -9,6 +9,7 @@ using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Credentials;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.LockFile;
+using Nuplane.Reconciliation.Models;
 using Nuplane.Sources;
 using Nuplane.Store.State;
 using Nuplane.Versioning;
@@ -227,6 +228,36 @@ internal sealed class RestoreComposition : IAsyncDisposable
             .UnpinnedRequests
             .Select(Describe)
             .ToArray();
+
+    /// <summary>
+    /// The stage and message the cycle this composition just ran recorded for each package it
+    /// failed, read from the same store registry the cycle's failure recorder wrote through — the
+    /// join a caller would otherwise have to do itself between <c>FailedPackages</c> and the state
+    /// file's <c>LastFailureById</c>.
+    /// </summary>
+    /// <remarks>
+    /// <c>LastFailureById</c> is a last-known record per package, not a log of this run, so the join
+    /// is on the cycle's own failed ids <i>and</i> its correlation id: a record an earlier cycle left
+    /// for a package this one failed for a reason it did not record — a graph node failed only
+    /// because a sibling was — is left out rather than reported as if it had just happened.
+    /// </remarks>
+    public async Task<IReadOnlyList<PackageRefusal>> DescribeRefusalsAsync(ReconciliationRunResult run, CancellationToken cancellationToken)
+    {
+        if (run.FailedPackages.Count == 0)
+        {
+            return [];
+        }
+
+        var state = await _provider.GetRequiredService<IStoreRegistry>().GetStateAsync(cancellationToken).ConfigureAwait(false);
+
+        return run.FailedPackages
+            .Select(state.LastFailureById.GetValueOrDefault)
+            .OfType<FailureRecord>()
+            .Where(record => string.Equals(record.CorrelationId, run.ChangeSet.CorrelationId, StringComparison.Ordinal))
+            .OrderBy(static record => record.PackageId, StringComparer.OrdinalIgnoreCase)
+            .Select(static record => new PackageRefusal(record.PackageId, record.Stage, record.Message))
+            .ToArray();
+    }
 
     public ValueTask DisposeAsync() => _provider.DisposeAsync();
 
