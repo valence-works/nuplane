@@ -13,7 +13,9 @@ namespace Nuplane;
 /// <c>capability-unpinned</c>, <c>capability-conflict</c>, <c>capability-unresolved</c>,
 /// <c>capability-metadata-invalid</c>, <c>capability-contribution-limit</c> — and a package that
 /// could not be resolved from any feed records a <c>resolve-*</c> stage, such as
-/// <c>resolve-feed-unavailable</c> or <c>resolve-no-eligible-feed</c>. Match on the prefix rather
+/// <c>resolve-feed-unavailable</c> or <c>resolve-no-eligible-feed</c>. A package that depends on a
+/// declared host-provided package (<c>Nuplane:HostProvidedPackages</c>) the host carries at a version
+/// outside the required range records <c>host-version-unsatisfied</c>. Match on the prefix rather
 /// than the full name where the distinction that matters is "a decision the host has not made"
 /// versus "a feed that could not be reached": a later Nuplane may add a stage beside these.
 /// </param>

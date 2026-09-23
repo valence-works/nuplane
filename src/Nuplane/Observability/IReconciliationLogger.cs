@@ -165,6 +165,44 @@ public interface IReconciliationLogger
     }
 
     /// <summary>
+    /// Logs that a package was refused because it depends on a package the host provides at a
+    /// version outside the range the dependency requires. Recorded in the store under the
+    /// <c>host-version-unsatisfied</c> stage.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
+    /// <param name="packageId">The refused package's identifier.</param>
+    /// <param name="message">The refusal message, naming the dependent package, the dependency, the range it requires, and the host's version.</param>
+    void LogHostProvidedVersionRefused(string correlationId, string packageId, string message)
+    {
+    }
+
+    /// <summary>
+    /// Logs that a dependency on a declared host-provided package was trusted as satisfied without
+    /// a version check, because the host's package versions do not include it. Nothing fails, but a
+    /// dependency that needs a newer host than the one running would otherwise pass silently.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
+    /// <param name="dependentPackageId">The identifier of the package that declares the dependency.</param>
+    /// <param name="dependencyId">The declared host-provided package's identifier.</param>
+    /// <param name="versionRange">The version range the dependency requires.</param>
+    void LogHostProvidedVersionUnknown(string correlationId, string dependentPackageId, string dependencyId, string versionRange)
+    {
+    }
+
+    /// <summary>
+    /// Logs where the host's package versions — the versions host-provided dependencies are checked
+    /// against — were read from: the deps files the .NET host loaded, or a scan of the application
+    /// base directory when the host did not report them.
+    /// </summary>
+    /// <param name="correlationId">The unique identifier for the current reconciliation cycle.</param>
+    /// <param name="source">The source: <c>LoadedDepsFiles</c> or <c>BaseDirectoryScan</c>.</param>
+    /// <param name="depsFiles">The deps files that were read.</param>
+    /// <param name="packageCount">The number of packages the deps files list.</param>
+    void LogHostPackageVersionSource(string correlationId, string source, IReadOnlyList<string> depsFiles, int packageCount)
+    {
+    }
+
+    /// <summary>
     /// Logs a reconciliation trigger event with its type and optional source.
     /// </summary>
     /// <param name="correlationId">The unique identifier for this reconciliation cycle.</param>

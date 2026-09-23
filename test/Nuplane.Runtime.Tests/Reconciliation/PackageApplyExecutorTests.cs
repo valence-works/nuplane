@@ -73,6 +73,75 @@ public sealed class PackageApplyExecutorTests : IDisposable
         Assert.Contains(graph.Nodes, static node => node.PackageId == "Shared.Dependency" && node.Version == "10.0.3");
     }
 
+    [Fact]
+    public async Task ResolveAsync_WhenRootDependsOnDeclaredHostPackageAtUnsatisfiedVersion_RefusesThatRootAndAppliesTheOthers()
+    {
+        // Microsoft.Extensions.Options is in this test host's own *.deps.json at a version far above
+        // 1.0.0, so an exact [1.0.0] dependency on it, once declared host-provided, is one the host
+        // says it supplies but cannot satisfy.
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Root.Refused"] = CreateInstalledPackage("Root.Refused", "1.0.0", "Microsoft.Extensions.Options", "[1.0.0]"),
+            ["Root.Applied"] = CreateInstalledPackage("Root.Applied", "1.0.0")
+        });
+        var recorder = new RecordingFailureRecorder();
+        var logger = new RecordingReconciliationLogger();
+        var sut = new PackageApplyExecutor(
+            resolver,
+            new PackageTransactionCoordinator(new AtomicPointerSwitcher(), recorder),
+            new PassthroughRetryPolicy(),
+            recorder,
+            reconciliationLogger: logger,
+            hostProvidedPackagesOptions: HostProvidedPackagesTestSupport.WithEntries("Microsoft.Extensions.Options"));
+
+        var result = await sut.ResolveAsync(
+            [
+                new PackageRequest("Root.Refused", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source"),
+                new PackageRequest("Root.Applied", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")
+            ],
+            "corr-1",
+            CancellationToken.None);
+
+        var record = Assert.Single(recorder.Records);
+        Assert.Equal("Root.Refused", record.PackageId);
+        Assert.Equal(PackageDependencyGraphResolver.HostVersionUnsatisfiedStage, record.Stage);
+        Assert.Equal("corr-1", record.CorrelationId);
+        Assert.Contains("'Microsoft.Extensions.Options [1.0.0]'", record.Message);
+        Assert.Equal(["Root.Refused"], result.FailedPackageIds);
+        Assert.Equal(["Root.Applied"], result.ResolvedPackages.Select(static package => package.Id));
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Equal(["Root.Applied"], graph.Roots.Select(static root => root.PackageId));
+        Assert.Single(logger.HostVersionRefused, static refused => refused.PackageId == "Root.Refused");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WhenDeclaredHostPackageVersionIsUnknown_AppliesRootAndLogsTheUncheckedDependency()
+    {
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Root.A"] = CreateInstalledPackage("Root.A", "1.0.0", "Acme.Contracts", "[2.0.0, 3.0.0)")
+        });
+        var recorder = new RecordingFailureRecorder();
+        var logger = new RecordingReconciliationLogger();
+        var sut = new PackageApplyExecutor(
+            resolver,
+            new PackageTransactionCoordinator(new AtomicPointerSwitcher(), recorder),
+            new PassthroughRetryPolicy(),
+            recorder,
+            reconciliationLogger: logger,
+            hostProvidedPackagesOptions: HostProvidedPackagesTestSupport.WithEntries("Acme.Contracts"));
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Root.A", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            "corr-1",
+            CancellationToken.None);
+
+        Assert.Empty(recorder.Records);
+        Assert.Empty(result.FailedPackageIds);
+        Assert.Equal(["Root.A"], result.ResolvedPackages.Select(static package => package.Id));
+        Assert.Equal([("Root.A", "Acme.Contracts", "[2.0.0, 3.0.0)")], logger.HostVersionUnknown);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempRoot))

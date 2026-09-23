@@ -1,5 +1,6 @@
 using Nuplane.Abstractions;
 using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Runtime.Tests.TestSupport;
 using System.Reflection;
@@ -448,6 +449,105 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveAsync_DeclaredHostProvidedDependencySatisfiedByHostVersion_SkipsItWithoutRefusal()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Elsa.Workflows.Core", dependencyVersionRange: "[4.1.0, 5.0.0)");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
+        var sut = CreateResolverWithHost(resolver, WithEntries("Elsa."), ("Elsa.Workflows.Core", "4.1.2"));
+
+        var result = await ResolveRootAsync(sut, root);
+
+        Assert.Empty(resolver.Requests);
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Single(graph.Nodes);
+        Assert.Empty(graph.Edges);
+        Assert.Empty(result.HostVersionRefusals);
+        Assert.Empty(result.UnverifiedHostProvidedDependencies);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_DeclaredHostProvidedDependencyNotSatisfiedByHostVersion_RefusesDependent()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Elsa.Workflows.Core", dependencyVersionRange: "[4.1.0, 5.0.0)");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
+        var sut = CreateResolverWithHost(resolver, WithEntries("Elsa."), ("Elsa.Workflows.Core", "4.0.0"));
+
+        var result = await ResolveRootAsync(sut, root);
+
+        Assert.Empty(resolver.Requests);
+        var refusal = Assert.Single(result.HostVersionRefusals);
+        Assert.Equal(new HostProvidedDependency("Plugin.Root", "1.0.0", "Elsa.Workflows.Core", "[4.1.0, 5.0.0)", "4.0.0"), refusal.Dependency);
+        Assert.Equal(["Plugin.Root"], refusal.RootPackageIds);
+        Assert.Contains("'Plugin.Root@1.0.0'", refusal.Message);
+        Assert.Contains("'Elsa.Workflows.Core [4.1.0, 5.0.0)'", refusal.Message);
+        Assert.Contains("'Elsa.Workflows.Core 4.0.0'", refusal.Message);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_UndeclaredDependencyInHostAtNonSatisfyingVersion_AcquiresItWithoutRefusal()
+    {
+        // Only a declared package is held to the host's version. An undeclared one the host carries
+        // at a version outside the range is acquired as before, so isolated loading can give the
+        // dependent its own copy.
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Contoso.Json", dependencyVersionRange: "[13.0.0,)");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Contoso.Json"] = CreateInstalledPackage("Contoso.Json", "13.0.0")
+        });
+        var sut = CreateResolverWithHost(resolver, WithEntries(), ("Contoso.Json", "12.0.0"));
+
+        var result = await ResolveRootAsync(sut, root);
+
+        Assert.Single(resolver.Requests, static request => request.Id == "Contoso.Json");
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Contains(graph.Nodes, static node => node.PackageId == "Contoso.Json" && node.Version == "13.0.0" && node.Role == PackageNodeRole.Dependency);
+        Assert.Empty(result.HostVersionRefusals);
+        Assert.Empty(result.UnverifiedHostProvidedDependencies);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_DeclaredHostProvidedDependencyWithUnknownHostVersion_TreatsItAsSatisfiedAndReportsIt()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Elsa.Workflows.Core", dependencyVersionRange: "[4.1.0, 5.0.0)");
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase));
+        var sut = CreateResolverWithHost(resolver, WithEntries("Elsa."));
+
+        var result = await ResolveRootAsync(sut, root);
+
+        Assert.Empty(resolver.Requests);
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Single(graph.Nodes);
+        Assert.Empty(result.HostVersionRefusals);
+        var unverified = Assert.Single(result.UnverifiedHostProvidedDependencies);
+        Assert.Equal(new HostProvidedDependency("Plugin.Root", "1.0.0", "Elsa.Workflows.Core", "[4.1.0, 5.0.0)", HostVersion: null), unverified);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_TransitiveDependentOfUnsatisfiedHostDependency_RefusesEveryRootThatReachesIt()
+    {
+        var roots = new[]
+        {
+            CreateInstalledPackage("Root.A", "1.0.0", dependencyId: "Plugin.Shared", dependencyVersionRange: "[1.0.0]"),
+            CreateInstalledPackage("Root.B", "1.0.0", dependencyId: "Plugin.Shared", dependencyVersionRange: "[1.0.0]"),
+            CreateInstalledPackage("Root.C", "1.0.0")
+        }.ToDictionary(static root => root.Id, StringComparer.OrdinalIgnoreCase);
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Plugin.Shared"] = CreateInstalledPackage("Plugin.Shared", "1.0.0", dependencyId: "Elsa.Workflows.Core", dependencyVersionRange: "[4.1.0, 5.0.0)")
+        });
+        var sut = CreateResolverWithHost(resolver, WithEntries("Elsa."), ("Elsa.Workflows.Core", "4.0.0"));
+
+        var result = await sut.ResolveAsync(
+            roots.Keys.Select(static id => new PackageRequest(id, "[1.0.0]", "root-feed", PackageUpdatePolicy.Exact, "test-source")).ToArray(),
+            (request, _) => Task.FromResult(roots[request.Id]),
+            CancellationToken.None);
+
+        var refusal = Assert.Single(result.HostVersionRefusals);
+        Assert.Equal("Plugin.Shared", refusal.Dependency.DependentPackageId);
+        Assert.Equal(["Root.A", "Root.B"], refusal.RootPackageIds);
+    }
+
+    [Fact]
     public async Task ResolveAsync_DependencyAlreadyLoadedAsPlugin_StillAcquiresDependencyNode()
     {
         var loadedDependencyId = $"Plugin.LoadedDependency.{Guid.NewGuid():N}";
@@ -645,6 +745,22 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
             Directory.Delete(_tempRoot, recursive: true);
         }
     }
+
+    private static PackageDependencyGraphResolver CreateResolverWithHost(
+        StubPackageResolver resolver,
+        HostProvidedPackagesOptions options,
+        params (string PackageId, string Version)[] hostPackages) =>
+        new(
+            resolver,
+            new PassthroughRetryPolicy(),
+            options,
+            hostPackages.ToDictionary(static package => package.PackageId, static package => package.Version, StringComparer.OrdinalIgnoreCase));
+
+    private static Task<PackageDependencyGraphResolutionResult> ResolveRootAsync(PackageDependencyGraphResolver sut, ResolvedPackage root) =>
+        sut.ResolveAsync(
+            [new PackageRequest(root.Id, $"[{root.Version}]", "root-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root),
+            CancellationToken.None);
 
     private ResolvedPackage CreateInstalledPackage(
         string packageId,
