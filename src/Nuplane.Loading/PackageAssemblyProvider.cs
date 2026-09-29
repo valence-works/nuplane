@@ -67,14 +67,19 @@ internal sealed class PackageAssemblyProvider : IPackageAssemblyProvider
         var materialized = new List<Assembly>();
         foreach (var candidate in candidates.OrderBy(static candidate => candidate.AssemblyPath, StringComparer.OrdinalIgnoreCase))
         {
-            if (assembliesByPath.TryGetValue(candidate.AssemblyPath, out var existingAssembly))
-            {
-                materialized.Add(existingAssembly);
-                continue;
-            }
-
             try
             {
+                if (IsSharedWithHost(loadContext, candidate.AssemblyPath, packageId, version))
+                {
+                    continue;
+                }
+
+                if (assembliesByPath.TryGetValue(candidate.AssemblyPath, out var existingAssembly))
+                {
+                    materialized.Add(existingAssembly);
+                    continue;
+                }
+
                 var loadedAssembly = loadContext.LoadFromAssemblyPath(candidate.AssemblyPath);
                 assembliesByPath[candidate.AssemblyPath] = loadedAssembly;
                 materialized.Add(loadedAssembly);
@@ -91,6 +96,39 @@ internal sealed class PackageAssemblyProvider : IPackageAssemblyProvider
         }
 
         return OrderAssemblies(materialized);
+    }
+
+    /// <summary>
+    /// Determines whether one of the package's assembly files is a shared assembly the context's policy matches.
+    /// Such a file is the host's, not the package's, so it is left out of the package's assemblies: returning the
+    /// host's copy would have a consumer that scans the package's assemblies treat the host's assembly as the
+    /// package's own, and loading the package's file by path would put a private copy into the context, which it
+    /// would then hand to the package's code as well. A host with no satisfying copy is reported.
+    /// </summary>
+    private bool IsSharedWithHost(AssemblyLoadContext loadContext, string assemblyPath, string packageId, string version)
+    {
+        if (loadContext is not ISharedAssemblyPolicyLoadContext policyContext)
+        {
+            return false;
+        }
+
+        var assemblyName = AssemblyName.GetAssemblyName(assemblyPath);
+        if (!policyContext.IsSharedAssembly(assemblyName))
+        {
+            return false;
+        }
+
+        if (!SharedAssemblyHostCopy.HostSatisfies(assemblyName))
+        {
+            _logger.LogWarning(
+                "Skipping shared assembly {AssemblyPath} of package {PackageId}@{Version}: the host has no copy of {PolicyEntry} that satisfies the shared-assembly policy.",
+                assemblyPath,
+                packageId,
+                version,
+                SharedAssemblyHostCopy.DescribePolicyEntry(assemblyName));
+        }
+
+        return true;
     }
 
     private bool TryGetInstallPath(string packageId, string version, out string installPath)

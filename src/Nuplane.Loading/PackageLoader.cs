@@ -394,7 +394,7 @@ internal sealed class PackageLoader : IPackageLoader
                 .ToArray();
             if (graphLoadMode == PackageLoadMode.HostIntegrated)
             {
-                var candidates = BuildHostIntegratedResolutionCandidates(graphKey, graphPackages.LoadablePackages);
+                var candidates = BuildHostIntegratedResolutionCandidates(graphKey, graphPackages.LoadablePackages, sharedPolicy);
                 _hostIntegratedResolutionCatalog.ValidateCanPublishGraph(graphKey, candidates);
             }
 
@@ -408,7 +408,7 @@ internal sealed class PackageLoader : IPackageLoader
             }
 
             var assembliesByPackageKey = graphLoadMode == PackageLoadMode.HostIntegrated
-                ? MaterializeHostIntegratedAssemblies(context, graphPackages.LoadablePackages)
+                ? MaterializeHostIntegratedAssemblies(context, graphPackages.LoadablePackages, sharedPolicy)
                 : new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase);
 
             if (graphLoadMode == PackageLoadMode.HostIntegrated)
@@ -851,9 +851,16 @@ internal sealed class PackageLoader : IPackageLoader
             ? diagnostics
             : [];
 
+    /// <summary>
+    /// Loads and returns each package's own assemblies, which the resolution catalog then publishes for framework
+    /// by-name resolution. An assembly the shared-assembly policy matches is not the package's own: it is skipped,
+    /// never loaded from the package's file, because loading it by path bypasses the context's <c>Load</c> override
+    /// and would give the graph a private copy that the package's code then binds instead of the host's.
+    /// </summary>
     private IReadOnlyDictionary<string, IReadOnlyList<Assembly>> MaterializeHostIntegratedAssemblies(
         AssemblyLoadContext context,
-        IReadOnlyList<LoadableGraphPackage> packages)
+        IReadOnlyList<LoadableGraphPackage> packages,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy)
     {
         var result = new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase);
         var assembliesByPath = context.Assemblies
@@ -874,7 +881,11 @@ internal sealed class PackageLoader : IPackageLoader
 
                 try
                 {
-                    AssemblyName.GetAssemblyName(candidate.AssemblyPath);
+                    if (IsProvidedByHost(AssemblyName.GetAssemblyName(candidate.AssemblyPath), package, sharedPolicy))
+                    {
+                        continue;
+                    }
+
                     var loadedAssembly = context.LoadFromAssemblyPath(candidate.AssemblyPath);
                     assembliesByPath[candidate.AssemblyPath] = loadedAssembly;
                     packageAssemblies.Add(loadedAssembly);
@@ -892,9 +903,15 @@ internal sealed class PackageLoader : IPackageLoader
         return result;
     }
 
+    /// <summary>
+    /// Builds the entries the graph would publish, for the conflict check that runs before it loads. Skips the
+    /// assemblies the shared-assembly policy matches, exactly as <see cref="MaterializeHostIntegratedAssemblies"/>
+    /// does, so the graph is checked for what it will actually publish.
+    /// </summary>
     private IReadOnlyList<HostIntegratedAssemblyResolutionCandidate> BuildHostIntegratedResolutionCandidates(
         string graphKey,
-        IReadOnlyList<LoadableGraphPackage> packages)
+        IReadOnlyList<LoadableGraphPackage> packages,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy)
     {
         var entries = new List<HostIntegratedAssemblyResolutionCandidate>();
         foreach (var package in packages)
@@ -904,6 +921,11 @@ internal sealed class PackageLoader : IPackageLoader
                 try
                 {
                     var assemblyName = AssemblyName.GetAssemblyName(candidate.AssemblyPath);
+                    if (IsProvidedByHost(assemblyName, package, sharedPolicy))
+                    {
+                        continue;
+                    }
+
                     entries.Add(new(
                         assemblyName.Name ?? Path.GetFileNameWithoutExtension(candidate.AssemblyPath),
                         assemblyName.Version,
@@ -918,6 +940,28 @@ internal sealed class PackageLoader : IPackageLoader
         }
 
         return entries;
+    }
+
+    /// <summary>
+    /// Determines whether <paramref name="assemblyName"/>, a file of <paramref name="package"/>, is a shared
+    /// assembly the host provides. Refuses the load when it is but the host has no copy of it that satisfies the
+    /// policy, because the package's code would otherwise load and then fail on the missing assembly.
+    /// </summary>
+    private bool IsProvidedByHost(AssemblyName assemblyName, LoadableGraphPackage package, IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy)
+    {
+        if (!_matcher.IsMatch(assemblyName, sharedPolicy))
+        {
+            return false;
+        }
+
+        if (!SharedAssemblyHostCopy.HostSatisfies(assemblyName))
+        {
+            throw new FileNotFoundException(
+                $"Package '{package.Id}@{package.Version}' carries shared assembly {SharedAssemblyHostCopy.DescribePolicyEntry(assemblyName)}, " +
+                "which the shared-assembly policy leaves to the host, but the host has no copy of it with that major version.");
+        }
+
+        return true;
     }
 
     private static string? TryResolveTargetFrameworkMoniker(string assemblyPath, string installPath)

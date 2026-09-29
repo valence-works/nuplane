@@ -19,7 +19,7 @@ public sealed class LoadingOptionsValidator
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var errors = new List<string>();
+        var errors = new List<string>(options.ConfigurationErrors);
 
         if (options.DeactivationTimeout <= TimeSpan.Zero)
         {
@@ -73,9 +73,11 @@ public sealed class LoadingOptionsValidator
                 continue;
             }
 
-            if (!PublicKeyTokenPattern.IsMatch(identity.PublicKeyToken ?? string.Empty))
+            // An empty token is an unsigned assembly: the matcher compares it with the empty token an unsigned
+            // assembly reports. Anything else must be a real token.
+            if (!string.IsNullOrEmpty(identity.PublicKeyToken) && !PublicKeyTokenPattern.IsMatch(identity.PublicKeyToken))
             {
-                errors.Add($"Shared assembly '{identity.Name}' must have a 16-char hex public key token.");
+                errors.Add($"Shared assembly '{identity.Name}' must have a 16-char hex public key token, or an empty or null one for an unsigned assembly.");
             }
 
             if (identity.MajorVersion < 0)

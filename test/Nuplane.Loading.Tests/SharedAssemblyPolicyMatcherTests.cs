@@ -18,6 +18,17 @@ public sealed class SharedAssemblyPolicyMatcherTests
     }
 
     [Fact]
+    public void IsMatch_NullEntryToken_MatchesUnsignedAssembly()
+    {
+        var entries = new[] { new SharedAssemblyPolicyEntry("MyLib", null!, 9) };
+        var assembly = new AssemblyName { Name = "MyLib", Version = new(9, 0, 0, 0) };
+
+        var result = _sut.IsMatch(assembly, entries);
+
+        Assert.True(result);
+    }
+
+    [Fact]
     public void IsMatch_DifferentMajorVersion_ReturnsFalse()
     {
         var entries = new[] { new SharedAssemblyPolicyEntry("MyLib", "", 9) };

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Plugin.SharedConsumer</AssemblyName>
+    <RootNamespace>Plugin.SharedConsumer</RootNamespace>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Remove="coverlet.collector" />
+    <PackageReference Remove="Microsoft.NET.Test.Sdk" />
+    <PackageReference Remove="xunit" />
+    <PackageReference Remove="xunit.runner.visualstudio" />
+    <Using Remove="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copied to this project's output, which is the package payload the shared-assembly tests install: a package
+         that carries its own copy of an assembly the test host also has. -->
+    <ProjectReference Include="..\Nuplane.Loading.Tests.Fixtures\Nuplane.Loading.Tests.Fixtures.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -50,8 +50,17 @@ public interface IPackageAssemblyCatalog
 /// </summary>
 /// <param name="PackageId">The package identifier.</param>
 /// <param name="Version">The active package version.</param>
-/// <param name="Assemblies">The loaded assemblies materialized for the package.</param>
-/// <param name="AssemblyReferences">The deterministic durable assembly references associated with the package.</param>
+/// <param name="Assemblies">
+/// The loaded assemblies materialized for the package. An assembly the package carries that the shared-assembly
+/// policy matches is not the package's own, so it is left out: the package's code binds the host's copy, and
+/// listing that copy here would have a consumer that scans these assemblies take the host's assembly for the
+/// package's.
+/// </param>
+/// <param name="AssemblyReferences">
+/// The deterministic durable assembly references associated with the package. They describe the files the package
+/// carries, including its copy of a shared assembly; load assemblies through <see cref="Assemblies"/>, not from
+/// these paths, or a shared assembly is loaded from the package instead of the host.
+/// </param>
 /// <param name="LoadMode">The effective load mode used for the package.</param>
 /// <param name="FrameworkIntegrationSafe">Whether the loaded assemblies are safe for framework integration.</param>
 public sealed record PackageAssemblies(

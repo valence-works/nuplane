@@ -10,6 +10,13 @@ namespace Nuplane.Loading.Tests;
 public sealed class PackageLoaderHostIntegratedTests : IDisposable
 {
     private readonly DirectoryInfo _tempDir = Directory.CreateTempSubdirectory("nuplane-host-integrated-test-");
+    private readonly HostIntegratedAssemblyResolutionCatalog _sharedCatalog = new();
+    private readonly PackageLoader _sharedLoader;
+
+    public PackageLoaderHostIntegratedTests()
+    {
+        _sharedLoader = new PackageLoader(options: HostIntegratedOptions(), hostIntegratedResolutionCatalog: _sharedCatalog);
+    }
 
     public void Dispose()
     {
@@ -241,6 +248,98 @@ public sealed class PackageLoaderHostIntegratedTests : IDisposable
         Assert.Contains("pkg-a", result.FailedByPackageId.Keys);
         Assert.False(catalog.TryResolve(typeof(FixtureMarker).Assembly.GetName(), out _, out var diagnostic));
         Assert.Equal("not-found", diagnostic.Outcome);
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_HostIntegratedPackageCarryingSharedAssembly_BindsHostCopyAndDoesNotPublishPackageCopy()
+    {
+        var package = ConsumerPackage();
+
+        var result = await _sharedLoader.EnsureGraphLoadedAsync([[package]], [SharedAssemblyTestSupport.UnsignedPolicyEntry], CancellationToken.None);
+
+        Assert.Empty(result.FailedByPackageId);
+        var context = LoadContextOf(_sharedLoader, package);
+        Assert.Empty(SharedAssemblyTestSupport.SharedAssembliesIn(context.Assemblies));
+        AssertConsumerBindsHostCopy(context);
+        Assert.False(_sharedCatalog.TryResolve(SharedAssemblyTestSupport.HostSharedAssembly.GetName(), out _, out _));
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_HostIntegratedPackageCarryingUnsharedAssembly_LoadsAndPublishesPackageCopy()
+    {
+        var package = ConsumerPackage();
+
+        var result = await _sharedLoader.EnsureGraphLoadedAsync([[package]], [], CancellationToken.None);
+
+        Assert.Empty(result.FailedByPackageId);
+        var context = LoadContextOf(_sharedLoader, package);
+        var packageCopy = SharedAssemblyTestSupport.SharedAssemblyIn(context.Assemblies);
+        Assert.StartsWith(package.InstallPath, packageCopy.Location, StringComparison.Ordinal);
+        Assert.Same(packageCopy, SharedAssemblyTestSupport.BoundSharedType(SharedAssemblyTestSupport.ConsumerAssembly(context)).Assembly);
+        Assert.True(_sharedCatalog.TryResolve(SharedAssemblyTestSupport.HostSharedAssembly.GetName(), out var published, out _));
+        Assert.Same(packageCopy, published);
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_HostIntegratedGraphWithSharedAssemblyInTwoPackages_LoadsWithoutConflictAndBindsHostCopy()
+    {
+        var consumer = ConsumerPackage();
+        var sharedAssemblyPackage = Pkg(SharedAssemblyTestSupport.SharedAssemblyName, "1.0.0", SharedAssemblyTestSupport.CreateSharedAssemblyPackageInstall(_tempDir));
+
+        var result = await _sharedLoader.EnsureGraphLoadedAsync(
+            [[consumer, sharedAssemblyPackage]],
+            [SharedAssemblyTestSupport.UnsignedPolicyEntry],
+            CancellationToken.None);
+
+        Assert.Empty(result.FailedByPackageId);
+        Assert.Equal(2, result.Loaded.Count);
+        AssertConsumerBindsHostCopy(LoadContextOf(_sharedLoader, consumer));
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_HostIntegratedPackageCarryingSharedAssemblyTheHostLacks_RefusesLoadNamingPackageAssemblyAndPolicyEntry()
+    {
+        var (installPath, absentAssemblyName, policy) = SharedAssemblyTestSupport.CreateConsumerPackageInstallWithHostAbsentAssembly(_tempDir);
+        var package = Pkg(SharedAssemblyTestSupport.ConsumerPackageId, "1.0.0", installPath);
+
+        var result = await _sharedLoader.EnsureGraphLoadedAsync([[package]], [policy], CancellationToken.None);
+
+        var message = Assert.Single(result.FailedByPackageId).Value;
+        Assert.Contains($"'{package.Id}@{package.Version}'", message, StringComparison.Ordinal);
+        Assert.Contains($"'{absentAssemblyName}'", message, StringComparison.Ordinal);
+        Assert.Contains("public key token: unsigned, major version: 1", message, StringComparison.Ordinal);
+        Assert.Contains("the host has no copy of it", message, StringComparison.Ordinal);
+        Assert.Empty(result.Loaded);
+        Assert.False(_sharedLoader.TryGetContext(package.Id, package.Version, out _));
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_HostIntegratedPackageCarryingSharedAssemblyOfMajorTheHostLacks_RefusesLoad()
+    {
+        var (installPath, policy) = SharedAssemblyTestSupport.CreateSharedAssemblyPackageInstallOfLowerMajor(_tempDir);
+        var package = Pkg(SharedAssemblyTestSupport.SharedAssemblyName, "1.0.0", installPath);
+
+        var result = await _sharedLoader.EnsureGraphLoadedAsync([[package]], [policy], CancellationToken.None);
+
+        var message = Assert.Single(result.FailedByPackageId).Value;
+        Assert.Contains($"major version: {policy.MajorVersion}", message, StringComparison.Ordinal);
+        Assert.Contains("the host has no copy of it with that major version", message, StringComparison.Ordinal);
+        Assert.Empty(result.Loaded);
+    }
+
+    private ResolvedPackage ConsumerPackage() =>
+        Pkg(SharedAssemblyTestSupport.ConsumerPackageId, "1.0.0", SharedAssemblyTestSupport.CreateConsumerPackageInstall(_tempDir));
+
+    private static void AssertConsumerBindsHostCopy(AssemblyLoadContext context) =>
+        Assert.Same(typeof(HealthyFixtureType), SharedAssemblyTestSupport.BoundSharedType(SharedAssemblyTestSupport.ConsumerAssembly(context)));
+
+    private static IOptions<LoadingOptions> HostIntegratedOptions() =>
+        Options.Create(new LoadingOptions { DefaultLoadMode = PackageLoadMode.HostIntegrated });
+
+    private static AssemblyLoadContext LoadContextOf(PackageLoader loader, ResolvedPackage package)
+    {
+        Assert.True(loader.TryGetContext(package.Id, package.Version, out var handle));
+        return Assert.IsAssignableFrom<AssemblyLoadContext>(handle!.Context);
     }
 
     private string CreateInstallDir(string packageId) =>

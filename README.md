@@ -671,7 +671,7 @@ Use these conventions when enabling cluster-convergent runtime loading:
 Use these conventions when enabling optional in-process loading:
 
 - Keep loading opt-in and default-disabled unless the host explicitly wants Nuplane-managed loading.
-- Use per-package isolated load contexts and configure shared contracts by strong identity (`name`, `publicKeyToken`, `majorVersion`).
+- Use per-package isolated load contexts and configure shared contracts by identity (`name`, `publicKeyToken`, `majorVersion`); a `null`, empty, or omitted `publicKeyToken` identifies an unsigned assembly, and a shared assembly a package carries is the host's: it is left out of the package's assemblies and a host-integrated load is refused if the host has no matching copy. See [Usage Guide: Sharing assemblies with the host](docs/wiki/Usage-Guide.md#sharing-assemblies-with-the-host).
 - Configure bounded deactivation timeout and continue with unload attempt on timeout.
 - Treat `UnloadPending` as degraded and retry pending unload on each reconciliation cycle.
 - Capture outcome evidence using observer callbacks plus correlation-linked logs/metrics/health.

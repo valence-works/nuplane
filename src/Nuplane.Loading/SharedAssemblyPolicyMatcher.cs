@@ -24,7 +24,7 @@ public sealed class SharedAssemblyPolicyMatcher
 
         return entries.Any(x =>
             string.Equals(x.Name, requested.Name, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(x.PublicKeyToken, requestedToken, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(x.PublicKeyToken ?? string.Empty, requestedToken, StringComparison.OrdinalIgnoreCase) &&
             x.MajorVersion == requestedMajor);
     }
 
