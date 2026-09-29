@@ -38,7 +38,9 @@ public sealed class LoadingOptions
 
     /// <summary>
     /// Gets the collection of shared assembly identities whose assemblies are loaded from
-    /// the host's default context rather than package-specific contexts.
+    /// the host's default context rather than package-specific contexts. A package that carries
+    /// its own copy of a matched assembly never has that copy loaded, in any load mode: the host's
+    /// copy is the only one its code binds.
     /// </summary>
     public ICollection<SharedAssemblyIdentity> SharedAssemblies { get; } = new List<SharedAssemblyIdentity>();
 

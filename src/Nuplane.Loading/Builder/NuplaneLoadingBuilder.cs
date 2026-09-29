@@ -23,9 +23,9 @@ public sealed class NuplaneLoadingBuilder
     /// package-specific context.
     /// </summary>
     /// <param name="name">The assembly name (without file extension).</param>
-    /// <param name="publicKeyToken">The lowercase hex public key token, or an empty string for unsigned assemblies.</param>
+    /// <param name="publicKeyToken">The 16-character hex public key token, or <see langword="null"/> or an empty string for an unsigned assembly.</param>
     /// <param name="majorVersion">The major version that must match for the shared binding to apply.</param>
-    public NuplaneLoadingBuilder SharedAssembly(string name, string publicKeyToken, int majorVersion)
+    public NuplaneLoadingBuilder SharedAssembly(string name, string? publicKeyToken, int majorVersion)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 

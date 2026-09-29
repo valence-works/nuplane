@@ -22,6 +22,12 @@ public static class NuplaneBuilderLoadingExtensions
     /// Load-mode selection uses package metadata advisors by default and can be changed through
     /// <see cref="NuplaneLoadingBuilder.WithLoadModeSelectionPolicy(PackageLoadModeSelectionPolicy)"/>.
     /// </summary>
+    /// <remarks>
+    /// A <c>SharedAssemblies</c> entry's <c>PublicKeyToken</c> may be <c>null</c>, empty, or left out for an
+    /// unsigned assembly. An entry that cannot be bound — one without a <c>Name</c> or a <c>MajorVersion</c>, or
+    /// whose <c>MajorVersion</c> is not a number — fails <see cref="LoadingOptions"/> validation at startup with its
+    /// configuration path, instead of being silently left out as the configuration binder would.
+    /// </remarks>
     /// <param name="builder">The Nuplane builder to extend.</param>
     /// <param name="configuration">The application configuration.</param>
     /// <param name="configure">An optional callback to configure loading options.</param>

@@ -127,6 +127,28 @@ public sealed class PackageAssemblyProviderTests : IDisposable
         Assert.StartsWith(_tempDir.FullName, packageCopy.Location, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task GetAssemblies_WhenHostHasNoCopyOfSharedAssembly_SkipsItWithWarningInsteadOfLoadingPackageCopy()
+    {
+        var installPath = SharedAssemblyTestSupport.CreateConsumerPackageInstall(_tempDir);
+        var absent = HostFreeLoadTestSupport.EmitPackage(_tempDir, "Shared.Absent");
+        var absentFileName = $"{absent.AssemblyName}.dll";
+        File.Copy(Path.Combine(absent.InstallPath, absentFileName), Path.Combine(installPath, absentFileName));
+        var loader = new PackageLoader();
+        await loader.EnsureLoadedAsync(
+            [new ResolvedPackage(SharedAssemblyTestSupport.ConsumerPackageId, "1.0.0", "feed-a", installPath, DateTimeOffset.UtcNow, "source-a")],
+            [new SharedAssemblyPolicyEntry(absent.AssemblyName, string.Empty, 1)],
+            CancellationToken.None);
+        var logger = new CaptureLogger<PackageAssemblyProvider>();
+
+        var assemblies = new PackageAssemblyProvider(loader, logger).GetAssemblies(SharedAssemblyTestSupport.ConsumerPackageId, "1.0.0");
+
+        Assert.DoesNotContain(assemblies, assembly => assembly.GetName().Name == absent.AssemblyName);
+        Assert.Contains(logger.Entries, entry =>
+            entry.LogLevel == LogLevel.Warning &&
+            entry.Message.Contains(absentFileName, StringComparison.Ordinal));
+    }
+
     private async Task<IReadOnlyList<Assembly>> LoadConsumerPackageAndGetAssembliesAsync(
         PackageLoadMode? graphLoadMode,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy)

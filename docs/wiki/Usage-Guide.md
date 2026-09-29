@@ -307,7 +307,8 @@ questions. `HostProvidedPackages` decides, before a package is ever on disk, whi
 the resolver skips acquiring at all. `Loading:SharedAssemblies` (the `options.SharedAssemblies` list
 just above) decides, after a package has been acquired and is being loaded, which of its
 *assemblies* resolve from the host's own load context instead of a package-specific one, so that a
-type from that assembly is assignable across package boundaries. A package id can belong on one
+type from that assembly is assignable across package boundaries. See [Sharing assemblies with the
+host](#sharing-assemblies-with-the-host). A package id can belong on one
 list, the other, both, or neither — being host-provided does not make an assembly shared, and a
 shared assembly need not be host-provided (it may still be acquired as an ordinary dependency and
 simply loaded from the host's context).
@@ -908,6 +909,39 @@ Package-authored metadata lives at package-root `nuplane.json`:
 ```
 
 `HostIntegrated` metadata is treated as a requirement and promotes the loadable dependency closure. `Collectible` metadata is only a preference; it never forces a graph down from a host-configured `HostIntegrated` default or another host-integrated requirement.
+
+#### Sharing assemblies with the host
+
+- **Applicability:** `Optional Module`
+
+Every package graph loads into a context of its own, so a package that carries an assembly gets its own copy of it, and a type from that copy is not the host's type. List an assembly under `Loading:SharedAssemblies` when package code and host code must agree on its types — typically a contracts assembly the host itself references:
+
+```json
+{
+  "Nuplane": {
+    "Loading": {
+      "SharedAssemblies": [
+        { "Name": "Acme.Contracts", "PublicKeyToken": null, "MajorVersion": 4 },
+        { "Name": "Newtonsoft.Json", "PublicKeyToken": "30ad4fe6b2a6aeed", "MajorVersion": 13 }
+      ]
+    }
+  }
+}
+```
+
+The code equivalent is `loading.SharedAssembly("Acme.Contracts", null, 4)` on the `AutoloadPackages` builder, or a `SharedAssemblyIdentity` added to `LoadingOptions.SharedAssemblies` (or to `HostIntegratedLoadOptions.SharedAssemblies` for a host-free load).
+
+An entry matches an assembly by simple name (case-insensitively), public key token and major version:
+
+- `PublicKeyToken` is the 16-hex-character token of a strong-named assembly. For an unsigned assembly, set it to `null` or `""`, or leave it out: all three mean unsigned and are the same identity. Any other value that is not 16 hex characters fails startup validation.
+- `Name` and `MajorVersion` are required. An entry without either, or whose `MajorVersion` is not a number, fails startup validation with an error naming the entry's configuration path, for example `Nuplane:Loading:SharedAssemblies:1`. The configuration binder would otherwise leave such an entry out without a word, and the host would run as if it had never declared it. Earlier versions did exactly that, and also left out every entry whose `PublicKeyToken` was `null` or absent.
+
+A matched assembly resolves to the host's copy in every load mode, however it is reached:
+
+- When package code binds it by name, the package's load context resolves it from the host's default context.
+- A package that carries its own copy of it — beside its own assembly, or as the shared assembly's own package acquired as a dependency — never has that copy loaded. `HostIntegrated` loading neither loads it nor publishes it for framework by-name resolution, so two packages that both carry it do not conflict. `IPackageAssemblyCatalog` lists the host's copy in its place.
+- If the host has no copy that satisfies the request, binding fails with the usual `FileNotFoundException` or `FileLoadException` instead of falling back to the package's copy, and `IPackageAssemblyCatalog` skips the assembly with a warning. To refuse, at reconciliation, a package that needs a newer copy than the host has, also declare its package in [`HostProvidedPackages`](#packages-the-host-already-provides).
+- `PackageAssemblies.AssemblyReferences` still lists the files a package carries, its copy of a shared assembly included. Load assemblies through `IPackageAssemblyCatalog`, not from those paths; loading a file by path puts the package's copy into your own context.
 
 #### Refusing activation with a package activation gate
 
