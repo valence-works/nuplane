@@ -32,4 +32,19 @@ public sealed record SharedAssemblyIdentity(
         get => _publicKeyToken;
         init => _publicKeyToken = value ?? string.Empty;
     }
+
+    /// <summary>
+    /// Deconstructs the identity into its name, its public key token (empty for an unsigned assembly) and its major
+    /// version. Declared explicitly because the positional token is nullable, which would otherwise make the
+    /// compiler-generated deconstruction produce a nullable token that never is one.
+    /// </summary>
+    /// <param name="name">The simple name of the assembly.</param>
+    /// <param name="publicKeyToken">The public key token, or an empty string for an unsigned assembly.</param>
+    /// <param name="majorVersion">The major version to match.</param>
+    public void Deconstruct(out string name, out string publicKeyToken, out int majorVersion)
+    {
+        name = Name;
+        publicKeyToken = PublicKeyToken;
+        majorVersion = MajorVersion;
+    }
 }

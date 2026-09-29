@@ -409,14 +409,12 @@ public sealed class ConfigurationDrivenRegistrationTests
             ["Nuplane:Loading:SharedAssemblies:0:MajorVersion"] = "1",
             ["Nuplane:Loading:SharedAssemblies:1:PublicKeyToken"] = null
         };
-        if (name is not null)
+        foreach (var (key, value) in new[] { ("Name", name), ("MajorVersion", majorVersion) })
         {
-            settings["Nuplane:Loading:SharedAssemblies:1:Name"] = name;
-        }
-
-        if (majorVersion is not null)
-        {
-            settings["Nuplane:Loading:SharedAssemblies:1:MajorVersion"] = majorVersion;
+            if (value is not null)
+            {
+                settings[$"Nuplane:Loading:SharedAssemblies:1:{key}"] = value;
+            }
         }
 
         using var provider = BuildLoadingProvider(settings);
@@ -426,6 +424,25 @@ public sealed class ConfigurationDrivenRegistrationTests
 
         Assert.Contains("'Nuplane:Loading:SharedAssemblies:1'", ex.Message);
         Assert.DoesNotContain("SharedAssemblies:0", ex.Message);
+    }
+
+    [Fact]
+    public void AutoloadPackages_FromConfiguration_SharedAssembliesConfiguredAsSingleObject_FailsValidationWithOneErrorSayingItMustBeAnArray()
+    {
+        using var provider = BuildLoadingProvider(new()
+        {
+            ["Nuplane:Loading:SharedAssemblies:Name"] = "Acme.Contracts",
+            ["Nuplane:Loading:SharedAssemblies:PublicKeyToken"] = null,
+            ["Nuplane:Loading:SharedAssemblies:MajorVersion"] = "4"
+        });
+
+        var ex = Assert.Throws<OptionsValidationException>(() =>
+            provider.GetRequiredService<IOptions<LoadingOptions>>().Value);
+
+        var failure = Assert.Single(ex.Failures);
+        Assert.Contains("'Nuplane:Loading:SharedAssemblies' must be an array of entries", failure, StringComparison.Ordinal);
+        Assert.Contains("found an object with keys", failure, StringComparison.Ordinal);
+        Assert.All(["Name", "PublicKeyToken", "MajorVersion"], key => Assert.Contains(key, failure, StringComparison.Ordinal));
     }
 
     [Fact]

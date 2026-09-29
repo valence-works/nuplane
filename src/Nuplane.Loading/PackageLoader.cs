@@ -881,7 +881,7 @@ internal sealed class PackageLoader : IPackageLoader
 
                 try
                 {
-                    if (_matcher.IsMatch(AssemblyName.GetAssemblyName(candidate.AssemblyPath), sharedPolicy))
+                    if (IsProvidedByHost(AssemblyName.GetAssemblyName(candidate.AssemblyPath), package, sharedPolicy))
                     {
                         continue;
                     }
@@ -921,7 +921,7 @@ internal sealed class PackageLoader : IPackageLoader
                 try
                 {
                     var assemblyName = AssemblyName.GetAssemblyName(candidate.AssemblyPath);
-                    if (_matcher.IsMatch(assemblyName, sharedPolicy))
+                    if (IsProvidedByHost(assemblyName, package, sharedPolicy))
                     {
                         continue;
                     }
@@ -940,6 +940,28 @@ internal sealed class PackageLoader : IPackageLoader
         }
 
         return entries;
+    }
+
+    /// <summary>
+    /// Determines whether <paramref name="assemblyName"/>, a file of <paramref name="package"/>, is a shared
+    /// assembly the host provides. Refuses the load when it is but the host has no copy of it that satisfies the
+    /// policy, because the package's code would otherwise load and then fail on the missing assembly.
+    /// </summary>
+    private bool IsProvidedByHost(AssemblyName assemblyName, LoadableGraphPackage package, IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy)
+    {
+        if (!_matcher.IsMatch(assemblyName, sharedPolicy))
+        {
+            return false;
+        }
+
+        if (!SharedAssemblyHostCopy.HostSatisfies(assemblyName))
+        {
+            throw new FileNotFoundException(
+                $"Package '{package.Id}@{package.Version}' carries shared assembly {SharedAssemblyHostCopy.DescribePolicyEntry(assemblyName)}, " +
+                "which the shared-assembly policy leaves to the host, but the host has no copy of it with that major version.");
+        }
+
+        return true;
     }
 
     private static string? TryResolveTargetFrameworkMoniker(string assemblyPath, string installPath)

@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.Loader;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
@@ -104,13 +105,12 @@ public sealed class PackageAssemblyProviderTests : IDisposable
     [InlineData(null)]
     [InlineData(PackageLoadMode.Collectible)]
     [InlineData(PackageLoadMode.HostIntegrated)]
-    public async Task GetAssemblies_WhenPackageCarriesSharedAssembly_ReturnsHostCopyAndKeepsPackageBoundToIt(PackageLoadMode? graphLoadMode)
+    public async Task GetAssemblies_WhenPackageCarriesSharedAssembly_LeavesItOutAndKeepsPackageBoundToHostCopy(PackageLoadMode? graphLoadMode)
     {
-        var assemblies = await LoadConsumerPackageAndGetAssembliesAsync(graphLoadMode, [SharedAssemblyTestSupport.UnsignedPolicyEntry]);
+        var (context, assemblies) = await LoadConsumerPackageAndGetAssembliesAsync(graphLoadMode, [SharedAssemblyTestSupport.UnsignedPolicyEntry]);
 
-        Assert.Same(
-            SharedAssemblyTestSupport.HostSharedAssembly,
-            Assert.Single(assemblies, assembly => assembly.GetName().Name == SharedAssemblyTestSupport.SharedAssemblyName));
+        Assert.Empty(SharedAssemblyTestSupport.SharedAssembliesIn(assemblies));
+        Assert.Empty(SharedAssemblyTestSupport.SharedAssembliesIn(context.Assemblies));
         var consumer = Assert.Single(assemblies, assembly => assembly.GetName().Name == SharedAssemblyTestSupport.ConsumerPackageId);
         Assert.Same(typeof(HealthyFixtureType), SharedAssemblyTestSupport.BoundSharedType(consumer));
     }
@@ -121,35 +121,32 @@ public sealed class PackageAssemblyProviderTests : IDisposable
     [InlineData(PackageLoadMode.HostIntegrated)]
     public async Task GetAssemblies_WhenPackageCarriesUnsharedAssembly_ReturnsPackageCopy(PackageLoadMode? graphLoadMode)
     {
-        var assemblies = await LoadConsumerPackageAndGetAssembliesAsync(graphLoadMode, []);
+        var (_, assemblies) = await LoadConsumerPackageAndGetAssembliesAsync(graphLoadMode, []);
 
-        var packageCopy = Assert.Single(assemblies, assembly => assembly.GetName().Name == SharedAssemblyTestSupport.SharedAssemblyName);
+        var packageCopy = SharedAssemblyTestSupport.SharedAssemblyIn(assemblies);
         Assert.StartsWith(_tempDir.FullName, packageCopy.Location, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task GetAssemblies_WhenHostHasNoCopyOfSharedAssembly_SkipsItWithWarningInsteadOfLoadingPackageCopy()
     {
-        var installPath = SharedAssemblyTestSupport.CreateConsumerPackageInstall(_tempDir);
-        var absent = HostFreeLoadTestSupport.EmitPackage(_tempDir, "Shared.Absent");
-        var absentFileName = $"{absent.AssemblyName}.dll";
-        File.Copy(Path.Combine(absent.InstallPath, absentFileName), Path.Combine(installPath, absentFileName));
+        var (installPath, absentAssemblyName, policy) = SharedAssemblyTestSupport.CreateConsumerPackageInstallWithHostAbsentAssembly(_tempDir);
         var loader = new PackageLoader();
         await loader.EnsureLoadedAsync(
             [new ResolvedPackage(SharedAssemblyTestSupport.ConsumerPackageId, "1.0.0", "feed-a", installPath, DateTimeOffset.UtcNow, "source-a")],
-            [new SharedAssemblyPolicyEntry(absent.AssemblyName, string.Empty, 1)],
+            [policy],
             CancellationToken.None);
         var logger = new CaptureLogger<PackageAssemblyProvider>();
 
         var assemblies = new PackageAssemblyProvider(loader, logger).GetAssemblies(SharedAssemblyTestSupport.ConsumerPackageId, "1.0.0");
 
-        Assert.DoesNotContain(assemblies, assembly => assembly.GetName().Name == absent.AssemblyName);
+        Assert.DoesNotContain(assemblies, assembly => assembly.GetName().Name == absentAssemblyName);
         Assert.Contains(logger.Entries, entry =>
             entry.LogLevel == LogLevel.Warning &&
-            entry.Message.Contains(absentFileName, StringComparison.Ordinal));
+            entry.Message.Contains($"{absentAssemblyName}.dll", StringComparison.Ordinal));
     }
 
-    private async Task<IReadOnlyList<Assembly>> LoadConsumerPackageAndGetAssembliesAsync(
+    private async Task<(AssemblyLoadContext Context, IReadOnlyList<Assembly> Assemblies)> LoadConsumerPackageAndGetAssembliesAsync(
         PackageLoadMode? graphLoadMode,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy)
     {
@@ -165,8 +162,11 @@ public sealed class PackageAssemblyProviderTests : IDisposable
             ? await loader.EnsureLoadedAsync([package], sharedPolicy, CancellationToken.None)
             : await loader.EnsureGraphLoadedAsync([[package]], sharedPolicy, CancellationToken.None);
         Assert.Empty(result.FailedByPackageId);
+        Assert.True(loader.TryGetContext(package.Id, package.Version, out var handle));
 
-        return new PackageAssemblyProvider(loader).GetAssemblies(package.Id, package.Version);
+        return (
+            Assert.IsAssignableFrom<AssemblyLoadContext>(handle!.Context),
+            new PackageAssemblyProvider(loader).GetAssemblies(package.Id, package.Version));
     }
 
     private string CreatePackageInstallPath(IReadOnlyList<string> sourcePaths)

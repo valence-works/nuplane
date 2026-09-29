@@ -52,7 +52,9 @@ public interface IPackageAssemblyCatalog
 /// <param name="Version">The active package version.</param>
 /// <param name="Assemblies">
 /// The loaded assemblies materialized for the package. An assembly the package carries that the shared-assembly
-/// policy matches is represented by the host's copy, the one the package's code binds, not by the package's file.
+/// policy matches is not the package's own, so it is left out: the package's code binds the host's copy, and
+/// listing that copy here would have a consumer that scans these assemblies take the host's assembly for the
+/// package's.
 /// </param>
 /// <param name="AssemblyReferences">
 /// The deterministic durable assembly references associated with the package. They describe the files the package

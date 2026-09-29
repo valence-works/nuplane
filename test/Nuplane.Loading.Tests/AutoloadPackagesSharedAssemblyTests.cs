@@ -9,25 +9,13 @@ namespace Nuplane.Loading.Tests;
 /// declares an unsigned one, bound by <c>AutoloadPackages</c>, validated at startup, honoured by host-integrated
 /// loading, and still honoured when the host reads the package's assemblies through the assembly catalog.
 /// </summary>
-public sealed class AutoloadPackagesSharedAssemblyTests : IDisposable
+public sealed class AutoloadPackagesSharedAssemblyTests : IAsyncDisposable
 {
     private readonly DirectoryInfo _tempDir = Directory.CreateTempSubdirectory("nuplane-shared-assembly-e2e-");
+    private readonly NuplaneHostFixture _host;
 
-    public void Dispose()
+    public AutoloadPackagesSharedAssemblyTests()
     {
-        try
-        {
-            _tempDir.Delete(recursive: true);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-        }
-    }
-
-    [Fact]
-    public async Task AutoloadPackages_UnsignedSharedAssemblyFromConfiguration_HostIntegratedPackageCarryingItsOwnCopyBindsHostCopy()
-    {
-        Assert.Empty(SharedAssemblyTestSupport.HostSharedAssembly.GetName().GetPublicKeyToken() ?? []);
         var loadingConfiguration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -39,20 +27,37 @@ public sealed class AutoloadPackagesSharedAssemblyTests : IDisposable
             })
             .Build()
             .GetSection("Nuplane:Loading");
-        await using var host = new NuplaneHostFixture(loadingConfiguration: loadingConfiguration);
+        _host = new NuplaneHostFixture(loadingConfiguration: loadingConfiguration);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _host.DisposeAsync();
+        try
+        {
+            // Files loaded into non-collectible contexts can stay locked for the process lifetime.
+            _tempDir.Delete(recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
+    [Fact]
+    public async Task AutoloadPackages_UnsignedSharedAssemblyFromConfiguration_HostIntegratedPackageCarryingItsOwnCopyBindsHostCopy()
+    {
+        Assert.Empty(SharedAssemblyTestSupport.HostSharedAssembly.GetName().GetPublicKeyToken() ?? []);
         var package = HostFreeLoadTestSupport.ActivePackage(
             SharedAssemblyTestSupport.ConsumerPackageId,
             SharedAssemblyTestSupport.CreateConsumerPackageInstall(_tempDir));
 
-        await host.ActivateAsync(package);
-        var assemblies = await host.ReadAssembliesAsync();
+        await _host.ActivateAsync(package);
+        var assemblies = await _host.ReadAssembliesAsync();
 
-        var loaded = Assert.Single((await host.ReadLoadStateAsync()).Packages);
+        var loaded = Assert.Single((await _host.ReadLoadStateAsync()).Packages);
         Assert.Equal(PackageLoadStatus.Loaded, loaded.Status);
         Assert.Equal(PackageLoadMode.HostIntegrated, loaded.LoadMode);
-        Assert.All(
-            assemblies.Where(static assembly => assembly.GetName().Name == SharedAssemblyTestSupport.SharedAssemblyName),
-            static assembly => Assert.Same(SharedAssemblyTestSupport.HostSharedAssembly, assembly));
+        Assert.Empty(SharedAssemblyTestSupport.SharedAssembliesIn(assemblies));
         var consumer = Assert.Single(assemblies, static assembly => assembly.GetName().Name == SharedAssemblyTestSupport.ConsumerPackageId);
         Assert.Same(typeof(HealthyFixtureType), SharedAssemblyTestSupport.BoundSharedType(consumer));
     }

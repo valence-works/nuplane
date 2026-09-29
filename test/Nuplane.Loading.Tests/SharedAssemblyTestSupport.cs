@@ -56,6 +56,48 @@ internal static class SharedAssemblyTestSupport
             .GetProperty("SharedType")!
             .GetValue(null)!;
 
+    /// <summary>
+    /// Gets the shared assembly from <paramref name="assemblies"/>; there must be exactly one, so a test that
+    /// expects the host's copy, or the package's, does not pass on a list holding both.
+    /// </summary>
+    public static Assembly SharedAssemblyIn(IEnumerable<Assembly> assemblies) =>
+        Assert.Single(SharedAssembliesIn(assemblies));
+
+    /// <summary>Gets every assembly of <paramref name="assemblies"/> that carries the shared assembly's name.</summary>
+    public static IEnumerable<Assembly> SharedAssembliesIn(IEnumerable<Assembly> assemblies) =>
+        assemblies.Where(static assembly => assembly.GetName().Name == SharedAssemblyName);
+
+    /// <summary>
+    /// Installs the consumer package with one more assembly the host has no copy of, and returns the policy entry
+    /// that declares that assembly shared.
+    /// </summary>
+    public static (string InstallPath, string AbsentAssemblyName, SharedAssemblyPolicyEntry Policy) CreateConsumerPackageInstallWithHostAbsentAssembly(DirectoryInfo root)
+    {
+        var installPath = CreateConsumerPackageInstall(root);
+        var absent = HostFreeLoadTestSupport.EmitPackage(root, "Shared.Absent");
+        var absentFileName = $"{absent.AssemblyName}.dll";
+        File.Copy(Path.Combine(absent.InstallPath, absentFileName), Path.Combine(installPath, absentFileName));
+
+        return (installPath, absent.AssemblyName, new SharedAssemblyPolicyEntry(absent.AssemblyName, string.Empty, 1));
+    }
+
+    /// <summary>
+    /// Installs a package carrying the shared assembly's name at a major version one below the host's copy, and
+    /// returns the policy entry that declares that lower major shared. The host has a copy of the assembly, but not
+    /// of that major version, and the default binder would hand the higher one back.
+    /// </summary>
+    public static (string InstallPath, SharedAssemblyPolicyEntry Policy) CreateSharedAssemblyPackageInstallOfLowerMajor(DirectoryInfo root)
+    {
+        var lowerMajor = SharedAssemblyMajorVersion - 1;
+        var installDirectory = root.CreateSubdirectory($"{SharedAssemblyName}-lower-major");
+        HostFreeLoadTestSupport.EmitAssembly(
+            SharedAssemblyName,
+            new Version(lowerMajor, 9, 0, 0),
+            Path.Combine(installDirectory.FullName, $"{SharedAssemblyName}.dll"));
+
+        return (installDirectory.FullName, new SharedAssemblyPolicyEntry(SharedAssemblyName, string.Empty, lowerMajor));
+    }
+
     private static string CreateInstall(DirectoryInfo root, string packageId, params string[] assemblyFileNames)
     {
         var installDirectory = root.CreateSubdirectory(packageId);

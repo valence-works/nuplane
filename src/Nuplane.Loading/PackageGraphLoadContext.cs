@@ -53,7 +53,7 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
     }
 
     /// <inheritdoc />
-    public bool IsSharedAssembly(AssemblyName assemblyName) => _matcher.IsMatch(assemblyName, _sharedPolicy);
+    bool ISharedAssemblyPolicyLoadContext.IsSharedAssembly(AssemblyName assemblyName) => _matcher.IsMatch(assemblyName, _sharedPolicy);
 
     protected override Assembly? Load(AssemblyName assemblyName)
     {

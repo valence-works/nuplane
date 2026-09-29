@@ -114,7 +114,7 @@ internal static class HostFreeLoadTestSupport
         return new(assemblyName, root.CreateSubdirectory(assemblyName).FullName);
     }
 
-    private static void EmitAssembly(string assemblyName, Version assemblyVersion, string assemblyPath)
+    public static void EmitAssembly(string assemblyName, Version assemblyVersion, string assemblyPath)
     {
         var assemblyBuilder = new PersistedAssemblyBuilder(
             new AssemblyName(assemblyName) { Version = assemblyVersion },

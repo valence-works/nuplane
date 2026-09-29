@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Configuration;
 
 namespace Nuplane.Loading;
@@ -28,6 +29,14 @@ internal static class LoadingOptionsConfigurationBinder
         var sharedAssembliesSection = loadingSection.GetSection(nameof(LoadingOptions.SharedAssemblies));
         var configured = sharedAssembliesSection.GetChildren().ToArray();
         var bound = options.SharedAssemblies.Count - boundBefore;
+        if (IsSingleObject(configured))
+        {
+            options.ConfigurationErrors.Add(
+                $"'{sharedAssembliesSection.Path}' must be an array of entries; found an object with keys {string.Join(", ", configured.Select(static child => child.Key))}. " +
+                "Configure it as a list, for example \"SharedAssemblies\": [ { \"Name\": \"...\", \"MajorVersion\": 1 } ].");
+            return;
+        }
+
         if (bound == configured.Length)
         {
             return;
@@ -38,6 +47,10 @@ internal static class LoadingOptionsConfigurationBinder
             ? refusals
             : [$"'{sharedAssembliesSection.Path}' configures {configured.Length} shared assembly entries, but only {bound} bound."]);
     }
+
+    // An array's children are keyed 0, 1, 2...; children keyed by anything else mean an object was configured.
+    private static bool IsSingleObject(IConfigurationSection[] configured) =>
+        configured.Length > 0 && configured.Any(static child => !int.TryParse(child.Key, NumberStyles.None, CultureInfo.InvariantCulture, out _));
 
     private static string? DescribeUnboundEntry(IConfigurationSection entry)
     {
