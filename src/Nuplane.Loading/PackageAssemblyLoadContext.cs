@@ -8,7 +8,7 @@ namespace Nuplane.Loading;
 /// and shared assembly policy support. Assemblies matching the shared policy are loaded from
 /// the host's default context to avoid version conflicts.
 /// </summary>
-public sealed class PackageAssemblyLoadContext : AssemblyLoadContext
+public sealed class PackageAssemblyLoadContext : AssemblyLoadContext, ISharedAssemblyPolicyLoadContext
 {
     private readonly AssemblyDependencyResolver _dependencyResolver;
     private readonly IReadOnlyList<SharedAssemblyPolicyEntry> _sharedPolicy;
@@ -32,6 +32,9 @@ public sealed class PackageAssemblyLoadContext : AssemblyLoadContext
         _sharedPolicy = sharedPolicy ?? throw new ArgumentNullException(nameof(sharedPolicy));
         _matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
     }
+
+    /// <inheritdoc />
+    bool ISharedAssemblyPolicyLoadContext.IsSharedAssembly(AssemblyName assemblyName) => _matcher.IsMatch(assemblyName, _sharedPolicy);
 
     /// <inheritdoc />
     protected override Assembly? Load(AssemblyName assemblyName)

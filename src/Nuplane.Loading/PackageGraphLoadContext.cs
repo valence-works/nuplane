@@ -5,7 +5,7 @@ using NuGet.RuntimeModel;
 
 namespace Nuplane.Loading;
 
-internal class PackageGraphLoadContext : AssemblyLoadContext
+internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPolicyLoadContext
 {
     private readonly IReadOnlyDictionary<string, string> assemblyPathsByName;
     private readonly IReadOnlyList<AssemblyDependencyResolver> _dependencyResolvers;
@@ -51,6 +51,9 @@ internal class PackageGraphLoadContext : AssemblyLoadContext
             .GroupBy(static candidate => candidate.AssemblyName!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.OrderBy(static candidate => candidate.Path, StringComparer.OrdinalIgnoreCase).First().Path, StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <inheritdoc />
+    public bool IsSharedAssembly(AssemblyName assemblyName) => _matcher.IsMatch(assemblyName, _sharedPolicy);
 
     protected override Assembly? Load(AssemblyName assemblyName)
     {

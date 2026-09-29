@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.Loader;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Abstractions;
 using Nuplane.Events;
@@ -153,7 +154,14 @@ internal sealed class NuplaneHostFixture : IAsyncDisposable
 
     private readonly ServiceProvider _provider;
 
-    public NuplaneHostFixture(string? stateFilePath = null, bool withLoading = true)
+    /// <param name="stateFilePath">The state file to use, or <see langword="null"/> for an in-memory store.</param>
+    /// <param name="withLoading">Whether the host composes loading at all.</param>
+    /// <param name="loadingConfiguration">
+    /// A <c>Nuplane:Loading</c> section to install loading from, as a host that keeps its loading settings in
+    /// configuration does; it must enable loading itself. When <see langword="null"/>, loading is installed from
+    /// code and enabled.
+    /// </param>
+    public NuplaneHostFixture(string? stateFilePath = null, bool withLoading = true, IConfiguration? loadingConfiguration = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -168,9 +176,19 @@ internal sealed class NuplaneHostFixture : IAsyncDisposable
                 nuplane.WithStateFile(stateFilePath);
             }
 
-            if (withLoading)
+            if (!withLoading)
             {
-                nuplane.AutoloadPackages(loading => loading.WithDefaultLoadMode(PackageLoadMode.HostIntegrated));
+                return;
+            }
+
+            Action<NuplaneLoadingBuilder> hostIntegrated = static loading => loading.WithDefaultLoadMode(PackageLoadMode.HostIntegrated);
+            if (loadingConfiguration is null)
+            {
+                nuplane.AutoloadPackages(hostIntegrated);
+            }
+            else
+            {
+                nuplane.AutoloadPackages(loadingConfiguration, hostIntegrated);
             }
         });
 
@@ -208,4 +226,11 @@ internal sealed class NuplaneHostFixture : IAsyncDisposable
 
     public Task<PackageLoadStateSnapshot> ReadLoadStateAsync() =>
         _provider.GetRequiredService<IPackageLoadStateCatalog>().GetLoadStateAsync(CancellationToken.None);
+
+    /// <summary>
+    /// Reads every assembly of the loaded packages through the host-facing assembly catalog, the way a host hands
+    /// package assemblies to a framework to scan.
+    /// </summary>
+    public async Task<IReadOnlyList<Assembly>> ReadAssembliesAsync() =>
+        [.. await _provider.GetRequiredService<IPackageAssemblyCatalog>().GetAssembliesAsync(CancellationToken.None)];
 }

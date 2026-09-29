@@ -75,7 +75,7 @@ internal sealed class PackageAssemblyProvider : IPackageAssemblyProvider
 
             try
             {
-                var loadedAssembly = loadContext.LoadFromAssemblyPath(candidate.AssemblyPath);
+                var loadedAssembly = LoadCandidate(loadContext, candidate.AssemblyPath);
                 assembliesByPath[candidate.AssemblyPath] = loadedAssembly;
                 materialized.Add(loadedAssembly);
             }
@@ -91,6 +91,26 @@ internal sealed class PackageAssemblyProvider : IPackageAssemblyProvider
         }
 
         return OrderAssemblies(materialized);
+    }
+
+    /// <summary>
+    /// Loads one of the package's assembly files into its context. A file the context's shared-assembly policy
+    /// matches is bound by name instead, so the context answers with the host's copy exactly as it does for the
+    /// package's own code; loading the package's file by path would put a private copy into the context, which it
+    /// would then hand to the package's code as well.
+    /// </summary>
+    private static Assembly LoadCandidate(AssemblyLoadContext loadContext, string assemblyPath)
+    {
+        if (loadContext is ISharedAssemblyPolicyLoadContext policyContext)
+        {
+            var assemblyName = AssemblyName.GetAssemblyName(assemblyPath);
+            if (policyContext.IsSharedAssembly(assemblyName))
+            {
+                return loadContext.LoadFromAssemblyName(assemblyName);
+            }
+        }
+
+        return loadContext.LoadFromAssemblyPath(assemblyPath);
     }
 
     private bool TryGetInstallPath(string packageId, string version, out string installPath)

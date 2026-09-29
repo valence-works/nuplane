@@ -1,5 +1,8 @@
+using System.Reflection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Loading.Tests.Fixtures;
 using System.Runtime.Versioning;
 
 namespace Nuplane.Loading.Tests;
@@ -94,6 +97,54 @@ public sealed class PackageAssemblyProviderTests : IDisposable
             Assert.Contains($"{Path.DirectorySeparatorChar}lib{Path.DirectorySeparatorChar}{selectedFramework}{Path.DirectorySeparatorChar}", assembly.Location, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain($"{Path.DirectorySeparatorChar}lib{Path.DirectorySeparatorChar}{otherFramework}{Path.DirectorySeparatorChar}", assembly.Location, StringComparison.OrdinalIgnoreCase);
         });
+    }
+
+    // Null loads the package on its own, in a per-package context; a load mode loads it as a graph in that mode.
+    [Theory]
+    [InlineData(null)]
+    [InlineData(PackageLoadMode.Collectible)]
+    [InlineData(PackageLoadMode.HostIntegrated)]
+    public async Task GetAssemblies_WhenPackageCarriesSharedAssembly_ReturnsHostCopyAndKeepsPackageBoundToIt(PackageLoadMode? graphLoadMode)
+    {
+        var assemblies = await LoadConsumerPackageAndGetAssembliesAsync(graphLoadMode, [SharedAssemblyTestSupport.UnsignedPolicyEntry]);
+
+        Assert.Same(
+            SharedAssemblyTestSupport.HostSharedAssembly,
+            Assert.Single(assemblies, assembly => assembly.GetName().Name == SharedAssemblyTestSupport.SharedAssemblyName));
+        var consumer = Assert.Single(assemblies, assembly => assembly.GetName().Name == SharedAssemblyTestSupport.ConsumerPackageId);
+        Assert.Same(typeof(HealthyFixtureType), SharedAssemblyTestSupport.BoundSharedType(consumer));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(PackageLoadMode.Collectible)]
+    [InlineData(PackageLoadMode.HostIntegrated)]
+    public async Task GetAssemblies_WhenPackageCarriesUnsharedAssembly_ReturnsPackageCopy(PackageLoadMode? graphLoadMode)
+    {
+        var assemblies = await LoadConsumerPackageAndGetAssembliesAsync(graphLoadMode, []);
+
+        var packageCopy = Assert.Single(assemblies, assembly => assembly.GetName().Name == SharedAssemblyTestSupport.SharedAssemblyName);
+        Assert.StartsWith(_tempDir.FullName, packageCopy.Location, StringComparison.Ordinal);
+    }
+
+    private async Task<IReadOnlyList<Assembly>> LoadConsumerPackageAndGetAssembliesAsync(
+        PackageLoadMode? graphLoadMode,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy)
+    {
+        var package = new ResolvedPackage(
+            SharedAssemblyTestSupport.ConsumerPackageId,
+            "1.0.0",
+            "feed-a",
+            SharedAssemblyTestSupport.CreateConsumerPackageInstall(_tempDir),
+            DateTimeOffset.UtcNow,
+            "source-a");
+        var loader = new PackageLoader(options: Options.Create(new LoadingOptions { DefaultLoadMode = graphLoadMode ?? PackageLoadMode.Collectible }));
+        var result = graphLoadMode is null
+            ? await loader.EnsureLoadedAsync([package], sharedPolicy, CancellationToken.None)
+            : await loader.EnsureGraphLoadedAsync([[package]], sharedPolicy, CancellationToken.None);
+        Assert.Empty(result.FailedByPackageId);
+
+        return new PackageAssemblyProvider(loader).GetAssemblies(package.Id, package.Version);
     }
 
     private string CreatePackageInstallPath(IReadOnlyList<string> sourcePaths)

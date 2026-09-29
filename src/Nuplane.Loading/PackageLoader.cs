@@ -394,7 +394,7 @@ internal sealed class PackageLoader : IPackageLoader
                 .ToArray();
             if (graphLoadMode == PackageLoadMode.HostIntegrated)
             {
-                var candidates = BuildHostIntegratedResolutionCandidates(graphKey, graphPackages.LoadablePackages);
+                var candidates = BuildHostIntegratedResolutionCandidates(graphKey, graphPackages.LoadablePackages, sharedPolicy);
                 _hostIntegratedResolutionCatalog.ValidateCanPublishGraph(graphKey, candidates);
             }
 
@@ -408,7 +408,7 @@ internal sealed class PackageLoader : IPackageLoader
             }
 
             var assembliesByPackageKey = graphLoadMode == PackageLoadMode.HostIntegrated
-                ? MaterializeHostIntegratedAssemblies(context, graphPackages.LoadablePackages)
+                ? MaterializeHostIntegratedAssemblies(context, graphPackages.LoadablePackages, sharedPolicy)
                 : new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase);
 
             if (graphLoadMode == PackageLoadMode.HostIntegrated)
@@ -851,9 +851,16 @@ internal sealed class PackageLoader : IPackageLoader
             ? diagnostics
             : [];
 
+    /// <summary>
+    /// Loads and returns each package's own assemblies, which the resolution catalog then publishes for framework
+    /// by-name resolution. An assembly the shared-assembly policy matches is not the package's own: it is skipped,
+    /// never loaded from the package's file, because loading it by path bypasses the context's <c>Load</c> override
+    /// and would give the graph a private copy that the package's code then binds instead of the host's.
+    /// </summary>
     private IReadOnlyDictionary<string, IReadOnlyList<Assembly>> MaterializeHostIntegratedAssemblies(
         AssemblyLoadContext context,
-        IReadOnlyList<LoadableGraphPackage> packages)
+        IReadOnlyList<LoadableGraphPackage> packages,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy)
     {
         var result = new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase);
         var assembliesByPath = context.Assemblies
@@ -874,7 +881,11 @@ internal sealed class PackageLoader : IPackageLoader
 
                 try
                 {
-                    AssemblyName.GetAssemblyName(candidate.AssemblyPath);
+                    if (_matcher.IsMatch(AssemblyName.GetAssemblyName(candidate.AssemblyPath), sharedPolicy))
+                    {
+                        continue;
+                    }
+
                     var loadedAssembly = context.LoadFromAssemblyPath(candidate.AssemblyPath);
                     assembliesByPath[candidate.AssemblyPath] = loadedAssembly;
                     packageAssemblies.Add(loadedAssembly);
@@ -892,9 +903,15 @@ internal sealed class PackageLoader : IPackageLoader
         return result;
     }
 
+    /// <summary>
+    /// Builds the entries the graph would publish, for the conflict check that runs before it loads. Skips the
+    /// assemblies the shared-assembly policy matches, exactly as <see cref="MaterializeHostIntegratedAssemblies"/>
+    /// does, so the graph is checked for what it will actually publish.
+    /// </summary>
     private IReadOnlyList<HostIntegratedAssemblyResolutionCandidate> BuildHostIntegratedResolutionCandidates(
         string graphKey,
-        IReadOnlyList<LoadableGraphPackage> packages)
+        IReadOnlyList<LoadableGraphPackage> packages,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy)
     {
         var entries = new List<HostIntegratedAssemblyResolutionCandidate>();
         foreach (var package in packages)
@@ -904,6 +921,11 @@ internal sealed class PackageLoader : IPackageLoader
                 try
                 {
                     var assemblyName = AssemblyName.GetAssemblyName(candidate.AssemblyPath);
+                    if (_matcher.IsMatch(assemblyName, sharedPolicy))
+                    {
+                        continue;
+                    }
+
                     entries.Add(new(
                         assemblyName.Name ?? Path.GetFileNameWithoutExtension(candidate.AssemblyPath),
                         assemblyName.Version,

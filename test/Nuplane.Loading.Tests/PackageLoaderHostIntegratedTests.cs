@@ -243,6 +243,67 @@ public sealed class PackageLoaderHostIntegratedTests : IDisposable
         Assert.Equal("not-found", diagnostic.Outcome);
     }
 
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_HostIntegratedPackageCarryingSharedAssembly_BindsHostCopyAndDoesNotPublishPackageCopy()
+    {
+        var catalog = new HostIntegratedAssemblyResolutionCatalog();
+        var loader = new PackageLoader(options: HostIntegratedOptions(), hostIntegratedResolutionCatalog: catalog);
+        var package = Pkg(SharedAssemblyTestSupport.ConsumerPackageId, "1.0.0", SharedAssemblyTestSupport.CreateConsumerPackageInstall(_tempDir));
+
+        var result = await loader.EnsureGraphLoadedAsync([[package]], [SharedAssemblyTestSupport.UnsignedPolicyEntry], CancellationToken.None);
+
+        Assert.Empty(result.FailedByPackageId);
+        var context = LoadContextOf(loader, package);
+        Assert.DoesNotContain(context.Assemblies, assembly => assembly.GetName().Name == SharedAssemblyTestSupport.SharedAssemblyName);
+        Assert.Same(typeof(HealthyFixtureType), SharedAssemblyTestSupport.BoundSharedType(SharedAssemblyTestSupport.ConsumerAssembly(context)));
+        Assert.False(catalog.TryResolve(SharedAssemblyTestSupport.HostSharedAssembly.GetName(), out _, out _));
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_HostIntegratedPackageCarryingUnsharedAssembly_LoadsAndPublishesPackageCopy()
+    {
+        var catalog = new HostIntegratedAssemblyResolutionCatalog();
+        var loader = new PackageLoader(options: HostIntegratedOptions(), hostIntegratedResolutionCatalog: catalog);
+        var installPath = SharedAssemblyTestSupport.CreateConsumerPackageInstall(_tempDir);
+        var package = Pkg(SharedAssemblyTestSupport.ConsumerPackageId, "1.0.0", installPath);
+
+        var result = await loader.EnsureGraphLoadedAsync([[package]], [], CancellationToken.None);
+
+        Assert.Empty(result.FailedByPackageId);
+        var context = LoadContextOf(loader, package);
+        var packageCopy = Assert.Single(context.Assemblies, assembly => assembly.GetName().Name == SharedAssemblyTestSupport.SharedAssemblyName);
+        Assert.StartsWith(installPath, packageCopy.Location, StringComparison.Ordinal);
+        Assert.Same(packageCopy, SharedAssemblyTestSupport.BoundSharedType(SharedAssemblyTestSupport.ConsumerAssembly(context)).Assembly);
+        Assert.True(catalog.TryResolve(SharedAssemblyTestSupport.HostSharedAssembly.GetName(), out var published, out _));
+        Assert.Same(packageCopy, published);
+    }
+
+    [Fact]
+    public async Task EnsureGraphLoadedAsync_HostIntegratedGraphWithSharedAssemblyInTwoPackages_LoadsWithoutConflictAndBindsHostCopy()
+    {
+        var loader = new PackageLoader(options: HostIntegratedOptions(), hostIntegratedResolutionCatalog: new HostIntegratedAssemblyResolutionCatalog());
+        var consumer = Pkg(SharedAssemblyTestSupport.ConsumerPackageId, "1.0.0", SharedAssemblyTestSupport.CreateConsumerPackageInstall(_tempDir));
+        var sharedAssemblyPackage = Pkg(SharedAssemblyTestSupport.SharedAssemblyName, "1.0.0", SharedAssemblyTestSupport.CreateSharedAssemblyPackageInstall(_tempDir));
+
+        var result = await loader.EnsureGraphLoadedAsync(
+            [[consumer, sharedAssemblyPackage]],
+            [SharedAssemblyTestSupport.UnsignedPolicyEntry],
+            CancellationToken.None);
+
+        Assert.Empty(result.FailedByPackageId);
+        Assert.Equal(2, result.Loaded.Count);
+        Assert.Same(typeof(HealthyFixtureType), SharedAssemblyTestSupport.BoundSharedType(SharedAssemblyTestSupport.ConsumerAssembly(LoadContextOf(loader, consumer))));
+    }
+
+    private static IOptions<LoadingOptions> HostIntegratedOptions() =>
+        Options.Create(new LoadingOptions { DefaultLoadMode = PackageLoadMode.HostIntegrated });
+
+    private static AssemblyLoadContext LoadContextOf(PackageLoader loader, ResolvedPackage package)
+    {
+        Assert.True(loader.TryGetContext(package.Id, package.Version, out var handle));
+        return Assert.IsAssignableFrom<AssemblyLoadContext>(handle!.Context);
+    }
+
     private string CreateInstallDir(string packageId) =>
         CreateInstallDir(packageId, typeof(FixtureMarker).Assembly);
 
