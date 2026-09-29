@@ -36,7 +36,7 @@ public static class NuplaneBuilderLoadingExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         var loadingSection = GetNamedSectionOrSelf(configuration, LoadingSectionName);
-        builder.Services.Configure<LoadingOptions>(options => loadingSection.Bind(options));
+        builder.Services.Configure<LoadingOptions>(options => LoadingOptionsConfigurationBinder.Bind(options, loadingSection));
 
         return AutoloadPackagesCore(builder, configure, enableByDefault: false);
     }

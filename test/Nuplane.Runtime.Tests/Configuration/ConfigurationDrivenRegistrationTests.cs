@@ -373,6 +373,62 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
+    public void AutoloadPackages_FromConfiguration_NullEmptyOrOmittedPublicKeyToken_BindsAsUnsignedSharedAssembly()
+    {
+        using var provider = BuildLoadingProvider(new()
+        {
+            ["Nuplane:Loading:SharedAssemblies:0:Name"] = "Acme.Null",
+            // What a JSON "PublicKeyToken": null becomes: the key is present, with a null value.
+            ["Nuplane:Loading:SharedAssemblies:0:PublicKeyToken"] = null,
+            ["Nuplane:Loading:SharedAssemblies:0:MajorVersion"] = "4",
+            ["Nuplane:Loading:SharedAssemblies:1:Name"] = "Acme.Omitted",
+            ["Nuplane:Loading:SharedAssemblies:1:MajorVersion"] = "4",
+            ["Nuplane:Loading:SharedAssemblies:2:Name"] = "Acme.Empty",
+            ["Nuplane:Loading:SharedAssemblies:2:PublicKeyToken"] = "",
+            ["Nuplane:Loading:SharedAssemblies:2:MajorVersion"] = "4"
+        });
+
+        var loading = provider.GetRequiredService<IOptions<LoadingOptions>>().Value;
+
+        Assert.Equal(
+            [("Acme.Null", "", 4), ("Acme.Omitted", "", 4), ("Acme.Empty", "", 4)],
+            loading.SharedAssemblies.Select(static identity => (identity.Name, identity.PublicKeyToken, identity.MajorVersion)));
+    }
+
+    [Theory]
+    [InlineData(null, "4")]
+    [InlineData("Acme.Contracts", null)]
+    [InlineData("Acme.Contracts", "four")]
+    public void AutoloadPackages_FromConfiguration_SharedAssemblyEntryThatDoesNotBind_FailsValidationNamingTheEntry(
+        string? name,
+        string? majorVersion)
+    {
+        var settings = new Dictionary<string, string?>
+        {
+            ["Nuplane:Loading:SharedAssemblies:0:Name"] = "Acme.Bound",
+            ["Nuplane:Loading:SharedAssemblies:0:MajorVersion"] = "1",
+            ["Nuplane:Loading:SharedAssemblies:1:PublicKeyToken"] = null
+        };
+        if (name is not null)
+        {
+            settings["Nuplane:Loading:SharedAssemblies:1:Name"] = name;
+        }
+
+        if (majorVersion is not null)
+        {
+            settings["Nuplane:Loading:SharedAssemblies:1:MajorVersion"] = majorVersion;
+        }
+
+        using var provider = BuildLoadingProvider(settings);
+
+        var ex = Assert.Throws<OptionsValidationException>(() =>
+            provider.GetRequiredService<IOptions<LoadingOptions>>().Value);
+
+        Assert.Contains("'Nuplane:Loading:SharedAssemblies:1'", ex.Message);
+        Assert.DoesNotContain("SharedAssemblies:0", ex.Message);
+    }
+
+    [Fact]
     public async Task StoreRegistry_OnFirstAccess_LogsDefaultPathActivation()
     {
         var root = Path.Combine(Path.GetTempPath(), "nuplane-activation-log", Guid.NewGuid().ToString("N"));
@@ -1253,6 +1309,19 @@ public sealed class ConfigurationDrivenRegistrationTests
             provider.GetRequiredService<IOptions<HostProvidedPackagesOptions>>().Value);
 
         Assert.Contains("Nuplane:HostProvidedPackages", ex.Message);
+    }
+
+    // Composes loading the way a host that keeps its settings in configuration does: the Nuplane section for
+    // the core runtime and its Loading subsection for AutoloadPackages.
+    private static ServiceProvider BuildLoadingProvider(Dictionary<string, string?> settings)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
+            nuplane.AutoloadPackages(configuration.GetSection("Nuplane:Loading")));
+
+        return services.BuildServiceProvider();
     }
 
     private sealed class CapturingLoggerProvider(List<string> messages) : ILoggerProvider

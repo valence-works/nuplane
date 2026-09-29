@@ -41,4 +41,12 @@ public sealed class LoadingOptions
     /// the host's default context rather than package-specific contexts.
     /// </summary>
     public ICollection<SharedAssemblyIdentity> SharedAssemblies { get; } = new List<SharedAssemblyIdentity>();
+
+    /// <summary>
+    /// Configuration-shape errors found while binding these options from configuration — for example a
+    /// <see cref="SharedAssemblies"/> entry the configuration binder could not construct and would otherwise have
+    /// dropped. Recorded by <c>LoadingOptionsConfigurationBinder</c> and surfaced by
+    /// <see cref="LoadingOptionsValidator"/> alongside the checks it performs on the bound values.
+    /// </summary>
+    internal List<string> ConfigurationErrors { get; } = [];
 }

@@ -19,7 +19,7 @@ public sealed class LoadingOptionsValidator
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var errors = new List<string>();
+        var errors = new List<string>(options.ConfigurationErrors);
 
         if (options.DeactivationTimeout <= TimeSpan.Zero)
         {
