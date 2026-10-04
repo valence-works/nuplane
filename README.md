@@ -102,13 +102,13 @@ not used for precedence.
 }
 ```
 
-The same policy can be set in code. The callback runs after configuration binding, so it can refine or
-override configured values:
+In a configuration-driven host, the builder callback runs after binding and can override configured
+priorities:
 
 ```csharp
 using Nuplane.Sources.Configuration;
 
-services.AddNuplane(nuplane =>
+services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
 {
     nuplane.Services.Configure<DesiredStateOptions>(options =>
     {
@@ -117,6 +117,8 @@ services.AddNuplane(nuplane =>
     });
 });
 ```
+
+For code-only setup, omit the configuration argument and keep the same callback.
 
 For a duplicate ID, Nuplane selects the request with the lowest source priority, then uses the
 existing case-insensitive `SourceName` and `VersionRange` ordering, followed by deterministic feed,

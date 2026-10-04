@@ -74,12 +74,12 @@ they were registered with (for example, `renewal-demo-updates`). A custom `IDesi
 emit a stable source name in its requests and configure that same name here. Feed-resolution
 priorities and CLR type names do not select the desired-state winner.
 
-The equivalent code-first setup is:
+Use the configuration overload to override configured priorities in the builder callback after binding:
 
 ```csharp
 using Nuplane.Sources.Configuration;
 
-services.AddNuplane(nuplane =>
+services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
 {
     nuplane.Services.Configure<DesiredStateOptions>(options =>
     {
@@ -88,6 +88,8 @@ services.AddNuplane(nuplane =>
     });
 });
 ```
+
+For code-only setup, omit the configuration argument and keep the same callback.
 
 For one package ID, source priority is followed by the existing case-insensitive source-name and
 version-range ordering, then deterministic feed, update-policy, and casing tie-breaks. Nuplane keeps
