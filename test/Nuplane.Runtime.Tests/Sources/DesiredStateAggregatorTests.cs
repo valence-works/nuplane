@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Sources;
+using Nuplane.Sources.Configuration;
 
 namespace Nuplane.Runtime.Tests.Sources;
 
@@ -50,6 +52,106 @@ public sealed class DesiredStateAggregatorTests
 
         Assert.Empty(result.Requests);
         Assert.Empty(result.SourceErrors);
+    }
+
+    [Fact]
+    public async Task AggregateAsync_HigherPrioritySource_WinsBeforeVersionRangeAndPreservesRequest()
+    {
+        var preferred = new PackageRequest("Package", "1.0.0", "feed-preferred", PackageUpdatePolicy.Exact, "preferred");
+        var fallback = new PackageRequest("package", "1.1.0", "feed-fallback", PackageUpdatePolicy.Range, "fallback");
+        var options = new DesiredStateOptions();
+        options.SetPriority("preferred", 0);
+        options.SetPriority("fallback", 10);
+        var sut = new DesiredStateAggregator(Options.Create(options));
+
+        var result = await sut.AggregateAsync(
+            [new FakeSource("fallback", [fallback]), new FakeSource("preferred", [preferred])],
+            CancellationToken.None);
+
+        Assert.Same(preferred, Assert.Single(result.Requests));
+    }
+
+    [Fact]
+    public async Task AggregateAsync_UnspecifiedPriority_ComesAfterConfiguredPriority()
+    {
+        var configured = new PackageRequest("package", "9.0.0", "feed-a", PackageUpdatePolicy.Exact, "z-source");
+        var unspecified = new PackageRequest("package", "1.0.0", "feed-b", PackageUpdatePolicy.Exact, "a-source");
+        var options = new DesiredStateOptions();
+        options.SetPriority("z-source", 100);
+        var sut = new DesiredStateAggregator(Options.Create(options));
+
+        var result = await sut.AggregateAsync(
+            [new FakeSource("a-source", [unspecified]), new FakeSource("z-source", [configured])],
+            CancellationToken.None);
+
+        Assert.Same(configured, Assert.Single(result.Requests));
+    }
+
+    [Fact]
+    public async Task AggregateAsync_EqualPriority_UsesCaseInsensitiveSourceNameRegardlessOfRequestOrder()
+    {
+        var alpha = new PackageRequest("package", "1.0.0", "feed-a", PackageUpdatePolicy.Exact, "alpha");
+        var beta = new PackageRequest("package", "2.0.0", "feed-b", PackageUpdatePolicy.Exact, "beta");
+        var options = new DesiredStateOptions();
+        options.SetPriority("alpha", 5);
+        options.SetPriority("beta", 5);
+        var sut = new DesiredStateAggregator(Options.Create(options));
+
+        var first = await sut.AggregateAsync([new FakeSource("alpha", [beta, alpha])], CancellationToken.None);
+        var second = await sut.AggregateAsync([new FakeSource("alpha", [alpha, beta])], CancellationToken.None);
+
+        Assert.Same(alpha, Assert.Single(first.Requests));
+        Assert.Equal(alpha, Assert.Single(second.Requests));
+    }
+
+    [Fact]
+    public async Task AggregateAsync_DefaultPriority_UsesCaseInsensitiveSourceNameRegardlessOfRequestOrder()
+    {
+        var alpha = new PackageRequest("package", "1.0.0", "feed-a", PackageUpdatePolicy.Exact, "alpha");
+        var beta = new PackageRequest("package", "2.0.0", "feed-b", PackageUpdatePolicy.Exact, "beta");
+        var sut = new DesiredStateAggregator();
+
+        var first = await sut.AggregateAsync([new FakeSource("alpha", [beta, alpha])], CancellationToken.None);
+        var second = await sut.AggregateAsync([new FakeSource("alpha", [alpha, beta])], CancellationToken.None);
+
+        Assert.Same(alpha, Assert.Single(first.Requests));
+        Assert.Equal(alpha, Assert.Single(second.Requests));
+    }
+
+    [Fact]
+    public async Task AggregateAsync_SourcePriority_IsCaseInsensitive()
+    {
+        var preferred = new PackageRequest("package", "1.0.0", "feed-a", PackageUpdatePolicy.Exact, "preferred");
+        var fallback = new PackageRequest("package", "2.0.0", "feed-b", PackageUpdatePolicy.Exact, "fallback");
+        var options = new DesiredStateOptions();
+        options.SetPriority("PREFERRED", -1);
+        options.SetPriority("FALLBACK", 10);
+        var sut = new DesiredStateAggregator(Options.Create(options));
+
+        var result = await sut.AggregateAsync(
+            [new FakeSource("fallback", [fallback]), new FakeSource("preferred", [preferred])],
+            CancellationToken.None);
+
+        Assert.Same(preferred, Assert.Single(result.Requests));
+    }
+
+    [Fact]
+    public async Task AggregateAsync_SameCaseInsensitiveFields_UsesPolicyAndOrdinalCasingForDeterministicWinner()
+    {
+        var exactUpper = new PackageRequest("PKG", "1.0.0", "Feed", PackageUpdatePolicy.Exact, "Source");
+        var exactLower = new PackageRequest("pkg", "1.0.0", "feed", PackageUpdatePolicy.Exact, "source");
+        var range = new PackageRequest("pkg", "1.0.0", "feed", PackageUpdatePolicy.Range, "source");
+        var sut = new DesiredStateAggregator();
+
+        var first = await sut.AggregateAsync(
+            [new FakeSource("Source", [range, exactLower, exactUpper])],
+            CancellationToken.None);
+        var second = await sut.AggregateAsync(
+            [new FakeSource("Source", [exactUpper, exactLower, range])],
+            CancellationToken.None);
+
+        Assert.Same(exactUpper, Assert.Single(first.Requests));
+        Assert.Equal(exactUpper, Assert.Single(second.Requests));
     }
 
     [Fact]
