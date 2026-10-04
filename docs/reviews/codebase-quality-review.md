@@ -1,7 +1,7 @@
 # Codebase quality, DX, architecture, and structure review
 
 **Issue:** [#104](https://github.com/valence-works/nuplane/issues/104)  
-**Stage:** 1 analysis complete; Stage 2 work unit 1 delivered for review
+**Stage:** 1 analysis complete; Stage 2 work unit 1 delivered
 **Audited commit:** `95af2dc4c998ab213b9aaf18a69324e8178d9262` (`main`, 2026-10-04)  
 **Review date:** 2026-10-04
 
@@ -70,11 +70,11 @@ Issue #104 was the only open issue and there were no open pull requests at the s
 
 ## Stage 2 delivery record
 
-Stage 2 evidence is recorded separately from the audited Stage 1 baseline above. An open remediation PR does not change the finding on `main` until it is reviewed and merged.
+Stage 2 evidence is recorded separately from the audited Stage 1 baseline above. A remediation PR changes the finding on `main` only after it is reviewed and merged.
 
 | Work unit | Finding IDs | Status | Delivery evidence |
 | --- | --- | --- | --- |
-| 1 | AR-001, AR-002 | Delivered for review; not merged | [PR #106](https://github.com/valence-works/nuplane/pull/106), exact head `a35fb6320b16405360a3964c36af640a33b461db`. Local Release build passed with 0 warnings/errors; all 1,269 tests passed; pack, secret scan, and diff check passed. Exact-head GitHub `build-test` and state-persistence jobs passed on Ubuntu, macOS, and Windows. Final adversarial review reported no remaining Critical/Required finding. Copilot review was requested through both the documented CLI route and direct REST reviewer identity, but GitHub exposed no pending request, review, or comment; no Copilot pass is claimed. |
+| 1 | AR-001, AR-002 | Delivered and merged | [PR #106](https://github.com/valence-works/nuplane/pull/106), reviewed head `a35fb6320b16405360a3964c36af640a33b461db`, squash merge `846c3b336ddfe0c00cbb936226c317c62bec13a5`. Local Release build passed with 0 warnings/errors; all 1,269 tests passed; pack, secret scan, and diff check passed. Exact-head GitHub `build-test` and state-persistence jobs passed on Ubuntu, macOS, and Windows. Final adversarial review reported no remaining Critical/Required finding. Copilot review was requested through both the documented CLI route and direct REST reviewer identity, but GitHub exposed no pending request, review, or comment; no Copilot pass is claimed. |
 
 The first Windows matrix run failed because `File.Move(..., overwrite: true)` denied replacement while a shared reader held the old state file open. The corrected exact head uses `File.Replace` with a unique backup for existing files and `File.Move` only for first creation. If replacement removes the destination and then fails, the prior backup is restored before the error is rethrown; if restoration is blocked, recovery artifacts are retained. The refreshed Windows job passed that production path. The deliberate extra file read before each file-backed mutation protects direct registry writers that loaded before another writer committed, while the lock-held cycle refresh protects reconciliation and startup-recovery reads.
 
@@ -131,8 +131,8 @@ Severity indicates impact, not implementation size:
 
 | ID | Category | Severity | Classification | Summary | Stage 2 disposition |
 | --- | --- | --- | --- | --- | --- |
-| AR-001 | Architecture/state | High | Confirmed defect | State-file writes are non-atomic and memory advances before durable save | Implemented in open PR #106 at `a35fb632`; exact-head local and platform CI passed; not merged |
-| AR-002 | Architecture/concurrency | High | Confirmed defect | Long-lived processes can overwrite newer persisted state from a stale cache | Implemented with AR-001 in open PR #106 at `a35fb632`; exact-head local and platform CI passed; not merged |
+| AR-001 | Architecture/state | High | Confirmed defect | State-file writes are non-atomic and memory advances before durable save | Delivered in PR #106; reviewed head `a35fb632`, squash merge `846c3b33` |
+| AR-002 | Architecture/concurrency | High | Confirmed defect | Long-lived processes can overwrite newer persisted state from a stale cache | Delivered with AR-001 in PR #106; reviewed head `a35fb632`, squash merge `846c3b33` |
 | AR-003 | Architecture/integrity | High | Confirmed defect | Lock-file generate, enforce, and hash semantics are disconnected from acquisition/activation | Contract decision, then remediate |
 | AR-004 | Architecture/security | High | Confirmed defect | Advertised feed-trust policy has no runtime evaluator | Compatibility decision, then remediate |
 | CQ-001 | Correctness | High | Confirmed defect | Same-type desired sources collide in snapshots and diagnostics | Remediate after state writer |
@@ -413,7 +413,7 @@ Each work unit should produce a small coherent PR, update this report's status t
 
 | Order | Work unit | Finding IDs | Dependencies | Readiness and independent verification |
 | --- | --- | --- | --- | --- |
-| 1 | Add fault-injection/two-registry tests, then implement one atomic, refresh-on-lock state commit path | AR-001, AR-002 | None | Delivered for review in PR #106 at `a35fb632`; exact-head old/new visibility, destructive replacement failure, cancellation, two-registry, in-memory, reconciliation/recovery refresh, and Ubuntu/macOS/Windows checks passed. Not merged. |
+| 1 | Add fault-injection/two-registry tests, then implement one atomic, refresh-on-lock state commit path | AR-001, AR-002 | None | Delivered in PR #106 at reviewed head `a35fb632`, squash merge `846c3b33`; exact-head old/new visibility, destructive replacement failure, cancellation, two-registry, in-memory, reconciliation/recovery refresh, and Ubuntu/macOS/Windows checks passed. |
 | 2 | Define lock-file provenance/hash contract in an ADR; constrain resolution before acquisition; implement generate/enforce/strict across roots and dependencies | AR-003 | Work unit 1 for safe lock-file/state persistence patterns | Decision task ready; behavior implementation waits for the recorded hash/legacy policy. Verify full closure, mismatch LKG, deterministic generation, and exact provenance. |
 | 3 | Record trust compatibility policy; add feed trust model and pre-acquisition admission evaluator | AR-004 | Lock/resolution seam from work unit 2 should be stable | Decision task ready. Recommended default is legacy-unspecified = trusted-with-warning for one compatibility window. Verify explicit untrusted fail-closed and scoped overrides. |
 | 4 | Introduce additive source-instance identity with persisted-key migration; restore empty snapshots correctly; consolidate the affected fixtures | CQ-001, CQ-002, TST-001 | Work unit 1 | Ready. Verify two same-type feeds/directories, restart, fallback isolation, error retention, empty snapshot, and legacy key read. |
@@ -453,7 +453,7 @@ Use the `agentic-program-lead` workflow in a separate code session.
 
 1. Refresh issue/PR/default-branch/worktree state and confirm that no matching remediation PR has appeared.
 2. Read this report in full and preserve its stable finding IDs in PRs and issue updates.
-3. Adopt and verify work unit 1 through open PR #106; do not duplicate it. Do not begin lock/trust implementation until PR #106 is resolved and their recorded design decisions satisfy the readiness notes.
+3. Treat work unit 1 as delivered through PR #106; do not duplicate it. Do not begin lock/trust implementation until their recorded design decisions satisfy the readiness notes.
 4. Use isolated managed worktrees and session-owned integration processes; preserve unrelated changes.
 5. Link each PR and exact validation evidence from issue #104, update finding status in this report, and leave the issue open until Stage 2 completion criteria are met.
 
