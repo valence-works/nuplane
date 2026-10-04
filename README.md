@@ -82,6 +82,54 @@ Hosts (e.g., web apps, workers, modular systems) react to change events by reloa
 The set of packages Nuplane should make active.
 Desired state comes from configured sources, such as remote feeds, directory-backed feeds, or other desired-state providers.
 
+When more than one desired source contributes the same package ID, configure source precedence under
+`Nuplane:DesiredState:SourcePriorities`. Lower numbers win and an unlisted source has the lowest
+precedence (`int.MaxValue`). Source names are matched case-insensitively, and the name used here is
+the `PackageRequest.SourceName` emitted by the source. A directory registration sets that source name
+to its feed name, while a custom source can use a different stable name. A source's CLR type name is
+not used for precedence.
+
+```json
+{
+  "Nuplane": {
+    "DesiredState": {
+      "SourcePriorities": {
+        "renewal-demo-updates": 0,
+        "renewal-demo-baseline": 10
+      }
+    }
+  }
+}
+```
+
+In a configuration-driven host, the builder callback runs after binding and can override configured
+priorities:
+
+```csharp
+using Nuplane.Sources.Configuration;
+
+services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
+{
+    nuplane.Services.Configure<DesiredStateOptions>(options =>
+    {
+        options.SetPriority("renewal-demo-updates", 0);
+        options.SetPriority("renewal-demo-baseline", 10);
+    });
+});
+```
+
+For code-only setup, omit the configuration argument and keep the same callback.
+
+For a duplicate ID, Nuplane selects the request with the lowest source priority, then uses the
+existing case-insensitive `SourceName` and `VersionRange` ordering, followed by deterministic feed,
+update-policy, and casing tie-breaks. The selected `PackageRequest` remains intact. This policy only
+resolves overlap in desired state: feed priorities still control feed candidate ordering, and source
+admission, trust checks, package resolution, fallback behavior, and semantic version selection remain
+their own stages. `FeedResolution:FeedPriorities` does not implicitly set source priorities, and Nuplane
+does not compare semantic versions across sources. For example, a higher-priority exact `1.0.0` request
+remains the winner over a lower-priority source's newer `1.1.0` request. With no priorities, existing
+case-insensitive source-name ordering remains the default.
+
 ### Actual state
 
 The packages currently installed and active in the local package store.
@@ -298,6 +346,7 @@ Nuplane has two configuration layers:
   - optional state file path
   - feeds, include patterns, directory watcher settings
 - existing runtime option sections under `Nuplane:*` — advanced operator configuration:
+  - `DesiredState`
   - `Reconciliation`
   - `FeedResolution`
   - `SourceTrust`
@@ -341,7 +390,7 @@ For configuration-driven setup, prefer the keyed `Nuplane:Setup:Feeds` object sh
 }
 ```
 
-The feed key is the feed name. This shape is preferred for layered .NET configuration because later providers can override `Feeds:feedz.io` by identity instead of merging array entries by numeric position. Feed resolution order is not based on object order; use the existing feed priority configuration when one feed should be preferred over another.
+The feed key is the feed name. This shape is preferred for layered .NET configuration because later providers can override `Feeds:feedz.io` by identity instead of merging array entries by numeric position. Feed object order is not semantic; use `DesiredState:SourcePriorities` for overlapping desired requests and `FeedResolution:FeedPriorities` for feed resolution candidates.
 
 Migration from the legacy array shape is mechanical:
 
