@@ -8,12 +8,25 @@ namespace Nuplane.Store.State;
 /// </summary>
 public sealed class StoreStateSerializer : IStoreStateSerializer
 {
+    private readonly IAtomicFileReplacer _fileReplacer;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+
+    /// <summary>Initializes a serializer that writes state through atomic file replacement.</summary>
+    public StoreStateSerializer()
+        : this(new AtomicFileReplacer())
+    {
+    }
+
+    internal StoreStateSerializer(IAtomicFileReplacer fileReplacer)
+    {
+        _fileReplacer = fileReplacer ?? throw new ArgumentNullException(nameof(fileReplacer));
+    }
 
     /// <inheritdoc />
     public async Task<StoreStateRecord> LoadAsync(string stateFilePath, CancellationToken cancellationToken)
@@ -23,7 +36,13 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
             return StoreStateRecord.Empty();
         }
 
-        await using var stream = File.OpenRead(stateFilePath);
+        await using var stream = new FileStream(
+            stateFilePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 4096,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
         return await DeserializeAsync(stream, cancellationToken).ConfigureAwait(false);
     }
 
@@ -42,14 +61,88 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
     /// <inheritdoc />
     public async Task SaveAsync(string stateFilePath, StoreStateRecord state, CancellationToken cancellationToken)
     {
-        var directory = Path.GetDirectoryName(stateFilePath);
-        if (!string.IsNullOrWhiteSpace(directory))
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var destinationPath = Path.GetFullPath(stateFilePath);
+        var directory = Path.GetDirectoryName(destinationPath)!;
+        Directory.CreateDirectory(directory);
+
+        var operationId = Guid.NewGuid().ToString("N");
+        var fileName = Path.GetFileName(destinationPath);
+        var temporaryPath = Path.Combine(directory, $"{fileName}.{operationId}.tmp");
+        var backupPath = Path.Combine(directory, $"{fileName}.{operationId}.bak");
+        var replacementAttempted = false;
+
+        try
         {
-            Directory.CreateDirectory(directory);
+            await using (var stream = new FileStream(
+                temporaryPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 4096,
+                FileOptions.Asynchronous))
+            {
+                await JsonSerializer.SerializeAsync(stream, Normalize(state), JsonOptions, cancellationToken).ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                stream.Flush(flushToDisk: true);
+            }
+
+            replacementAttempted = true;
+            await _fileReplacer.ReplaceAsync(temporaryPath, destinationPath, backupPath, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            TryRestoreBackup(destinationPath, backupPath);
+            throw;
+        }
+        finally
+        {
+            // ReplaceFileW can fail after removing the destination. If restoring the backup also
+            // fails, retain both recovery artifacts instead of deleting the only valid records.
+            if (!replacementAttempted || File.Exists(destinationPath))
+            {
+                TryDeleteRecoveryFile(temporaryPath);
+                TryDeleteRecoveryFile(backupPath);
+            }
+        }
+    }
+
+    private static void TryRestoreBackup(string destinationPath, string backupPath)
+    {
+        if (File.Exists(destinationPath) || !File.Exists(backupPath))
+        {
+            return;
         }
 
-        await using var stream = File.Create(stateFilePath);
-        await JsonSerializer.SerializeAsync(stream, Normalize(state), JsonOptions, cancellationToken);
+        try
+        {
+            File.Move(backupPath, destinationPath);
+        }
+        catch (IOException)
+        {
+            // Preserve the backup under its unique recovery name when restoration is blocked.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Preserve the backup under its unique recovery name when restoration is blocked.
+        }
+    }
+
+    private static void TryDeleteRecoveryFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+            // Cleanup must not hide the original serialization or replacement failure.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Cleanup must not hide the original serialization or replacement failure.
+        }
     }
 
     private static StoreStateRecord Normalize(StoreStateRecord state) =>

@@ -49,12 +49,9 @@ public static class NuplaneStore
     /// State file with no active packages recorded: an empty collection is returned.
     /// </description></item>
     /// <item><description>
-    /// State file read while a host is mid-write: because the host does not write via a
-    /// temp-file-and-move, a concurrent read can observe a sharing violation (an
-    /// <see cref="IOException"/>) or torn, partial JSON content (a
-    /// <see cref="System.Text.Json.JsonException"/>). Both outcomes are transient; a caller that
-    /// needs a consistent read across a concurrent write should retry, since this method does
-    /// not retry on the caller's behalf.
+    /// State file read while a host is saving: state is written to a unique sibling temporary
+    /// file and atomically moved into place, so a concurrent read observes the previous or next
+    /// complete record. This method does not retry for unrelated I/O or deserialization failures.
     /// </description></item>
     /// </list>
     /// </remarks>
@@ -65,7 +62,7 @@ public static class NuplaneStore
     /// and install path, ordered deterministically by package id and then version.
     /// </returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="stateFilePath"/> is <see langword="null"/>, empty, or whitespace.</exception>
-    /// <exception cref="IOException">Thrown when the state file exists but cannot be opened for reading, for example while a host holds an exclusive lock on it mid-write.</exception>
+    /// <exception cref="IOException">Thrown when the state file exists but cannot be opened for reading, for example because access is denied.</exception>
     /// <exception cref="System.Text.Json.JsonException">Thrown when the state file exists but its content is empty, torn, or otherwise not valid JSON for <see cref="StoreStateRecord"/>.</exception>
     public static async Task<IReadOnlyList<ActivePackage>> ReadActivePackagesAsync(
         string stateFilePath,
@@ -95,7 +92,7 @@ public static class NuplaneStore
     /// <param name="cancellationToken">A token to cancel the read.</param>
     /// <returns>The persisted store state, or <see cref="StoreStateRecord.Empty"/> when no state file exists.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="stateFilePath"/> is <see langword="null"/>, empty, or whitespace.</exception>
-    /// <exception cref="IOException">Thrown when the state file exists but cannot be opened for reading, for example while a host holds an exclusive lock on it mid-write.</exception>
+    /// <exception cref="IOException">Thrown when the state file exists but cannot be opened for reading, for example because access is denied.</exception>
     /// <exception cref="System.Text.Json.JsonException">Thrown when the state file exists but its content is empty, torn, or otherwise not valid JSON for <see cref="StoreStateRecord"/>.</exception>
     public static async Task<StoreStateRecord> ReadStateAsync(
         string stateFilePath,
@@ -161,7 +158,7 @@ public static class NuplaneStore
     /// </returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">Thrown when <paramref name="options"/> resolves to <see cref="StorePersistenceMode.InMemory"/>.</exception>
-    /// <exception cref="IOException">Thrown when the resolved state file exists but cannot be opened for reading, for example while a host holds an exclusive lock on it mid-write.</exception>
+    /// <exception cref="IOException">Thrown when the resolved state file exists but cannot be opened for reading, for example because access is denied.</exception>
     /// <exception cref="System.Text.Json.JsonException">Thrown when the resolved state file exists but its content is empty, torn, or otherwise not valid JSON for <see cref="StoreStateRecord"/>.</exception>
     public static Task<IReadOnlyList<ActivePackage>> ReadActivePackagesAsync(
         StoreRegistryOptions options,
@@ -186,7 +183,7 @@ public static class NuplaneStore
     /// <returns>The persisted store state, or <see cref="StoreStateRecord.Empty"/> when no state file exists.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">Thrown when <paramref name="options"/> resolves to <see cref="StorePersistenceMode.InMemory"/>.</exception>
-    /// <exception cref="IOException">Thrown when the resolved state file exists but cannot be opened for reading, for example while a host holds an exclusive lock on it mid-write.</exception>
+    /// <exception cref="IOException">Thrown when the resolved state file exists but cannot be opened for reading, for example because access is denied.</exception>
     /// <exception cref="System.Text.Json.JsonException">Thrown when the resolved state file exists but its content is empty, torn, or otherwise not valid JSON for <see cref="StoreStateRecord"/>.</exception>
     public static Task<StoreStateRecord> ReadStateAsync(
         StoreRegistryOptions options,

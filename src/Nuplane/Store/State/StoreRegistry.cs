@@ -9,7 +9,7 @@ namespace Nuplane.Store.State;
 /// last-known-good versions, failure records, and source snapshots. Supports lazy loading
 /// from a serialized state file.
 /// </summary>
-public sealed partial class StoreRegistry : IStoreRegistry
+public sealed partial class StoreRegistry : IStoreRegistry, IStoreStateCycleRefresher
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly IStoreStateSerializer _serializer;
@@ -103,6 +103,28 @@ public sealed partial class StoreRegistry : IStoreRegistry
         }
     }
 
+    async Task<bool> IStoreStateCycleRefresher.RefreshFromDiskAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            LogPersistenceActivationOnce();
+            if (string.IsNullOrWhiteSpace(_stateFilePath))
+            {
+                return false;
+            }
+
+            var refreshedState = await _serializer.LoadAsync(_stateFilePath, cancellationToken);
+            _currentState = refreshedState;
+            _loaded = true;
+            return true;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     /// <inheritdoc />
     public Task PersistActiveVersionsAsync(
         IReadOnlyDictionary<string, string> activeVersions,
@@ -142,16 +164,16 @@ public sealed partial class StoreRegistry : IStoreRegistry
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            await EnsureLoadedUnderLockAsync(cancellationToken);
+            var currentState = await LoadLatestStateForMutationUnderLockAsync(cancellationToken);
 
             var now = DateTimeOffset.UtcNow;
             var nextActive = new Dictionary<string, string>(activeVersions, StringComparer.OrdinalIgnoreCase);
-            var nextLkg = new Dictionary<string, string>(_currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase);
+            var nextLkg = new Dictionary<string, string>(currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase);
             var nextDescriptors = activePackageDescriptors is null
-                ? new Dictionary<string, ActivePackageDescriptor>(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase)
+                ? new Dictionary<string, ActivePackageDescriptor>(currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, ActivePackageDescriptor>(activePackageDescriptors, StringComparer.OrdinalIgnoreCase);
             var nextGraphs = activeGraphs is null
-                ? new Dictionary<string, GraphActivationRecord>(_currentState.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase)
+                ? new Dictionary<string, GraphActivationRecord>(currentState.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, GraphActivationRecord>(activeGraphs, StringComparer.OrdinalIgnoreCase);
 
             foreach (var (id, version) in successfullyApplied)
@@ -167,7 +189,7 @@ public sealed partial class StoreRegistry : IStoreRegistry
                 }
             }
 
-            _currentState = _currentState with
+            var nextState = currentState with
             {
                 ActiveVersionById = nextActive,
                 LastKnownGoodById = nextLkg,
@@ -176,10 +198,7 @@ public sealed partial class StoreRegistry : IStoreRegistry
                 ActiveGraphsById = nextGraphs
             };
 
-            if (!string.IsNullOrWhiteSpace(_stateFilePath))
-            {
-                await _serializer.SaveAsync(_stateFilePath, _currentState, cancellationToken);
-            }
+            await CommitStateUnderLockAsync(nextState, cancellationToken);
         }
         finally
         {
@@ -203,23 +222,20 @@ public sealed partial class StoreRegistry : IStoreRegistry
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            await EnsureLoadedUnderLockAsync(cancellationToken);
+            var currentState = await LoadLatestStateForMutationUnderLockAsync(cancellationToken);
 
-            var nextFailures = new Dictionary<string, FailureRecord>(_currentState.LastFailureById, StringComparer.OrdinalIgnoreCase)
+            var nextFailures = new Dictionary<string, FailureRecord>(currentState.LastFailureById, StringComparer.OrdinalIgnoreCase)
             {
                 [packageId] = new(packageId, stage, message, DateTimeOffset.UtcNow, correlationId)
             };
 
-            _currentState = _currentState with
+            var nextState = currentState with
             {
                 LastFailureById = nextFailures,
                 UpdatedAt = DateTimeOffset.UtcNow
             };
 
-            if (!string.IsNullOrWhiteSpace(_stateFilePath))
-            {
-                await _serializer.SaveAsync(_stateFilePath, _currentState, cancellationToken);
-            }
+            await CommitStateUnderLockAsync(nextState, cancellationToken);
         }
         finally
         {
@@ -239,23 +255,20 @@ public sealed partial class StoreRegistry : IStoreRegistry
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            await EnsureLoadedUnderLockAsync(cancellationToken);
+            var currentState = await LoadLatestStateForMutationUnderLockAsync(cancellationToken);
 
-            var nextSnapshots = new Dictionary<string, SourceSnapshotRef>(_currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase)
+            var nextSnapshots = new Dictionary<string, SourceSnapshotRef>(currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase)
             {
                 [sourceName] = snapshot
             };
 
-            _currentState = _currentState with
+            var nextState = currentState with
             {
                 LastSuccessfulSourceSnapshots = nextSnapshots,
                 UpdatedAt = DateTimeOffset.UtcNow
             };
 
-            if (!string.IsNullOrWhiteSpace(_stateFilePath))
-            {
-                await _serializer.SaveAsync(_stateFilePath, _currentState, cancellationToken);
-            }
+            await CommitStateUnderLockAsync(nextState, cancellationToken);
         }
         finally
         {
@@ -265,11 +278,7 @@ public sealed partial class StoreRegistry : IStoreRegistry
 
     private async Task EnsureLoadedUnderLockAsync(CancellationToken cancellationToken)
     {
-        if (!_activationLogged && _effectiveSettings is not null)
-        {
-            _activationLogged = true;
-            LogEffectiveSettings(_effectiveSettings);
-        }
+        LogPersistenceActivationOnce();
 
         if (string.IsNullOrWhiteSpace(_stateFilePath) || _loaded)
         {
@@ -278,6 +287,36 @@ public sealed partial class StoreRegistry : IStoreRegistry
 
         _currentState = await _serializer.LoadAsync(_stateFilePath, cancellationToken);
         _loaded = true;
+    }
+
+    private async Task<StoreStateRecord> LoadLatestStateForMutationUnderLockAsync(CancellationToken cancellationToken)
+    {
+        LogPersistenceActivationOnce();
+        return string.IsNullOrWhiteSpace(_stateFilePath)
+            ? _currentState
+            : await _serializer.LoadAsync(_stateFilePath, cancellationToken);
+    }
+
+    private async Task CommitStateUnderLockAsync(StoreStateRecord nextState, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(_stateFilePath))
+        {
+            await _serializer.SaveAsync(_stateFilePath, nextState, cancellationToken);
+        }
+
+        _currentState = nextState;
+        _loaded = true;
+    }
+
+    private void LogPersistenceActivationOnce()
+    {
+        if (_activationLogged || _effectiveSettings is null)
+        {
+            return;
+        }
+
+        _activationLogged = true;
+        LogEffectiveSettings(_effectiveSettings);
     }
 
     private void LogEffectiveSettings(EffectiveStorePersistenceSettings settings)

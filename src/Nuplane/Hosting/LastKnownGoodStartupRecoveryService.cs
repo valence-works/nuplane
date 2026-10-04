@@ -127,6 +127,11 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
             return skipped;
         }
 
+        if (storeLockHandle.Outcome == StoreLockOutcome.Acquired && _storeRegistry is IStoreStateCycleRefresher stateRefresher)
+        {
+            await stateRefresher.RefreshFromDiskAsync(cancellationToken);
+        }
+
         var state = await _storeRegistry.GetStateAsync(cancellationToken);
         var validation = Validate(state);
         if (!validation.Succeeded)

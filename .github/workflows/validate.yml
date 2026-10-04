@@ -14,6 +14,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  state-persistence-platform:
+    name: State persistence (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    steps:
+      - name: Checkout candidate commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Run atomic state and registry tests
+        run: dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj --configuration Release --filter "FullyQualifiedName~StoreRegistryTests.PersistActiveVersions_WhenSaveFails|FullyQualifiedName~StoreRegistryTests.PersistFailure_WhenSaveFails|FullyQualifiedName~StoreRegistryTests.PersistSourceSnapshot_WhenSaveFails|FullyQualifiedName~StoreRegistryTests.PersistMutations_TwoLockCoordinatedRegistriesLoadedBeforeWrites_RetainsAllUpdates|FullyQualifiedName~StoreStateSerializerTests"
+
+      - name: Run lock-held state refresh and snapshot tests
+        run: dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj --configuration Release --filter "FullyQualifiedName~DesiredSourceSnapshotCacheTests.SaveAsync_WhenRegistryPersistenceFails|FullyQualifiedName~ReconciliationServiceStoreLockTests.TriggerAsync_WhenAnotherRegistryUpdatesState_RefreshesStateAndSnapshotBeforeSourceFallback|FullyQualifiedName~LastKnownGoodStartupRecoveryServiceStoreLockTests.TryRecoverAsync_WhenAnotherRegistryUpdatesLoadedState_UsesRefreshedLastKnownGoodVersion"
+
   build-test:
     runs-on: ubuntu-latest
     timeout-minutes: 30

@@ -14,7 +14,7 @@ public sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
     private readonly IStoreRegistry _storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
 
     /// <summary>
-    /// Saves a desired-state snapshot to both the in-memory cache and the store registry.
+    /// Saves a desired-state snapshot to the store registry and then publishes it to the in-memory cache.
     /// </summary>
     public async Task SaveAsync(string sourceName, IReadOnlyList<PackageRequest> requests, CancellationToken cancellationToken)
     {
@@ -22,11 +22,11 @@ public sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
         ArgumentNullException.ThrowIfNull(requests);
 
         var captured = requests.ToArray();
-        _snapshots[sourceName] = captured;
         await _storeRegistry.PersistSourceSnapshotAsync(
             sourceName,
             new(Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow, captured),
             cancellationToken);
+        _snapshots[sourceName] = captured;
     }
 
     /// <summary>
@@ -45,6 +45,8 @@ public sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
         requests = [];
         return false;
     }
+
+    internal void ClearMemoryCache() => _snapshots.Clear();
 
     /// <summary>
     /// Loads a snapshot for the specified source, first checking the in-memory cache,

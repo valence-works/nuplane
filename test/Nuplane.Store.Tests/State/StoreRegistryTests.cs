@@ -1,4 +1,7 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Reconciliation.Configuration;
 using Nuplane.Store.State;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -17,6 +20,7 @@ public sealed class StoreRegistryTests
             .ThrowsAsync(new IOException("Disk full"));
 
         var registry = new StoreRegistry(serializer, stateFilePath: "/tmp/state.json");
+        var initialState = await registry.GetStateAsync(CancellationToken.None);
 
         await Assert.ThrowsAsync<IOException>(() =>
             registry.PersistActiveVersionsAsync(
@@ -24,6 +28,10 @@ public sealed class StoreRegistryTests
                 new Dictionary<string, string> { ["pkg"] = "1.0.0" },
                 "corr-001",
                 CancellationToken.None));
+
+        var stateAfterFailure = await registry.GetStateAsync(CancellationToken.None);
+        Assert.Empty(stateAfterFailure.ActiveVersionById);
+        Assert.Equal(initialState.UpdatedAt, stateAfterFailure.UpdatedAt);
     }
 
     [Fact]
@@ -36,9 +44,14 @@ public sealed class StoreRegistryTests
             .ThrowsAsync(new IOException("Disk full"));
 
         var registry = new StoreRegistry(serializer, stateFilePath: "/tmp/state.json");
+        var initialState = await registry.GetStateAsync(CancellationToken.None);
 
         await Assert.ThrowsAsync<IOException>(() =>
             registry.PersistFailureAsync("pkg", "stage", "err", "corr-002", CancellationToken.None));
+
+        var stateAfterFailure = await registry.GetStateAsync(CancellationToken.None);
+        Assert.Empty(stateAfterFailure.LastFailureById);
+        Assert.Equal(initialState.UpdatedAt, stateAfterFailure.UpdatedAt);
     }
 
     [Fact]
@@ -51,12 +64,70 @@ public sealed class StoreRegistryTests
             .ThrowsAsync(new IOException("Disk full"));
 
         var registry = new StoreRegistry(serializer, stateFilePath: "/tmp/state.json");
+        var initialState = await registry.GetStateAsync(CancellationToken.None);
 
         await Assert.ThrowsAsync<IOException>(() =>
             registry.PersistSourceSnapshotAsync(
                 "local",
                 new SourceSnapshotRef("v1", DateTimeOffset.UtcNow),
                 CancellationToken.None));
+
+        var stateAfterFailure = await registry.GetStateAsync(CancellationToken.None);
+        Assert.Empty(stateAfterFailure.LastSuccessfulSourceSnapshots);
+        Assert.Equal(initialState.UpdatedAt, stateAfterFailure.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task PersistMutations_TwoLockCoordinatedRegistriesLoadedBeforeWrites_RetainsAllUpdates()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "nuplane-registry-concurrency", Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var stateFilePath = Path.Combine(tempRoot, "store-state.json");
+            var settings = EffectiveStorePersistenceSettings.Resolve(new StoreRegistryOptions { StateFilePath = stateFilePath });
+            var reconciliationOptions = Options.Create(new ReconciliationOptions { EnableStoreLock = true });
+            var serializer = new StoreStateSerializer();
+            var registryA = new StoreRegistry(serializer, stateFilePath);
+            var registryB = new StoreRegistry(serializer, stateFilePath);
+            var lockA = new StoreLock(settings, reconciliationOptions, NullLogger<StoreLock>.Instance);
+            var lockB = new StoreLock(settings, reconciliationOptions, NullLogger<StoreLock>.Instance);
+            await registryA.GetStateAsync(CancellationToken.None);
+            await registryB.GetStateAsync(CancellationToken.None);
+
+            using (var handle = lockA.Acquire())
+            {
+                Assert.Equal(StoreLockOutcome.Acquired, handle.Outcome);
+                await registryA.PersistActiveVersionsAsync(
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["pkg-a"] = "1.0.0" },
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["pkg-a"] = "1.0.0" },
+                    "corr-active-a",
+                    CancellationToken.None);
+                await registryA.PersistFailureAsync("pkg-a", "resolve", "failed-a", "corr-a", CancellationToken.None);
+                await registryA.PersistSourceSnapshotAsync("source-a", new("snapshot-a", DateTimeOffset.UtcNow), CancellationToken.None);
+            }
+
+            using (var handle = lockB.Acquire())
+            {
+                Assert.Equal(StoreLockOutcome.Acquired, handle.Outcome);
+                await registryB.PersistFailureAsync("pkg-b", "resolve", "failed-b", "corr-b", CancellationToken.None);
+                await registryB.PersistSourceSnapshotAsync("source-b", new("snapshot-b", DateTimeOffset.UtcNow), CancellationToken.None);
+            }
+
+            var persisted = await new StoreRegistry(serializer, stateFilePath).GetStateAsync(CancellationToken.None);
+            Assert.Equal("1.0.0", persisted.ActiveVersionById["pkg-a"]);
+            Assert.Contains("pkg-a", persisted.LastFailureById.Keys);
+            Assert.Contains("pkg-b", persisted.LastFailureById.Keys);
+            Assert.Contains("source-a", persisted.LastSuccessfulSourceSnapshots.Keys);
+            Assert.Contains("source-b", persisted.LastSuccessfulSourceSnapshots.Keys);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -70,9 +141,13 @@ public sealed class StoreRegistryTests
             new Dictionary<string, string> { ["pkg"] = "1.0.0" },
             "corr-003",
             CancellationToken.None);
+        var state = await registry.GetStateAsync(CancellationToken.None);
 
         await serializer.DidNotReceive().SaveAsync(
             Arg.Any<string>(), Arg.Any<StoreStateRecord>(), Arg.Any<CancellationToken>());
+        await serializer.DidNotReceive().LoadAsync(
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+        Assert.Equal("1.0.0", state.ActiveVersionById["pkg"]);
     }
 
     [Fact]
