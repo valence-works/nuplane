@@ -67,9 +67,11 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
         var directory = Path.GetDirectoryName(destinationPath)!;
         Directory.CreateDirectory(directory);
 
-        var temporaryPath = Path.Combine(
-            directory,
-            $"{Path.GetFileName(destinationPath)}.{Guid.NewGuid():N}.tmp");
+        var operationId = Guid.NewGuid().ToString("N");
+        var fileName = Path.GetFileName(destinationPath);
+        var temporaryPath = Path.Combine(directory, $"{fileName}.{operationId}.tmp");
+        var backupPath = Path.Combine(directory, $"{fileName}.{operationId}.bak");
+        var replacementAttempted = false;
 
         try
         {
@@ -86,19 +88,52 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
                 stream.Flush(flushToDisk: true);
             }
 
-            await _fileReplacer.ReplaceAsync(temporaryPath, destinationPath, cancellationToken).ConfigureAwait(false);
+            replacementAttempted = true;
+            await _fileReplacer.ReplaceAsync(temporaryPath, destinationPath, backupPath, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            TryRestoreBackup(destinationPath, backupPath);
+            throw;
         }
         finally
         {
-            TryDeleteTemporaryFile(temporaryPath);
+            // ReplaceFileW can fail after removing the destination. If restoring the backup also
+            // fails, retain both recovery artifacts instead of deleting the only valid records.
+            if (!replacementAttempted || File.Exists(destinationPath))
+            {
+                TryDeleteRecoveryFile(temporaryPath);
+                TryDeleteRecoveryFile(backupPath);
+            }
         }
     }
 
-    private static void TryDeleteTemporaryFile(string temporaryPath)
+    private static void TryRestoreBackup(string destinationPath, string backupPath)
+    {
+        if (File.Exists(destinationPath) || !File.Exists(backupPath))
+        {
+            return;
+        }
+
+        try
+        {
+            File.Move(backupPath, destinationPath);
+        }
+        catch (IOException)
+        {
+            // Preserve the backup under its unique recovery name when restoration is blocked.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Preserve the backup under its unique recovery name when restoration is blocked.
+        }
+    }
+
+    private static void TryDeleteRecoveryFile(string path)
     {
         try
         {
-            File.Delete(temporaryPath);
+            File.Delete(path);
         }
         catch (IOException)
         {
@@ -116,5 +151,4 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
             ActivePackageDescriptorsById = new(state.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase),
             ActiveGraphsById = new(state.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase)
         };
-
 }

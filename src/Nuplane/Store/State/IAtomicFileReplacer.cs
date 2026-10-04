@@ -2,18 +2,26 @@ namespace Nuplane.Store.State;
 
 internal interface IAtomicFileReplacer
 {
-    Task ReplaceAsync(string temporaryFilePath, string destinationFilePath, CancellationToken cancellationToken);
+    Task ReplaceAsync(
+        string temporaryFilePath,
+        string destinationFilePath,
+        string backupFilePath,
+        CancellationToken cancellationToken);
 }
 
 internal sealed class AtomicFileReplacer : IAtomicFileReplacer
 {
-    public Task ReplaceAsync(string temporaryFilePath, string destinationFilePath, CancellationToken cancellationToken)
+    public Task ReplaceAsync(
+        string temporaryFilePath,
+        string destinationFilePath,
+        string backupFilePath,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         if (File.Exists(destinationFilePath))
         {
-            File.Replace(temporaryFilePath, destinationFilePath, destinationBackupFileName: null);
+            File.Replace(temporaryFilePath, destinationFilePath, backupFilePath);
         }
         else
         {

@@ -57,6 +57,47 @@ public sealed class StoreStateSerializerTests
     }
 
     [Fact]
+    public async Task SaveAsync_WhenReplacementRemovesDestinationBeforeFailing_RestoresPreviousRecord()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "nuplane-state-destructive-replace-failure", Guid.NewGuid().ToString("N"));
+        var stateFilePath = Path.Combine(tempRoot, "store-state.json");
+        var serializer = new StoreStateSerializer();
+        var previousState = StoreStateRecord.Empty() with
+        {
+            ActiveVersionById = new(StringComparer.OrdinalIgnoreCase) { ["pkg-a"] = "1.0.0" }
+        };
+
+        try
+        {
+            await serializer.SaveAsync(stateFilePath, previousState, CancellationToken.None);
+            var registry = new StoreRegistry(
+                new StoreStateSerializer(new DestructiveFailingFileReplacer()),
+                stateFilePath);
+            await registry.GetStateAsync(CancellationToken.None);
+
+            await Assert.ThrowsAsync<IOException>(() => registry.PersistActiveVersionsAsync(
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["pkg-a"] = "2.0.0" },
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["pkg-a"] = "2.0.0" },
+                "corr-destructive-replace",
+                CancellationToken.None));
+
+            var diskState = await serializer.LoadAsync(stateFilePath, CancellationToken.None);
+            var memoryState = await registry.GetStateAsync(CancellationToken.None);
+            Assert.Equal("1.0.0", diskState.ActiveVersionById["pkg-a"]);
+            Assert.Equal("1.0.0", memoryState.ActiveVersionById["pkg-a"]);
+            Assert.Empty(Directory.GetFiles(tempRoot, "store-state.json.*.tmp"));
+            Assert.Empty(Directory.GetFiles(tempRoot, "store-state.json.*.bak"));
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task SaveAsync_WhenCancelledBeforeReplacement_PreservesPreviousRecordAndCleansTemporaryFile()
     {
         var tempRoot = Path.Combine(Path.GetTempPath(), "nuplane-state-cancelled-replace", Guid.NewGuid().ToString("N"));
@@ -137,6 +178,7 @@ public sealed class StoreStateSerializerTests
             var afterReplacement = await defaultSerializer.LoadAsync(stateFilePath, CancellationToken.None);
             Assert.Equal("1.0.0", fromOpenReader.ActiveVersionById["pkg-a"]);
             Assert.Equal("2.0.0", afterReplacement.ActiveVersionById["pkg-a"]);
+            Assert.Empty(Directory.GetFiles(tempRoot, "store-state.json.*.bak"));
         }
         finally
         {
@@ -252,10 +294,27 @@ public sealed class StoreStateSerializerTests
     {
         public List<string> TemporaryFilePaths { get; } = [];
 
-        public Task ReplaceAsync(string temporaryFilePath, string destinationFilePath, CancellationToken cancellationToken)
+        public Task ReplaceAsync(
+            string temporaryFilePath,
+            string destinationFilePath,
+            string backupFilePath,
+            CancellationToken cancellationToken)
         {
             TemporaryFilePaths.Add(temporaryFilePath);
             return Task.FromException(new IOException("Injected atomic replacement failure."));
+        }
+    }
+
+    private sealed class DestructiveFailingFileReplacer : IAtomicFileReplacer
+    {
+        public Task ReplaceAsync(
+            string temporaryFilePath,
+            string destinationFilePath,
+            string backupFilePath,
+            CancellationToken cancellationToken)
+        {
+            File.Move(destinationFilePath, backupFilePath);
+            return Task.FromException(new IOException("Injected failure after destination removal."));
         }
     }
 
@@ -263,7 +322,11 @@ public sealed class StoreStateSerializerTests
         CancellationTokenSource cancellation,
         List<string> temporaryFilePaths) : IAtomicFileReplacer
     {
-        public Task ReplaceAsync(string temporaryFilePath, string destinationFilePath, CancellationToken cancellationToken)
+        public Task ReplaceAsync(
+            string temporaryFilePath,
+            string destinationFilePath,
+            string backupFilePath,
+            CancellationToken cancellationToken)
         {
             temporaryFilePaths.Add(temporaryFilePath);
             cancellation.Cancel();
@@ -279,11 +342,15 @@ public sealed class StoreStateSerializerTests
         public TaskCompletionSource ReplaceStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource AllowReplace { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public async Task ReplaceAsync(string temporaryFilePath, string destinationFilePath, CancellationToken cancellationToken)
+        public async Task ReplaceAsync(
+            string temporaryFilePath,
+            string destinationFilePath,
+            string backupFilePath,
+            CancellationToken cancellationToken)
         {
             ReplaceStarted.TrySetResult();
             await AllowReplace.Task.WaitAsync(cancellationToken);
-            await _inner.ReplaceAsync(temporaryFilePath, destinationFilePath, cancellationToken);
+            await _inner.ReplaceAsync(temporaryFilePath, destinationFilePath, backupFilePath, cancellationToken);
         }
     }
 }
