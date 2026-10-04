@@ -274,6 +274,8 @@ public sealed class StoreStateSerializerTests
 
     private sealed class PausingFileReplacer : IAtomicFileReplacer
     {
+        private readonly IAtomicFileReplacer _inner = new AtomicFileReplacer();
+
         public TaskCompletionSource ReplaceStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource AllowReplace { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -281,7 +283,7 @@ public sealed class StoreStateSerializerTests
         {
             ReplaceStarted.TrySetResult();
             await AllowReplace.Task.WaitAsync(cancellationToken);
-            File.Move(temporaryFilePath, destinationFilePath, overwrite: true);
+            await _inner.ReplaceAsync(temporaryFilePath, destinationFilePath, cancellationToken);
         }
     }
 }

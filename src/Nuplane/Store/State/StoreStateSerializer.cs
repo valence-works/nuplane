@@ -19,7 +19,7 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
 
     /// <summary>Initializes a serializer that writes state through atomic file replacement.</summary>
     public StoreStateSerializer()
-        : this(new FileMoveAtomicFileReplacer())
+        : this(new AtomicFileReplacer())
     {
     }
 
@@ -117,13 +117,4 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
             ActiveGraphsById = new(state.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase)
         };
 
-    private sealed class FileMoveAtomicFileReplacer : IAtomicFileReplacer
-    {
-        public Task ReplaceAsync(string temporaryFilePath, string destinationFilePath, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            File.Move(temporaryFilePath, destinationFilePath, overwrite: true);
-            return Task.CompletedTask;
-        }
-    }
 }
