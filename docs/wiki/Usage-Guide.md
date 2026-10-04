@@ -50,6 +50,54 @@ Typical shape:
 3. Read authoritative package state from the active catalog or admin read surfaces.
 4. Keep host decisions — cache invalidation, feature toggles, discovery, reload, and activation — in host code.
 
+### Precedence for overlapping desired sources
+
+When a directory source, manifest, or custom desired-state source contributes the same package ID,
+Nuplane resolves the overlap with `DesiredStateOptions`. A lower number has higher precedence; an
+omitted source has the default priority `int.MaxValue`.
+
+```json
+{
+  "Nuplane": {
+    "DesiredState": {
+      "SourcePriorities": {
+        "renewal-demo-updates": 0,
+        "renewal-demo-baseline": 10
+      }
+    }
+  }
+}
+```
+
+The source name is the `PackageRequest.SourceName` value. Directory-backed sources use the feed name
+they were registered with (for example, `Directory.Drop`). A custom `IDesiredPackageSource` should
+emit a stable source name in its requests and configure that same name here. Feed names and CLR type
+names are separate concepts and do not select the desired-state winner.
+
+The equivalent code-first setup is:
+
+```csharp
+using Nuplane.Sources.Configuration;
+
+services.AddNuplane(nuplane =>
+{
+    nuplane.Services.Configure<DesiredStateOptions>(options =>
+    {
+        options.SetPriority("renewal-demo-updates", 0);
+        options.SetPriority("renewal-demo-baseline", 10);
+    });
+});
+```
+
+For one package ID, source priority is followed by the existing case-insensitive source-name and
+version-range ordering, then deterministic feed, update-policy, and casing tie-breaks. Nuplane keeps
+the winning request verbatim. This setting only chooses between overlapping desired requests; feed
+resolution priorities, source admission and trust, package acquisition, fallback behavior, and
+semantic version selection are unchanged. `FeedResolution:FeedPriorities` does not implicitly set
+source priorities, and Nuplane does not compare semantic versions across sources. A higher-priority
+exact `1.0.0` request therefore remains the winner over a lower-priority source's newer `1.1.0`
+request. With no priorities, existing case-insensitive source-name ordering remains the default.
+
 ## Query-first integration guidance
 
 - **Applicability:** `Core`

@@ -163,6 +163,25 @@ public sealed class DirectoryNupkgDesiredSourceTests : IDisposable
         Assert.Equal("2.0.0", request.VersionRange);
     }
 
+    [Theory]
+    [InlineData("MyPlugin.1.9.0.nupkg", "MyPlugin.1.10.0.nupkg", "1.10.0")]
+    [InlineData("MyPlugin.1.1.0-beta.2.nupkg", "MyPlugin.1.1.0-beta.10.nupkg", "1.1.0-beta.10")]
+    [InlineData("MyPlugin.1.1.0-beta.10.nupkg", "MyPlugin.1.1.0.nupkg", "1.1.0")]
+    [InlineData("MyPlugin.1.9.0.nupkg", "MyPlugin.2.0.0-alpha.nupkg", "2.0.0-alpha")]
+    public async Task GetDesiredAsync_MultipleVersions_UsesNuGetSemanticVersionOrdering(
+        string firstFileName,
+        string secondFileName,
+        string expectedVersion)
+    {
+        CreateNupkg(firstFileName);
+        CreateNupkg(secondFileName);
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], feedName: "local-drop");
+
+        var request = Assert.Single(await source.GetDesiredAsync(CancellationToken.None));
+
+        Assert.Equal(expectedVersion, request.VersionRange);
+    }
+
     [Fact]
     public async Task DesiredRole_EmitsHighestVersionOnly()
     {

@@ -14,6 +14,7 @@ using Nuplane.Reconciliation.Configuration;
 using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Setup;
 using Nuplane.Sources;
+using Nuplane.Sources.Configuration;
 using Nuplane.Sources.Directory;
 using Nuplane.Sources.Directory.Builder;
 using Nuplane.Sources.Directory.Configuration;
@@ -23,6 +24,48 @@ namespace Nuplane.Runtime.Tests.Configuration;
 
 public sealed class ConfigurationDrivenRegistrationTests
 {
+    [Fact]
+    public void AddNuplane_FromConfiguration_BindsDesiredStateSourcePriorities()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:DesiredState:SourcePriorities:Directory.Drop"] = "10"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<DesiredStateOptions>>().Value;
+
+        Assert.Equal(10, options.GetPriority("directory.drop"));
+        Assert.Equal(StringComparer.OrdinalIgnoreCase, options.SourcePriorities.Comparer);
+    }
+
+    [Fact]
+    public void AddNuplane_CodeConfiguration_OverridesDesiredStateSourcePriority()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:DesiredState:SourcePriorities:Directory.Drop"] = "10"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
+        {
+            nuplane.Services.Configure<DesiredStateOptions>(options => options.SetPriority("directory.drop", -1));
+        });
+
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<DesiredStateOptions>>().Value;
+
+        Assert.Equal(-1, options.GetPriority("DIRECTORY.DROP"));
+    }
+
     [Fact]
     public void AddNuplane_FromConfiguration_KeyedRemoteFeed_RegistersFeedUsingKeyName()
     {

@@ -12,6 +12,7 @@ using Nuplane.Setup;
 using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
 using Nuplane.Store.Validation;
+using Nuplane.Sources.Configuration;
 
 namespace Nuplane.Registration;
 
@@ -23,6 +24,7 @@ internal static class NuplaneOptionsRegistrationServices
     private const string LockFileSectionName = "LockFile";
     private const string CleanupPolicySectionName = "CleanupPolicy";
     private const string ConvergenceSectionName = "Convergence";
+    private const string DesiredStateSectionName = "DesiredState";
     internal const string StoreRegistrySectionName = "StoreRegistry";
     internal const string CapabilitiesSectionName = "Capabilities";
     internal const string HostProvidedPackagesSectionName = "HostProvidedPackages";
@@ -35,6 +37,7 @@ internal static class NuplaneOptionsRegistrationServices
         static (services, configuration) => ConfigureBoundOptions<LockFileOptions>(services, configuration, LockFileSectionName),
         static (services, configuration) => ConfigureBoundOptions<CleanupPolicyOptions>(services, configuration, CleanupPolicySectionName),
         static (services, configuration) => ConfigureBoundOptions<ConvergenceOptions>(services, configuration, ConvergenceSectionName),
+        static (services, configuration) => ConfigureBoundOptions<DesiredStateOptions>(services, configuration, DesiredStateSectionName),
         static (services, configuration) => ConfigureBoundOptions<StoreRegistryOptions>(services, configuration, StoreRegistrySectionName),
         static (services, configuration) => ConfigureCapabilityOptions(services, configuration),
         static (services, configuration) => ConfigureHostProvidedPackagesOptions(services, configuration)
@@ -62,6 +65,7 @@ internal static class NuplaneOptionsRegistrationServices
         services.AddOptions<LockFileOptions>().ValidateOnStart();
         services.AddOptions<CleanupPolicyOptions>().ValidateOnStart();
         services.AddOptions<ConvergenceOptions>().ValidateOnStart();
+        services.AddOptions<DesiredStateOptions>().ValidateOnStart();
         services.AddOptions<StoreRegistryOptions>().ValidateOnStart();
         services.AddOptions<CapabilityOptions>().ValidateOnStart();
         services.AddOptions<HostProvidedPackagesOptions>().ValidateOnStart();
