@@ -388,7 +388,7 @@ For configuration-driven setup, prefer the keyed `Nuplane:Setup:Feeds` object sh
 }
 ```
 
-The feed key is the feed name. This shape is preferred for layered .NET configuration because later providers can override `Feeds:feedz.io` by identity instead of merging array entries by numeric position. Feed resolution order is not based on object order; use the existing feed priority configuration when one feed should be preferred over another.
+The feed key is the feed name. This shape is preferred for layered .NET configuration because later providers can override `Feeds:feedz.io` by identity instead of merging array entries by numeric position. Feed object order is not semantic; use `DesiredState:SourcePriorities` for overlapping desired requests and `FeedResolution:FeedPriorities` for feed resolution candidates.
 
 Migration from the legacy array shape is mechanical:
 

@@ -49,11 +49,13 @@ public sealed class DesiredSourcePrecedenceIntegrationTests
 
         foreach (var host in fixture.Hosts)
         {
-            var state = await WaitForStateAsync(
+            await WaitForStateAsync(
                 host,
                 static current => PackageIds.All(packageId =>
                     current.ActiveVersionById.TryGetValue(packageId, out var version)
                     && version == "1.1.0"));
+
+            var state = await host.ReadStateAsync();
 
             Assert.Equal(PackageIds.Length, state.ActiveVersionById.Count);
             Assert.All(PackageIds, packageId =>
@@ -260,9 +262,7 @@ public sealed class DesiredSourcePrecedenceIntegrationTests
                     await host.Host.StartAsync(startTimeout.Token);
                     if (watchFeeds)
                     {
-                        await host.WaitForWatcherAsync("renewal-demo-baseline");
-                        await host.WaitForWatcherAsync("renewal-demo-updates");
-                        await host.ProbeWatcherAsync(baselineDirectory);
+                        await host.WaitUntilWatchingUpdatesAsync(updatesDirectory);
                     }
                 }
 
@@ -400,8 +400,7 @@ public sealed class DesiredSourcePrecedenceIntegrationTests
                         nuplane.AddDirectoryFeed("renewal-demo-baseline", baselineDirectory, feed =>
                         {
                             feed.Include("Activities").Include("Renewals");
-                            feed.Watch = watchFeeds;
-                            feed.DebounceWindow = TimeSpan.FromMilliseconds(100);
+                            feed.Watch = false;
                         });
                         nuplane.AddDirectoryFeed("renewal-demo-updates", updatesDirectory, feed =>
                         {
@@ -416,19 +415,28 @@ public sealed class DesiredSourcePrecedenceIntegrationTests
             return new(name, stateFilePath, host, watcherLogs);
         }
 
-        public async Task WaitForWatcherAsync(string feedName)
+        public async Task WaitUntilWatchingUpdatesAsync(string updatesDirectory)
         {
+            const string feedName = "renewal-demo-updates";
             await _watcherLogs.WaitForEnabledAsync(feedName, WaitTimeout);
-        }
+            var observed = _watcherLogs.WaitForObservedTriggerAsync(feedName, WaitTimeout);
+            var probePath = Path.Combine(updatesDirectory, $"Probe.{Name}.0.0.0.nupkg");
+            while (!observed.IsCompleted)
+            {
+                // Retry one ignored package until this host has processed a real shared-feed event.
+                // A fixed path avoids accumulating files that each require a stability probe.
+                await File.WriteAllBytesAsync(probePath, [0x50, 0x4B], CancellationToken.None);
+                await Task.WhenAny(observed, Task.Delay(TimeSpan.FromSeconds(1)));
+            }
 
-        public async Task ProbeWatcherAsync(string baselineDirectory)
-        {
-            var observed = _watcherLogs.WaitForObservedTriggerAsync("renewal-demo-baseline", WaitTimeout);
-            await File.WriteAllBytesAsync(
-                Path.Combine(baselineDirectory, "Probe.0.0.0.nupkg"),
-                [0x50, 0x4B],
-                CancellationToken.None);
             await observed;
+
+            // Drain the observed cycle before the single publication under test.
+            using var timeout = new CancellationTokenSource(WaitTimeout);
+            var drained = await Host.Services.GetRequiredService<IReconciliationTriggerIngress>()
+                .EnqueueAndWaitAsync(ReconciliationTrigger.Manual(), timeout.Token);
+            Assert.False(drained.Skipped);
+            Assert.Empty(drained.FailedPackages);
         }
 
         public Task<StoreStateRecord> ReadStateAsync() =>

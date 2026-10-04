@@ -70,9 +70,9 @@ omitted source has the default priority `int.MaxValue`.
 ```
 
 The source name is the `PackageRequest.SourceName` value. Directory-backed sources use the feed name
-they were registered with (for example, `Directory.Drop`). A custom `IDesiredPackageSource` should
-emit a stable source name in its requests and configure that same name here. Feed names and CLR type
-names are separate concepts and do not select the desired-state winner.
+they were registered with (for example, `renewal-demo-updates`). A custom `IDesiredPackageSource` should
+emit a stable source name in its requests and configure that same name here. Feed-resolution
+priorities and CLR type names do not select the desired-state winner.
 
 The equivalent code-first setup is:
 
@@ -649,8 +649,8 @@ Choose configuration-first setup when you want the host to declare:
 The sample `appsettings.json` is the best concrete repository anchor for this path.
 Prefer keyed feed setup under `Nuplane:Setup:Feeds`, where each feed key is the feed name.
 This avoids positional array merging when `appsettings.json`, environment variables, and mounted
-configuration files are layered. Feed object order is not semantic; configure feed priorities
-separately when resolution order matters.
+configuration files are layered. Feed object order is not semantic; use `DesiredState:SourcePriorities`
+for overlapping desired requests and `FeedResolution:FeedPriorities` for feed resolution candidates.
 
 When the same setting is expressed in both layers, the more specific runtime option section wins
 over the `Nuplane:Setup` shorthand. An explicitly present
