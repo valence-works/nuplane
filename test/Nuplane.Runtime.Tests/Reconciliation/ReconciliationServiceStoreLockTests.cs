@@ -73,6 +73,65 @@ public sealed class ReconciliationServiceStoreLockTests : IDisposable
     }
 
     [Fact]
+    public async Task TriggerAsync_WhenAnotherRegistryUpdatesState_RefreshesStateAndSnapshotBeforeSourceFallback()
+    {
+        var sourceName = typeof(ChangingSource).FullName!;
+        var source = new ChangingSource();
+        var requestsSentForResolution = new List<PackageRequest>();
+        var packageResolver = Substitute.For<IPackageResolver>();
+        packageResolver
+            .ResolveAsync(Arg.Do<PackageRequest>(requestsSentForResolution.Add), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var request = call.Arg<PackageRequest>();
+                return Task.FromResult(new ResolvedPackage(
+                    request.Id,
+                    "1.0.0",
+                    "feed-a",
+                    Path.Combine(_root, "packages", request.Id),
+                    DateTimeOffset.UtcNow,
+                    request.SourceName));
+            });
+        var packageCleanupService = Substitute.For<IPackageCleanupService>();
+        packageCleanupService.ExecuteAutomaticAsync(default!, default!, default!, default, default)
+            .ReturnsForAnyArgs(Task.FromResult<IReadOnlyList<CleanupDecision>>([]));
+        var serviceRegistry = new StoreRegistry(new StoreStateSerializer(), _stateFilePath);
+        var service = ReconciliationServiceFactory.Create(
+            sources: [source],
+            storeRegistry: serviceRegistry,
+            packageResolver: packageResolver,
+            reconciliationOptions: new() { MaxRetryAttempts = 0 },
+            packageCleanupService: packageCleanupService,
+            storeLock: CreateStoreLock());
+
+        await service.TriggerManualAsync(CancellationToken.None);
+
+        var otherRegistry = new StoreRegistry(new StoreStateSerializer(), _stateFilePath);
+        await otherRegistry.PersistActiveVersionsAsync(
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["old-package"] = "1.0.0",
+                ["external-package"] = "1.0.0"
+            },
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            "corr-from-other-registry",
+            CancellationToken.None);
+        await otherRegistry.PersistSourceSnapshotAsync(
+            sourceName,
+            new("snapshot-from-other-registry", DateTimeOffset.UtcNow, [Req("external-package")]),
+            CancellationToken.None);
+
+        await service.TriggerManualAsync(CancellationToken.None);
+
+        Assert.Collection(
+            requestsSentForResolution,
+            request => Assert.Equal("old-package", request.Id),
+            request => Assert.Equal("external-package", request.Id));
+        var finalState = await serviceRegistry.GetStateAsync(CancellationToken.None);
+        Assert.Equal("1.0.0", finalState.ActiveVersionById["external-package"]);
+    }
+
+    [Fact]
     public async Task TriggerAsync_AfterACycleCompletes_ReleasesTheStoreLock()
     {
         var service = CreateService();
@@ -182,6 +241,22 @@ public sealed class ReconciliationServiceStoreLockTests : IDisposable
         {
             ReadCount++;
             return Task.FromResult<IReadOnlyList<PackageRequest>>([]);
+        }
+    }
+
+    private static PackageRequest Req(string id) =>
+        new(id, "1.0.0", "feed-a", PackageUpdatePolicy.Exact, "source-a");
+
+    private sealed class ChangingSource : IDesiredPackageSource
+    {
+        private int _readCount;
+
+        public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken cancellationToken)
+        {
+            _readCount++;
+            return _readCount == 1
+                ? Task.FromResult<IReadOnlyList<PackageRequest>>([Req("old-package")])
+                : Task.FromException<IReadOnlyList<PackageRequest>>(new IOException("Source unavailable."));
         }
     }
 

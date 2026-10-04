@@ -1,6 +1,8 @@
 using Nuplane.Abstractions;
 using Nuplane.Sources;
 using Nuplane.Store.State;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace Nuplane.Runtime.Tests.Sources;
 
@@ -69,6 +71,25 @@ public sealed class DesiredSourceSnapshotCacheTests
         Assert.True(foundB);
         Assert.Equal("alpha", a[0].Id, StringComparer.OrdinalIgnoreCase);
         Assert.Equal("beta", b[0].Id, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WhenRegistryPersistenceFails_PreservesPreviouslyPublishedSnapshot()
+    {
+        var storeRegistry = Substitute.For<IStoreRegistry>();
+        storeRegistry.GetStateAsync(Arg.Any<CancellationToken>()).Returns(StoreStateRecord.Empty());
+        storeRegistry.PersistSourceSnapshotAsync(Arg.Any<string>(), Arg.Any<SourceSnapshotRef>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var cache = new DesiredSourceSnapshotCache(storeRegistry);
+        await cache.SaveAsync("src-a", [Req("alpha")], CancellationToken.None);
+
+        storeRegistry.PersistSourceSnapshotAsync(Arg.Any<string>(), Arg.Any<SourceSnapshotRef>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new IOException("Disk full"));
+
+        await Assert.ThrowsAsync<IOException>(() => cache.SaveAsync("src-a", [Req("beta")], CancellationToken.None));
+
+        Assert.True(cache.TryGetSnapshot("src-a", out var requests));
+        Assert.Equal("alpha", Assert.Single(requests).Id);
     }
 
     private static PackageRequest Req(string id) =>

@@ -8,12 +8,25 @@ namespace Nuplane.Store.State;
 /// </summary>
 public sealed class StoreStateSerializer : IStoreStateSerializer
 {
+    private readonly IAtomicFileReplacer _fileReplacer;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+
+    /// <summary>Initializes a serializer that writes state through atomic file replacement.</summary>
+    public StoreStateSerializer()
+        : this(new FileMoveAtomicFileReplacer())
+    {
+    }
+
+    internal StoreStateSerializer(IAtomicFileReplacer fileReplacer)
+    {
+        _fileReplacer = fileReplacer ?? throw new ArgumentNullException(nameof(fileReplacer));
+    }
 
     /// <inheritdoc />
     public async Task<StoreStateRecord> LoadAsync(string stateFilePath, CancellationToken cancellationToken)
@@ -23,7 +36,13 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
             return StoreStateRecord.Empty();
         }
 
-        await using var stream = File.OpenRead(stateFilePath);
+        await using var stream = new FileStream(
+            stateFilePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 4096,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
         return await DeserializeAsync(stream, cancellationToken).ConfigureAwait(false);
     }
 
@@ -42,14 +61,53 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
     /// <inheritdoc />
     public async Task SaveAsync(string stateFilePath, StoreStateRecord state, CancellationToken cancellationToken)
     {
-        var directory = Path.GetDirectoryName(stateFilePath);
-        if (!string.IsNullOrWhiteSpace(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
+        cancellationToken.ThrowIfCancellationRequested();
 
-        await using var stream = File.Create(stateFilePath);
-        await JsonSerializer.SerializeAsync(stream, Normalize(state), JsonOptions, cancellationToken);
+        var destinationPath = Path.GetFullPath(stateFilePath);
+        var directory = Path.GetDirectoryName(destinationPath)!;
+        Directory.CreateDirectory(directory);
+
+        var temporaryPath = Path.Combine(
+            directory,
+            $"{Path.GetFileName(destinationPath)}.{Guid.NewGuid():N}.tmp");
+
+        try
+        {
+            await using (var stream = new FileStream(
+                temporaryPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 4096,
+                FileOptions.Asynchronous))
+            {
+                await JsonSerializer.SerializeAsync(stream, Normalize(state), JsonOptions, cancellationToken).ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                stream.Flush(flushToDisk: true);
+            }
+
+            await _fileReplacer.ReplaceAsync(temporaryPath, destinationPath, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            TryDeleteTemporaryFile(temporaryPath);
+        }
+    }
+
+    private static void TryDeleteTemporaryFile(string temporaryPath)
+    {
+        try
+        {
+            File.Delete(temporaryPath);
+        }
+        catch (IOException)
+        {
+            // Cleanup must not hide the original serialization or replacement failure.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Cleanup must not hide the original serialization or replacement failure.
+        }
     }
 
     private static StoreStateRecord Normalize(StoreStateRecord state) =>
@@ -58,4 +116,14 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
             ActivePackageDescriptorsById = new(state.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase),
             ActiveGraphsById = new(state.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase)
         };
+
+    private sealed class FileMoveAtomicFileReplacer : IAtomicFileReplacer
+    {
+        public Task ReplaceAsync(string temporaryFilePath, string destinationFilePath, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(temporaryFilePath, destinationFilePath, overwrite: true);
+            return Task.CompletedTask;
+        }
+    }
 }

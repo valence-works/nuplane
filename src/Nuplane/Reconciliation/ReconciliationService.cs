@@ -26,6 +26,8 @@ public sealed class ReconciliationService : IReconciliationService
     private readonly ReconciliationPipeline _pipeline;
     private readonly SemaphoreSlim _cycleLock = new(1, 1);
     private readonly IStoreLock? _storeLock;
+    private readonly IStoreRegistry _storeRegistry;
+    private readonly DesiredSourceSnapshotCache _sourceSnapshotCache;
     private int _inFlight;
 
     /// <summary>
@@ -199,6 +201,7 @@ public sealed class ReconciliationService : IReconciliationService
         var desiredStateAgg = desiredStateAggregator ?? throw new ArgumentNullException(nameof(desiredStateAggregator));
         var diffEngine = desiredActualDiffEngine ?? throw new ArgumentNullException(nameof(desiredActualDiffEngine));
         var storeReg = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
+        _storeRegistry = storeReg;
         _reconciliationOptions = reconciliationOpts;
         var eventDispatcher = observerEventDispatcher ?? throw new ArgumentNullException(nameof(observerEventDispatcher));
         var healthEval = healthEvaluator ?? throw new ArgumentNullException(nameof(healthEvaluator));
@@ -212,7 +215,7 @@ public sealed class ReconciliationService : IReconciliationService
 
         var pointerSwitcher = new AtomicPointerSwitcher();
         var transactionCoordinator = new PackageTransactionCoordinator(pointerSwitcher, failureRec);
-        var snapshotCache = new DesiredSourceSnapshotCache(storeReg);
+        _sourceSnapshotCache = new DesiredSourceSnapshotCache(storeReg);
         var applyExecutor = new PackageApplyExecutor(
             packageResolver ?? throw new ArgumentNullException(nameof(packageResolver)),
             transactionCoordinator,
@@ -223,7 +226,7 @@ public sealed class ReconciliationService : IReconciliationService
             hostProvidedPackagesOptions?.Value);
 
         _pipeline = new();
-        _pipeline.Use(new DesiredStateReadMiddleware(sourcesList, desiredStateAgg, retry, snapshotCache, failureRec, loggerInstance, metricsInstance));
+        _pipeline.Use(new DesiredStateReadMiddleware(sourcesList, desiredStateAgg, retry, _sourceSnapshotCache, failureRec, loggerInstance, metricsInstance));
         _pipeline.Use(new PackageResolutionMiddleware(applyExecutor, loggerInstance));
         _pipeline.Use(new TrustAndLockGateMiddleware(lockCoordinator, retry, failureRec, loggerInstance));
         _pipeline.Use(new DiffAndChangeEventMiddleware(diffEngine, dryRun, retry, storeReg, eventDispatcher, metricsInstance));
@@ -254,6 +257,15 @@ public sealed class ReconciliationService : IReconciliationService
             if (!storeLock.CanProceed)
             {
                 return Skipped(ReconciliationSkipReason.StoreLockUnavailable);
+            }
+
+            if (storeLock.Outcome == StoreLockOutcome.Acquired && _storeRegistry is IStoreStateCycleRefresher stateRefresher)
+            {
+                var refreshedFromDisk = await stateRefresher.RefreshFromDiskAsync(cancellationToken);
+                if (refreshedFromDisk)
+                {
+                    _sourceSnapshotCache.ClearMemoryCache();
+                }
             }
 
             var cycleStartedAt = DateTimeOffset.UtcNow;

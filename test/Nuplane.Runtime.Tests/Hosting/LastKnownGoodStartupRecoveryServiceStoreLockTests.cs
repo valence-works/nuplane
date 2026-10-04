@@ -108,6 +108,42 @@ public sealed class LastKnownGoodStartupRecoveryServiceStoreLockTests : IDisposa
     }
 
     [Fact]
+    public async Task TryRecoverAsync_WhenAnotherRegistryUpdatesLoadedState_UsesRefreshedLastKnownGoodVersion()
+    {
+        await SeedValidLastKnownGoodStateAsync();
+        var newerInstallPath = Path.Combine(_root.Path, "pkg-a", "2.0.0");
+        Directory.CreateDirectory(newerInstallPath);
+
+        var recoveryStore = CreateStoreRegistry();
+        await recoveryStore.GetStateAsync(CancellationToken.None);
+        await CreateStoreRegistry().PersistActiveVersionsAsync(
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["pkg-a"] = "2.0.0" },
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["pkg-a"] = "2.0.0" },
+            "corr-newer-version",
+            CancellationToken.None,
+            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pkg-a"] = new(
+                    "pkg-a",
+                    "2.0.0",
+                    "local-cache",
+                    "desired-source",
+                    newerInstallPath,
+                    DateTimeOffset.UtcNow,
+                    "corr-newer-version")
+            });
+        var dispatcher = new WritingObserverDispatcher(recoveryStore);
+        var recovery = CreateRecoveryService(dispatcher, CreateStoreLock(), storeRegistry: recoveryStore);
+
+        var result = await recovery.TryRecoverAsync(CorrelationId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var recovered = Assert.Single(dispatcher.AppliedPackages);
+        Assert.Equal("2.0.0", recovered.Version);
+        Assert.Equal(newerInstallPath, recovered.InstallPath);
+    }
+
+    [Fact]
     public async Task TryRecoverAsync_WhenStoreLockIsDisabled_WritesEvenWhileAnotherHolderOwnsTheStore()
     {
         await SeedValidLastKnownGoodStateAsync();
@@ -148,9 +184,10 @@ public sealed class LastKnownGoodStartupRecoveryServiceStoreLockTests : IDisposa
     private LastKnownGoodStartupRecoveryService CreateRecoveryService(
         IObserverEventDispatcher dispatcher,
         IStoreLock storeLock,
-        TimeSpan? storeLockTimeout = null) =>
+        TimeSpan? storeLockTimeout = null,
+        IStoreRegistry? storeRegistry = null) =>
         new(
-            CreateStoreRegistry(),
+            storeRegistry ?? CreateStoreRegistry(),
             dispatcher,
             new StartupRecoveryState(),
             cycleFailureContributors: null,
@@ -173,6 +210,7 @@ public sealed class LastKnownGoodStartupRecoveryServiceStoreLockTests : IDisposa
     private sealed class WritingObserverDispatcher(IStoreRegistry storeRegistry) : IObserverEventDispatcher
     {
         public bool Invoked { get; private set; }
+        public IReadOnlyList<ResolvedPackage> AppliedPackages { get; private set; } = [];
 
         public Task PublishChangingAsync(PackageChangeSet changeSet, CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -190,6 +228,7 @@ public sealed class LastKnownGoodStartupRecoveryServiceStoreLockTests : IDisposa
             CancellationToken cancellationToken)
         {
             Invoked = true;
+            AppliedPackages = appliedPackages;
             await storeRegistry.PersistFailureAsync("pkg-a", "load", "boom", changeSet.CorrelationId, cancellationToken);
         }
     }
