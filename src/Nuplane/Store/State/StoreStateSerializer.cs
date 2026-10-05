@@ -8,7 +8,7 @@ namespace Nuplane.Store.State;
 /// </summary>
 public sealed class StoreStateSerializer : IStoreStateSerializer
 {
-    private readonly IAtomicFileReplacer _fileReplacer;
+    private readonly AtomicFileWriter _fileWriter;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -19,13 +19,18 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
 
     /// <summary>Initializes a serializer that writes state through atomic file replacement.</summary>
     public StoreStateSerializer()
-        : this(new AtomicFileReplacer())
+        : this(new AtomicFileWriter())
     {
     }
 
     internal StoreStateSerializer(IAtomicFileReplacer fileReplacer)
+        : this(new AtomicFileWriter(fileReplacer))
     {
-        _fileReplacer = fileReplacer ?? throw new ArgumentNullException(nameof(fileReplacer));
+    }
+
+    private StoreStateSerializer(AtomicFileWriter fileWriter)
+    {
+        _fileWriter = fileWriter ?? throw new ArgumentNullException(nameof(fileWriter));
     }
 
     /// <inheritdoc />
@@ -61,88 +66,13 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
     /// <inheritdoc />
     public async Task SaveAsync(string stateFilePath, StoreStateRecord state, CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var destinationPath = Path.GetFullPath(stateFilePath);
-        var directory = Path.GetDirectoryName(destinationPath)!;
-        Directory.CreateDirectory(directory);
-
-        var operationId = Guid.NewGuid().ToString("N");
-        var fileName = Path.GetFileName(destinationPath);
-        var temporaryPath = Path.Combine(directory, $"{fileName}.{operationId}.tmp");
-        var backupPath = Path.Combine(directory, $"{fileName}.{operationId}.bak");
-        var replacementAttempted = false;
-
-        try
-        {
-            await using (var stream = new FileStream(
-                temporaryPath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 4096,
-                FileOptions.Asynchronous))
+        await _fileWriter.WriteAsync(
+            stateFilePath,
+            async (stream, token) =>
             {
-                await JsonSerializer.SerializeAsync(stream, Normalize(state), JsonOptions, cancellationToken).ConfigureAwait(false);
-                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-                stream.Flush(flushToDisk: true);
-            }
-
-            replacementAttempted = true;
-            await _fileReplacer.ReplaceAsync(temporaryPath, destinationPath, backupPath, cancellationToken).ConfigureAwait(false);
-        }
-        catch
-        {
-            TryRestoreBackup(destinationPath, backupPath);
-            throw;
-        }
-        finally
-        {
-            // ReplaceFileW can fail after removing the destination. If restoring the backup also
-            // fails, retain both recovery artifacts instead of deleting the only valid records.
-            if (!replacementAttempted || File.Exists(destinationPath))
-            {
-                TryDeleteRecoveryFile(temporaryPath);
-                TryDeleteRecoveryFile(backupPath);
-            }
-        }
-    }
-
-    private static void TryRestoreBackup(string destinationPath, string backupPath)
-    {
-        if (File.Exists(destinationPath) || !File.Exists(backupPath))
-        {
-            return;
-        }
-
-        try
-        {
-            File.Move(backupPath, destinationPath);
-        }
-        catch (IOException)
-        {
-            // Preserve the backup under its unique recovery name when restoration is blocked.
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // Preserve the backup under its unique recovery name when restoration is blocked.
-        }
-    }
-
-    private static void TryDeleteRecoveryFile(string path)
-    {
-        try
-        {
-            File.Delete(path);
-        }
-        catch (IOException)
-        {
-            // Cleanup must not hide the original serialization or replacement failure.
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // Cleanup must not hide the original serialization or replacement failure.
-        }
+                await JsonSerializer.SerializeAsync(stream, Normalize(state), JsonOptions, token).ConfigureAwait(false);
+            },
+            cancellationToken);
     }
 
     private static StoreStateRecord Normalize(StoreStateRecord state) =>

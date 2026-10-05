@@ -1,14 +1,86 @@
 using Nuplane.Abstractions;
 using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.LockFile;
 using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Store.Activation;
 using Nuplane.Store.Transactions;
+using Microsoft.Extensions.Options;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 
 public sealed class PackageApplyExecutorTests : IDisposable
 {
+    private static readonly string HashA = $"sha512:{Convert.ToBase64String(new byte[64])}";
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"nuplane-apply-executor-{Guid.NewGuid():N}");
+
+    [Fact]
+    public async Task ResolveAsync_EnforceEntry_ConstrainsRootBeforeAcquisition()
+    {
+        var resolved = CreateInstalledPackage("Root.A", "2.0.0") with
+        {
+            FeedName = "locked-feed",
+            PackageContentHash = HashA
+        };
+        var resolver = new RecordingResolver(resolved);
+        var recorder = new RecordingFailureRecorder();
+        var coordinator = await CreateLockCoordinatorAsync(
+            LockFileMode.Enforce,
+            [new("Root.A", "2.0.0", "locked-feed", HashA, DateTimeOffset.UtcNow)]);
+        var snapshot = await coordinator.CaptureAsync(CancellationToken.None);
+        var sut = new PackageApplyExecutor(
+            resolver,
+            new PackageTransactionCoordinator(new AtomicPointerSwitcher(), recorder),
+            new PassthroughRetryPolicy(),
+            recorder);
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Root.A", "[1.0.0, 3.0.0)", "live-feed", PackageUpdatePolicy.LatestMinor, "source")],
+            "corr-lock",
+            coordinator,
+            snapshot,
+            CancellationToken.None);
+
+        var request = Assert.Single(resolver.Requests);
+        Assert.Equal("2.0.0", request.VersionRange);
+        Assert.Equal("locked-feed", request.FeedName);
+        Assert.Equal(PackageUpdatePolicy.Exact, request.UpdatePolicy);
+        Assert.Empty(result.FailedPackageIds);
+        Assert.Single(result.ResolvedPackages);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_StrictDependencyMissingEntry_DoesNotAcquireDependencyOrProduceGraph()
+    {
+        var root = CreateInstalledPackage("Root.A", "1.0.0", "Dependency.A", "[1.0.0]") with
+        {
+            PackageContentHash = HashA
+        };
+        var resolver = new RecordingResolver(root);
+        var recorder = new RecordingFailureRecorder();
+        var coordinator = await CreateLockCoordinatorAsync(
+            LockFileMode.Strict,
+            [new("Root.A", "1.0.0", "test-feed", HashA, DateTimeOffset.UtcNow)]);
+        var snapshot = await coordinator.CaptureAsync(CancellationToken.None);
+        var sut = new PackageApplyExecutor(
+            resolver,
+            new PackageTransactionCoordinator(new AtomicPointerSwitcher(), recorder),
+            new PassthroughRetryPolicy(),
+            recorder);
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest("Root.A", "1.0.0", "test-feed", PackageUpdatePolicy.Exact, "source")],
+            "corr-lock",
+            coordinator,
+            snapshot,
+            CancellationToken.None);
+
+        Assert.Single(resolver.Requests, static request => request.Id == "Root.A");
+        Assert.DoesNotContain(resolver.Requests, static request => request.Id == "Dependency.A");
+        Assert.Equal(["Root.A"], result.FailedPackageIds);
+        Assert.Empty(result.ResolvedPackages);
+        Assert.Empty(result.ResolvedGraphs);
+        Assert.Contains(recorder.Records, static record => record.PackageId == "Root.A" && record.Stage == "lock");
+    }
 
     [Fact]
     public async Task ResolveAsync_WhenConflictAndIndependentResolutionFailure_RecordsConflictOnlyForConflictRoots()
@@ -164,6 +236,19 @@ public sealed class PackageApplyExecutorTests : IDisposable
         return new(packageId, version, "test-feed", installPath, DateTimeOffset.UtcNow, "test-source");
     }
 
+    private async Task<LockFileCoordinator> CreateLockCoordinatorAsync(
+        LockFileMode mode,
+        IReadOnlyList<PackageLockEntry> entries)
+    {
+        Directory.CreateDirectory(_tempRoot);
+        var path = Path.Combine(_tempRoot, $"{Guid.NewGuid():N}.lock.json");
+        var options = new LockFileOptions { Mode = mode, Path = path };
+        var wrapped = new OptionsWrapper<LockFileOptions>(options);
+        var store = new LockFileStore(wrapped);
+        await store.WriteAsync(new("2.0", DateTimeOffset.UtcNow, entries), CancellationToken.None);
+        return new(store, wrapped);
+    }
+
     private static string CreateNuspec(
         string packageId,
         string version,
@@ -198,6 +283,17 @@ public sealed class PackageApplyExecutorTests : IDisposable
             return packages.TryGetValue(key, out var package)
                 ? Task.FromResult(package)
                 : Task.FromException<ResolvedPackage>(new InvalidOperationException($"Package '{request.Id}' was not configured."));
+        }
+    }
+
+    private sealed class RecordingResolver(ResolvedPackage package) : IPackageResolver
+    {
+        public List<PackageRequest> Requests { get; } = [];
+
+        public Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            return Task.FromResult(package);
         }
     }
 

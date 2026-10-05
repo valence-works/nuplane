@@ -71,13 +71,34 @@ public sealed class PackageDependencyGraphResolver
     /// <param name="resolveRootAsync">The callback used to resolve each root package.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The resolved packages and graph metadata.</returns>
-    public async Task<PackageDependencyGraphResolutionResult> ResolveAsync(
+    public Task<PackageDependencyGraphResolutionResult> ResolveAsync(
         IReadOnlyList<PackageRequest> desiredRequests,
         Func<PackageRequest, CancellationToken, Task<ResolvedPackage>> resolveRootAsync,
+        CancellationToken cancellationToken) =>
+        ResolveCoreAsync(
+            desiredRequests,
+            resolveRootAsync,
+            (request, ct) => _retryPolicy.ExecuteAsync(
+                token => _packageResolver.ResolveAsync(request, token),
+                ct),
+            cancellationToken);
+
+    internal Task<PackageDependencyGraphResolutionResult> ResolveAsync(
+        IReadOnlyList<PackageRequest> desiredRequests,
+        Func<PackageRequest, CancellationToken, Task<ResolvedPackage>> resolveRootAsync,
+        Func<PackageRequest, CancellationToken, Task<ResolvedPackage>> resolveDependencyAsync,
+        CancellationToken cancellationToken) =>
+        ResolveCoreAsync(desiredRequests, resolveRootAsync, resolveDependencyAsync, cancellationToken);
+
+    private async Task<PackageDependencyGraphResolutionResult> ResolveCoreAsync(
+        IReadOnlyList<PackageRequest> desiredRequests,
+        Func<PackageRequest, CancellationToken, Task<ResolvedPackage>> resolveRootAsync,
+        Func<PackageRequest, CancellationToken, Task<ResolvedPackage>> resolveDependencyAsync,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(desiredRequests);
         ArgumentNullException.ThrowIfNull(resolveRootAsync);
+        ArgumentNullException.ThrowIfNull(resolveDependencyAsync);
 
         var resolvedPackages = new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase);
         var rootPackages = new List<ResolvedPackage>();
@@ -144,9 +165,7 @@ public sealed class PackageDependencyGraphResolver
                     PackageUpdatePolicy.Exact,
                     $"dependency-of:{parent.Id}");
 
-                dependencyPackage = await _retryPolicy.ExecuteAsync(
-                    ct => _packageResolver.ResolveAsync(dependencyRequest, ct),
-                    cancellationToken);
+                dependencyPackage = await resolveDependencyAsync(dependencyRequest, cancellationToken);
                 resolvedPackages[BuildPackageKey(dependencyPackage.Id, dependencyPackage.Version)] = dependencyPackage;
             }
 

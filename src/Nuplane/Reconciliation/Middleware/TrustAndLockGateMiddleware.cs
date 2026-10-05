@@ -1,6 +1,7 @@
 using Nuplane.Abstractions;
 using Nuplane.Observability;
 using Nuplane.Store.State;
+using Nuplane.Reconciliation.LockFile;
 
 namespace Nuplane.Reconciliation.Middleware;
 
@@ -8,7 +9,8 @@ internal sealed class TrustAndLockGateMiddleware(
     ILockFileCoordinator lockFileCoordinator,
     IReconciliationRetryPolicy retryPolicy,
     IFailureRecorder failureRecorder,
-    IReconciliationLogger logger) : IReconciliationMiddleware
+    IReconciliationLogger logger,
+    ILockFileCycleCoordinator? lockFileCycleCoordinator = null) : IReconciliationMiddleware
 {
     public async Task InvokeAsync(ReconciliationCycleContext context, Func<Task> next)
     {
@@ -19,9 +21,11 @@ internal sealed class TrustAndLockGateMiddleware(
 
         foreach (var resolved in resolutionResult.ResolvedPackages)
         {
-            var lockOutcome = await retryPolicy.ExecuteAsync(
-                ct => lockFileCoordinator.EvaluateAsync(resolved, ct),
-                context.CancellationToken);
+            var lockOutcome = lockFileCycleCoordinator is not null && context.LockFileSnapshot is not null
+                ? lockFileCycleCoordinator.Evaluate(context.LockFileSnapshot, resolved)
+                : await retryPolicy.ExecuteAsync(
+                    ct => lockFileCoordinator.EvaluateAsync(resolved, ct),
+                    context.CancellationToken);
 
             logger.LogLockOutcome(context.CorrelationId, resolved.Id, lockOutcome);
 

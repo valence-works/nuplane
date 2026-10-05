@@ -4,6 +4,7 @@ using Nuplane.Feeds;
 using Nuplane.Feeds.Policy;
 using Nuplane.Observability;
 using Nuplane.Reconciliation.Configuration;
+using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Store.State;
 using Nuplane.Store.Transactions;
@@ -52,9 +53,25 @@ public sealed class PackageApplyExecutor(
     private readonly IReconciliationLogger _reconciliationLogger = reconciliationLogger ?? new ReconciliationLogger();
 
     /// <inheritdoc />
-    public async Task<PackageResolutionResult> ResolveAsync(
+    public Task<PackageResolutionResult> ResolveAsync(
         IReadOnlyList<PackageRequest> desiredRequests,
         string correlationId,
+        CancellationToken cancellationToken) =>
+        ResolveCoreAsync(desiredRequests, correlationId, lockFileCoordinator: null, lockFileSnapshot: null, cancellationToken);
+
+    internal Task<PackageResolutionResult> ResolveAsync(
+        IReadOnlyList<PackageRequest> desiredRequests,
+        string correlationId,
+        ILockFileCycleCoordinator lockFileCoordinator,
+        LockFileSnapshot lockFileSnapshot,
+        CancellationToken cancellationToken) =>
+        ResolveCoreAsync(desiredRequests, correlationId, lockFileCoordinator, lockFileSnapshot, cancellationToken);
+
+    private async Task<PackageResolutionResult> ResolveCoreAsync(
+        IReadOnlyList<PackageRequest> desiredRequests,
+        string correlationId,
+        ILockFileCycleCoordinator? lockFileCoordinator,
+        LockFileSnapshot? lockFileSnapshot,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(desiredRequests);
@@ -73,6 +90,7 @@ public sealed class PackageApplyExecutor(
         var graphs = new List<ResolvedPackageGraph>();
         var hostVersionRefusals = new List<ContributionRefusal>();
         var reportedUnverifiedHostDependencies = new HashSet<HostProvidedDependency>();
+        var expectedHashesById = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         var resolvedRootsById = new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase);
         var rootRequests = new List<PackageRequest>();
@@ -146,12 +164,47 @@ public sealed class PackageApplyExecutor(
             .OrderBy(static decision => decision.PackageId, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return new(deduplicatedResolved, failed, deduplicatedDecisions, graphs);
+        return new(deduplicatedResolved, failed, deduplicatedDecisions, graphs)
+        {
+            LockFileEvaluated = lockFileCoordinator is not null,
+            ExpectedArtifactHashes = expectedHashesById
+        };
 
         Task<ResolvedPackage> ResolveRootAsync(PackageRequest packageRequest, CancellationToken ct) =>
-            _retryPolicy.ExecuteAsync(
-                token => _packageResolver.ResolveAsync(packageRequest, token),
+            ResolvePackageAsync(packageRequest, ct);
+
+        Task<ResolvedPackage> ResolveDependencyAsync(PackageRequest packageRequest, CancellationToken ct) =>
+            ResolvePackageAsync(packageRequest, ct);
+
+        async Task<ResolvedPackage> ResolvePackageAsync(PackageRequest packageRequest, CancellationToken ct)
+        {
+            var effectiveRequest = lockFileCoordinator is null
+                ? packageRequest
+                : lockFileCoordinator.ConstrainRequest(lockFileSnapshot!, packageRequest);
+            var package = await _retryPolicy.ExecuteAsync(
+                token => _packageResolver.ResolveAsync(effectiveRequest, token),
                 ct);
+
+            if (lockFileCoordinator is null)
+            {
+                return package;
+            }
+
+            var outcome = lockFileCoordinator.Evaluate(lockFileSnapshot!, package);
+            if (!outcome.Allowed || outcome.EffectivePackage is null)
+            {
+                throw new LockFilePolicyException(
+                    outcome.ReasonCode,
+                    $"Lock policy rejected package '{package.Id}@{package.Version}' ({outcome.ReasonCode}).");
+            }
+
+            if (outcome.ExpectedHash is not null)
+            {
+                expectedHashesById[package.Id] = outcome.ExpectedHash;
+            }
+
+            return outcome.EffectivePackage;
+        }
 
         Task<ResolvedPackage> ResolveCachedRootAsync(PackageRequest packageRequest, CancellationToken ct) =>
             resolvedRootsById.TryGetValue(packageRequest.Id, out var root)
@@ -347,6 +400,7 @@ public sealed class PackageApplyExecutor(
                 var graphResult = await _graphResolver.ResolveAsync(
                     rootRequests,
                     ResolveCachedRootAsync,
+                    ResolveDependencyAsync,
                     cancellationToken);
                 resolved.AddRange(graphResult.ResolvedPackages);
                 graphs.AddRange(graphResult.ResolvedGraphs);
@@ -386,6 +440,7 @@ public sealed class PackageApplyExecutor(
             {
                 var stage = ex switch
                 {
+                    LockFilePolicyException => "lock",
                     FeedUnavailableException => "resolve-feed-unavailable",
                     NoEligibleFeedException => "resolve-no-eligible-feed",
                     NuGetResolverException => "resolve-graph-conflict",
@@ -468,6 +523,7 @@ public sealed class PackageApplyExecutor(
             failed.Add(packageId);
             var stage = exception switch
             {
+                LockFilePolicyException => "lock",
                 FeedUnavailableException => "resolve-feed-unavailable",
                 NoEligibleFeedException => "resolve-no-eligible-feed",
                 _ => "resolve"
@@ -521,7 +577,7 @@ public sealed class PackageApplyExecutor(
             foreach (var resolved in resolutionResult.ResolvedPackages)
             {
                 var transaction = await _transactionCoordinator.ExecuteAsync(
-                    new(resolved.Id, resolved.Version, correlationId),
+                    CreateTransactionRequest(resolved, resolutionResult, correlationId),
                     cancellationToken);
 
                 if (transaction.Succeeded)
@@ -566,7 +622,7 @@ public sealed class PackageApplyExecutor(
                 }
 
                 var transaction = await _transactionCoordinator.ExecuteAsync(
-                    new(resolved.Id, resolved.Version, correlationId),
+                    CreateTransactionRequest(resolved, resolutionResult, correlationId),
                     cancellationToken);
 
                 if (transaction.Succeeded)
@@ -629,4 +685,15 @@ public sealed class PackageApplyExecutor(
     }
 
     private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";
+
+    private static PackageTransactionRequest CreateTransactionRequest(
+        ResolvedPackage package,
+        PackageResolutionResult resolutionResult,
+        string correlationId) =>
+        new(
+            package.Id,
+            package.Version,
+            correlationId,
+            ExpectedArtifactHash: resolutionResult.ExpectedArtifactHashes.GetValueOrDefault(package.Id),
+            ActualArtifactHash: package.PackageContentHash);
 }

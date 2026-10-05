@@ -20,4 +20,9 @@ public sealed record PackageResolutionResult(
     /// Gets the resolved dependency graphs, normalizing legacy construction to an empty list.
     /// </summary>
     public IReadOnlyList<ResolvedPackageGraph> ResolvedGraphs { get; init; } = ResolvedGraphs ?? [];
+
+    internal bool LockFileEvaluated { get; init; }
+
+    internal IReadOnlyDictionary<string, string> ExpectedArtifactHashes { get; init; } =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 }

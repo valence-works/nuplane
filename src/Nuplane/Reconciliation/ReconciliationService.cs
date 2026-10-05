@@ -9,6 +9,7 @@ using Nuplane.Observability;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Middleware;
 using Nuplane.Reconciliation.Models;
+using Nuplane.Reconciliation.LockFile;
 using Nuplane.Sources;
 using Nuplane.Store.Activation;
 using Nuplane.Store.Cleanup;
@@ -209,6 +210,7 @@ public sealed class ReconciliationService : IReconciliationService
         var metricsInstance = metrics ?? throw new ArgumentNullException(nameof(metrics));
         var failureRec = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
         var lockCoordinator = lockFileCoordinator ?? throw new ArgumentNullException(nameof(lockFileCoordinator));
+        var lockFileCycleCoordinator = lockCoordinator as ILockFileCycleCoordinator;
         var retry = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
         var dryRun = dryRunPlanner ?? throw new ArgumentNullException(nameof(dryRunPlanner));
         var cleanupService = packageCleanupService ?? throw new ArgumentNullException(nameof(packageCleanupService));
@@ -226,9 +228,13 @@ public sealed class ReconciliationService : IReconciliationService
             hostProvidedPackagesOptions?.Value);
 
         _pipeline = new();
+        if (lockFileCycleCoordinator is not null)
+        {
+            _pipeline.Use(new LockFileCycleMiddleware(lockFileCycleCoordinator));
+        }
         _pipeline.Use(new DesiredStateReadMiddleware(sourcesList, desiredStateAgg, retry, _sourceSnapshotCache, failureRec, loggerInstance, metricsInstance));
-        _pipeline.Use(new PackageResolutionMiddleware(applyExecutor, loggerInstance));
-        _pipeline.Use(new TrustAndLockGateMiddleware(lockCoordinator, retry, failureRec, loggerInstance));
+        _pipeline.Use(new PackageResolutionMiddleware(applyExecutor, loggerInstance, lockFileCycleCoordinator));
+        _pipeline.Use(new TrustAndLockGateMiddleware(lockCoordinator, retry, failureRec, loggerInstance, lockFileCycleCoordinator));
         _pipeline.Use(new DiffAndChangeEventMiddleware(diffEngine, dryRun, retry, storeReg, eventDispatcher, metricsInstance));
         _pipeline.Use(new TransactionExecutionMiddleware(applyExecutor, diffEngine, eventDispatcher));
         _pipeline.Use(new CleanupMiddleware(diffEngine, storeReg, cleanupService, cleanupOpts, metricsInstance));

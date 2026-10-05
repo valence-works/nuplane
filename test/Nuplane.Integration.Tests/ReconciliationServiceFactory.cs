@@ -47,7 +47,11 @@ internal static class ReconciliationServiceFactory
         var reconOptions = reconciliationOptions ?? new ReconciliationOptions();
         var metricsInstance = metrics ?? new ReconciliationMetrics(new());
         var feedResolution = feedResolutionOptions ?? new FeedResolutionOptions();
-        var lockOptions = new LockFileOptions();
+        var lockOptions = new LockFileOptions
+        {
+            Mode = LockFileMode.Enforce,
+            Path = Path.Combine(Path.GetTempPath(), $"nuplane-test-lock-{Guid.NewGuid():N}.json")
+        };
         var cleanupOptions = cleanupPolicyOptions ?? new CleanupPolicyOptions();
 
         return new(
