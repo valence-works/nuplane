@@ -26,7 +26,7 @@ public sealed class LockFileEnforceModeTests
         var snapshot = await coordinator.CaptureAsync(CancellationToken.None);
         var constrained = coordinator.ConstrainRequest(
             snapshot,
-            new("pkg-a", "[1.0.0, 10.0.0)", "feed-live", PackageUpdatePolicy.LatestMinor, "source"));
+            new("pkg-a", "[1.0.0, 10.0.0)", "feed-live", PackageUpdatePolicy.Range, "source"));
         var resolved = new ResolvedPackage("pkg-a", "1.2.3", "feed-lock", "/tmp/pkg-a", DateTimeOffset.UtcNow, "source")
         {
             PackageContentHash = CanonicalHash()

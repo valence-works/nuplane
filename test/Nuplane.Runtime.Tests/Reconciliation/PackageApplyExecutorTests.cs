@@ -34,7 +34,7 @@ public sealed class PackageApplyExecutorTests : IDisposable
             recorder);
 
         var result = await sut.ResolveAsync(
-            [new PackageRequest("Root.A", "[1.0.0, 3.0.0)", "live-feed", PackageUpdatePolicy.LatestMinor, "source")],
+            [new PackageRequest("Root.A", "[1.0.0, 3.0.0)", "live-feed", PackageUpdatePolicy.Range, "source")],
             "corr-lock",
             coordinator,
             snapshot,

@@ -50,8 +50,15 @@ public sealed class LockFileStore
             return null;
         }
 
-        await using var stream = File.OpenRead(_path);
-        return await JsonSerializer.DeserializeAsync<PackageLockFile>(stream, JsonOptions, cancellationToken);
+        await using var stream = new FileStream(
+            _path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 4096,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        return await JsonSerializer.DeserializeAsync<PackageLockFile>(stream, JsonOptions, cancellationToken)
+            ?? throw new JsonException("The lock file JSON document must contain an object.");
     }
 
     /// <summary>
@@ -63,7 +70,7 @@ public sealed class LockFileStore
 
         await _fileWriter.WriteAsync(
             _path,
-            (stream, token) => JsonSerializer.SerializeAsync(stream, lockFile, JsonOptions, token).AsTask(),
+            (stream, token) => JsonSerializer.SerializeAsync(stream, lockFile, JsonOptions, token),
             cancellationToken);
     }
 }

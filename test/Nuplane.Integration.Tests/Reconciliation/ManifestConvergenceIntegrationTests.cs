@@ -5,6 +5,7 @@ using Nuplane.Abstractions;
 using Nuplane.Feeds;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Convergence;
+using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Sources;
 using Nuplane.Store.State;
@@ -273,6 +274,13 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
     private static async Task<ResolvedPackage> ResolveAndTriggerCycleAsync(ServiceCollection services)
     {
         services.AddSingleton<IPackageResolver>(new NuGetPackageResolver());
+        services.Configure<LockFileOptions>(options =>
+        {
+            // This test deliberately replaces real feed acquisition with the metadata-only resolver,
+            // which has no archive bytes from which Generate mode could derive provenance.
+            options.Mode = LockFileMode.Enforce;
+            options.Path = Path.Combine(Path.GetTempPath(), $"nuplane-manifest-test-{Guid.NewGuid():N}.lock.json");
+        });
 
         await using var provider = services.BuildServiceProvider();
         var reconciliation = provider.GetRequiredService<ReconciliationService>();

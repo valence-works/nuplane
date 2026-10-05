@@ -246,15 +246,16 @@ public async Task TriggerManualAsync_WhenSourcesEmpty_ReturnsEmptyChangeSet()
 
 The reconciliation engine uses a middleware pipeline (`ReconciliationPipeline`) with discrete stages:
 
-1. **DesiredStateReadMiddleware** — Read desired package state from sources
-2. **PackageResolutionMiddleware** — Resolve packages from feeds
-3. **TrustAndLockGateMiddleware** — Evaluate trust policy and lock file
-4. **PackageLoadingMiddleware** — Load assemblies via ALCs
-5. **DiffAndChangeEventMiddleware** — Compute diff and emit change events
-6. **TransactionExecutionMiddleware** — Execute atomic state mutations
-7. **UnloadMiddleware** — Unload obsolete assemblies
-8. **CleanupMiddleware** — Clean up old package versions
-9. **HealthAndMetricsMiddleware** — Evaluate health and record metrics
+1. **LockFileCycleMiddleware** — Capture one immutable lock snapshot for the cycle and, in Generate mode, atomically publish a complete lock only after successful completion
+2. **DesiredStateReadMiddleware** — Read desired package state from sources
+3. **PackageResolutionMiddleware** — Resolve packages from feeds using the captured lock constraints
+4. **TrustAndLockGateMiddleware** — Report trust/lock outcomes from the captured snapshot; version, feed, and artifact constraints are already applied during resolution
+5. **PackageLoadingMiddleware** — Load assemblies via ALCs
+6. **DiffAndChangeEventMiddleware** — Compute diff and emit change events
+7. **TransactionExecutionMiddleware** — Execute atomic state mutations
+8. **UnloadMiddleware** — Unload obsolete assemblies
+9. **CleanupMiddleware** — Clean up old package versions
+10. **HealthAndMetricsMiddleware** — Evaluate health and record metrics
 
 Each middleware receives a `ReconciliationCycleContext` and must call `next()` to continue the pipeline.
 

@@ -199,7 +199,7 @@ Process B can load generation N, process A can acquire the lock and save generat
 
 ### AR-003 — Lock-file behavior is not end-to-end
 
-**Evidence and execution path**
+**Original evidence and execution path (before remediation)**
 
 - [`MultiFeedPackageResolver`](../../src/Nuplane/Feeds/MultiFeedPackageResolver.cs#L125) resolves/acquires a concrete package before lock evaluation.
 - [`LockFileCoordinator.EvaluateAsync`](../../src/Nuplane/Reconciliation/LockFileCoordinator.cs#L19-L55) replaces version and feed from a lock entry but preserves the original package's install path.
@@ -213,7 +213,11 @@ An enforce/strict cycle can claim the locked version/feed while retaining the or
 
 **Root cause:** lock-file evaluation was added as a post-resolution metadata gate rather than as a constraint on resolution, acquisition, graph construction, and activation provenance.
 
-**Recommended correction and required design decision:** treat a lock entry as one provenance constraint `(id, version, feed, hash)` and apply it before acquisition and dependency-graph construction. Define and version the canonical artifact-hash format, compute it before activation, and propagate expected/actual values through root and dependency transactions. Generate mode must write the complete deterministic closure atomically only after a successful cycle. This work is not implementation-ready until the hash representation and legacy/missing-hash behavior are recorded in a short ADR; the implementation must retain existing public option names unless an explicitly versioned migration is approved.
+**Remediation status (2026-10-05): implemented on the AR-003 delivery branch, pending PR review.** ADR-0001 records the accepted schema `2.0` contract and legacy policy. The runtime now captures one immutable lock snapshot per cycle; constrains locked root, dependency, and contributed-root requests before acquisition; hashes the exact `.nupkg` bytes as canonical `sha512:<standard-padded-base64>`; persists and propagates the actual hash into resolved packages, graph nodes, and transaction requests; and fails closed before activation when the selected version, feed, or hash disagrees with the entry. Generate mode publishes the complete successful closure through the same failure-atomic writer used by store state and preserves timestamps for byte-stable repeated output. Enforce still permits packages without entries, while Strict requires every acquired root and dependency; unsupported schema `1.0` and invalid used hashes produce migration diagnostics.
+
+Validation on the integrated branch: `dotnet build nuplane.sln --no-restore` completed with zero warnings and errors; `dotnet test nuplane.sln --no-restore` passed all 1,317 tests (794 runtime, 155 integration, 250 loading, 72 store, 25 NuGet, and 21 directory-source tests). Focused coverage includes exact local and remote archive bytes, cached metadata validation, root/dependency graph propagation, pre-acquisition lock constraints, strict dependency closure, deterministic generation, malformed-lock diagnostics, and failed atomic replacement preserving the prior lock.
+
+**Correction applied and decisions recorded:** a lock entry is now one provenance constraint `(id, version, feed, hash)` applied before acquisition and dependency-graph construction. ADR-0001 versions the canonical artifact-hash format and legacy/missing-hash behavior. Expected and actual hashes reach root and dependency transactions, Generate writes only a complete successful closure, and the existing public option names remain intact.
 
 **Compatibility risk:** enforce mode will begin failing cases that currently proceed with inconsistent metadata; generate output may expose a previously dormant format; existing lock hashes may not match the chosen canonical representation.
 
@@ -414,7 +418,7 @@ Each work unit should produce a small coherent PR, update this report's status t
 | Order | Work unit | Finding IDs | Dependencies | Readiness and independent verification |
 | --- | --- | --- | --- | --- |
 | 1 | Add fault-injection/two-registry tests, then implement one atomic, refresh-on-lock state commit path | AR-001, AR-002 | None | Delivered in PR #106 at reviewed head `a35fb632`, squash merge `846c3b33`; exact-head old/new visibility, destructive replacement failure, cancellation, two-registry, in-memory, reconciliation/recovery refresh, and Ubuntu/macOS/Windows checks passed. |
-| 2 | Define lock-file provenance/hash contract in an ADR; constrain resolution before acquisition; implement generate/enforce/strict across roots and dependencies | AR-003 | Work unit 1 for safe lock-file/state persistence patterns | Decision task ready; behavior implementation waits for the recorded hash/legacy policy. Verify full closure, mismatch LKG, deterministic generation, and exact provenance. |
+| 2 | Define lock-file provenance/hash contract in an ADR; constrain resolution before acquisition; implement generate/enforce/strict across roots and dependencies | AR-003 | Work unit 1 for safe lock-file/state persistence patterns | Accepted decisions are recorded in ADR-0001; implementation and full validation are complete on the delivery branch, pending exact-head PR review and CI. |
 | 3 | Record trust compatibility policy; add feed trust model and pre-acquisition admission evaluator | AR-004 | Lock/resolution seam from work unit 2 should be stable | Decision task ready. Recommended default is legacy-unspecified = trusted-with-warning for one compatibility window. Verify explicit untrusted fail-closed and scoped overrides. |
 | 4 | Introduce additive source-instance identity with persisted-key migration; restore empty snapshots correctly; consolidate the affected fixtures | CQ-001, CQ-002, TST-001 | Work unit 1 | Ready. Verify two same-type feeds/directories, restart, fallback isolation, error retention, empty snapshot, and legacy key read. |
 | 5 | Repair consumer quick starts, routes, API/package names, architecture map, and historical-spec labels | DX-001, DX-002, DX-003, DX-004 | Can run in parallel with work units 1–4 after adopting any overlapping PR | Ready. Verify root-level commands, all HTTP requests, relative links, and external snippet compilation. |
@@ -453,8 +457,8 @@ Use the `agentic-program-lead` workflow in a separate code session.
 
 1. Refresh issue/PR/default-branch/worktree state and confirm that no matching remediation PR has appeared.
 2. Read this report in full and preserve its stable finding IDs in PRs and issue updates.
-3. Treat work unit 1 as delivered through PR #106; do not duplicate it. Do not begin lock/trust implementation until their recorded design decisions satisfy the readiness notes.
+3. Treat work unit 1 as delivered through PR #106 and AR-003 as implemented on its delivery branch; do not duplicate either. Do not begin AR-004 until its recorded design decision satisfies the readiness note.
 4. Use isolated managed worktrees and session-owned integration processes; preserve unrelated changes.
 5. Link each PR and exact validation evidence from issue #104, update finding status in this report, and leave the issue open until Stage 2 completion criteria are met.
 
-**Outstanding decisions:** canonical lock-file hash representation and legacy/missing-hash behavior (AR-003); compatibility default/window for feeds without explicit trust metadata (AR-004); canonical durable activation pointer model (HYP-001). The report records recommended directions but does not claim owner acceptance.
+**Outstanding decisions:** compatibility default/window for feeds without explicit trust metadata (AR-004); canonical durable activation pointer model (HYP-001). ADR-0001 records the accepted canonical lock-file hash representation and legacy/missing-hash behavior for AR-003.

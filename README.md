@@ -688,9 +688,11 @@ Use these conventions when enabling advanced feed governance:
 
 - Recommended lock path: `./state/nuplane.lock.json` (outside source-controlled app code paths).
 - Commit lock files only for reproducibility workflows where environment parity is required.
-- Use `generate` mode to refresh lock entries from a known-good cycle.
-- Use `enforce` mode to hold package versions/feed selection stable under feed drift.
-- Use `strict` mode to fail packages missing lock entries and to block hash mismatches.
+- Schema `2.0` records each exact acquired `.nupkg` as `sha512:<standard-padded-base64>`; the digest includes every archive byte, including package signatures.
+- Use `generate` mode to atomically refresh the complete root and dependency closure after a successful cycle. Unchanged closure output remains byte-for-byte stable.
+- Use `enforce` mode to constrain matching entries to their locked version and feed before acquisition; packages with no entry continue through live resolution.
+- Use `strict` mode to require a valid entry for every acquired root and dependency. Host-provided dependencies are not acquired and therefore require no entry.
+- Schema `1.0`, malformed hashes, missing hashes, and artifact mismatches are rejected by `enforce` and `strict`; run a successful `generate` cycle to migrate a legacy lock.
 - Rotate lock files intentionally and treat lock updates as auditable operational changes.
 
 ## ⚙️ Phase 4 Operator Guidance (Convergent Runtime Loading)

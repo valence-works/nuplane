@@ -9,12 +9,17 @@ namespace Nuplane.Abstractions;
 /// <param name="InstallPath">The file system path where the package is installed.</param>
 /// <param name="InstalledAt">The time at which the package was installed.</param>
 /// <param name="SourceName">The name of the desired-state source that requested this package.</param>
-/// <param name="PackageContentHash">The canonical SHA-512 hash of the acquired package archive, or <see langword="null"/> when unavailable.</param>
 public sealed record ResolvedPackage(
     string Id,
     string Version,
     string FeedName,
     string InstallPath,
     DateTimeOffset InstalledAt,
-    string SourceName = "",
-    string? PackageContentHash = null);
+    string SourceName = "")
+{
+    /// <summary>
+    /// Gets the canonical SHA-512 hash of the acquired package archive, or <see langword="null"/>
+    /// when the exact archive provenance is unavailable.
+    /// </summary>
+    public string? PackageContentHash { get; init; }
+}

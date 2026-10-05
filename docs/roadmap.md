@@ -487,7 +487,7 @@ Example:
       "id": "My.Plugin",
       "version": "1.2.3",
       "feed": "Internal",
-      "hash": "sha512-..."
+      "hash": "sha512:<standard-padded-base64>"
     }
   ]
 }
@@ -497,9 +497,9 @@ Example:
 
 ### Modes
 
-* Generate: write lock file from current resolved state
-* Enforce: ignore version ranges and use lock file versions
-* Strict: fail if lock file missing packages
+* Generate: atomically write schema `2.0` from the complete successfully resolved closure
+* Enforce: constrain matching entries by version, feed, and exact archive hash before acquisition
+* Strict: require valid entries for every acquired root and dependency
 
 ---
 

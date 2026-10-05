@@ -48,7 +48,11 @@ internal sealed class TrustAndLockGateMiddleware(
             trustAndLockPassed,
             combinedFailures.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray(),
             resolutionResult.FeedDecisions,
-            resolutionResult.ResolvedGraphs);
+            resolutionResult.ResolvedGraphs)
+        {
+            LockFileEvaluated = resolutionResult.LockFileEvaluated,
+            ExpectedArtifactHashes = resolutionResult.ExpectedArtifactHashes
+        };
 
         await next();
     }

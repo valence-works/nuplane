@@ -25,7 +25,7 @@ public sealed class LockFileCoordinatorTests : IDisposable
     {
         File.Delete(_lockFilePath); // ensure absent
         var coordinator = Build(_lockFilePath, LockFileMode.Enforce);
-        var pkg = Pkg("alpha", "1.0.0", "feed-a");
+        var pkg = Pkg("alpha", "1.0.0", "feed-a") with { PackageContentHash = HashA };
 
         var result = await coordinator.EvaluateAsync(pkg, CancellationToken.None);
 
@@ -42,7 +42,7 @@ public sealed class LockFileCoordinatorTests : IDisposable
         var snapshot = await coordinator.CaptureAsync(CancellationToken.None);
         var request = coordinator.ConstrainRequest(
             snapshot,
-            new("alpha", "[1.0.0, 3.0.0)", "feed-live", PackageUpdatePolicy.LatestPatch, "source"));
+            new("alpha", "[1.0.0, 3.0.0)", "feed-live", PackageUpdatePolicy.Range, "source"));
 
         Assert.Equal("2.0.0", request.VersionRange);
         Assert.Equal("feed-a", request.FeedName);
@@ -54,12 +54,24 @@ public sealed class LockFileCoordinatorTests : IDisposable
     {
         await WriteLockFileAsync(_lockFilePath, "1.0", [new("alpha", "2.0.0", "feed-a", "legacy", DateTimeOffset.UtcNow)]);
         var coordinator = Build(_lockFilePath, LockFileMode.Generate);
-        var pkg = Pkg("alpha", "1.0.0", "feed-a");
+        var pkg = Pkg("alpha", "1.0.0", "feed-a") with { PackageContentHash = HashA };
 
         var result = await coordinator.EvaluateAsync(pkg, CancellationToken.None);
 
         Assert.True(result.Allowed);
         Assert.Equal("1.0.0", result.EffectivePackage!.Version); // not overridden
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_GenerateModeMissingActualHash_BlocksBeforeActivation()
+    {
+        File.Delete(_lockFilePath);
+        var coordinator = Build(_lockFilePath, LockFileMode.Generate);
+
+        var result = await coordinator.EvaluateAsync(Pkg("alpha", "1.0.0", "feed-a"), CancellationToken.None);
+
+        Assert.False(result.Allowed);
+        Assert.Equal("actual-hash-missing", result.ReasonCode);
     }
 
     [Fact]
@@ -106,6 +118,23 @@ public sealed class LockFileCoordinatorTests : IDisposable
     }
 
     [Theory]
+    [InlineData("not-json")]
+    [InlineData("null")]
+    [InlineData("{\"schemaVersion\":\"2.0\",\"generatedAt\":\"2026-10-05T00:00:00Z\",\"packages\":null}")]
+    public async Task CaptureAsync_EnforceModeMalformedLock_RejectsWithPolicyDiagnostic(string contents)
+    {
+        await File.WriteAllTextAsync(_lockFilePath, contents);
+        var coordinator = Build(_lockFilePath, LockFileMode.Enforce);
+
+        var snapshot = await coordinator.CaptureAsync(CancellationToken.None);
+
+        var exception = Assert.Throws<LockFilePolicyException>(() => coordinator.ConstrainRequest(
+            snapshot,
+            new("alpha", "1.0.0", null, PackageUpdatePolicy.Exact, "source")));
+        Assert.Equal("invalid-lock-file", exception.ReasonCode);
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("sha512:not-base64")]
     [InlineData("SHA512:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==")]
@@ -144,7 +173,7 @@ public sealed class LockFileCoordinatorTests : IDisposable
         await WriteLockFileAsync(_lockFilePath, "2.0", []);
         var coordinator = Build(_lockFilePath, LockFileMode.Enforce);
         var snapshot = await coordinator.CaptureAsync(CancellationToken.None);
-        var live = new PackageRequest("alpha", "[1.0.0, 2.0.0)", "feed-live", PackageUpdatePolicy.LatestMinor, "source");
+        var live = new PackageRequest("alpha", "[1.0.0, 2.0.0)", "feed-live", PackageUpdatePolicy.Range, "source");
 
         var constrained = coordinator.ConstrainRequest(snapshot, live);
 

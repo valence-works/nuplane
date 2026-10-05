@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Reconciliation.LockFile;
@@ -30,7 +31,18 @@ public sealed class LockFileCoordinator(LockFileStore store, IOptions<LockFileOp
 
     internal async Task<LockFileSnapshot> CaptureAsync(CancellationToken cancellationToken)
     {
-        var lockFile = await _store.ReadAsync(cancellationToken);
+        PackageLockFile? lockFile;
+        try
+        {
+            lockFile = await _store.ReadAsync(cancellationToken);
+        }
+        catch (JsonException exception)
+        {
+            return CreateSnapshot(null, new(
+                "invalid-lock-file",
+                $"The lock file is not valid JSON for the Nuplane lock schema: {exception.Message}"));
+        }
+
         if (_options.Mode is LockFileMode.Enforce or LockFileMode.Strict &&
             lockFile is not null &&
             !string.Equals(lockFile.SchemaVersion, CurrentSchemaVersion, StringComparison.Ordinal))
@@ -42,6 +54,14 @@ public sealed class LockFileCoordinator(LockFileStore store, IOptions<LockFileOp
 
         if (lockFile is not null)
         {
+            if (lockFile.Packages is null ||
+                lockFile.Packages.Any(static entry => entry is null || string.IsNullOrWhiteSpace(entry.Id)))
+            {
+                return CreateSnapshot(null, new(
+                    "invalid-lock-file",
+                    "The lock file must contain a packages array whose entries have non-empty package identifiers."));
+            }
+
             var duplicate = lockFile.Packages
                 .GroupBy(static entry => entry.Id, StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault(static group => group.Skip(1).Any());
@@ -95,7 +115,9 @@ public sealed class LockFileCoordinator(LockFileStore store, IOptions<LockFileOp
 
         if (snapshot.Mode == LockFileMode.Generate)
         {
-            return new(true, "generate", resolved, null);
+            return IsCanonicalHash(resolved.PackageContentHash)
+                ? new(true, "generate", resolved, null)
+                : new(false, "actual-hash-missing", null, null);
         }
 
         if (snapshot.ValidationFailure is { } validationFailure)
@@ -177,8 +199,10 @@ public sealed class LockFileCoordinator(LockFileStore store, IOptions<LockFileOp
                 $"Cannot generate a provenance lock because package '{missingHash.Id}@{missingHash.Version}' has no canonical archive hash.");
         }
 
-        var previousEntries = string.Equals(snapshot.ExistingLockFile?.SchemaVersion, CurrentSchemaVersion, StringComparison.Ordinal)
-            ? snapshot.ExistingLockFile.Packages.ToDictionary(static entry => entry.Id, StringComparer.OrdinalIgnoreCase)
+        var existingLock = snapshot.ExistingLockFile;
+        var previousEntries = snapshot.ValidationFailure is null && existingLock is not null &&
+            string.Equals(existingLock.SchemaVersion, CurrentSchemaVersion, StringComparison.Ordinal)
+            ? existingLock.Packages.ToDictionary(static entry => entry.Id, StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, PackageLockEntry>(StringComparer.OrdinalIgnoreCase);
         var entries = resolvedPackages
             .Select(package =>
