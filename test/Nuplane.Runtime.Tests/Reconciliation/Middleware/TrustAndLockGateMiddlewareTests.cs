@@ -40,6 +40,28 @@ public sealed class TrustAndLockGateMiddlewareTests
     }
 
     [Fact]
+    public async Task InvokeAsync_AllPackagesTrustedAndLockClean_PreservesLockEvaluationMetadata()
+    {
+        var resolved = new[] { Pkg("alpha") };
+        var expectedHashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["alpha"] = "sha512:expected"
+        };
+        var middleware = Build();
+        var ctx = Ctx(resolved);
+        ctx.ResolutionResult = ctx.ResolutionResult! with
+        {
+            LockFileEvaluated = true,
+            ExpectedArtifactHashes = expectedHashes
+        };
+
+        await middleware.InvokeAsync(ctx, () => Task.CompletedTask);
+
+        Assert.True(ctx.ResolutionResult!.LockFileEvaluated);
+        Assert.Same(expectedHashes, ctx.ResolutionResult.ExpectedArtifactHashes);
+    }
+
+    [Fact]
     public async Task InvokeAsync_OnePackageBlockedByLock_ExcludedAndFailureRecorded()
     {
         var recorder = new FakeFailureRecorder();

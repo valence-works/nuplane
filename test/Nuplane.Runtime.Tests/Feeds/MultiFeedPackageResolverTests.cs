@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -12,6 +13,75 @@ namespace Nuplane.Runtime.Tests.Feeds;
 
 public sealed class MultiFeedPackageResolverTests
 {
+    [Fact]
+    public async Task ResolveAsync_LocalArchive_PropagatesPersistedHashAcrossCachedResolves()
+    {
+        using var packages = new TempDirectory();
+        using var installRoot = new TempDirectory();
+        var archivePath = NupkgTestBuilder.Create("MyPlugin", "1.0.0").BuildTo(packages.Path);
+        var expectedHash = "sha512:" + Convert.ToBase64String(SHA512.HashData(await File.ReadAllBytesAsync(archivePath)));
+        var options = new FeedResolutionOptions { PackageInstallRoot = installRoot.Path };
+        options.Feeds.Add(new("local", new Uri(packages.Path + Path.DirectorySeparatorChar)));
+        var resolver = CreateResolver(options, Substitute.For<IRemotePackageAcquirer>());
+        var request = new PackageRequest("MyPlugin", "[1.0.0]", "local", PackageUpdatePolicy.Exact, "source");
+
+        var first = await resolver.ResolveAsync(request, CancellationToken.None);
+        var second = await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal(expectedHash, first.PackageContentHash);
+        Assert.Equal(first.PackageContentHash, second.PackageContentHash);
+        Assert.Equal(first.InstallPath, second.InstallPath);
+    }
+
+    public static IEnumerable<object?[]> CachedHashMetadataCases()
+    {
+        var canonicalHash = "sha512:" + Convert.ToBase64String(Enumerable.Range(0, 64).Select(static i => (byte)i).ToArray());
+        string?[] invalidMetadata =
+        [
+            null, "", "sha512:invalid", "sha256:" + canonicalHash[7..],
+            canonicalHash.ToUpperInvariant(), canonicalHash.TrimEnd('='),
+            canonicalHash + "\n", canonicalHash.Insert(12, " "),
+            canonicalHash[..^3] + "x==", "sha512:" + Convert.ToBase64String(new byte[63])
+        ];
+        foreach (var localFeed in new[] { true, false })
+        {
+            yield return [localFeed, canonicalHash, canonicalHash];
+            foreach (var metadata in invalidMetadata)
+            {
+                yield return [localFeed, metadata, null];
+            }
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(CachedHashMetadataCases))]
+    public async Task ResolveAsync_CachedInstall_UsesOnlyCanonicalArchiveMetadata(bool localFeed, string? metadata, string? expectedHash)
+    {
+        using var packages = new TempDirectory();
+        using var installRoot = new TempDirectory();
+        NupkgTestBuilder.Create("MyPlugin", "1.0.0").BuildTo(packages.Path);
+        var options = new FeedResolutionOptions { PackageInstallRoot = installRoot.Path };
+        options.Feeds.Add(new("feed", localFeed
+            ? new Uri(packages.Path + Path.DirectorySeparatorChar)
+            : new Uri("https://feed.example/v3/index.json")));
+        var installDirectory = PackageInstallStore.GetInstallDirectory(installRoot.Path, "feed", "MyPlugin", "1.0.0");
+        Directory.CreateDirectory(installDirectory);
+        await File.WriteAllTextAsync(Path.Combine(installDirectory, ".nuplane-ready"), string.Empty);
+        if (metadata is not null)
+        {
+            await File.WriteAllTextAsync(Path.Combine(installDirectory, ".nuplane-content-hash"), metadata);
+        }
+        var acquirer = new NuGetRemotePackageAcquirer(Options.Create(options));
+        var resolver = CreateResolver(options, acquirer);
+        var request = new PackageRequest("MyPlugin", "[1.0.0]", "feed", PackageUpdatePolicy.Exact, "source");
+
+        var result = await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal(expectedHash, result.PackageContentHash);
+        Assert.Equal(installDirectory, result.InstallPath);
+        Assert.Equal(metadata is not null, File.Exists(Path.Combine(installDirectory, ".nuplane-content-hash")));
+    }
+
     private static MultiFeedPackageResolver CreateResolver(
         FeedResolutionOptions options,
         IRemotePackageAcquirer acquirer,

@@ -1,4 +1,5 @@
 using Nuplane.Reconciliation.Validation;
+using Nuplane.Reconciliation.LockFile;
 
 namespace Nuplane.Runtime.Tests.LockFile;
 
@@ -22,5 +23,26 @@ public sealed class LockFileOptionsValidatorTests
         Assert.True(result.Failed);
         Assert.Contains("Lock file path must be provided", result.FailureMessage);
     }
-}
 
+    [Fact]
+    public void Validate_HashMismatchRelaxationRequested_Fails()
+    {
+        var result = _sut.Validate(null, new() { FailOnHashMismatch = false });
+
+        Assert.True(result.Failed);
+        Assert.Contains(nameof(LockFileOptions.FailOnHashMismatch), result.FailureMessage);
+    }
+
+    [Fact]
+    public void Validate_StrictEntryRelaxationRequested_Fails()
+    {
+        var result = _sut.Validate(null, new()
+        {
+            Mode = LockFileMode.Strict,
+            RequireEntryInStrictMode = false
+        });
+
+        Assert.True(result.Failed);
+        Assert.Contains(nameof(LockFileOptions.RequireEntryInStrictMode), result.FailureMessage);
+    }
+}

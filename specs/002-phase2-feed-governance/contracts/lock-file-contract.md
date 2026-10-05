@@ -1,6 +1,8 @@
 # Contract: Lock File Modes and Integrity
 
 ## Lock File Schema Contract
+Schema `2.0` is the current enforceable schema.
+
 Minimum entry fields:
 - `id`
 - `version`
@@ -14,8 +16,12 @@ Minimum entry fields:
 - `strict`: fail package when required lock entry is missing.
 
 ## Integrity Contract
+- `hash` MUST use `sha512:<standard-padded-base64>` and identify every byte of the exact acquired `.nupkg` archive.
+- Version, feed, and hash constraints MUST be applied before package acquisition returns to graph construction.
+- Strict mode MUST cover every acquired root and dependency; host-provided dependencies are excluded because Nuplane does not acquire them.
 - Activation MUST fail when downloaded artifact hash does not match lock entry hash.
 - Hash mismatch MUST NOT switch active pointer away from LKG.
+- Schema `1.0` and malformed or missing schema `2.0` hashes MUST NOT be silently trusted by enforce or strict mode.
 
 ## Dry-Run Contract
 - Dry-run executes lock checks exactly as apply mode.

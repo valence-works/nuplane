@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Reconciliation.LockFile;
+using Nuplane.Store.State;
 
 namespace Nuplane.Reconciliation;
 
@@ -10,7 +11,7 @@ namespace Nuplane.Reconciliation;
 /// Reads and writes package lock files in JSON format, providing serialization
 /// and deserialization for <see cref="PackageLockFile"/> instances.
 /// </summary>
-public sealed class LockFileStore(IOptions<LockFileOptions> options)
+public sealed class LockFileStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -19,7 +20,25 @@ public sealed class LockFileStore(IOptions<LockFileOptions> options)
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    private readonly string _path = (options ?? throw new ArgumentNullException(nameof(options))).Value.Path;
+    private readonly string _path;
+    private readonly AtomicFileWriter _fileWriter;
+
+    /// <summary>Initializes a lock-file store that publishes writes atomically.</summary>
+    public LockFileStore(IOptions<LockFileOptions> options)
+        : this(options, new AtomicFileWriter())
+    {
+    }
+
+    internal LockFileStore(IOptions<LockFileOptions> options, IAtomicFileReplacer fileReplacer)
+        : this(options, new AtomicFileWriter(fileReplacer))
+    {
+    }
+
+    private LockFileStore(IOptions<LockFileOptions> options, AtomicFileWriter fileWriter)
+    {
+        _path = (options ?? throw new ArgumentNullException(nameof(options))).Value.Path;
+        _fileWriter = fileWriter ?? throw new ArgumentNullException(nameof(fileWriter));
+    }
 
     /// <summary>
     /// Reads the lock file from disk, returning <see langword="null"/> if the file does not exist.
@@ -31,8 +50,15 @@ public sealed class LockFileStore(IOptions<LockFileOptions> options)
             return null;
         }
 
-        await using var stream = File.OpenRead(_path);
-        return await JsonSerializer.DeserializeAsync<PackageLockFile>(stream, JsonOptions, cancellationToken);
+        await using var stream = new FileStream(
+            _path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 4096,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        return await JsonSerializer.DeserializeAsync<PackageLockFile>(stream, JsonOptions, cancellationToken)
+            ?? throw new JsonException("The lock file JSON document must contain an object.");
     }
 
     /// <summary>
@@ -42,13 +68,9 @@ public sealed class LockFileStore(IOptions<LockFileOptions> options)
     {
         ArgumentNullException.ThrowIfNull(lockFile);
 
-        var directory = Path.GetDirectoryName(_path);
-        if (!string.IsNullOrWhiteSpace(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        await using var stream = File.Create(_path);
-        await JsonSerializer.SerializeAsync(stream, lockFile, JsonOptions, cancellationToken);
+        await _fileWriter.WriteAsync(
+            _path,
+            (stream, token) => JsonSerializer.SerializeAsync(stream, lockFile, JsonOptions, token),
+            cancellationToken);
     }
 }

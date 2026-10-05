@@ -1,5 +1,6 @@
 using Nuplane.Abstractions;
 using Nuplane.Reconciliation.Models;
+using Nuplane.Reconciliation.LockFile;
 using Nuplane.Sources;
 
 namespace Nuplane.Reconciliation.Middleware;
@@ -21,6 +22,7 @@ internal sealed class ReconciliationCycleContext
 
     // Resolution
     public PackageResolutionResult? ResolutionResult { get; set; }
+    public LockFileSnapshot? LockFileSnapshot { get; set; }
     public List<ResolvedPackage> TrustAndLockPassed { get; set; } = [];
 
     // Failure counts
@@ -39,5 +41,4 @@ internal sealed class ReconciliationCycleContext
     // Result
     public ReconciliationRunResult? Result { get; set; }
 }
-
 

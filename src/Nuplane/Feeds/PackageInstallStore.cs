@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Security.Cryptography;
 using Nuplane.Feeds.Configuration;
 
 namespace Nuplane.Feeds;
@@ -18,6 +19,9 @@ internal static class PackageInstallStore
     /// therefore already present when the directory is published under its final name.
     /// </summary>
     public const string CompletionMarkerFileName = ".nuplane-ready";
+
+    /// <summary>The canonical hash of the exact archive used for a completed extraction.</summary>
+    public const string ContentHashFileName = ".nuplane-content-hash";
 
     /// <summary>
     /// Resolves the writable root that all package extractions land under.
@@ -86,8 +90,20 @@ internal static class PackageInstallStore
 
         try
         {
+            await using var packageStream = File.OpenRead(nupkgPath);
+            var hash = await SHA512.HashDataAsync(packageStream, cancellationToken);
+            var contentHash = "sha512:" + Convert.ToBase64String(hash);
+            packageStream.Position = 0;
+
             Directory.CreateDirectory(stagingDirectory);
-            ZipFile.ExtractToDirectory(nupkgPath, stagingDirectory, overwriteFiles: true);
+            using (var archive = new ZipArchive(packageStream, ZipArchiveMode.Read, leaveOpen: true))
+            {
+                archive.ExtractToDirectory(stagingDirectory, overwriteFiles: true);
+            }
+            await File.WriteAllTextAsync(
+                Path.Combine(stagingDirectory, ContentHashFileName),
+                contentHash,
+                cancellationToken);
             await File.WriteAllTextAsync(
                 Path.Combine(stagingDirectory, CompletionMarkerFileName),
                 string.Empty,
@@ -107,6 +123,39 @@ internal static class PackageInstallStore
                 Directory.Delete(stagingDirectory, recursive: true);
             }
         }
+    }
+
+    /// <summary>
+    /// Reads a previously acquired archive hash. Legacy installs and invalid or noncanonical
+    /// metadata return <see langword="null"/>; extracted content cannot reconstruct archive bytes.
+    /// </summary>
+    /// <param name="installDirectory">The completed package install directory.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    public static async Task<string?> ReadContentHashAsync(string installDirectory, CancellationToken cancellationToken)
+    {
+        string contentHash;
+        try
+        {
+            contentHash = await File.ReadAllTextAsync(Path.Combine(installDirectory, ContentHashFileName), cancellationToken);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        const string prefix = "sha512:";
+        if (contentHash.Length != prefix.Length + 88 || !contentHash.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var bytes = new byte[64];
+        var base64 = contentHash[prefix.Length..];
+        return Convert.TryFromBase64String(base64, bytes, out var bytesWritten)
+            && bytesWritten == bytes.Length
+            && string.Equals(base64, Convert.ToBase64String(bytes), StringComparison.Ordinal)
+                ? contentHash
+                : null;
     }
 
     /// <summary>

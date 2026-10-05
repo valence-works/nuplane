@@ -13,7 +13,7 @@ public sealed class LockFileStrictModeTests
         var lockPath = Path.Combine(Path.GetTempPath(), $"nuplane-lock-{Guid.NewGuid():N}.json");
         var lockOptions = new LockFileOptions { Mode = LockFileMode.Strict, Path = lockPath, RequireEntryInStrictMode = true };
         var store = new LockFileStore(new OptionsWrapper<LockFileOptions>(lockOptions));
-        await store.WriteAsync(new("1.0", DateTimeOffset.UtcNow, []), CancellationToken.None);
+        await store.WriteAsync(new("2.0", DateTimeOffset.UtcNow, []), CancellationToken.None);
 
         var coordinator = new LockFileCoordinator(
             store,

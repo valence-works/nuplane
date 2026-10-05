@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.Security.Cryptography;
 using Nuplane.Abstractions;
 using Nuplane.Builder;
 using Nuplane.Reconciliation;
@@ -192,7 +193,7 @@ public sealed class CapabilityContributionCycleTests : IDisposable
         // evaluated against the lock file exactly like a root the host named.
         var failure = await LastFailureAsync(engine.PackageId);
         Assert.Equal("lock", failure.Stage);
-        Assert.Equal("strict-missing-entry", failure.Message);
+        Assert.StartsWith("strict-missing-entry:", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -316,24 +317,28 @@ public sealed class CapabilityContributionCycleTests : IDisposable
             }
             """);
 
-    private void WriteLockFile(PackageFixture package) =>
+    private void WriteLockFile(PackageFixture package)
+    {
+        var packagePath = Path.Combine(_moduleFeedDirectory, $"{package.PackageId}.{package.Version}.nupkg");
+        var hash = $"sha512:{Convert.ToBase64String(SHA512.HashData(File.ReadAllBytes(packagePath)))}";
         File.WriteAllText(
             _lockFilePath,
             $$"""
             {
-              "schemaVersion": "1.0",
+              "schemaVersion": "2.0",
               "generatedAt": "{{DateTimeOffset.UtcNow:O}}",
               "packages": [
                 {
                   "id": "{{package.PackageId}}",
                   "version": "{{package.Version}}",
                   "feed": "{{ModuleFeedName}}",
-                  "hash": "",
+                  "hash": "{{hash}}",
                   "timestamp": "{{DateTimeOffset.UtcNow:O}}"
                 }
               ]
             }
             """);
+    }
 
     private Task<NuplaneRestoreResult> RestoreAsync(
         params (string Key, string? Value)[] settings) =>

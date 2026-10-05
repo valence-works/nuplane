@@ -15,4 +15,11 @@ public sealed record ResolvedPackage(
     string FeedName,
     string InstallPath,
     DateTimeOffset InstalledAt,
-    string SourceName = "");
+    string SourceName = "")
+{
+    /// <summary>
+    /// Gets the canonical SHA-512 hash of the acquired package archive, or <see langword="null"/>
+    /// when the exact archive provenance is unavailable.
+    /// </summary>
+    public string? PackageContentHash { get; init; }
+}
