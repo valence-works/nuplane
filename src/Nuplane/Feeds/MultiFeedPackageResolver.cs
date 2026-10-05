@@ -159,7 +159,8 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                 candidate.Name,
                 installPath,
                 DateTimeOffset.UtcNow,
-                request.SourceName);
+                request.SourceName,
+                await PackageInstallStore.ReadContentHashAsync(installPath, cancellationToken));
 
             _decisions[request.Id] = FeedResolutionDecision.Resolved(
                 request,

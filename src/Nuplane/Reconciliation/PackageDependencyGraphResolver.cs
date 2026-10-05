@@ -456,7 +456,7 @@ public sealed class PackageDependencyGraphResolver
             package.InstallPath,
             PackageSourceKind.RemoteFeed,
             string.IsNullOrWhiteSpace(package.SourceName) ? package.FeedName : package.SourceName,
-            PackageContentHash: null,
+            PackageContentHash: package.PackageContentHash,
             RuntimeAssets: ResolveRuntimeAssets(package.InstallPath),
             DiscoverableAssets: role is PackageNodeRole.Root or PackageNodeRole.RootAndDependency ? ResolveRuntimeAssets(package.InstallPath) : [],
             SupportAssets: role is PackageNodeRole.Dependency ? ResolveRuntimeAssets(package.InstallPath) : []);

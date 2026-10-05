@@ -16,8 +16,10 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     [Fact]
     public async Task ResolveAsync_RootOnlyDesiredInput_ResolvesRootAndDependencyGraph()
     {
-        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Plugin.Dependency", dependencyVersionRange: "[1.0.0]");
-        var dependency = CreateInstalledPackage("Plugin.Dependency", "1.0.0");
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Plugin.Dependency", dependencyVersionRange: "[1.0.0]")
+            with { PackageContentHash = "sha512:" + Convert.ToBase64String(new byte[64]) };
+        var dependency = CreateInstalledPackage("Plugin.Dependency", "1.0.0")
+            with { PackageContentHash = "sha512:" + Convert.ToBase64String(Enumerable.Repeat((byte)1, 64).ToArray()) };
         var resolver = new StubPackageResolver(
             new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
             {
@@ -33,6 +35,8 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
         Assert.Equal(["Plugin.Dependency", "Plugin.Root"], result.ResolvedPackages.Select(static package => package.Id).Order(StringComparer.OrdinalIgnoreCase));
         var graph = Assert.Single(result.ResolvedGraphs);
         Assert.Equal(["Plugin.Root"], graph.Roots.Select(static node => node.PackageId));
+        Assert.Equal(root.PackageContentHash, Assert.Single(graph.Roots).PackageContentHash);
+        Assert.Equal(dependency.PackageContentHash, Assert.Single(graph.Nodes, static node => node.PackageId == "Plugin.Dependency").PackageContentHash);
         Assert.Contains(graph.Nodes, static node => node.PackageId == "Plugin.Dependency" && node.Role == PackageNodeRole.Dependency);
         var edge = Assert.Single(graph.Edges);
         Assert.Equal("Plugin.Root", edge.FromPackageId);
