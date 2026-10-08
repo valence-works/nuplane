@@ -28,12 +28,13 @@ public interface INuplaneObserver
     Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken ct);
 
     /// <summary>
-    /// Called after a reconciliation cycle successfully applies packages, carrying the set of
-    /// packages that are active for the cycle even when the change set itself is empty.
+    /// Called during reconciliation completion when the cycle successfully applies packages (even with an empty
+    /// change set) or commits removals. The callback carries the change set and packages successfully applied in
+    /// that cycle; <paramref name="appliedPackages"/> can be empty when a removal commits without a successful application.
     /// Default implementation is a no-op for backward compatibility.
     /// </summary>
     /// <param name="changeSet">The computed package change set for the cycle.</param>
-    /// <param name="appliedPackages">The packages successfully applied for the cycle.</param>
+    /// <param name="appliedPackages">The packages successfully applied for the cycle; this is empty when a removal commits without a successful application.</param>
     /// <param name="ct">A token to cancel the operation.</param>
     Task OnPackagesReconciledAsync(
         PackageChangeSet changeSet,

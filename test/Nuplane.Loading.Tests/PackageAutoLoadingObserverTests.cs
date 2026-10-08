@@ -90,6 +90,24 @@ public sealed class PackageAutoLoadingObserverTests : IDisposable
     }
 
     [Fact]
+    public async Task OnPackagesReconciledAsync_RemovalWithEmptyAppliedList_RetiresInactiveContexts()
+    {
+        var removed = new ResolvedPackage("pkg-removed", "1.0.0", "feed", "/path-removed", Now);
+        var loader = new FakePackageLoader(preloadedPackages: [removed]);
+        var dispatcher = new FakeLoadingEventDispatcher();
+        var store = CreateStoreRegistry("empty-after-removal");
+        var sut = CreateObserver(loader, dispatcher, new() { Enabled = true }, storeRegistry: store);
+        var changeSet = new PackageChangeSet([], [], [removed.Id], "corr-remove-to-empty", Now);
+
+        await sut.OnPackagesReconciledAsync(changeSet, [], CancellationToken.None);
+
+        Assert.Contains("pkg-removed@1.0.0", loader.UnloadedKeys);
+        Assert.False(loader.TryGetContext(removed.Id, removed.Version, out _));
+        Assert.False(loader.WasCalled);
+        Assert.Empty(dispatcher.LoadedEvents);
+    }
+
+    [Fact]
     public async Task UpdatedPackage_UnloadsSupersededVersionContext()
     {
         var oldVersion = new ResolvedPackage("pkg", "1.0.0", "feed", "/path-1", Now);

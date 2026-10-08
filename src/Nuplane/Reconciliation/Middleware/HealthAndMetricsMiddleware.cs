@@ -52,7 +52,7 @@ internal sealed class HealthAndMetricsMiddleware(
             await observerEventDispatcher.PublishChangedAsync(changeSet, context.CancellationToken);
         }
 
-        if (applyResult.AppliedPackages.Count > 0)
+        if (applyResult.AppliedPackages.Count > 0 || changeSet.Removed.Count > 0)
         {
             await observerEventDispatcher.PublishReconciledAsync(changeSet, applyResult.AppliedPackages, context.CancellationToken);
         }
