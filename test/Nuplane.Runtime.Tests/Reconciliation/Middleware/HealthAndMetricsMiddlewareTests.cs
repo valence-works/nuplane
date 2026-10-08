@@ -20,7 +20,7 @@ public sealed class HealthAndMetricsMiddlewareTests
         var ctx = Ctx(changeSet);
         await Build(dispatcher: dispatcher).InvokeAsync(ctx, () => Task.CompletedTask);
 
-        Assert.Equal(1, dispatcher.PublishChangedCallCount);
+        Assert.Single(dispatcher.Calls, call => call == "changed");
     }
 
     [Fact]
@@ -32,7 +32,84 @@ public sealed class HealthAndMetricsMiddlewareTests
         var ctx = Ctx(emptyChangeSet);
         await Build(dispatcher: dispatcher).InvokeAsync(ctx, () => Task.CompletedTask);
 
-        Assert.Equal(0, dispatcher.PublishChangedCallCount);
+        Assert.DoesNotContain("changed", dispatcher.Calls);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_RemovedChangeSetAndNoAppliedPackages_PublishChangedThenReconciledWithEmptyAppliedList()
+    {
+        var changeSet = new PackageChangeSet([], [], ["pkg-removed"], "corr-removal", DateTimeOffset.UtcNow);
+        var dispatcher = new RecordingDispatcher();
+        var ctx = Ctx(changeSet);
+        var nextCallCount = 0;
+
+        await Build(dispatcher: dispatcher).InvokeAsync(ctx, () =>
+        {
+            nextCallCount++;
+            return Task.CompletedTask;
+        });
+
+        Assert.Equal(["changed", "reconciled"], dispatcher.Calls);
+        Assert.Same(changeSet, dispatcher.ChangedChangeSet);
+        Assert.Same(changeSet, dispatcher.ReconciledChangeSet);
+        Assert.Same(ctx.ApplyResult!.AppliedPackages, dispatcher.ReconciledAppliedPackages);
+        Assert.Empty(dispatcher.ReconciledAppliedPackages!);
+        Assert.Equal(1, nextCallCount);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_RemovedChangeSetAndFailedAcquisition_NotifiesWithoutClearingFailures()
+    {
+        var changeSet = new PackageChangeSet([], [], ["pkg-removed"], "corr-removal-failure", DateTimeOffset.UtcNow);
+        var dispatcher = new RecordingDispatcher();
+        var ctx = Ctx(changeSet);
+        ctx.ApplyResult = new([], ["pkg-failed"]);
+
+        await Build(dispatcher: dispatcher, evaluator: new FakeHealthEvaluator(true)).InvokeAsync(ctx, () => Task.CompletedTask);
+
+        Assert.Equal(["changed", "reconciled"], dispatcher.Calls);
+        Assert.Empty(dispatcher.ReconciledAppliedPackages!);
+        Assert.True(ctx.Result!.IsDegraded);
+        Assert.Equal(["pkg-failed"], ctx.Result.FailedPackages);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_NoChangesAndNoAppliedPackages_DoesNotPublishReconciled()
+    {
+        var dispatcher = new RecordingDispatcher();
+        var ctx = Ctx(new PackageChangeSet([], [], [], "corr-empty", DateTimeOffset.UtcNow));
+
+        await Build(dispatcher: dispatcher).InvokeAsync(ctx, () => Task.CompletedTask);
+
+        Assert.Empty(dispatcher.Calls);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_NoChangesAndFailedOnly_DoesNotPublishReconciledAndPreservesFailure()
+    {
+        var dispatcher = new RecordingDispatcher();
+        var ctx = Ctx(new PackageChangeSet([], [], [], "corr-failed-only", DateTimeOffset.UtcNow));
+        ctx.ApplyResult = new([], ["pkg-failed"]);
+
+        await Build(dispatcher: dispatcher, evaluator: new FakeHealthEvaluator(true)).InvokeAsync(ctx, () => Task.CompletedTask);
+
+        Assert.Empty(dispatcher.Calls);
+        Assert.True(ctx.Result!.IsDegraded);
+        Assert.Equal(["pkg-failed"], ctx.Result.FailedPackages);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_NoChangeWithSuccessfulAppliedPackages_PublishesReconciled()
+    {
+        var applied = Pkg("pkg-applied", "1.0.0");
+        var dispatcher = new RecordingDispatcher();
+        var ctx = Ctx(new PackageChangeSet([], [], [], "corr-applied-no-change", DateTimeOffset.UtcNow));
+        ctx.ApplyResult = new([applied], []);
+
+        await Build(dispatcher: dispatcher).InvokeAsync(ctx, () => Task.CompletedTask);
+
+        Assert.Equal(["reconciled"], dispatcher.Calls);
+        Assert.Same(ctx.ApplyResult.AppliedPackages, dispatcher.ReconciledAppliedPackages);
     }
 
     [Fact]
@@ -123,18 +200,27 @@ public sealed class HealthAndMetricsMiddlewareTests
 
     private sealed class RecordingDispatcher : IObserverEventDispatcher
     {
-        public int PublishChangedCallCount { get; private set; }
+        public List<string> Calls { get; } = [];
+        public PackageChangeSet? ChangedChangeSet { get; private set; }
+        public PackageChangeSet? ReconciledChangeSet { get; private set; }
+        public IReadOnlyList<ResolvedPackage>? ReconciledAppliedPackages { get; private set; }
 
         public Task PublishChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
 
         public Task PublishChangedAsync(PackageChangeSet changeSet, CancellationToken ct)
         {
-            PublishChangedCallCount++;
+            Calls.Add("changed");
+            ChangedChangeSet = changeSet;
             return Task.CompletedTask;
         }
 
-        public Task PublishReconciledAsync(PackageChangeSet changeSet, IReadOnlyList<ResolvedPackage> appliedPackages, CancellationToken ct) =>
-            Task.CompletedTask;
+        public Task PublishReconciledAsync(PackageChangeSet changeSet, IReadOnlyList<ResolvedPackage> appliedPackages, CancellationToken ct)
+        {
+            Calls.Add("reconciled");
+            ReconciledChangeSet = changeSet;
+            ReconciledAppliedPackages = appliedPackages;
+            return Task.CompletedTask;
+        }
 
         public Task NotifyPackageFailedAsync(string packageId, Exception exception, string correlationId, CancellationToken ct) =>
             Task.CompletedTask;
