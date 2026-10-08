@@ -36,6 +36,7 @@ No blocking infrastructure changes are needed.
 ## Phase 5: Polish and Cross-Cutting Validation
 
 - [X] T007 Run focused Runtime, Loading, and Integration tests; run the six affected Nuplane and Nuplane.Abstractions target builds; perform the condition-only mutation/revert proof recorded in `specs/029-removal-completion/quickstart.md`.
+- [X] T008 Correct the sample observer log label to `AppliedPackageCount`, keeping authoritative discovery unchanged; source review found this field reports the applied list, not total active packages.
 
 ## Dependencies & Execution Order
 
@@ -43,3 +44,4 @@ No blocking infrastructure changes are needed.
 - T004 and T005 can follow the tests; T004 makes the causal integration test pass.
 - T006 can be authored alongside T001 only if edits to the shared middleware test file are sequenced; run after T001.
 - T007 depends on all implementation and test tasks.
+- T008 is a source-only terminology correction and does not require additional tests.

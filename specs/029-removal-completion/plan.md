@@ -17,7 +17,7 @@ Change the existing completion-dispatch condition in `HealthAndMetricsMiddleware
 **Project Type**: Multi-target .NET libraries
 **Performance Goals**: No additional work on cycles that have neither successful applies nor removals
 **Constraints**: No public signature change, configuration change, host dependency, package install, or unload policy change
-**Scale/Scope**: One dispatch predicate, one XML contract clarification, focused regression coverage
+**Scale/Scope**: One dispatch predicate, observer XML clarification, one sample log-label correction, focused regression coverage
 
 ## Constitution Check
 
@@ -37,11 +37,14 @@ The current code dispatches `PublishChangedAsync` for any non-empty `Added`, `Up
 
 `PackageAutoLoadingObserver.OnPackagesReconciledAsync` already runs its inactive-context pass when `Removed` or `Updated` is non-empty, rereads the authoritative store, and calls the loader's existing `UnloadContextsNotActive`. It needs a focused empty-applied removal regression; this feature adds no retirement or collection behavior.
 
+`PluginDiscoveryObserver` treats reconciliation as an invalidation hook and re-queries authoritative discovery surfaces, but its log label must describe `appliedPackages.Count`, not imply that it is the total active-package count. Keep the query behavior unchanged.
+
 ## Project Structure
 
 ```text
 src/Nuplane/Reconciliation/Middleware/HealthAndMetricsMiddleware.cs
 src/Nuplane.Abstractions/INuplaneObserver.cs
+samples/Nuplane.Sample.AspNetCore/PluginDiscoveryObserver.cs
 test/Nuplane.Runtime.Tests/Reconciliation/Middleware/HealthAndMetricsMiddlewareTests.cs
 test/Nuplane.Loading.Tests/PackageAutoLoadingObserverTests.cs
 test/Nuplane.Integration.Tests/Reconciliation/RemovalCompletionIntegrationTests.cs

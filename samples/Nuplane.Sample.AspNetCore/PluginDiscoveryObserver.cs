@@ -20,7 +20,7 @@ internal sealed class PluginDiscoveryObserver(
         CancellationToken cancellationToken)
     {
         logger.LogInformation(
-            "Packages reconciled invalidation received. ActivePackageCount={Count}, CorrelationId={CorrelationId}. Refreshing sample-owned plugin discovery from the canonical query surfaces.",
+            "Packages reconciled invalidation received. AppliedPackageCount={Count}, CorrelationId={CorrelationId}. Refreshing sample-owned plugin discovery from the canonical query surfaces.",
             appliedPackages.Count,
             changeSet.CorrelationId);
 
