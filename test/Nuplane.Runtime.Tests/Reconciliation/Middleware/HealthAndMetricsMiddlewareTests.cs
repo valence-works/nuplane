@@ -62,15 +62,17 @@ public sealed class HealthAndMetricsMiddlewareTests
     {
         var changeSet = new PackageChangeSet([], [], ["pkg-removed"], "corr-removal-failure", DateTimeOffset.UtcNow);
         var dispatcher = new RecordingDispatcher();
+        var evaluator = new FakeHealthEvaluator(true);
         var ctx = Ctx(changeSet);
         ctx.ApplyResult = new([], ["pkg-failed"]);
 
-        await Build(dispatcher: dispatcher, evaluator: new FakeHealthEvaluator(true)).InvokeAsync(ctx, () => Task.CompletedTask);
+        await Build(dispatcher: dispatcher, evaluator: evaluator).InvokeAsync(ctx, () => Task.CompletedTask);
 
         Assert.Equal(["changed", "reconciled"], dispatcher.Calls);
         Assert.Empty(dispatcher.ReconciledAppliedPackages!);
         Assert.True(ctx.Result!.IsDegraded);
         Assert.Equal(["pkg-failed"], ctx.Result.FailedPackages);
+        Assert.True(evaluator.LastInput!.HadAnyFailures);
     }
 
     [Fact]
@@ -88,14 +90,16 @@ public sealed class HealthAndMetricsMiddlewareTests
     public async Task InvokeAsync_NoChangesAndFailedOnly_DoesNotPublishReconciledAndPreservesFailure()
     {
         var dispatcher = new RecordingDispatcher();
+        var evaluator = new FakeHealthEvaluator(true);
         var ctx = Ctx(new PackageChangeSet([], [], [], "corr-failed-only", DateTimeOffset.UtcNow));
         ctx.ApplyResult = new([], ["pkg-failed"]);
 
-        await Build(dispatcher: dispatcher, evaluator: new FakeHealthEvaluator(true)).InvokeAsync(ctx, () => Task.CompletedTask);
+        await Build(dispatcher: dispatcher, evaluator: evaluator).InvokeAsync(ctx, () => Task.CompletedTask);
 
         Assert.Empty(dispatcher.Calls);
         Assert.True(ctx.Result!.IsDegraded);
         Assert.Equal(["pkg-failed"], ctx.Result.FailedPackages);
+        Assert.True(evaluator.LastInput!.HadAnyFailures);
     }
 
     [Fact]
@@ -185,6 +189,7 @@ public sealed class HealthAndMetricsMiddlewareTests
 
     private sealed class FakeHealthEvaluator(bool isDegraded) : IReconciliationHealthEvaluator
     {
+        public ReconciliationHealthInput? LastInput { get; private set; }
         public bool IsDegraded => isDegraded;
         public int LastLockFailureCount => 0;
         public int LastCleanupFailureCount => 0;
@@ -195,7 +200,11 @@ public sealed class HealthAndMetricsMiddlewareTests
         public int LastLoaderFailureCount => 0;
         public int LastAdminRejectionCount => 0;
 
-        public bool Evaluate(ReconciliationHealthInput input) => isDegraded;
+        public bool Evaluate(ReconciliationHealthInput input)
+        {
+            LastInput = input;
+            return isDegraded;
+        }
     }
 
     private sealed class RecordingDispatcher : IObserverEventDispatcher

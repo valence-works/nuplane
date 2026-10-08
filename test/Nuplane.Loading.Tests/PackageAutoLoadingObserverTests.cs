@@ -90,7 +90,7 @@ public sealed class PackageAutoLoadingObserverTests : IDisposable
     }
 
     [Fact]
-    public async Task RemovedPackageWithEmptyAppliedList_RetiresOnlyContextsAbsentFromAuthoritativeState()
+    public async Task OnPackagesReconciledAsync_RemovalWithEmptyAppliedList_RetiresInactiveContexts()
     {
         var removed = new ResolvedPackage("pkg-removed", "1.0.0", "feed", "/path-removed", Now);
         var loader = new FakePackageLoader(preloadedPackages: [removed]);
