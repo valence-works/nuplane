@@ -2,7 +2,7 @@
 
 **Branch**: `108-safe-package-store-pruning` | **Date**: 2026-10-09 | **Spec**: [spec.md](spec.md)
 
-**Status**: Design accepted after independent review and root verification on 2026-10-09. Task generation is next; no product implementation or package-deletion acceptance is claimed.
+**Status**: Design accepted after independent review and root verification on 2026-10-09. The 128-artifact implementation checklist is independently reviewed and root-accepted in [tasks.md](tasks.md); implementation is next. No product implementation or package-deletion acceptance is claimed.
 
 ## Summary
 
