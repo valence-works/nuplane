@@ -405,7 +405,8 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
         }
     }
 
-    private sealed class AdmittedPathValidator : IPackageStoreOperationPathValidator
+    private sealed class AdmittedPathValidator : IPackageStoreOperationPathValidator,
+        IPackageStoreOperationPackageDirectoryValidator
     {
         private readonly IPhysicalStoreFileSystem _files;
         private readonly PackageStoreAuthorityResolver _resolver;
@@ -454,6 +455,62 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
             }
             using (resolved)
             {
+                ValidateResolvedInstallPath(resolved, targetKind, expectedPath, currentLedger);
+                resolved.Revalidate();
+            }
+        }
+
+        public TResult WithValidatedPackageDirectory<TResult>(
+            string installPath,
+            Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle, TResult> callback)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+            ArgumentNullException.ThrowIfNull(callback);
+            AdmittedPathIdentity? expectedPath = null;
+            if (_pathIdentities is not null)
+            {
+                if (!_pathIdentities.TryGetValue(installPath, out var admittedPath))
+                    throw Refusal("The install path is absent from this operation's admitted path union.", _root);
+                expectedPath = admittedPath;
+            }
+
+            if (expectedPath is { TargetKind: not PhysicalStorePathTarget.PackageDirectory })
+            {
+                throw new PackageStoreAdmissionException(
+                    PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "Scoped package metadata requires an admitted extracted package directory.",
+                    _root);
+            }
+
+            var currentLedger = _ledgerObservation();
+            using var resolved = _resolver.Resolve(installPath, PhysicalStorePathTarget.PackageDirectory, _root);
+            ValidateResolvedInstallPath(resolved, PhysicalStorePathTarget.PackageDirectory, expectedPath, currentLedger);
+            resolved.Revalidate();
+
+            var directory = resolved.Target as PhysicalStoreDirectoryHandle
+                ?? throw Refusal("The admitted package path is not a held directory.", _root);
+            TResult result;
+            try
+            {
+                result = callback(_files, directory);
+            }
+            catch
+            {
+                // Preserve a refused result if the retained authority/path evidence changed while
+                // a callback was failing; otherwise propagate its original read/parse failure.
+                resolved.Revalidate();
+                throw;
+            }
+            resolved.Revalidate();
+            return result;
+        }
+
+        private PhysicalStoreEntryInfo ValidateResolvedInstallPath(
+            ResolvedPackageStorePath resolved,
+            PhysicalStorePathTarget targetKind,
+            AdmittedPathIdentity? expectedPath,
+            (string Digest, PhysicalFileIdentity Identity) currentLedger)
+        {
             if (resolved.RootIdentity != _root || resolved.MembershipCandidate is not { Status: RootMembershipStatus.Complete } candidate ||
                 candidate.EnrollmentEpoch != _epoch ||
                 !string.Equals(candidate.LedgerDigest, currentLedger.Digest, StringComparison.Ordinal) ||
@@ -473,8 +530,8 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
                 throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
                     "The install path no longer identifies the package directory admitted for this operation.", _root);
             }
-            resolved.Revalidate();
-            }
+
+            return target;
         }
     }
 

@@ -1,4 +1,5 @@
 using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Store.Coordination.PhysicalFiles;
 
 namespace Nuplane.Store.Coordination;
 
@@ -130,14 +131,52 @@ internal sealed class PackageStoreOperationState : IPackageStoreOperationOwnerCo
     {
         ArgumentNullException.ThrowIfNull(borrow);
         ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+        BeginValidation(borrow, installPath);
+        try
+        {
+            // Validation is synchronous provider work; never hold _gate while invoking it.
+            _pathValidator.ValidateForInstallPath(installPath);
+        }
+        finally
+        {
+            EndValidation();
+        }
+    }
 
+    internal TResult WithValidatedPackageDirectory<TResult>(
+        PackageStoreOperationBorrow borrow,
+        string installPath,
+        Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle, TResult> callback)
+    {
+        ArgumentNullException.ThrowIfNull(borrow);
+        ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+        ArgumentNullException.ThrowIfNull(callback);
+        BeginValidation(borrow, installPath);
+        try
+        {
+            if (_pathValidator is not IPackageStoreOperationPackageDirectoryValidator packageDirectoryValidator)
+            {
+                throw new PackageStoreAdmissionException(
+                    PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "This admitted operation cannot expose a held package directory for scoped reads.",
+                    _root);
+            }
+
+            return packageDirectoryValidator.WithValidatedPackageDirectory(installPath, callback);
+        }
+        finally
+        {
+            EndValidation();
+        }
+    }
+
+    private void BeginValidation(PackageStoreOperationBorrow borrow, string installPath)
+    {
         lock (_gate)
         {
             EnsureBorrowOwnerMatches(borrow);
-            if (!_activeBorrows.Contains(borrow))
-            {
+            if (borrow.IsDisposed || !_activeBorrows.Contains(borrow))
                 throw ExpiredBorrow(borrow);
-            }
 
             var allowedPath = _borrowPathRestrictions[borrow];
             if (allowedPath is not null && !string.Equals(allowedPath, installPath, StringComparison.Ordinal))
@@ -150,26 +189,19 @@ internal sealed class PackageStoreOperationState : IPackageStoreOperationOwnerCo
 
             _activeValidations++;
         }
+    }
 
+    private void EndValidation()
+    {
         TaskCompletionSource<bool>? drained = null;
-        try
+        lock (_gate)
         {
-            // Validation is synchronous provider work; never hold _gate while invoking it.
-            _pathValidator.ValidateForInstallPath(installPath);
+            _activeValidations--;
+            if (_closing && _activeBorrows.Count == 0 && _activeValidations == 0)
+                drained = _drained;
         }
-        finally
-        {
-            lock (_gate)
-            {
-                _activeValidations--;
-                if (_closing && _activeBorrows.Count == 0 && _activeValidations == 0)
-                {
-                    drained = _drained;
-                }
-            }
 
-            drained?.TrySetResult(true);
-        }
+        drained?.TrySetResult(true);
     }
 
     internal RootMembershipRegistry.LockedMemberLocations GetLockedMemberLocations(

@@ -168,7 +168,7 @@ internal sealed class PackageStoreAuthorityResolver
             var frames = new List<ComponentFrame> { new(path.Components) };
             PhysicalStoreFileHandle? finalFile = null;
             PhysicalStoreDirectoryHandle? finalFileParent = null;
-            var prospectiveConfiguredRoot = false;
+            var prospectiveMissingSuffix = false;
 
             while (frames.Count > 0)
             {
@@ -216,7 +216,8 @@ internal sealed class PackageStoreAuthorityResolver
                 var entry = _files.InspectChildNoFollow(current, component);
                 if (entry is null)
                 {
-                    if (target != PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix ||
+                    if (target is not (PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix or
+                            PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix) ||
                         state.RootIdentity is not null ||
                         frames.Any(static candidate => candidate.Alias is not null) ||
                         !TryGetOrdinaryRemainingSuffix(frames, out var remainingSuffix))
@@ -225,7 +226,7 @@ internal sealed class PackageStoreAuthorityResolver
                     }
 
                     state.RecordMissingSuffix(current, component, remainingSuffix);
-                    prospectiveConfiguredRoot = true;
+                    prospectiveMissingSuffix = true;
                     break;
                 }
 
@@ -318,7 +319,9 @@ internal sealed class PackageStoreAuthorityResolver
                 state.MembershipLedgerIdentity,
                 transferredHandles,
                 () => state.Revalidate(finalTarget, target, finalFileParent),
-                prospectiveConfiguredRoot);
+                isProspectiveConfiguredRoot: prospectiveMissingSuffix &&
+                    target == PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix,
+                isProspectiveMissingSuffix: prospectiveMissingSuffix);
             state.DetachHandles();
             return result;
         }
@@ -804,7 +807,7 @@ internal sealed class PackageStoreAuthorityResolver
             IReadOnlyList<string> remainingSuffix)
         {
             if (RootIdentity is not null || ActiveAliases.Count != 0)
-                throw Unknown("A missing configured-root suffix cannot follow observed authority or an unresolved alias.", RootIdentity);
+                throw Unknown("A missing target suffix cannot follow observed authority or an unresolved alias.", RootIdentity);
 
             var before = resolver._files.InspectHandle(parent);
             var semantics = resolver._names.ObserveDirectoryNameSemantics(parent);
@@ -812,7 +815,7 @@ internal sealed class PackageStoreAuthorityResolver
             if (IsReservedControlName(firstMissingName, semantics) ||
                 remainingSuffix.Any(IsPotentialReservedControlName))
             {
-                throw Unknown("A prospective configured root cannot occupy the reserved control-directory name.", RootIdentity);
+                throw Unknown("A prospective directory target cannot occupy the reserved control-directory name.", RootIdentity);
             }
 
             var missing = resolver._files.InspectChildNoFollow(parent, firstMissingName);
@@ -838,7 +841,7 @@ internal sealed class PackageStoreAuthorityResolver
             if (!IsAscii(name))
             {
                 throw Refusal(PackageStoreAdmissionReason.UnsupportedFilesystem,
-                    "The configured-root name may alias the reserved control directory under native name semantics.");
+                    "The missing target name may alias the reserved control directory under native name semantics.");
             }
 
             // Both operands are ASCII here, so this checks only ASCII case variants.
@@ -854,7 +857,7 @@ internal sealed class PackageStoreAuthorityResolver
             if (!IsAscii(name))
             {
                 throw Refusal(PackageStoreAdmissionReason.UnsupportedFilesystem,
-                    "A later configured-root component has no observable native name profile for reserved-name comparison.");
+                    "A later missing-target component has no observable native name profile for reserved-name comparison.");
             }
 
             // The explicit ASCII guard above keeps this comparison out of Unicode folding semantics.
@@ -882,7 +885,7 @@ internal sealed class PackageStoreAuthorityResolver
             if (!supported)
             {
                 throw Refusal(PackageStoreAdmissionReason.UnsupportedFilesystem,
-                    "The filesystem returned an unsupported native name profile for a prospective configured root.");
+                    "The filesystem returned an unsupported native name profile for a prospective missing target.");
             }
         }
 
@@ -891,8 +894,10 @@ internal sealed class PackageStoreAuthorityResolver
             PhysicalStorePathTarget targetKind,
             PhysicalStoreDirectoryHandle? targetParent)
         {
-            if (_missingSuffixes.Count > 0 && targetKind != PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix)
-                throw Unknown("Missing-suffix evidence is valid only for configured-root admission.", RootIdentity);
+            if (_missingSuffixes.Count > 0 && targetKind is not (
+                    PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix or
+                    PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix))
+                throw Unknown("Missing-suffix evidence is valid only for configured-root or package-directory classification.", RootIdentity);
 
             foreach (var anchor in _anchors)
             {
@@ -972,14 +977,15 @@ internal sealed class PackageStoreAuthorityResolver
                     parentAfter.Kind != PhysicalStoreEntryKind.Directory || parentAfter.Identity != missing.ParentIdentity ||
                     semanticsAfter != missing.Semantics)
                 {
-                    throw Unknown("A prospective configured-root suffix changed after native absence observation.", RootIdentity);
+                    throw Unknown("A prospective target suffix changed after native absence observation.", RootIdentity);
                 }
             }
 
-            if (targetKind == PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix &&
+            if (targetKind is (PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix or
+                    PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix) &&
                 _missingSuffixes.Count > 1)
             {
-                throw Unknown("A configured-root resolution observed multiple missing suffixes.", RootIdentity);
+                throw Unknown("A missing-suffix resolution observed multiple missing edges.", RootIdentity);
             }
 
             foreach (var control in _controls)

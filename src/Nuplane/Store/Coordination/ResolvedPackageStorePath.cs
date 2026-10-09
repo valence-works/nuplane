@@ -7,8 +7,8 @@ namespace Nuplane.Store.Coordination;
 /// <summary>Owns a metadata-only configured-path resolution and its retained native evidence.</summary>
 /// <remarks>
 /// A null authority, root identity, and membership candidate means only that resolution positively
-/// observed no reserved authority on the resolved namespace. A configured-root result may also retain
-/// a verified absent child edge for a prospective first-run suffix. This result is not an admission capability.
+/// observed no reserved authority on the resolved namespace. A permitted missing-suffix result may also retain
+/// a verified absent child edge below its nearest existing parent. This result is not an admission capability.
 /// </remarks>
 internal sealed class ResolvedPackageStorePath : IDisposable
 {
@@ -25,7 +25,8 @@ internal sealed class ResolvedPackageStorePath : IDisposable
         PhysicalFileIdentity? membershipLedgerIdentity,
         IReadOnlyList<PhysicalStoreHandle> ownedHandles,
         Action revalidate,
-        bool isProspectiveConfiguredRoot = false)
+        bool isProspectiveConfiguredRoot = false,
+        bool isProspectiveMissingSuffix = false)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(ownedHandles);
@@ -33,8 +34,10 @@ internal sealed class ResolvedPackageStorePath : IDisposable
         if ((authorityRoot is null) != (rootIdentity is null) || (rootIdentity is null) != (membershipCandidate is null) ||
             (membershipCandidate is null) != (membershipLedgerIdentity is null))
             throw new ArgumentException("Authority handle, root identity, and membership candidate must be present together.", nameof(authorityRoot));
-        if (isProspectiveConfiguredRoot && (rootIdentity is not null || target is not PhysicalStoreDirectoryHandle))
-            throw new ArgumentException("A prospective configured root requires an absent authority and a held existing parent.", nameof(isProspectiveConfiguredRoot));
+        if (isProspectiveMissingSuffix && (rootIdentity is not null || target is not PhysicalStoreDirectoryHandle))
+            throw new ArgumentException("A prospective directory target requires an absent authority and a held existing parent.", nameof(isProspectiveMissingSuffix));
+        if (isProspectiveConfiguredRoot && !isProspectiveMissingSuffix)
+            throw new ArgumentException("A prospective configured root must retain a missing-suffix observation.", nameof(isProspectiveConfiguredRoot));
 
         Target = target;
         AuthorityRoot = authorityRoot;
@@ -42,11 +45,12 @@ internal sealed class ResolvedPackageStorePath : IDisposable
         MembershipCandidate = membershipCandidate;
         MembershipLedgerIdentity = membershipLedgerIdentity;
         IsProspectiveConfiguredRoot = isProspectiveConfiguredRoot;
+        IsProspectiveMissingSuffix = isProspectiveMissingSuffix;
         _ownedHandles = ownedHandles.ToArray();
         _revalidate = revalidate;
     }
 
-    /// <summary>Gets the held final target, or the nearest existing parent for a prospective configured root.</summary>
+    /// <summary>Gets the held final target, or the nearest existing parent for a permitted missing suffix.</summary>
     internal PhysicalStoreHandle Target { get; }
 
     /// <summary>Gets the held authority-root directory, when one was positively observed.</summary>
@@ -63,6 +67,9 @@ internal sealed class ResolvedPackageStorePath : IDisposable
 
     /// <summary>Whether the configured-root result ends at an absent suffix below its held existing parent.</summary>
     internal bool IsProspectiveConfiguredRoot { get; }
+
+    /// <summary>Whether resolution ended at a verified absent suffix below its held existing parent.</summary>
+    internal bool IsProspectiveMissingSuffix { get; }
 
     /// <summary>Rechecks the retained namespace, edge, alias, authority, and target observations.</summary>
     internal void Revalidate()

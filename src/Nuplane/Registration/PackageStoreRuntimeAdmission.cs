@@ -6,6 +6,12 @@ using Nuplane.Store.State;
 
 namespace Nuplane.Registration;
 
+internal enum UnenrolledPackageDirectoryStatus
+{
+    Present,
+    Missing
+}
+
 internal static class PackageStoreRuntimeAdmission
 {
     internal static IPackageStoreAdmission Create(
@@ -47,6 +53,53 @@ internal static class PackageStoreRuntimeAdmission
     internal static IPackageStoreAdmission CreateManualInstallPathClassifier()
         => CreateUnenrolledOnlyClassifier(CreatePhysicalFileSystem(), rootLocator: null, baseLocator: null);
 
+    /// <summary>
+    /// Runs one package metadata read against a positively Unenrolled native directory observation.
+    /// The held path evidence remains live through the synchronous callback and is replayed before and after it.
+    /// The callback must finish native reads and return only detached data; it must not return handles or raw bytes.
+    /// </summary>
+    internal static T WithUnenrolledPackageDirectory<T>(
+        string exactInstallPath,
+        Func<IPhysicalStoreFileSystem, UnenrolledPackageDirectoryStatus, PhysicalStoreDirectoryHandle?, T> read)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(exactInstallPath);
+        ArgumentNullException.ThrowIfNull(read);
+
+        var files = CreatePhysicalFileSystem();
+        var resolver = CreateLedgerOnlyResolver(files);
+        var exactBaseLocator = Path.IsPathFullyQualified(exactInstallPath) ? null : Directory.GetCurrentDirectory();
+        using var resolved = resolver.Resolve(exactInstallPath,
+            PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix,
+            exactBaseLocator: exactBaseLocator);
+        if (resolved.RootIdentity is not null || resolved.MembershipCandidate is not null ||
+            resolved.MembershipLedgerIdentity is not null || resolved.AuthorityRoot is not null)
+        {
+            throw Refuse("An unscoped metadata read cannot access a package path with membership authority.",
+                resolved.RootIdentity);
+        }
+
+        var missing = resolved.IsProspectiveMissingSuffix;
+        var directory = missing
+            ? null
+            : resolved.Target as PhysicalStoreDirectoryHandle
+                ?? throw Refuse("A positively Unenrolled package path is not a held directory.");
+        resolved.Revalidate();
+        T result;
+        try
+        {
+            result = read(files,
+                missing ? UnenrolledPackageDirectoryStatus.Missing : UnenrolledPackageDirectoryStatus.Present,
+                directory);
+        }
+        catch
+        {
+            resolved.Revalidate();
+            throw;
+        }
+        resolved.Revalidate();
+        return result;
+    }
+
     internal static IPhysicalStoreFileSystem CreatePhysicalFileSystem()
         => OperatingSystem.IsWindows()
             ? new WindowsPhysicalStoreFileSystem()
@@ -72,10 +125,12 @@ internal static class PackageStoreRuntimeAdmission
         // The resolver needs the registry only to inspect the reserved ledger namespace. This
         // admission never calls a member-state reader and has no operation-owner path; a present
         // authority is refused before the custom state service or any callback can run.
-        var ledgerOnlyRegistry = new RootMembershipRegistry(files, new StoreStateSerializer());
         return new UnenrolledOnlyPackageStoreAdmission(files,
-            new PackageStoreAuthorityResolver(files, ledgerOnlyRegistry), rootLocator, baseLocator);
+            CreateLedgerOnlyResolver(files), rootLocator, baseLocator);
     }
+
+    private static PackageStoreAuthorityResolver CreateLedgerOnlyResolver(IPhysicalStoreFileSystem files)
+        => new(files, new RootMembershipRegistry(files, new StoreStateSerializer()));
 
     private sealed class UnenrolledOnlyPackageStoreAdmission(
         IPhysicalStoreFileSystem files,

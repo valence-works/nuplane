@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Capabilities;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Runtime.Tests.TestSupport;
@@ -34,6 +35,25 @@ public sealed class CapabilityDesiredStateContributorTests : IDisposable
             _reader);
 
     public void Dispose() => _packages.Dispose();
+
+    [Fact]
+    public async Task ContributeAsync_WhenMetadataAdmissionIsRefused_ThrowsWithoutMemoizingAbsence()
+    {
+        Select("PostgreSql");
+        var module = DeclaringModule();
+        var control = Directory.CreateDirectory(Path.Combine(module.InstallPath, ".nuplane-store"));
+
+        var refusal = await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => ContributeAsync([module]));
+
+        Assert.Equal(PackageStoreAdmissionReason.UnknownAuthority, refusal.Reason);
+        Assert.Empty(_logger.Selected);
+        control.Delete();
+
+        var contribution = await ContributeAsync([module]);
+
+        Assert.Equal(EnginePackageId, Assert.Single(contribution.Requests).Request.Id);
+        Assert.Equal(2, _reader.CountFor(module.Id));
+    }
 
     [Fact]
     public async Task ContributeAsync_WhenTheSelectedOptionIsDeclared_ContributesItAsARootForItsDeclaringPackage()

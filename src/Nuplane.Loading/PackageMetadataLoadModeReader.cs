@@ -1,3 +1,4 @@
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Metadata;
 
 namespace Nuplane.Loading;
@@ -22,6 +23,11 @@ internal sealed class PackageMetadataLoadModeReader
     public PackageMetadataLoadModeReadResult Read(string packageId, string version, string installPath)
     {
         var result = _reader.Read(packageId, version, installPath);
+        if (result.AdmissionRefusalReason is { } reason)
+        {
+            throw new PackageStoreAdmissionException(reason,
+                result.Diagnostic ?? "Package metadata access was refused by package-store admission.");
+        }
         if (!result.MetadataFound)
         {
             return PackageMetadataLoadModeReadResult.Missing;

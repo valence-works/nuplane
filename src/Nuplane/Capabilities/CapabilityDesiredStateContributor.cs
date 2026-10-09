@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Metadata;
 using Nuplane.Observability;
 using Nuplane.Reconciliation.Configuration;
@@ -292,6 +293,11 @@ internal sealed class CapabilityDesiredStateContributor(
                 }
 
                 var result = read();
+                if (result.AdmissionRefusalReason is { } reason)
+                {
+                    throw new PackageStoreAdmissionException(reason,
+                        result.Diagnostic ?? "Package metadata access was refused by package-store admission.");
+                }
                 _reads[key] = result;
                 return result;
             }
