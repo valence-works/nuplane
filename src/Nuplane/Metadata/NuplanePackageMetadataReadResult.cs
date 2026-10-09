@@ -1,12 +1,13 @@
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Metadata;
 
 /// <summary>
 /// Represents the outcome of <see cref="NuplanePackageMetadataReader.Read"/>: metadata absent,
-/// present but invalid, or present and valid.
+/// present but invalid, present and valid, or access refused before metadata observation.
 /// </summary>
-/// <param name="MetadataFound">Whether a package-root <c>nuplane.json</c> file exists.</param>
+/// <param name="MetadataFound">Whether a package-root <c>nuplane.json</c> file was observed. Refused access does not establish absence.</param>
 /// <param name="IsValid">Whether the file, if found, parsed and validated successfully.</param>
 /// <param name="Metadata">The validated metadata, when <paramref name="IsValid"/> is <see langword="true"/>.</param>
 /// <param name="Diagnostic">A bounded, human-readable validation failure reason, when found but invalid.</param>
@@ -31,6 +32,29 @@ public sealed record NuplanePackageMetadataReadResult(
     /// construction and deconstruction of this record keeps compiling and keeps binding.
     /// </remarks>
     public int? DeclaredSchemaVersion { get; init; }
+
+    /// <summary>Gets the admission refusal reason, or <see langword="null"/> when access was not refused.</summary>
+    /// <remarks>
+    /// A refusal is not missing metadata. Consumers must inspect this discriminator before treating
+    /// <see cref="MetadataFound"/> as an absence result. This non-positional property preserves
+    /// existing four-argument construction and deconstruction.
+    /// </remarks>
+    public PackageStoreAdmissionReason? AdmissionRefusalReason { get; init; }
+
+    /// <summary>Builds a refusal result without claiming whether package metadata exists.</summary>
+    /// <param name="reason">The typed reason access was denied before reading package metadata.</param>
+    /// <returns>A result distinct from <see cref="Missing"/> and from metadata validation failures.</returns>
+    public static NuplanePackageMetadataReadResult Refused(PackageStoreAdmissionReason reason)
+    {
+        if (!Enum.IsDefined(reason))
+            throw new ArgumentOutOfRangeException(nameof(reason));
+
+        return new(MetadataFound: false, IsValid: false, Metadata: null,
+            Diagnostic: "Package metadata access was refused by package-store admission.")
+        {
+            AdmissionRefusalReason = reason
+        };
+    }
 
     /// <summary>The shared result for a package with no <c>nuplane.json</c> file.</summary>
     public static NuplanePackageMetadataReadResult Missing { get; } =
