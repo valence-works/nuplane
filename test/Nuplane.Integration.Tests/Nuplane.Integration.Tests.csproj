@@ -15,8 +15,13 @@
   </ItemGroup>
 
   <Target Name="CopyPackageStoreTestHost" AfterTargets="Build">
+    <PropertyGroup>
+      <_PackageStoreTestHostOutput>$(MSBuildThisFileDirectory)../Nuplane.PackageStore.TestHost/bin/$(Configuration)/$(TargetFramework)/</_PackageStoreTestHostOutput>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_PackageStoreTestHostOutput)Nuplane.PackageStore.TestHost.dll') or !Exists('$(_PackageStoreTestHostOutput)Nuplane.PackageStore.TestHost.runtimeconfig.json') or !Exists('$(_PackageStoreTestHostOutput)Nuplane.PackageStore.TestHost.deps.json')"
+           Text="The package-store test host must be built before copying its executable artifacts." />
     <ItemGroup>
-      <PackageStoreTestHostArtifact Include="$(MSBuildThisFileDirectory)..\Nuplane.PackageStore.TestHost\bin\$(Configuration)\net10.0\**\*.*" />
+      <PackageStoreTestHostArtifact Include="$(_PackageStoreTestHostOutput)**/*.*" />
     </ItemGroup>
     <Copy SourceFiles="@(PackageStoreTestHostArtifact)"
           DestinationFiles="@(PackageStoreTestHostArtifact->'$(OutDir)PackageStoreTestHost\%(RecursiveDir)%(Filename)%(Extension)')"

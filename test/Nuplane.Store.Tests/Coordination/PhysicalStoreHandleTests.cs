@@ -69,7 +69,7 @@ public sealed class PhysicalStoreHandleTests
 
         var results = await Task.WhenAll(attempts);
 
-        Assert.Single(results.Where(static claimed => claimed));
+        Assert.Single(results, static claimed => claimed);
         Assert.Throws<InvalidOperationException>(() => file.ClaimInitialWrite(provider));
     }
 

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.PhysicalFiles;
@@ -100,6 +101,7 @@ public sealed class UnixPhysicalStoreFileSystemTests
     }
 
     [SupportedUnixFact]
+    [UnsupportedOSPlatform("windows")]
     public void ExclusiveCreation_UsesPrivateDirectoryAndFileModes()
     {
         using var fixture = new PackageStoreFixture();

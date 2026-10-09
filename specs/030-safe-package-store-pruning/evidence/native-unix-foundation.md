@@ -48,3 +48,22 @@ Independent review SHA256: `d7fe279e7cc6abb31c6064351ede1f67c8fa22b6328c03ee9de3
 The workflow now builds the Darwin artifact from the candidate checkout before Ubuntu build/pack, checks exact package asset hashes on Ubuntu, and requires seven macOS ARM64 native cases with zero skips. These hosted jobs remain pending until an exact-head run completes; local proof does not establish Linux or Windows runtime behavior.
 
 The adapter is a mechanism beneath admission. Directory creation/reopen observations assume serialized cooperating writers and cannot prove atomic create-and-open against arbitrary nonparticipants. File `fsync` does not claim directory-entry or power-loss durability. Windows, actual root/state-slot case policy, component-wise alias authority, multi-state active/LKG enrollment, before-read graph leases, state replacement, inventory/quarantine/deletion and full supported-platform tests remain open. Held-parent replacement/verified cleanup and inventory enumeration need separately reviewed narrow operations. The two-composition non-destructive before-read gate still precedes recursive-delete implementation. Stable releases and final Foundation adoption remain downstream work.
+
+## Hosted qualification follow-up and test-host correction
+
+[Validate 37915355285](https://github.com/valence-works/nuplane/actions/runs/37915355285) completed against `c7ee96ac8818e6062aa3cddf5f781a63cd5dd5c9`. The universal Darwin build, all three OS state-persistence lanes, and seven macOS ARM64 native cases passed. Ubuntu Store passed all 127 cases with zero skips, providing actual Linux x64 native runtime evidence. Loading 257, Runtime 799, NuGet 25 and Directory 21 also passed without skips.
+
+The overall run failed: Integration passed 157 and failed three process cases because solution builds omitted the new child test-host project, so its executable was absent. The Linux package step consequently did not run. This is a real test-infrastructure defect, not a green full-solution gate; the failed hosted log is preserved.
+
+The correction registers `Nuplane.PackageStore.TestHost` in the solution with all existing configuration mappings and makes its integration copy target fail if DLL, runtimeconfig or deps are absent. The copy path uses the configured target framework. Root also corrected the three warnings exposed by the solution build: the idiomatic `Assert.Single` predicate overload and a Windows platform annotation on the Unix permission test. No production/native implementation changed.
+
+Root moved the old owned host binaries and integration copies outside the worktree before rebuilding. The solution regenerated the host and copied it; independent review verified the graph/configuration/copy wiring. A direct copy-target negative control with the required DLL temporarily absent failed with the intended build error, then restored the file. Corrected local gates retained the same 711-input manifest SHA256 `dce83f85501bff9647ebe108ca0846648b38b8b7b2371b841e7d15cc9d51f1b9`:
+
+| Gate | Result | Log SHA256 |
+|---|---|---|
+| `harness-solution-build-v2` | Whole solution Release build: zero warnings/errors | `0aea493a42c321d615fa01296382328f23157c23b25904ccc0127e8a586c2428` |
+| `harness-process-tests-v1` | Three real child-process tests passed without rebuild, failures or skips | `2b46356286dc26ecc454a7281239d5c0e229e34b4b86285c1fc2d8f1c4e9d189` |
+| `harness-store-tests-v1` | Store: 127 passed, zero failed/skipped | `6db10bfde9318cb261af97aab21d8d087c3a3d6bc7c4c0fde6930c56b11e151e` |
+| `harness-missing-copy-negative-v1` | Expected build refusal with required child DLL absent; file restored | `3cdd09080c15e1d49e217e53041b2672081bbf89ffd48498c91ba7b4ace52ed9` |
+
+Independent harness review SHA256: `049918897205d337d6b201b7d7eb13f244de784921943a78edde3d7c6526e8eb`. The initial local solution build passed with three warnings; it is preserved separately and not reported as warning-free. A fresh exact-head hosted run is required for the correction. Full admission/deletion, Windows native qualification and stable release/adoption remain open.
