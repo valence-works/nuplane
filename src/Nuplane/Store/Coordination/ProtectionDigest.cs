@@ -78,6 +78,41 @@ internal static class ProtectionDigest
             writer.Field(1, EncodePhysicalFile(markerIdentity)));
     }
 
+    /// <summary>Derives a stable identity for a selected persisted graph subclosure.</summary>
+    /// <remarks>
+    /// The versioned domain intentionally differs from the original resolved-graph identity:
+    /// historical source decisions and target-framework inputs are not reconstructible from a
+    /// persisted snapshot. Repeated requests and edges remain repeated in the canonical payload.
+    /// </remarks>
+    internal static string RetainedSubclosureGraphId(
+        string parentGraphId,
+        string parentGenerationId,
+        IEnumerable<PackageGraphRootSelection> requestedRoots,
+        IEnumerable<PackageGraphNodeIdentity> nodes,
+        IEnumerable<PackageGraphEdgeIdentity> edges)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(parentGraphId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(parentGenerationId);
+        ArgumentNullException.ThrowIfNull(requestedRoots);
+        ArgumentNullException.ThrowIfNull(nodes);
+        ArgumentNullException.ThrowIfNull(edges);
+
+        return Digest("RetainedGraphSubclosureV1", writer =>
+        {
+            writer.Field(1, EncodeString(parentGraphId));
+            writer.Field(2, EncodeString(parentGenerationId));
+            writer.Field(3, EncodeSequence(requestedRoots
+                .Select(EncodeRootSelection)
+                .OrderBy(static value => value, ByteArrayComparer.Instance), static value => value));
+            writer.Field(4, EncodeSequence(nodes
+                .Select(EncodeProtectedNode)
+                .OrderBy(static value => value, ByteArrayComparer.Instance), static value => value));
+            writer.Field(5, EncodeSequence(edges
+                .Select(EncodeProtectedEdge)
+                .OrderBy(static value => value, ByteArrayComparer.Instance), static value => value));
+        });
+    }
+
     internal static void ValidateCanonicalDigest(string value)
     {
         _ = DecodeDigest(value);

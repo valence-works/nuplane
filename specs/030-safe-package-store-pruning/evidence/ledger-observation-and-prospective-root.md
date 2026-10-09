@@ -28,7 +28,7 @@ Final root verification on the same 828-input manifest passed:
 
 A compiled causal control weakened only the reserved-name guard from OR to AND. Both reserved-first/later regressions failed because admission stopped throwing; this demonstrates the tests detect that overacceptance. Log SHA-256 `f557f20f65129cece57150ced028a542ecd49ac294f7eb26dca53bcc30be88f1`; TRX SHA-256 `ba9cc272bfdc53da58d3cc4f55908bc000ea839b2ae1df9f6c279578b06c080f`. Source was restored byte-for-byte before the final Store/native/build gates. No Runtime suite execution is claimed for this source increment.
 
-New exact-head hosted qualification is pending. Windows correction is unproven until the new hosted Windows lane passes.
+Exact pushed head `04a200ff40e18e9a8b44ac627ca4de07b435dedd` passed [Validate 37982828544](https://github.com/valence-works/nuplane/actions/runs/37982828544), all six jobs including Windows. Root checked exact-head metadata and complete logs: full Ubuntu solution **1,796 passed, zero failed, 31 explicit platform skips** (Runtime 834; Store 466). The native boundary produced exactly 67 results on each runner: Unix **64 passed/three ext4-only skips**; Windows **63 passed/four explicit platform skips**. All twelve framework/platform serialization lanes passed 97 cases each; both owned Linux x64/ARM64 ext4 lanes passed all eight without skips. Complete hosted log SHA-256 `db4e20b4906b928c4f92442eb94d6e8af2cbe2c2f8e16e20b7155d8c1d999b74`. This qualifies ledger replacement and prospective-root admission for this bounded increment; it does not qualify later source changes or full runtime/pruning behavior.
 
 ## Hosted manifest
 
