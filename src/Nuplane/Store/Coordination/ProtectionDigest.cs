@@ -69,6 +69,15 @@ internal static class ProtectionDigest
         });
     }
 
+    /// <summary>Hashes the native identity of one validated package completion marker.</summary>
+    /// <remarks>This is descriptive identity evidence; it does not hash marker or package contents.</remarks>
+    internal static string PackageInstallCompletionIdentity(PhysicalFileIdentity markerIdentity)
+    {
+        ArgumentNullException.ThrowIfNull(markerIdentity);
+        return Digest("PackageInstallCompletionIdentity", writer =>
+            writer.Field(1, EncodePhysicalFile(markerIdentity)));
+    }
+
     internal static void ValidateCanonicalDigest(string value)
     {
         _ = DecodeDigest(value);

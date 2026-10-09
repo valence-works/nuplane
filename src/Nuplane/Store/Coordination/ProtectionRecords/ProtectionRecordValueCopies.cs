@@ -41,7 +41,8 @@ internal static class ProtectionRecordValueCopies
         ArgumentNullException.ThrowIfNull(selection.Request);
         var request = selection.Request;
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Id);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.VersionRange);
+        // Empty and whitespace ranges preserve the existing latest-stable request convention.
+        ArgumentNullException.ThrowIfNull(request.VersionRange);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.SourceName);
         if (request.FeedName is not null && string.IsNullOrWhiteSpace(request.FeedName))
             throw new ArgumentException("A requested root's feed name cannot be blank when specified.", nameof(selection));

@@ -57,7 +57,96 @@ internal sealed class PackageStoreAuthorityResolver
             throw new ArgumentOutOfRangeException(nameof(target));
 
         var path = ParseRequest(exactLocator, exactBaseLocator);
-        var state = new ResolutionState(this, requiredRoot);
+        return ResolveParsed(path, target, requiredRoot, memberLocatorScope: null);
+    }
+
+    /// <summary>Replays one persisted absolute member-state locator under an active registry lock scope.</summary>
+    /// <remarks>Only the parent path is expanded. The final state entry is observed no-follow as metadata.</remarks>
+    internal ResolvedMemberStateLocation ResolveMemberStateLocation(
+        string exactLocator,
+        RootMembershipRegistry.MemberLocatorReplayScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(exactLocator);
+        ArgumentNullException.ThrowIfNull(scope);
+        scope.EnsureActive();
+        if (string.IsNullOrWhiteSpace(exactLocator))
+            throw Unknown("A persisted member locator is blank.");
+
+        // Persisted hints must already be fully qualified. Relative runtime configuration needs to be
+        // captured before declaration; replay never consults the current working directory.
+        var path = ParseRequest(exactLocator, exactBaseLocator: null);
+        if (path.Anchor is null || path.Components.Length == 0)
+            throw Unknown("A persisted member locator must be fully qualified and name a final state file.", scope.RootIdentity);
+
+        var requestedBasename = path.Components[^1];
+        if (requestedBasename is "." or "..")
+            throw Unknown("A member state locator must end in one ordinary file name.", scope.RootIdentity);
+        try
+        {
+            PhysicalStoreNames.ValidateSingleComponent(requestedBasename);
+            ValidateComponentEncoding(requestedBasename);
+        }
+        catch (ArgumentException exception)
+        {
+            throw Unknown("A member state locator has an unsupported final name.", scope.RootIdentity, exception);
+        }
+
+        var parentPath = new ParsedPath(path.Anchor, path.Components[..^1]);
+        var parentResolution = ResolveParsed(parentPath, PhysicalStorePathTarget.ConfiguredRootDirectory,
+            requiredRoot: null, memberLocatorScope: scope);
+        try
+        {
+            scope.EnsureActive();
+            var parent = parentResolution.Target as PhysicalStoreDirectoryHandle
+                ?? throw Unknown("A member state locator did not resolve to a held parent directory.", scope.RootIdentity);
+            var parentBefore = _files.InspectHandle(parent);
+            if (parentBefore.Kind != PhysicalStoreEntryKind.Directory)
+                throw Unknown("A member state locator parent is not a directory.", scope.RootIdentity);
+
+            var entry = _files.InspectChildNoFollow(parent, requestedBasename);
+            if (entry is null)
+            {
+                var semantics = _names.ObserveDirectoryNameSemantics(parent);
+                var parentAfter = _files.InspectHandle(parent);
+                if (parentAfter.Kind != PhysicalStoreEntryKind.Directory || parentAfter.Identity != parentBefore.Identity ||
+                    _files.InspectChildNoFollow(parent, requestedBasename) is not null)
+                {
+                    throw Unknown("A prospective member state slot changed during native metadata observation.", scope.RootIdentity);
+                }
+
+                var slot = new StateSlotIdentity(parentBefore.Identity, semantics, requestedBasename);
+                parentResolution.Revalidate();
+                return new ResolvedMemberStateLocation(_files, _names, scope, parentResolution,
+                    requestedBasename, slot, existingFileIdentity: null);
+            }
+
+            if (entry.Kind != PhysicalStoreEntryKind.RegularFile || entry.LinkCount != 1)
+                throw Unknown("A member state slot must be a regular single-link file without a final alias.", scope.RootIdentity);
+
+            var observed = new PhysicalStoreIdentity(_files).ObserveStateSlot(parent, requestedBasename);
+            if (observed.FileIdentity != entry.Identity || observed.Slot.ParentIdentity != parentBefore.Identity)
+                throw Unknown("The member state slot changed during native canonical-name observation.", scope.RootIdentity);
+            parentResolution.Revalidate();
+            return new ResolvedMemberStateLocation(_files, _names, scope, parentResolution,
+                requestedBasename, observed.Slot, observed.FileIdentity);
+        }
+        catch
+        {
+            parentResolution.Dispose();
+            throw;
+        }
+    }
+
+    private ResolvedPackageStorePath ResolveParsed(
+        ParsedPath path,
+        PhysicalStorePathTarget target,
+        PhysicalRootIdentity? requiredRoot,
+        RootMembershipRegistry.MemberLocatorReplayScope? memberLocatorScope)
+    {
+        if (!Enum.IsDefined(target))
+            throw new ArgumentOutOfRangeException(nameof(target));
+        memberLocatorScope?.EnsureActive();
+        var state = new ResolutionState(this, requiredRoot, memberLocatorScope);
         try
         {
             var anchor = OpenAnchor(state, path.Anchor
@@ -482,7 +571,10 @@ internal sealed class PackageStoreAuthorityResolver
         PhysicalFileIdentity Identity,
         string Target);
 
-    private sealed class ResolutionState(PackageStoreAuthorityResolver resolver, PhysicalRootIdentity? requiredRoot)
+    private sealed class ResolutionState(
+        PackageStoreAuthorityResolver resolver,
+        PhysicalRootIdentity? requiredRoot,
+        RootMembershipRegistry.MemberLocatorReplayScope? memberLocatorScope)
     {
         private readonly List<PhysicalStoreHandle> _handles = [];
         private readonly List<DirectoryEvidence> _directories = [];
@@ -493,6 +585,7 @@ internal sealed class PackageStoreAuthorityResolver
         private readonly List<ControlEvidence> _controls = [];
 
         internal PhysicalRootIdentity? RequiredRoot { get; } = requiredRoot;
+        internal RootMembershipRegistry.MemberLocatorReplayScope? MemberLocatorScope { get; } = memberLocatorScope;
         internal PhysicalStoreDirectoryHandle? AuthorityRoot { get; private set; }
         internal PhysicalRootIdentity? RootIdentity { get; private set; }
         internal PhysicalRootIdentity? AuthorityRootIdentity => RootIdentity;
@@ -619,15 +712,7 @@ internal sealed class PackageStoreAuthorityResolver
                 throw Unknown("The membership ledger changed while its structural candidate was read.", RootIdentity);
             }
             var observedRoot = new PhysicalRootIdentity(parentInfo.Identity);
-            if (candidate.RootIdentity != observedRoot)
-                throw Refusal(PackageStoreAdmissionReason.RootMismatch,
-                    "The membership candidate does not bind the held physical directory.", observedRoot);
-            if (RequiredRoot is not null && candidate.RootIdentity != RequiredRoot)
-                throw Refusal(PackageStoreAdmissionReason.RootMismatch,
-                    "The configured path encountered a different physical authority root.", RequiredRoot);
-            if (candidate.Status != RootMembershipStatus.Complete || candidate.PendingStateCommit is not null)
-                throw Refusal(PackageStoreAdmissionReason.IncompleteEnrollment,
-                    "The reserved membership authority is incomplete or has a pending publication.", candidate.RootIdentity);
+            ValidateCandidate(observedRoot, candidate);
 
             if (RootIdentity is not null && (RootIdentity != candidate.RootIdentity ||
                 !string.Equals(MembershipCandidate!.LedgerDigest, candidate.LedgerDigest, StringComparison.Ordinal)))
@@ -750,11 +835,11 @@ internal sealed class PackageStoreAuthorityResolver
                 }
                 var candidate = resolver._registry.ReadCandidate(control.Parent);
                 if (candidate.RootIdentity != control.Candidate!.RootIdentity ||
-                    !string.Equals(candidate.LedgerDigest, control.Candidate.LedgerDigest, StringComparison.Ordinal) ||
-                    candidate.Status != RootMembershipStatus.Complete || candidate.PendingStateCommit is not null)
+                    !string.Equals(candidate.LedgerDigest, control.Candidate.LedgerDigest, StringComparison.Ordinal))
                 {
                     throw Unknown("The membership candidate changed after metadata-only path resolution.", RootIdentity);
                 }
+                ValidateCandidate(control.Candidate.RootIdentity, candidate);
                 var ledgerAfterRead = resolver._files.InspectChildNoFollow(control.ControlHandle!, LedgerName);
                 var heldLedgerAfterRead = resolver._files.InspectHandle(control.LedgerHandle!);
                 if (ledgerAfterRead is null || ledgerAfterRead.Kind != PhysicalStoreEntryKind.RegularFile ||
@@ -788,12 +873,30 @@ internal sealed class PackageStoreAuthorityResolver
             {
                 var root = resolver._files.InspectHandle(AuthorityRoot);
                 if (root.Kind != PhysicalStoreEntryKind.Directory || root.Identity != RootIdentity.HandleIdentity ||
-                    MembershipCandidate is null || MembershipCandidate.RootIdentity != RootIdentity ||
-                    MembershipCandidate.Status != RootMembershipStatus.Complete || MembershipCandidate.PendingStateCommit is not null)
+                    MembershipCandidate is null || MembershipCandidate.RootIdentity != RootIdentity)
                 {
                     throw Unknown("The retained authority-root candidate no longer binds its held directory.", RootIdentity);
                 }
+                ValidateCandidate(RootIdentity, MembershipCandidate);
             }
+        }
+
+        private void ValidateCandidate(PhysicalRootIdentity observedRoot, RootMembershipRecord candidate)
+        {
+            if (candidate.RootIdentity != observedRoot)
+                throw Refusal(PackageStoreAdmissionReason.RootMismatch,
+                    "The membership candidate does not bind the held physical directory.", observedRoot);
+            if (RequiredRoot is not null && candidate.RootIdentity != RequiredRoot)
+                throw Refusal(PackageStoreAdmissionReason.RootMismatch,
+                    "The configured path encountered a different physical authority root.", RequiredRoot);
+            if (MemberLocatorScope is { } scope)
+            {
+                scope.RequireCandidate(observedRoot, candidate);
+                return;
+            }
+            if (candidate.Status != RootMembershipStatus.Complete || candidate.PendingStateCommit is not null)
+                throw Refusal(PackageStoreAdmissionReason.IncompleteEnrollment,
+                    "The reserved membership authority is incomplete or has a pending publication.", candidate.RootIdentity);
         }
 
         private void AddEvidence<T>(List<T> evidence, T item)

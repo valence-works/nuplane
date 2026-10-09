@@ -257,10 +257,10 @@ internal sealed partial class RootMembershipRegistry
             // This first payload supplies untrusted lock-order hints only. Authority is reread under ownership.
             var hints = ReadLedger(root, control);
             owner = await _locks.AcquireAsync(control, hints.Members.Select(GetSlot).ToArray(), cancellationToken).ConfigureAwait(false);
-            var actual = ReadLedger(root, control);
+            var actual = ReadLedger(root, control, out var ledgerIdentity);
             if (!string.Equals(hints.LedgerDigest, actual.LedgerDigest, StringComparison.Ordinal))
                 throw Refused("Membership changed while acquiring root/state ownership; retry from fresh evidence.");
-            return new Transaction(this, root, control, owner, actual);
+            return new Transaction(this, root, control, owner, actual, ledgerIdentity);
         }
         catch
         {
@@ -290,8 +290,14 @@ internal sealed partial class RootMembershipRegistry
     }
 
     private RootMembershipRecord ReadLedger(PhysicalStoreDirectoryHandle root, PhysicalStoreDirectoryHandle control)
+        => ReadLedger(root, control, out _);
+
+    private RootMembershipRecord ReadLedger(PhysicalStoreDirectoryHandle root, PhysicalStoreDirectoryHandle control,
+        out PhysicalFileIdentity ledgerIdentity, PhysicalFileIdentity? expectedIdentity = null)
     {
-        var bytes = ReadFile(control, LedgerName, expected: null, MaximumStateBytes).Bytes;
+        var observed = ReadFile(control, LedgerName, expectedIdentity, MaximumStateBytes);
+        ledgerIdentity = observed.Identity;
+        var bytes = observed.Bytes;
         RootMembershipRecord ledger;
         try { ledger = _ledgerSerializer.Deserialize(bytes); }
         catch (JsonException exception)
@@ -498,16 +504,23 @@ internal sealed partial class RootMembershipRegistry
     private sealed record StateObservation(PhysicalFileIdentity Identity, byte[] Bytes, StoreStateRecord State);
 
     private sealed class Transaction(RootMembershipRegistry registry, PhysicalStoreDirectoryHandle root,
-        PhysicalStoreDirectoryHandle control, IAsyncDisposable owner, RootMembershipRecord ledger) : IAsyncDisposable
+        PhysicalStoreDirectoryHandle control, IAsyncDisposable owner, RootMembershipRecord ledger,
+        PhysicalFileIdentity ledgerIdentity) : IAsyncDisposable
     {
+        private PhysicalFileIdentity _ledgerIdentity = ledgerIdentity;
         internal RootMembershipRecord Ledger { get; private set; } = ledger;
+
+        internal RootMembershipRecord ReadCurrent()
+        {
+            var actual = registry.ReadLedger(root, control, out _, _ledgerIdentity);
+            RequireSameDigest(Ledger, actual);
+            return actual;
+        }
 
         internal void Publish(RootMembershipRecord next)
         {
-            var previous = registry.ReadLedger(root, control);
-            if (!string.Equals(previous.LedgerDigest, Ledger.LedgerDigest, StringComparison.Ordinal))
-                throw Refused("The owned ledger changed unexpectedly before publication.");
-            var priorIdentity = registry.ReadFile(control, LedgerName, expected: null, MaximumStateBytes).Identity;
+            ReadCurrent();
+            var priorIdentity = _ledgerIdentity;
             var bytes = registry._ledgerSerializer.Serialize(next);
             var stage = $"membership-{Guid.NewGuid():N}.tmp";
             var stagedIdentity = registry.CreateFile(control, stage, bytes);
@@ -515,10 +528,11 @@ internal sealed partial class RootMembershipRegistry
             if (!string.Equals(reopened.LedgerDigest, next.LedgerDigest, StringComparison.Ordinal))
                 throw Refused("Staged membership content did not verify.");
             registry._publication.PublishControlFileAt(control, stage, stagedIdentity, LedgerName, priorIdentity);
-            var actual = registry.ReadLedger(root, control);
+            var actual = registry.ReadLedger(root, control, out var publishedIdentity, stagedIdentity);
             if (!string.Equals(actual.LedgerDigest, next.LedgerDigest, StringComparison.Ordinal))
                 throw Refused("Published membership content did not verify.");
             Ledger = actual;
+            _ledgerIdentity = publishedIdentity;
         }
 
         public async ValueTask DisposeAsync()

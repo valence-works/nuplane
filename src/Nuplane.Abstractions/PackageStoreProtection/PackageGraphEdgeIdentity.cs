@@ -8,9 +8,10 @@ public sealed record PackageGraphEdgeIdentity
     /// <param name="toNodeId">The selected dependency node.</param>
     /// <param name="requestedPackageId">The requested dependency package identifier.</param>
     /// <param name="requestedVersionRange">The dependency version range.</param>
-    /// <param name="targetFramework">The dependency group target framework.</param>
+    /// <param name="targetFramework">The dependency group target framework; empty denotes a framework-agnostic group.</param>
     /// <param name="isOptional">Whether the dependency is optional.</param>
-    /// <exception cref="ArgumentException">A node identifier is empty or a required text value is blank.</exception>
+    /// <exception cref="ArgumentException">A node identifier is empty, a required text value is blank, or the target framework is whitespace.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="targetFramework"/> is null.</exception>
     internal PackageGraphEdgeIdentity(
         Guid fromNodeId,
         Guid toNodeId,
@@ -25,7 +26,9 @@ public sealed record PackageGraphEdgeIdentity
             throw new ArgumentException("The dependency node identifier cannot be empty.", nameof(toNodeId));
         ArgumentException.ThrowIfNullOrWhiteSpace(requestedPackageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(requestedVersionRange);
-        ArgumentException.ThrowIfNullOrWhiteSpace(targetFramework);
+        ArgumentNullException.ThrowIfNull(targetFramework);
+        if (targetFramework.Length != 0 && string.IsNullOrWhiteSpace(targetFramework))
+            throw new ArgumentException("A dependency target framework cannot be whitespace.", nameof(targetFramework));
 
         FromNodeId = fromNodeId;
         ToNodeId = toNodeId;

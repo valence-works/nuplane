@@ -103,7 +103,7 @@ internal sealed partial class RootMembershipRegistry
             var resolvedSlots = capturedSlots ?? throw Refused("Bootstrap did not capture every declared state slot.");
 
             // This exact digest check is the boundary before any member-state payload can be read.
-            var lockedLedger = ReadLedger(root, control);
+            var lockedLedger = ReadLedger(root, control, out var lockedLedgerIdentity);
             if (!string.Equals(initialLedger.LedgerDigest, lockedLedger.LedgerDigest, StringComparison.Ordinal))
                 throw Refused("The declared membership ledger changed while acquiring the complete lock set.");
             RequireDeclaredLedger(lockedLedger, expectedRoot, expectedEnrollmentEpoch, declarationById, locations);
@@ -153,7 +153,7 @@ internal sealed partial class RootMembershipRegistry
             cancellationToken.ThrowIfCancellationRequested();
 
             var transactionOwner = owner ?? throw Refused("Bootstrap did not return the complete lock owner.");
-            var transaction = new Transaction(this, root, control, transactionOwner, lockedLedger);
+            var transaction = new Transaction(this, root, control, transactionOwner, lockedLedger, lockedLedgerIdentity);
             owner = null;
             transactionOwnsHandles = true;
             await using var ownedTransaction = transaction;
