@@ -99,24 +99,16 @@ internal sealed class RootMembershipRegistry
         RequireExactProtection(actual.State, nextProtection);
         checkpoint?.Invoke(RootMembershipPublicationPoint.StateVerified);
 
-        var acknowledged = Acknowledge(ledger, member, slot, actual.Identity, nextProtection);
-        await RequireAllPriorStatesAsync(acknowledged, parents, cancellationToken).ConfigureAwait(false);
-        transaction.Publish(acknowledged);
-        checkpoint?.Invoke(RootMembershipPublicationPoint.Acknowledged);
-        if (backupIdentity is not null)
-        {
-            await RequirePriorArtifactAsync(parent, backupName, backupIdentity, member.Binding, cancellationToken).ConfigureAwait(false);
-            _publication.RemoveControlFileAt(parent, backupName, backupIdentity);
-        }
-        checkpoint?.Invoke(RootMembershipPublicationPoint.ArtifactsRemoved);
-        return acknowledged;
+        return await CompleteResolutionAsync(transaction, ledger, member, parents, parent, pending,
+            next: true, cancellationToken, checkpoint).ConfigureAwait(false);
     }
 
-    /// <summary>Reconciles only exact prior or bound next evidence; ambiguity preserves the pending record and artifacts.</summary>
+    /// <summary>Reconciles exact prior/next evidence and resumes only durably selected artifact cleanup.</summary>
     internal async Task<RootMembershipRecord> RecoverAsync(
         PhysicalStoreDirectoryHandle root,
         IReadOnlyDictionary<string, PhysicalStoreDirectoryHandle> memberParents,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<RootMembershipPublicationPoint>? checkpoint = null)
     {
         await using var transaction = await OpenLockedAsync(root, cancellationToken).ConfigureAwait(false);
         var ledger = transaction.Ledger;
@@ -127,44 +119,124 @@ internal sealed class RootMembershipRegistry
         var priorLedger = Rebuild(ledger, pending.PriorMembershipStatus, ledger.Members, pending: null);
         if (!string.Equals(priorLedger.LedgerDigest, pending.PriorLedgerDigest, StringComparison.Ordinal))
             throw Refused("Pending evidence does not reconstruct the exact prior membership ledger.");
+        var current = _files.InspectChildNoFollow(parent, GetSlot(member).CanonicalBasename);
+        var next = pending.Resolution switch
+        {
+            PendingStateCommitResolution.Next => true,
+            PendingStateCommitResolution.Prior => false,
+            _ => pending.StagedStateFileIdentity is not null && current?.Identity == pending.StagedStateFileIdentity
+        };
+        return await CompleteResolutionAsync(transaction, priorLedger, member, parents, parent, pending,
+            next, cancellationToken, checkpoint).ConfigureAwait(false);
+    }
+
+    private async Task<RootMembershipRecord> CompleteResolutionAsync(Transaction transaction,
+        RootMembershipRecord priorLedger, RootMemberRecord member,
+        IReadOnlyDictionary<string, PhysicalStoreDirectoryHandle> parents,
+        PhysicalStoreDirectoryHandle parent, PendingStateCommit pending, bool next,
+        CancellationToken cancellationToken, Action<RootMembershipPublicationPoint>? checkpoint)
+    {
+        var resolved = await ValidateResolutionAsync(priorLedger, member, parents, parent, pending, next,
+            allowMissingArtifacts: pending.Resolution != PendingStateCommitResolution.Unresolved, cancellationToken).ConfigureAwait(false);
+        if (pending.Resolution == PendingStateCommitResolution.Unresolved)
+        {
+            pending = new PendingStateCommit(pending.RootIdentity, pending.EnrollmentEpoch, pending.PriorMembershipStatus,
+                pending.PriorLedgerDigest, pending.PublicationId, member, pending.NextProtectionRecord,
+                pending.StagedStateFileIdentity, pending.BackupStateFileIdentity,
+                next ? PendingStateCommitResolution.Next : PendingStateCommitResolution.Prior);
+            // Keep prior members and Incomplete status until bound artifact cleanup is durably resolved.
+            transaction.Publish(WithPending(priorLedger, pending));
+        }
+        checkpoint?.Invoke(RootMembershipPublicationPoint.ResolutionPublished);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Reopen all selected states and artifacts after the durable marker, before the first removal.
+        await ValidateResolutionAsync(priorLedger, member, parents, parent, pending, next,
+            allowMissingArtifacts: true, cancellationToken).ConfigureAwait(false);
+        if (!next && pending.StagedStateFileIdentity is not null)
+        {
+            await RemoveArtifactAsync(parent, StageName(pending), pending.StagedStateFileIdentity, member.Binding,
+                pending.NextProtectionRecord, cancellationToken).ConfigureAwait(false);
+            checkpoint?.Invoke(RootMembershipPublicationPoint.StageRemoved);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        if (pending.BackupStateFileIdentity is not null)
+        {
+            // A prior-stage removal may have been interrupted; retain backup if selected state or a sibling changed.
+            await ValidateResolutionAsync(priorLedger, member, parents, parent, pending, next,
+                allowMissingArtifacts: true, cancellationToken).ConfigureAwait(false);
+            await RemoveArtifactAsync(parent, BackupName(pending), pending.BackupStateFileIdentity, member.Binding,
+                nextProtection: null, cancellationToken).ConfigureAwait(false);
+            checkpoint?.Invoke(RootMembershipPublicationPoint.BackupRemoved);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        RequireAbsent(parent, StageName(pending));
+        RequireAbsent(parent, BackupName(pending));
+        checkpoint?.Invoke(RootMembershipPublicationPoint.ArtifactsRemoved);
+        cancellationToken.ThrowIfCancellationRequested();
+        // Complete can only be retained after every member still reopens correctly and cleanup is finished.
+        await RequireAllPriorStatesAsync(resolved, parents, cancellationToken).ConfigureAwait(false);
+        RequireAbsent(parent, StageName(pending));
+        RequireAbsent(parent, BackupName(pending));
+        transaction.Publish(resolved);
+        checkpoint?.Invoke(RootMembershipPublicationPoint.Acknowledged);
+        return resolved;
+    }
+
+    private async Task<RootMembershipRecord> ValidateResolutionAsync(RootMembershipRecord priorLedger,
+        RootMemberRecord member, IReadOnlyDictionary<string, PhysicalStoreDirectoryHandle> parents,
+        PhysicalStoreDirectoryHandle parent, PendingStateCommit pending, bool next,
+        bool allowMissingArtifacts, CancellationToken cancellationToken)
+    {
         var slot = GetSlot(member);
-        var current = _files.InspectChildNoFollow(parent, slot.CanonicalBasename);
         RootMembershipRecord resolved;
-        var next = pending.StagedStateFileIdentity is not null && current?.Identity == pending.StagedStateFileIdentity;
         if (next)
         {
-            var actual = await ReadStateAsync(parent, slot, pending.StagedStateFileIdentity!, cancellationToken).ConfigureAwait(false);
+            var actual = await ReadStateAsync(parent, slot, pending.StagedStateFileIdentity
+                ?? throw Refused("Next-state resolution requires a durably bound staged identity."), cancellationToken).ConfigureAwait(false);
             RequireExactProtection(actual.State, pending.NextProtectionRecord);
             RequireAbsent(parent, StageName(pending));
-            await RequireBackupAsync(parent, member.Binding, pending, cancellationToken).ConfigureAwait(false);
             resolved = Acknowledge(priorLedger, member, slot, actual.Identity, pending.NextProtectionRecord);
         }
         else
         {
             await ReadPriorAsync(member.Binding, parent, cancellationToken).ConfigureAwait(false);
-            if (pending.StagedStateFileIdentity is null)
+            if (RequireCleanupArtifact(parent, StageName(pending), pending.StagedStateFileIdentity, allowMissingArtifacts))
             {
-                RequireAbsent(parent, StageName(pending));
-                RequireAbsent(parent, BackupName(pending));
-            }
-            else
-            {
-                await RequireArtifactAsync(parent, StageName(pending), pending.StagedStateFileIdentity,
+                await RequireArtifactAsync(parent, StageName(pending), pending.StagedStateFileIdentity!,
                     pending.NextProtectionRecord, cancellationToken).ConfigureAwait(false);
-                RequireProfile(parent, StageName(pending), pending.StagedStateFileIdentity, slot);
-                await RequireBackupAsync(parent, member.Binding, pending, cancellationToken).ConfigureAwait(false);
+                RequireProfile(parent, StageName(pending), pending.StagedStateFileIdentity!, slot);
             }
             resolved = priorLedger;
         }
-
-        // Complete can only be retained from the exact prior status after every member reopens correctly.
+        if (RequireCleanupArtifact(parent, BackupName(pending), pending.BackupStateFileIdentity, allowMissingArtifacts))
+            await RequirePriorArtifactAsync(parent, BackupName(pending), pending.BackupStateFileIdentity!,
+                member.Binding, cancellationToken).ConfigureAwait(false);
         await RequireAllPriorStatesAsync(resolved, parents, cancellationToken).ConfigureAwait(false);
-        transaction.Publish(resolved);
-        if (!next && pending.StagedStateFileIdentity is not null)
-            _publication.RemoveControlFileAt(parent, StageName(pending), pending.StagedStateFileIdentity);
-        if (pending.BackupStateFileIdentity is not null)
-            _publication.RemoveControlFileAt(parent, BackupName(pending), pending.BackupStateFileIdentity);
         return resolved;
+    }
+
+    private bool RequireCleanupArtifact(PhysicalStoreDirectoryHandle parent, string name,
+        PhysicalFileIdentity? expected, bool allowMissing)
+    {
+        var actual = _files.InspectChildNoFollow(parent, name);
+        if (actual is null && (expected is null || allowMissing))
+            return false;
+        PhysicalStorePublicationChecks.RequireExpectedEntry(actual, expected);
+        return actual is not null;
+    }
+
+    private async Task RemoveArtifactAsync(PhysicalStoreDirectoryHandle parent, string name, PhysicalFileIdentity expected,
+        RootMemberRecord.MemberBinding prior, PackageProtectionRecord? nextProtection, CancellationToken cancellationToken)
+    {
+        if (!RequireCleanupArtifact(parent, name, expected, allowMissing: true))
+            return;
+        if (nextProtection is null)
+            await RequirePriorArtifactAsync(parent, name, expected, prior, cancellationToken).ConfigureAwait(false);
+        else
+            await RequireArtifactAsync(parent, name, expected, nextProtection, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        _publication.RemoveControlFileAt(parent, name, expected);
     }
 
     /// <summary>Reads a structurally verified ledger without granting admission or completeness authority.</summary>
@@ -275,16 +347,6 @@ internal sealed class RootMembershipRegistry
             throw Refused("State payload does not bind the unchanged canonical slot.");
         var state = await DecodeStateAsync(read.Bytes, cancellationToken).ConfigureAwait(false);
         return new StateObservation(read.Identity, read.Bytes, state);
-    }
-
-    private async Task RequireBackupAsync(PhysicalStoreDirectoryHandle parent, RootMemberRecord.MemberBinding prior,
-        PendingStateCommit pending, CancellationToken cancellationToken)
-    {
-        if (prior is RootMemberRecord.ProspectiveBinding)
-            RequireAbsent(parent, BackupName(pending));
-        else
-            await RequirePriorArtifactAsync(parent, BackupName(pending), pending.BackupStateFileIdentity
-                ?? throw Refused("Existing-state recovery requires a bound backup identity."), prior, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task RequirePriorArtifactAsync(PhysicalStoreDirectoryHandle parent, string name,

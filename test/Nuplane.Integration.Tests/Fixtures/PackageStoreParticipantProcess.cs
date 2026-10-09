@@ -8,6 +8,8 @@ namespace Nuplane.Integration.Tests.Fixtures;
 internal sealed class PackageStoreParticipantProcess : IAsyncDisposable
 {
     private readonly Process _process;
+    private readonly string _correlationId;
+    private readonly string _correlationProperty;
     private readonly Task<string> _standardError;
     private readonly StringBuilder _standardOutput = new();
     private readonly object _disposeGate = new();
@@ -15,21 +17,46 @@ internal sealed class PackageStoreParticipantProcess : IAsyncDisposable
     private bool _released;
     private PackageStoreParticipantExit? _exit;
 
-    private PackageStoreParticipantProcess(Process process, string gate)
+    private PackageStoreParticipantProcess(Process process, string correlationId, string correlationProperty)
     {
         _process = process;
-        Gate = gate;
+        _correlationId = correlationId;
+        _correlationProperty = correlationProperty;
         ProcessId = process.Id;
         _standardError = process.StandardError.ReadToEndAsync();
     }
 
-    public string Gate { get; }
+    public string Gate => _correlationProperty == "gate" ? _correlationId : string.Empty;
+    public string OperationId => _correlationProperty == "operationId" ? _correlationId : string.Empty;
     public int ProcessId { get; }
     public bool HasExited => _exit is not null || _process.HasExited;
 
     public static async Task<PackageStoreParticipantProcess> StartAsync(string gate, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gate);
+        return await StartCoreAsync(["--gate", gate], gate, "gate", "ready", cancellationToken).ConfigureAwait(false);
+    }
+
+    public static Task<PackageStoreParticipantProcess> StartPublisherAsync(
+        string operationId, string requestPath, CancellationToken cancellationToken)
+        => StartOperationAsync("--membership-publish", operationId, requestPath, cancellationToken);
+
+    public static Task<PackageStoreParticipantProcess> StartRecoveryAsync(
+        string operationId, string requestPath, CancellationToken cancellationToken)
+        => StartOperationAsync("--membership-recover", operationId, requestPath, cancellationToken);
+
+    private static Task<PackageStoreParticipantProcess> StartOperationAsync(
+        string command, string operationId, string requestPath, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(requestPath);
+        return StartCoreAsync([command, requestPath], operationId, "operationId", "started", cancellationToken);
+    }
+
+    private static async Task<PackageStoreParticipantProcess> StartCoreAsync(
+        IReadOnlyList<string> arguments, string correlationId, string correlationProperty,
+        string readyKind, CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         var host = Path.Combine(AppContext.BaseDirectory, "PackageStoreTestHost", "Nuplane.PackageStore.TestHost.dll");
         if (!File.Exists(host))
@@ -44,20 +71,20 @@ internal sealed class PackageStoreParticipantProcess : IAsyncDisposable
             CreateNoWindow = true
         };
         start.ArgumentList.Add(host);
-        start.ArgumentList.Add("--gate");
-        start.ArgumentList.Add(gate);
+        foreach (var argument in arguments)
+            start.ArgumentList.Add(argument);
         var process = Process.Start(start) ?? throw new InvalidOperationException("The participant did not start.");
-        var participant = new PackageStoreParticipantProcess(process, gate);
+        var participant = new PackageStoreParticipantProcess(process, correlationId, correlationProperty);
         try
         {
-            using var ready = await participant.ReadResponseAsync("ready", cancellationToken);
+            using var ready = await participant.ReadResponseAsync(readyKind, cancellationToken).ConfigureAwait(false);
             if (ready.RootElement.GetProperty("processId").GetInt32() != participant.ProcessId)
                 throw new InvalidDataException("Participant readiness reported a different process identity.");
             return participant;
         }
         catch
         {
-            await participant.DisposeAsync();
+            await participant.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }
@@ -72,9 +99,18 @@ internal sealed class PackageStoreParticipantProcess : IAsyncDisposable
         var command = JsonSerializer.Serialize(new { command = "release", gate = Gate });
         await _process.StandardInput.WriteLineAsync(command.AsMemory(), cancellationToken);
         await _process.StandardInput.FlushAsync(cancellationToken);
-        using var response = await ReadResponseAsync("released", cancellationToken);
+        using var response = await ReadResponseAsync("released", cancellationToken).ConfigureAwait(false);
         return await CaptureExitAsync(cancellationToken);
     }
+
+    public Task<JsonDocument> ReadResponseAsync(string kind, CancellationToken cancellationToken)
+        => ReadResponseCoreAsync(kind, cancellationToken);
+
+    public Task<JsonDocument> ReadNextResponseAsync(CancellationToken cancellationToken)
+        => ReadNextResponseCoreAsync(cancellationToken);
+
+    public Task<PackageStoreParticipantExit> WaitForExitAsync(CancellationToken cancellationToken)
+        => CaptureExitAsync(cancellationToken);
 
     public async Task<PackageStoreParticipantExit> TerminateAsync(CancellationToken cancellationToken)
     {
@@ -92,18 +128,40 @@ internal sealed class PackageStoreParticipantProcess : IAsyncDisposable
         return await CaptureExitAsync(cancellationToken);
     }
 
-    private async Task<JsonDocument> ReadResponseAsync(string kind, CancellationToken cancellationToken)
+    private async Task<JsonDocument> ReadResponseCoreAsync(string kind, CancellationToken cancellationToken)
+    {
+        var message = await ReadNextResponseCoreAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (message.RootElement.GetProperty("kind").GetString() == kind)
+                return message;
+            throw new InvalidDataException($"Unexpected participant response while awaiting {kind}.");
+        }
+        catch
+        {
+            message.Dispose();
+            throw;
+        }
+    }
+
+    private async Task<JsonDocument> ReadNextResponseCoreAsync(CancellationToken cancellationToken)
     {
         var line = await _process.StandardOutput.ReadLineAsync(cancellationToken)
-            ?? throw new EndOfStreamException($"Participant exited before reporting {kind}.");
+            ?? throw new EndOfStreamException("Participant exited before reporting its next response.");
         _standardOutput.AppendLine(line);
         var message = JsonDocument.Parse(line);
         try
         {
-            if (message.RootElement.GetProperty("kind").GetString() == kind &&
-                message.RootElement.GetProperty("gate").GetString() == Gate)
+            if (message.RootElement.GetProperty(_correlationProperty).GetString() == _correlationId)
+            {
+                if (_correlationProperty == "operationId" &&
+                    message.RootElement.GetProperty("processId").GetInt32() != ProcessId)
+                {
+                    throw new InvalidDataException("Participant response contained a different process identity.");
+                }
                 return message;
-            throw new InvalidDataException($"Unexpected participant response while awaiting {kind}.");
+            }
+            throw new InvalidDataException("Participant response contained a different correlation identity.");
         }
         catch
         {

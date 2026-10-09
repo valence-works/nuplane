@@ -19,7 +19,8 @@ internal sealed class PendingStateCommit
         RootMemberRecord member,
         PackageProtectionRecord nextProtectionRecord,
         PhysicalFileIdentity? stagedStateFileIdentity = null,
-        PhysicalFileIdentity? backupStateFileIdentity = null)
+        PhysicalFileIdentity? backupStateFileIdentity = null,
+        PendingStateCommitResolution resolution = PendingStateCommitResolution.Unresolved)
     {
         ArgumentNullException.ThrowIfNull(rootIdentity);
         if (enrollmentEpoch <= 0)
@@ -29,6 +30,10 @@ internal sealed class PendingStateCommit
         ProtectionDigest.ValidateCanonicalDigest(priorLedgerDigest);
         if (publicationId == Guid.Empty)
             throw new ArgumentException("A pending state publication requires a non-empty publication identity.", nameof(publicationId));
+        if (!Enum.IsDefined(resolution))
+            throw new ArgumentOutOfRangeException(nameof(resolution));
+        if (resolution == PendingStateCommitResolution.Next && stagedStateFileIdentity is null)
+            throw new ArgumentException("A next-state resolution requires its observed staged state identity.", nameof(resolution));
         ArgumentNullException.ThrowIfNull(member);
         ArgumentNullException.ThrowIfNull(nextProtectionRecord);
 
@@ -102,6 +107,7 @@ internal sealed class PendingStateCommit
         BackupStateFileIdentity = backupStateFileIdentity is null
             ? null
             : MembershipRecordValueCopies.CopyIdentity(backupStateFileIdentity);
+        Resolution = resolution;
     }
 
     internal PhysicalRootIdentity RootIdentity { get; }
@@ -123,6 +129,8 @@ internal sealed class PendingStateCommit
     internal PhysicalFileIdentity? StagedStateFileIdentity { get; }
 
     internal PhysicalFileIdentity? BackupStateFileIdentity { get; }
+
+    internal PendingStateCommitResolution Resolution { get; }
 
     private static long GetNextRevision(RootMemberRecord.AcknowledgedBinding acknowledged)
     {

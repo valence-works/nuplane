@@ -315,6 +315,7 @@ internal sealed class RootMembershipPayloadSerializer
         public PackageProtectionRecord? NextProtectionRecord { get; set; }
         public PhysicalFileDto? StagedStateFileIdentity { get; set; }
         public PhysicalFileDto? BackupStateFileIdentity { get; set; }
+        public int? Resolution { get; set; }
 
         internal PendingStateCommit ToRecord(IReadOnlyList<RootMemberRecord> members)
         {
@@ -332,7 +333,8 @@ internal sealed class RootMembershipPayloadSerializer
                 priorMember,
                 Required(NextProtectionRecord, nameof(NextProtectionRecord)),
                 StagedStateFileIdentity?.ToRecord(),
-                BackupStateFileIdentity?.ToRecord());
+                BackupStateFileIdentity?.ToRecord(),
+                ReadEnum<PendingStateCommitResolution>(Resolution, nameof(Resolution)));
         }
 
         internal static PendingCommitDto FromRecord(PendingStateCommit value)
@@ -347,7 +349,8 @@ internal sealed class RootMembershipPayloadSerializer
                 Prior = BindingDto.FromRecord(value.Prior),
                 NextProtectionRecord = value.NextProtectionRecord,
                 StagedStateFileIdentity = value.StagedStateFileIdentity is null ? null : PhysicalFileDto.FromRecord(value.StagedStateFileIdentity),
-                BackupStateFileIdentity = value.BackupStateFileIdentity is null ? null : PhysicalFileDto.FromRecord(value.BackupStateFileIdentity)
+                BackupStateFileIdentity = value.BackupStateFileIdentity is null ? null : PhysicalFileDto.FromRecord(value.BackupStateFileIdentity),
+                Resolution = (int)value.Resolution
             };
     }
 

@@ -7,6 +7,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Nuplane\Nuplane.csproj" />
+    <Compile Include="..\Shared\OwnedProcessDirectory.cs" Link="Shared\OwnedProcessDirectory.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Remove="coverlet.collector" />
     <PackageReference Remove="Microsoft.NET.Test.Sdk" />
     <PackageReference Remove="NSubstitute" />

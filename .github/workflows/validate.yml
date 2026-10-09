@@ -103,14 +103,62 @@ jobs:
               'RecoverAsync_CompletePrior_RestoresStatusOnlyAfterEveryMemberReopensCorrectly',
               'PublishStateAsync_AnotherMembersMissingStateOrParent_RefusesBeforePendingPublication',
               'PublishStateAsync_SerializerDropsProtectionOnActualStageReopen_PreservesPendingAndPrior',
+              'PublishStateAsync_DurableResolutionAndCleanupSeams_RecoverWithoutUnreferencedBackups',
+              'RecoverAsync_PriorCleanupInterruptedBetweenRemovals_ResumesExactPriorAndRetainsSibling',
+              'RecoverAsync_UnresolvedMissingBoundArtifact_RefusesBeforeDurableCleanupSelection',
+              'RecoverAsync_ResolvedPriorChangedStageOrBackup_ValidatesAllArtifactsBeforeAnyRemoval',
+              'RecoverAsync_ResolvedNextChangedStateOrSibling_RefusesAndKeepsBackup',
+              'PublishStateAsync_CompletePrior_AcknowledgesOnlyAfterCleanupAndAllMembersValidate',
+              'RecoverAsync_BackupChangesAfterStageRemoval_RevalidatesPayloadBeforeRemovingBackup',
+              'RecoverAsync_CancelAfterFirstRemoval_RetainsDurableResolutionForFreshRecovery',
+              'RecoverAsync_SelectedStateChangesAfterStageRemoval_RetainsExactPriorBackup',
               'AcquireAsync_SortsMemberLocksAndReleasesInReverseOrder',
               'AcquireAsync_CancellationAfterFirstMemberUnwindsAndLeavesEveryLockReusable',
           ]
-          if len(rows) < 22 or any(row.get('outcome') != 'Passed' for row in rows):
+          if len(rows) < 31 or any(row.get('outcome') != 'Passed' for row in rows):
               raise SystemExit('Coordinated native publication/lock scenarios must execute without skips.')
           for name in required:
               if sum(row.get('testName', '').endswith('.' + name) for row in rows) != 1:
                   raise SystemExit('Missing coordinated scenario: ' + name)
+          PYCODE
+
+      - name: Qualify actual process publication and cleanup recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~RootMembershipRegistryProcessTests|FullyQualifiedName~PackageStoreParticipantProcessTests" \
+            --logger "trx;LogFileName=membership-process.trx" \
+            --results-directory "$RUNNER_TEMP/membership-process"
+          python3 - "$RUNNER_TEMP/membership-process/membership-process.trx" <<'PYCODE'
+          import sys
+          import re
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          if len(rows) != 33 or any(row.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('All 28 publisher cases, recovery restart case and four gate cases must pass without skips.')
+          publisher = [r.get('testName', '') for r in rows if '.PublisherProcess_CheckpointsRecoverOrPreserveExactEvidenceAcrossAllPriorBindings(' in r.get('testName', '')]
+          shapes = ['Prospective', 'ExistingUnprotected', 'Acknowledged']
+          points = ['PendingPublished', 'StageFlushed', 'BackupFlushed', 'ArtifactsBound', 'StatePublished',
+                    'StateVerified', 'ResolutionPublished', 'BackupRemoved', 'ArtifactsRemoved', 'Acknowledged']
+          pairs = [re.findall(r'"([^"]+)"', name)[:2] for name in publisher]
+          if len(publisher) != 28:
+              raise SystemExit('The actual publisher checkpoint matrix did not execute all 28 cases.')
+          for shape in shapes:
+              for point in points:
+                  if shape == 'Prospective' and point in ['BackupFlushed', 'BackupRemoved']:
+                      continue
+                  if pairs.count([shape, point]) != 1:
+                      raise SystemExit('Missing or duplicate publisher case: ' + shape + '/' + point)
+          required = ['RecoveryProcesses_CrashAfterPriorStageAndNextBackupRemoval_ResumeWithFreshOwner',
+                      'ReleaseAsync_AfterReadiness_CapturesSuccessfulChildExit',
+                      'DisposeAsync_BeforeRelease_TerminatesOwnedChildAndIsIdempotent',
+                      'ReleaseAsync_WhenCancelled_LeavesGateWaitingUntilOwnedTermination',
+                      'StartAsync_WhenAlreadyCancelled_DoesNotStartAChild']
+          for name in required:
+              if sum(row.get('testName', '').endswith('.' + name) for row in rows) != 1:
+                  raise SystemExit('Missing process ownership/recovery case: ' + name)
           PYCODE
 
       - name: Run atomic state and registry tests

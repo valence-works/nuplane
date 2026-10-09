@@ -481,6 +481,7 @@ internal static class ProtectionDigest
             writer.Field(8, GuidBytes(value.PublicationId));
             writer.Field(9, EncodeNullableRecord(value.StagedStateFileIdentity, EncodePhysicalFile));
             writer.Field(10, EncodeNullableRecord(value.BackupStateFileIdentity, EncodePhysicalFile));
+            writer.Field(11, EncodeEnum(value.Resolution));
         });
 
     private static byte[] EncodeBindingRecord(RootMemberRecord.MemberBinding value)

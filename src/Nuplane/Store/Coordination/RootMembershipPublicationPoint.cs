@@ -9,6 +9,9 @@ internal enum RootMembershipPublicationPoint
     ArtifactsBound,
     StatePublished,
     StateVerified,
-    Acknowledged,
-    ArtifactsRemoved
+    ResolutionPublished,
+    StageRemoved,
+    BackupRemoved,
+    ArtifactsRemoved,
+    Acknowledged
 }

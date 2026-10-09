@@ -216,6 +216,227 @@ public sealed class RootMembershipRegistryTests
     }
 
     [SupportedPhysicalStoreFact]
+    public async Task PublishStateAsync_DurableResolutionAndCleanupSeams_RecoverWithoutUnreferencedBackups()
+    {
+        foreach (var branch in Enum.GetValues<PriorBranch>())
+        foreach (var point in new[] { RootMembershipPublicationPoint.ResolutionPublished,
+                     RootMembershipPublicationPoint.BackupRemoved, RootMembershipPublicationPoint.ArtifactsRemoved })
+        {
+            if (branch == PriorBranch.Prospective && point == RootMembershipPublicationPoint.BackupRemoved) continue;
+            using var context = await Context.CreateAsync(branch, secondMember: true);
+            await context.InterruptAsync(point);
+            var ledger = context.Registry.ReadCandidate(context.Root);
+            var pending = Assert.IsType<PendingStateCommit>(ledger.PendingStateCommit);
+            Assert.Equal(PendingStateCommitResolution.Next, pending.Resolution);
+            Assert.Equal(RootMembershipStatus.Incomplete, ledger.Status);
+            Assert.Equal(context.Next.ProtectionRecord!.ProtectionDigest, (await context.ReadStateAsync()).ProtectionRecord!.ProtectionDigest);
+
+            var result = await context.Reopen().RecoverAsync(context.Root, context.Parents, CancellationToken.None);
+
+            Assert.Null(result.PendingStateCommit);
+            Assert.Equal(pending.StagedStateFileIdentity,
+                Assert.IsType<RootMemberRecord.AcknowledgedBinding>(result.Members[0].Binding).ObservedStateFileIdentity);
+            Assert.Null(context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.StageName(pending)));
+            Assert.Null(context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.BackupName(pending)));
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task RecoverAsync_PriorCleanupInterruptedBetweenRemovals_ResumesExactPriorAndRetainsSibling()
+    {
+        foreach (var branch in Enum.GetValues<PriorBranch>())
+        foreach (var point in new[] { RootMembershipPublicationPoint.ResolutionPublished, RootMembershipPublicationPoint.StageRemoved,
+                     RootMembershipPublicationPoint.BackupRemoved, RootMembershipPublicationPoint.ArtifactsRemoved })
+        {
+            if (branch == PriorBranch.Prospective && point == RootMembershipPublicationPoint.BackupRemoved) continue;
+            using var context = await Context.CreateAsync(branch, secondMember: true);
+            await context.InterruptAsync(RootMembershipPublicationPoint.ArtifactsBound);
+            await Assert.ThrowsAsync<InterruptedException>(() => context.Reopen().RecoverAsync(context.Root, context.Parents,
+                CancellationToken.None, actual => { if (actual == point) throw new InterruptedException(); }));
+            var ledger = context.Registry.ReadCandidate(context.Root);
+            var pending = Assert.IsType<PendingStateCommit>(ledger.PendingStateCommit);
+            Assert.Equal(PendingStateCommitResolution.Prior, pending.Resolution);
+            Assert.Equal(context.PriorIdentity, context.Files.InspectChildNoFollow(context.Parent, "state.json")?.Identity);
+            if (point is RootMembershipPublicationPoint.StageRemoved or RootMembershipPublicationPoint.BackupRemoved or RootMembershipPublicationPoint.ArtifactsRemoved)
+                Assert.Null(context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.StageName(pending)));
+
+            var result = await context.Reopen().RecoverAsync(context.Root, context.Parents, CancellationToken.None);
+
+            Assert.Equal(context.Initial.LedgerDigest, result.LedgerDigest);
+            Assert.Null(context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.StageName(pending)));
+            Assert.Null(context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.BackupName(pending)));
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task RecoverAsync_UnresolvedMissingBoundArtifact_RefusesBeforeDurableCleanupSelection()
+    {
+        foreach (var removeStage in new[] { false, true })
+        {
+            using var context = await Context.CreateAsync(PriorBranch.Legacy);
+            await context.InterruptAsync(removeStage ? RootMembershipPublicationPoint.ArtifactsBound : RootMembershipPublicationPoint.StatePublished);
+            var ledger = context.Registry.ReadCandidate(context.Root);
+            var pending = ledger.PendingStateCommit!;
+            Assert.Equal(PendingStateCommitResolution.Unresolved, pending.Resolution);
+            File.Delete(Path.Combine(context.ParentPath, removeStage ? RootMembershipRegistry.StageName(pending) : RootMembershipRegistry.BackupName(pending)));
+
+            await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => context.Reopen().RecoverAsync(context.Root, context.Parents, CancellationToken.None));
+
+            Assert.Equal(ledger.LedgerDigest, context.Registry.ReadCandidate(context.Root).LedgerDigest);
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task RecoverAsync_ResolvedPriorChangedStageOrBackup_ValidatesAllArtifactsBeforeAnyRemoval()
+    {
+        foreach (var changeStage in new[] { false, true })
+        foreach (var substituteIdentity in new[] { false, true })
+        {
+            using var context = await Context.CreateAsync(PriorBranch.Legacy);
+            await context.InterruptAsync(RootMembershipPublicationPoint.ArtifactsBound);
+            await Assert.ThrowsAsync<InterruptedException>(() => context.Reopen().RecoverAsync(context.Root, context.Parents,
+                CancellationToken.None, actual => { if (actual == RootMembershipPublicationPoint.ResolutionPublished) throw new InterruptedException(); }));
+            var ledger = context.Registry.ReadCandidate(context.Root);
+            var pending = ledger.PendingStateCommit!;
+            var name = changeStage ? RootMembershipRegistry.StageName(pending) : RootMembershipRegistry.BackupName(pending);
+            if (substituteIdentity)
+            {
+                File.Move(Path.Combine(context.ParentPath, name), Path.Combine(context.ParentPath, "retained-original"));
+                context.CreateFile(name, "third-artifact"u8.ToArray());
+            }
+            else File.WriteAllBytes(Path.Combine(context.ParentPath, name), "invalid-same-identity"u8.ToArray());
+            var stage = context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.StageName(pending))!.Identity;
+            var backup = context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.BackupName(pending))!.Identity;
+            if (!substituteIdentity)
+                Assert.Equal(changeStage ? pending.StagedStateFileIdentity : pending.BackupStateFileIdentity, changeStage ? stage : backup);
+
+            await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => context.Reopen().RecoverAsync(context.Root, context.Parents, CancellationToken.None));
+
+            Assert.Equal(ledger.LedgerDigest, context.Registry.ReadCandidate(context.Root).LedgerDigest);
+            Assert.Equal(stage, context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.StageName(pending))!.Identity);
+            Assert.Equal(backup, context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.BackupName(pending))!.Identity);
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task RecoverAsync_ResolvedNextChangedStateOrSibling_RefusesAndKeepsBackup()
+    {
+        foreach (var changeSibling in new[] { false, true })
+        {
+            using var context = await Context.CreateAsync(PriorBranch.Acknowledged, secondMember: true, complete: true);
+            await context.InterruptAsync(RootMembershipPublicationPoint.ResolutionPublished);
+            var ledger = context.Registry.ReadCandidate(context.Root);
+            File.WriteAllBytes(Path.Combine(context.ParentPath, changeSibling ? "second.json" : "state.json"), "third-payload"u8.ToArray());
+
+            await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => context.Reopen().RecoverAsync(context.Root, context.Parents, CancellationToken.None));
+
+            Assert.Equal(ledger.LedgerDigest, context.Registry.ReadCandidate(context.Root).LedgerDigest);
+            Assert.Equal(ledger.PendingStateCommit!.BackupStateFileIdentity,
+                context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.BackupName(ledger.PendingStateCommit))!.Identity);
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task PublishStateAsync_CompletePrior_AcknowledgesOnlyAfterCleanupAndAllMembersValidate()
+    {
+        using var context = await Context.CreateAsync(PriorBranch.Acknowledged, secondMember: true, complete: true);
+        PendingStateCommit? cleanup = null;
+        var result = await context.Registry.PublishStateAsync(context.Root, context.Parents, "member", context.Next, CancellationToken.None,
+            point =>
+            {
+                var actual = context.Registry.ReadCandidate(context.Root);
+                if (point == RootMembershipPublicationPoint.ResolutionPublished)
+                {
+                    cleanup = Assert.IsType<PendingStateCommit>(actual.PendingStateCommit);
+                    Assert.Equal(RootMembershipStatus.Incomplete, actual.Status);
+                    Assert.NotNull(context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.BackupName(cleanup)));
+                }
+                if (point == RootMembershipPublicationPoint.Acknowledged)
+                {
+                    Assert.NotNull(cleanup);
+                    Assert.Null(actual.PendingStateCommit);
+                    Assert.Equal(RootMembershipStatus.Complete, actual.Status);
+                    Assert.Null(context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.BackupName(cleanup)));
+                }
+            });
+        Assert.Equal(RootMembershipStatus.Complete, result.Status);
+        Assert.Equal(2, result.Members.Count);
+        await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => context.Reopen().RecoverAsync(context.Root, context.Parents, CancellationToken.None));
+        Assert.Equal(result.LedgerDigest, context.Registry.ReadCandidate(context.Root).LedgerDigest);
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task RecoverAsync_BackupChangesAfterStageRemoval_RevalidatesPayloadBeforeRemovingBackup()
+    {
+        using var context = await Context.CreateAsync(PriorBranch.Legacy);
+        await context.InterruptAsync(RootMembershipPublicationPoint.ArtifactsBound);
+        PendingStateCommit? pending = null;
+        await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => context.Reopen().RecoverAsync(context.Root, context.Parents,
+            CancellationToken.None, point =>
+            {
+                if (point != RootMembershipPublicationPoint.StageRemoved) return;
+                pending = context.Registry.ReadCandidate(context.Root).PendingStateCommit!;
+                File.WriteAllBytes(Path.Combine(context.ParentPath, RootMembershipRegistry.BackupName(pending)), "changed-between-removals"u8.ToArray());
+            }));
+        Assert.NotNull(pending);
+        var ledger = context.Registry.ReadCandidate(context.Root);
+        Assert.Equal(PendingStateCommitResolution.Prior, ledger.PendingStateCommit!.Resolution);
+        Assert.Null(context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.StageName(pending)));
+        Assert.Equal(pending.BackupStateFileIdentity, context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.BackupName(pending))!.Identity);
+        Assert.Equal("changed-between-removals"u8.ToArray(), File.ReadAllBytes(Path.Combine(context.ParentPath, RootMembershipRegistry.BackupName(pending))));
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task RecoverAsync_SelectedStateChangesAfterStageRemoval_RetainsExactPriorBackup()
+    {
+        foreach (var changeSibling in new[] { false, true })
+        {
+            using var context = await Context.CreateAsync(PriorBranch.Acknowledged, secondMember: true, complete: true);
+            await context.InterruptAsync(RootMembershipPublicationPoint.ArtifactsBound);
+            PendingStateCommit? pending = null;
+            await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => context.Reopen().RecoverAsync(context.Root, context.Parents,
+                CancellationToken.None, point =>
+                {
+                    if (point != RootMembershipPublicationPoint.StageRemoved) return;
+                    pending = context.Registry.ReadCandidate(context.Root).PendingStateCommit!;
+                    File.WriteAllBytes(Path.Combine(context.ParentPath, changeSibling ? "second.json" : "state.json"), "changed-selected-state"u8.ToArray());
+                }));
+            Assert.NotNull(pending);
+            var ledger = context.Registry.ReadCandidate(context.Root);
+            Assert.Equal(PendingStateCommitResolution.Prior, ledger.PendingStateCommit!.Resolution);
+            Assert.Equal(RootMembershipStatus.Incomplete, ledger.Status);
+            Assert.Null(context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.StageName(pending)));
+            var retainedBackup = context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.BackupName(pending));
+            Assert.NotNull(retainedBackup);
+            Assert.Equal(pending.BackupStateFileIdentity, retainedBackup.Identity);
+            using var file = context.Files.OpenFileChildNoFollow(context.Parent, RootMembershipRegistry.BackupName(pending), FileAccess.Read);
+            using var bytes = new MemoryStream(context.Files.ReadControlFile(file, RootMembershipRegistry.MaximumStateBytes), writable: false);
+            var backup = await new StoreStateSerializer().ReadPayloadAsync(bytes, CancellationToken.None);
+            Assert.Equal(Assert.IsType<RootMemberRecord.AcknowledgedBinding>(pending.Prior).ProtectionRecord.ProtectionDigest,
+                backup.ProtectionRecord!.ProtectionDigest);
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task RecoverAsync_CancelAfterFirstRemoval_RetainsDurableResolutionForFreshRecovery()
+    {
+        using var context = await Context.CreateAsync(PriorBranch.Legacy);
+        await context.InterruptAsync(RootMembershipPublicationPoint.ArtifactsBound);
+        using var cancellation = new CancellationTokenSource();
+        await Assert.ThrowsAsync<OperationCanceledException>(() => context.Reopen().RecoverAsync(context.Root, context.Parents, cancellation.Token,
+            point => { if (point == RootMembershipPublicationPoint.StageRemoved) cancellation.Cancel(); }));
+        var pending = context.Registry.ReadCandidate(context.Root).PendingStateCommit!;
+        Assert.Equal(PendingStateCommitResolution.Prior, pending.Resolution);
+        Assert.Null(context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.StageName(pending)));
+        Assert.NotNull(context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.BackupName(pending)));
+
+        var result = await context.Reopen().RecoverAsync(context.Root, context.Parents, CancellationToken.None);
+
+        Assert.Equal(context.Initial.LedgerDigest, result.LedgerDigest);
+        Assert.Null(context.Files.InspectChildNoFollow(context.Parent, RootMembershipRegistry.BackupName(pending)));
+    }
+
+    [SupportedPhysicalStoreFact]
     public async Task LookupAndInitialization_PresentMissingLedgerAndUnsupportedSerializer_RefuseWithoutRecreation()
     {
         using var context = await Context.CreateAsync(PriorBranch.Prospective);

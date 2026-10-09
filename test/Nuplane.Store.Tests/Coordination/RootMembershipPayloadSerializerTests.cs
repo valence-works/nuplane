@@ -59,26 +59,41 @@ public sealed class RootMembershipPayloadSerializerTests
     }
 
     [Theory]
-    [InlineData("prospective")]
-    [InlineData("unprotected")]
-    [InlineData("acknowledged")]
-    [InlineData("acknowledged-no-artifacts")]
-    public void RoundTrip_PendingCommit_PreservesPriorAndNext(string priorKind)
+    [InlineData("prospective", "unresolved")]
+    [InlineData("unprotected", "unresolved")]
+    [InlineData("acknowledged", "unresolved")]
+    [InlineData("acknowledged-no-artifacts", "unresolved")]
+    [InlineData("prospective", "prior")]
+    [InlineData("prospective", "next")]
+    [InlineData("prospective-no-artifacts", "prior")]
+    [InlineData("acknowledged-no-artifacts", "prior")]
+    [InlineData("unprotected", "prior")]
+    [InlineData("unprotected", "next")]
+    [InlineData("acknowledged", "prior")]
+    [InlineData("acknowledged", "next")]
+    public void RoundTrip_PendingCommit_PreservesPriorNextAndResolution(string priorKind, string resolutionName)
     {
         var priorBinding = priorKind switch
         {
-            "prospective" => (RootMemberRecord.MemberBinding)Prospective(),
+            "prospective" or "prospective-no-artifacts" => (RootMemberRecord.MemberBinding)Prospective(),
             "unprotected" => Unprotected(),
             _ => Acknowledged("member", revision: 2)
         };
         var member = Member("member", priorBinding);
         var nextRevision = priorKind.StartsWith("acknowledged", StringComparison.Ordinal) ? 3 : 1;
-        var stagedIdentity = priorKind == "acknowledged-no-artifacts" ? null : Identity("staged-state");
-        var backupIdentity = priorKind is "prospective" or "acknowledged-no-artifacts" ? null : Identity("backup-state");
+        var stagedIdentity = priorKind.EndsWith("-no-artifacts", StringComparison.Ordinal) ? null : Identity("staged-state");
+        var backupIdentity = priorKind.StartsWith("prospective", StringComparison.Ordinal) || stagedIdentity is null ? null : Identity("backup-state");
+        var resolution = resolutionName switch
+        {
+            "unresolved" => PendingStateCommitResolution.Unresolved,
+            "prior" => PendingStateCommitResolution.Prior,
+            "next" => PendingStateCommitResolution.Next,
+            _ => throw new ArgumentOutOfRangeException(nameof(resolutionName))
+        };
         var pending = new PendingStateCommit(
             Root(), 1, RootMembershipStatus.Incomplete, Digest,
             Guid.Parse("29d3a04d-d5f9-4628-aed8-5e5e14349dc5"), member,
-            Protection("member", nextRevision), stagedIdentity, backupIdentity);
+            Protection("member", nextRevision), stagedIdentity, backupIdentity, resolution);
         var original = Ledger([member], ["member"], pending: pending);
 
         var roundTrip = _serializer.Deserialize(_serializer.Serialize(original));
@@ -91,7 +106,32 @@ public sealed class RootMembershipPayloadSerializerTests
         Assert.Equal(pending.NextProtectionRecord.ProtectionDigest, restoredPending.NextProtectionRecord.ProtectionDigest);
         Assert.Equal(stagedIdentity, restoredPending.StagedStateFileIdentity);
         Assert.Equal(backupIdentity, restoredPending.BackupStateFileIdentity);
+        Assert.Equal(resolution, restoredPending.Resolution);
         Assert.Equal(_serializer.Serialize(original), _serializer.Serialize(roundTrip));
+    }
+
+    [Fact]
+    public void Deserialize_RequiresSupportedPendingResolutionAndNextStageIdentity()
+    {
+        var member = Member("member", Prospective());
+        var pending = new PendingStateCommit(
+            Root(), 1, RootMembershipStatus.Incomplete, Digest,
+            Guid.Parse("a40ca718-29e9-4748-8c6f-5ea7285f9304"), member,
+            Protection("member"), Identity("staged-state"), resolution: PendingStateCommitResolution.Next);
+        var payload = Encoding.UTF8.GetString(_serializer.Serialize(Ledger([member], ["member"], pending: pending)));
+
+        var missingResolution = Parse(payload);
+        missingResolution["pendingStateCommit"]!.AsObject().Remove("resolution");
+        Assert.Throws<JsonException>(() => Deserialize(missingResolution));
+
+        var unsupportedResolution = Parse(payload);
+        unsupportedResolution["pendingStateCommit"]!["resolution"] = 99;
+        Assert.Throws<JsonException>(() => Deserialize(unsupportedResolution));
+
+        var nextWithoutStage = Parse(payload);
+        nextWithoutStage["pendingStateCommit"]!.AsObject().Remove("stagedStateFileIdentity");
+        var exception = Assert.Throws<JsonException>(() => Deserialize(nextWithoutStage));
+        Assert.IsType<ArgumentException>(exception.InnerException);
     }
 
     [Fact]

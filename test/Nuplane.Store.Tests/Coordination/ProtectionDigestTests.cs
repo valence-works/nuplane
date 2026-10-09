@@ -784,6 +784,22 @@ public sealed class ProtectionDigestTests
                 Pending(Root(), 1, acknowledgedPrior, acknowledgedNext,
                     stagedStateFileIdentity: stagedIdentity, backupStateFileIdentity: Identity("other-backup-file")))));
 
+        var prospectivePrior = Member("member", Prospective());
+        var prospectiveNext = Protection("member");
+        var prospectiveStage = Identity("prospective-stage");
+        var unresolvedPending = Pending(Root(), 1, prospectivePrior, prospectiveNext,
+            stagedStateFileIdentity: prospectiveStage, resolution: PendingStateCommitResolution.Unresolved);
+        var priorResolvedPending = Pending(Root(), 1, prospectivePrior, prospectiveNext,
+            stagedStateFileIdentity: prospectiveStage, resolution: PendingStateCommitResolution.Prior);
+        var nextResolvedPending = Pending(Root(), 1, prospectivePrior, prospectiveNext,
+            stagedStateFileIdentity: prospectiveStage, resolution: PendingStateCommitResolution.Next);
+        var unresolvedDigest = ProtectionDigest.Ledger(Ledger([prospectivePrior], ["member"], pending: unresolvedPending));
+        Assert.NotEqual(unresolvedDigest, ProtectionDigest.Ledger(Ledger([prospectivePrior], ["member"], pending: priorResolvedPending)));
+        Assert.NotEqual(unresolvedDigest, ProtectionDigest.Ledger(Ledger([prospectivePrior], ["member"], pending: nextResolvedPending)));
+        Assert.NotEqual(
+            ProtectionDigest.Ledger(Ledger([prospectivePrior], ["member"], pending: priorResolvedPending)),
+            ProtectionDigest.Ledger(Ledger([prospectivePrior], ["member"], pending: nextResolvedPending)));
+
         var ack = Acknowledged("old", "parent", "old.json", "old-file", "old-body");
         var newMember = Member("new", Acknowledged("new", "parent", "new.json", "new-file", "new-body", epoch: 2));
         var retirement = new RootMemberRetirementEvidence("old", ack, 2, FixtureDigest("proof-one"));
@@ -977,10 +993,11 @@ public sealed class ProtectionDigestTests
         string priorLedgerDigest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         Guid? publicationId = null,
         PhysicalFileIdentity? stagedStateFileIdentity = null,
-        PhysicalFileIdentity? backupStateFileIdentity = null)
+        PhysicalFileIdentity? backupStateFileIdentity = null,
+        PendingStateCommitResolution resolution = PendingStateCommitResolution.Unresolved)
         => new(root, epoch, priorStatus, priorLedgerDigest,
             publicationId ?? Guid.Parse("10000000-0000-0000-0000-000000000001"), member, next,
-            stagedStateFileIdentity, backupStateFileIdentity);
+            stagedStateFileIdentity, backupStateFileIdentity, resolution);
 
     private static RootMemberRecord Member(string id, RootMemberRecord.MemberBinding binding, string? locator = null)
         => new(id, locator ?? $"/state/{id}.json", binding);

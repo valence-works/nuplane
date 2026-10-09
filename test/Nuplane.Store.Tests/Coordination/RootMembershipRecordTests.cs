@@ -91,6 +91,7 @@ public sealed class RootMembershipRecordTests
         Assert.Equal(RootMembershipStatus.Incomplete, incomplete.PriorMembershipStatus);
         Assert.Equal("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", incomplete.PriorLedgerDigest);
         Assert.NotEqual(Guid.Empty, incomplete.PublicationId);
+        Assert.Equal(PendingStateCommitResolution.Unresolved, incomplete.Resolution);
 
         var acknowledged = Member("member", Ack("member"));
         var complete = Pending(Root(), 1, acknowledged, Protection("member", revision: 2), RootMembershipStatus.Complete);
@@ -109,6 +110,16 @@ public sealed class RootMembershipRecordTests
         Assert.Equal(stagedProspective, prospectivePublication.StagedStateFileIdentity);
         Assert.NotSame(stagedProspective, prospectivePublication.StagedStateFileIdentity);
         Assert.Null(prospectivePublication.BackupStateFileIdentity);
+        Assert.Equal(PendingStateCommitResolution.Prior,
+            Pending(Root(), 1, prospective, nextFirst, stagedStateFileIdentity: stagedProspective,
+                resolution: PendingStateCommitResolution.Prior).Resolution);
+        Assert.Equal(PendingStateCommitResolution.Next,
+            Pending(Root(), 1, prospective, nextFirst, stagedStateFileIdentity: stagedProspective,
+                resolution: PendingStateCommitResolution.Next).Resolution);
+        Assert.Throws<ArgumentOutOfRangeException>(() => Pending(Root(), 1, prospective, nextFirst,
+            resolution: (PendingStateCommitResolution)99));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, prospective, nextFirst,
+            resolution: PendingStateCommitResolution.Next));
         Assert.Throws<ArgumentException>(() => Pending(Root(), 1, prospective, nextFirst,
             backupStateFileIdentity: Identity("backup")));
 
@@ -274,10 +285,11 @@ public sealed class RootMembershipRecordTests
         PackageProtectionRecord next, RootMembershipStatus priorStatus = RootMembershipStatus.Incomplete,
         string priorLedgerDigest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         Guid? publicationId = null, PhysicalFileIdentity? stagedStateFileIdentity = null,
-        PhysicalFileIdentity? backupStateFileIdentity = null)
+        PhysicalFileIdentity? backupStateFileIdentity = null,
+        PendingStateCommitResolution resolution = PendingStateCommitResolution.Unresolved)
         => new(root, epoch, priorStatus, priorLedgerDigest,
             publicationId ?? Guid.Parse("10000000-0000-0000-0000-000000000001"), member, next,
-            stagedStateFileIdentity, backupStateFileIdentity);
+            stagedStateFileIdentity, backupStateFileIdentity, resolution);
 
     private static RootMemberRecord Member(string id, RootMemberRecord.MemberBinding binding)
         => new(id, $"/external-state/{id}.json", binding);
