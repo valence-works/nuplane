@@ -608,6 +608,21 @@ jobs:
           import xml.etree.ElementTree as ET
           rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
           required = [
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_ClassifiesLiveAndStaleCompleteGraphsWithoutChangingArtifacts",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_EmptyNamespaceReturnsNoUseRecords",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_CancellationAfterAcquiringProbeReleasesLockAndPreservesArtifacts",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_CumulativePayloadBudgetRefusesBeforeProbingNextGraph",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesMissingRecordWithoutDeletingItsSentinel",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesMissingSentinelWithoutDeletingItsRecord",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesUnknownStageName",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesNoncanonicalUsePrefixAndExtension",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesMalformedRecordAndDigestMismatch",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesWhenRecordedInstallCompletionEvidenceIsMissing",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesDigestValidRecordBoundToDifferentSentinelIdentity",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesRecordFromAnotherEnrollmentEpoch",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesGraphWithForeignRootWithoutRemovingEitherArtifact",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesHardLinkedSentinel",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesWhenBoundedControlEnumerationOverflows",
               "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_RefusesMismatchedHeldRootBeforeCreatingArtifacts",
               "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_InvalidCandidateMetadataIsRejectedBeforeCreatingArtifacts",
               "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_ReopensExactRecordAndRetainsNativeSentinelUntilDisposal",
@@ -632,7 +647,7 @@ jobs:
               raise SystemExit('graph-use-publication: required scenario names or multiplicity differ.')
           if any(row.attrib.get('outcome') != 'Passed' for row in rows):
               raise SystemExit('graph-use-publication: every required scenario must pass without skips.')
-          print('Qualified all 19 native graph-use publication, binding and acquisition cases with no skips.')
+          print('Qualified all 34 native graph-use publication, inspection, binding and acquisition cases with no skips.')
           PYCODE
 
       - name: Qualify counted native root access across awaits and member replay

@@ -9,24 +9,33 @@ namespace Nuplane.Store.Coordination;
 /// <summary>Publishes one immutable graph-use candidate beneath an already-held and validated root.</summary>
 /// <remarks>
 /// The caller must already own the root and every member lock and must have validated graph completeness and
-/// install identities. This class takes only the graph-use sentinel lock. It returns no package-read capability,
-/// does not inspect install paths, and never removes publication artifacts.
+/// install identities. This class takes only graph-use sentinel locks and verifies install metadata during
+/// inspection. It returns no package-read capability and never removes publication artifacts.
 /// </remarks>
-internal sealed class PackageGraphUseRecordStore
+internal sealed partial class PackageGraphUseRecordStore
 {
+    internal const long DefaultMaximumTotalUseRecordBytes = 64L * 1024 * 1024;
+
     private readonly IPhysicalStoreFileSystem _files;
     private readonly IPhysicalStoreNameFileSystem _names;
     private readonly IPhysicalStorePublicationFileSystem _publication;
     private readonly IPhysicalStoreDirectoryPublicationFileSystem _directoryNames;
+    private readonly IPhysicalStoreDirectoryEnumerationFileSystem _enumeration;
+    private readonly long _maximumTotalUseRecordBytes;
     private readonly GraphUsePayloadSerializer _serializer = new();
 
-    internal PackageGraphUseRecordStore(IPhysicalStoreFileSystem files)
+    internal PackageGraphUseRecordStore(IPhysicalStoreFileSystem files, long? maximumTotalUseRecordBytes = null)
     {
         ArgumentNullException.ThrowIfNull(files);
+        _maximumTotalUseRecordBytes = maximumTotalUseRecordBytes ?? DefaultMaximumTotalUseRecordBytes;
+        if (_maximumTotalUseRecordBytes <= 0 || _maximumTotalUseRecordBytes > DefaultMaximumTotalUseRecordBytes)
+            throw new ArgumentOutOfRangeException(nameof(maximumTotalUseRecordBytes));
+
         _files = files;
         _names = files as IPhysicalStoreNameFileSystem ?? throw Refused("The filesystem provider lacks native name observations.");
         _publication = files as IPhysicalStorePublicationFileSystem ?? throw Refused("The filesystem provider lacks atomic no-replace publication.");
         _directoryNames = files as IPhysicalStoreDirectoryPublicationFileSystem ?? throw Refused("The filesystem provider lacks native directory-name observations.");
+        _enumeration = files as IPhysicalStoreDirectoryEnumerationFileSystem ?? throw Refused("The filesystem provider lacks bounded native directory enumeration.");
     }
 
     /// <summary>Creates and publishes a graph-use record while the caller retains its root/member locks.</summary>

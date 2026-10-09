@@ -125,14 +125,21 @@ binding and acquisition cases** and **17 lifetime/observer cases**. Each validat
 rejects all seven missing, duplicate, skipped, failed, unexpected, empty and
 substituted-result controls. Workflow SHA-256 is
 `6ccebffc2f7b95fe91f0d007ff1e30f676b94b92ce7049b282859a76907cb2ae`.
-Hosted execution on every platform remains pending for this new increment;
-older-head success does not qualify these changes.
+Hosted [Validate 38002684453](https://github.com/valence-works/nuplane/actions/runs/38002684453)
+qualified exact head `fad093bed0aa67b0ecbd208551c267fc765f1df1`: all six
+jobs passed; the full solution passed **1,936/0/38 explicit platform skips**.
+Each of the four platforms passed all 19 native graph-use cases and 17 lifetime
+cases without skips. Root parsed complete logs and exact-head job/step results;
+complete-log SHA-256 is
+`b14568470b178b46f047f37ab42b76b16323c35620ea34c13a75df3bc5784acf`.
+This does not qualify subsequent inspection edits.
 
 ## Remaining acceptance
 
 T036 and T047 remain open. This internal acquisition path is not yet registered
 as the public provider or connected to production Loading and every retained
-reader. Nonblocking stale-use inspection/reaping, actual overlapping generations
+reader. [Bounded nonblocking stale-use inspection](graph-use-native-inspection.md) is now
+implemented separately; cleanup/reaping and actual overlapping generations
 in two DI compositions before first retained package I/O, remaining scoped
 drivers and manual pruning/quarantine/crash recovery still require their own
 proof. Fixture reads here do not qualify the actual Loading boundary. No
