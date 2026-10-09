@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Safe Manual Package-Store Pruning
 
-**Purpose**: Validate requirements before architecture planning.  
-**Created**: 2026-10-09  
+**Purpose**: Validate requirements before architecture planning.
+**Created**: 2026-10-09
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality

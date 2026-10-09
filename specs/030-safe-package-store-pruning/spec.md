@@ -1,8 +1,8 @@
 # Feature Specification: Safe Manual Package-Store Pruning
 
-**Feature Branch**: `108-safe-package-store-pruning`  
-**Created**: 2026-10-09  
-**Status**: Draft — requirements prepared; design and implementation acceptance pending  
+**Feature Branch**: `108-safe-package-store-pruning`
+**Created**: 2026-10-09
+**Status**: Draft — requirements prepared; design and implementation acceptance pending
 **Input**: Deliver Nuplane #108 end to end: inventory, retention planning and explicit safe deletion, protecting active, last-known-good and in-use package graphs across hosts sharing a physical install root.
 
 Program: [Foundation #2500](https://github.com/elsa-workflows/elsa-foundation/issues/2500). Owning feature: [Nuplane #108](https://github.com/valence-works/nuplane/issues/108). The [root decision checkpoint](https://github.com/valence-works/nuplane/issues/108#issuecomment-6076600594) selects coordinated multi-state enrollment within existing delivery authorization. It supersedes the earlier owner-answer hold without waiving safety proof. This spec defines acceptance, not achieved behavior.
