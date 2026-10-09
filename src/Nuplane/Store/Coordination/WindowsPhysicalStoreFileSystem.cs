@@ -11,8 +11,8 @@ namespace Nuplane.Store.Coordination;
 /// <summary>Performs bounded metadata and control-file operations relative to held Windows directory handles.</summary>
 /// <remarks>
 /// The initial provider boundary is Windows x64 on local NTFS volumes. Child operations use one exact component
-/// relative to an already held directory handle. Its separate publication companion moves/removes only single
-/// control files; the provider does not delete package trees or resolve paths from remembered absolute names.
+/// relative to an already held directory handle. Separate publication companions handle single control files
+/// and prepared directories; the provider does not delete package trees or reopen remembered absolute paths.
 /// </remarks>
 internal sealed partial class WindowsPhysicalStoreFileSystem : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem
 {

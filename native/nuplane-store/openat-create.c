@@ -67,19 +67,21 @@ int nuplane_apfs_name_profile(int directory_fd, int *case_sensitive, int *normal
 }
 
 /*
- * Find the unique direct entry for an already-open regular file. Enumeration
- * uses a new open description so it cannot consume an offset on the caller's
- * held directory handle. Names are copied exactly as returned by readdir.
+ * Find the unique direct entry for an already-open regular file or directory.
+ * Enumeration uses a new open description so it cannot consume an offset on
+ * the caller's held directory handle. Names are copied exactly as returned by
+ * readdir. Directory link counts are deliberately not constrained: they vary
+ * with child-directory count and are not a no-hard-link check for directories.
  */
-__attribute__((visibility("default")))
-int nuplane_find_entry_name(int parent_fd, int file_fd, char *name, size_t capacity)
+static int find_entry_name(int parent_fd, int target_fd, int target_is_directory, char *name, size_t capacity)
 {
     struct stat parent_before;
-    struct stat file_before;
-    if (fstat(parent_fd, &parent_before) != 0 || fstat(file_fd, &file_before) != 0)
+    struct stat target_before;
+    if (fstat(parent_fd, &parent_before) != 0 || fstat(target_fd, &target_before) != 0)
         return -1;
-    if (!S_ISDIR(parent_before.st_mode) || !S_ISREG(file_before.st_mode) ||
-        file_before.st_nlink != 1 || parent_before.st_dev != file_before.st_dev) {
+    if (!S_ISDIR(parent_before.st_mode) ||
+        (target_is_directory ? !S_ISDIR(target_before.st_mode) : (!S_ISREG(target_before.st_mode) || target_before.st_nlink != 1)) ||
+        parent_before.st_dev != target_before.st_dev) {
         errno = EINVAL;
         return -1;
     }
@@ -101,8 +103,8 @@ int nuplane_find_entry_name(int parent_fd, int file_fd, char *name, size_t capac
         return -1;
     }
 
-    DIR *directory = fdopendir(enumeration_fd);
-    if (directory == NULL) {
+    DIR *stream = fdopendir(enumeration_fd);
+    if (stream == NULL) {
         int saved_errno = errno;
         close(enumeration_fd);
         errno = saved_errno;
@@ -114,20 +116,20 @@ int nuplane_find_entry_name(int parent_fd, int file_fd, char *name, size_t capac
     struct dirent *entry;
     for (;;) {
         errno = 0;
-        entry = readdir(directory);
+        entry = readdir(stream);
         if (entry == NULL) {
             if (errno != 0)
                 goto cleanup;
             break;
         }
-        if (entry->d_ino != file_before.st_ino || strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        if (entry->d_ino != target_before.st_ino || strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
         struct stat candidate;
         if (fstatat(parent_fd, entry->d_name, &candidate, AT_SYMLINK_NOFOLLOW) != 0)
             goto cleanup;
-        if (candidate.st_dev != file_before.st_dev || candidate.st_ino != file_before.st_ino ||
-            !S_ISREG(candidate.st_mode) || candidate.st_nlink != 1)
+        if (candidate.st_dev != target_before.st_dev || candidate.st_ino != target_before.st_ino ||
+            (target_is_directory ? !S_ISDIR(candidate.st_mode) : (!S_ISREG(candidate.st_mode) || candidate.st_nlink != 1)))
             continue;
 
         if (++matched != 1) {
@@ -148,15 +150,16 @@ int nuplane_find_entry_name(int parent_fd, int file_fd, char *name, size_t capac
     }
 
     struct stat parent_after;
-    struct stat file_after;
+    struct stat target_after;
     struct stat named_after;
-    if (fstat(parent_fd, &parent_after) != 0 || fstat(file_fd, &file_after) != 0 ||
+    if (fstat(parent_fd, &parent_after) != 0 || fstat(target_fd, &target_after) != 0 ||
         fstatat(parent_fd, name, &named_after, AT_SYMLINK_NOFOLLOW) != 0)
         goto cleanup;
     if (parent_after.st_dev != parent_before.st_dev || parent_after.st_ino != parent_before.st_ino ||
-        file_after.st_dev != file_before.st_dev || file_after.st_ino != file_before.st_ino || file_after.st_nlink != 1 ||
-        named_after.st_dev != file_before.st_dev || named_after.st_ino != file_before.st_ino ||
-        !S_ISREG(named_after.st_mode) || named_after.st_nlink != 1) {
+        target_after.st_dev != target_before.st_dev || target_after.st_ino != target_before.st_ino ||
+        (target_is_directory ? !S_ISDIR(target_after.st_mode) : (!S_ISREG(target_after.st_mode) || target_after.st_nlink != 1)) ||
+        named_after.st_dev != target_before.st_dev || named_after.st_ino != target_before.st_ino ||
+        (target_is_directory ? !S_ISDIR(named_after.st_mode) : (!S_ISREG(named_after.st_mode) || named_after.st_nlink != 1))) {
         errno = ESTALE;
         goto cleanup;
     }
@@ -165,9 +168,21 @@ int nuplane_find_entry_name(int parent_fd, int file_fd, char *name, size_t capac
 cleanup:
     {
         int saved_errno = errno;
-        if (closedir(directory) != 0 && result == 0)
+        if (closedir(stream) != 0 && result == 0)
             return -1;
         errno = saved_errno;
     }
     return result;
+}
+
+__attribute__((visibility("default")))
+int nuplane_find_entry_name(int parent_fd, int file_fd, char *name, size_t capacity)
+{
+    return find_entry_name(parent_fd, file_fd, 0, name, capacity);
+}
+
+__attribute__((visibility("default")))
+int nuplane_find_directory_entry_name(int parent_fd, int directory_fd, char *name, size_t capacity)
+{
+    return find_entry_name(parent_fd, directory_fd, 1, name, capacity);
 }

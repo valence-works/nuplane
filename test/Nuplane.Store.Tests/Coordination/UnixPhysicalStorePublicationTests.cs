@@ -98,7 +98,7 @@ public sealed class UnixPhysicalStorePublicationTests
             PhysicalStorePublicationTestCases.ReplacesExistingSlotAndPreservesItsIdentity(context);
     }
 
-    private static PhysicalStorePublicationTestContext CreateContext(bool enableCasefold = false)
+    internal static PhysicalStorePublicationTestContext CreateContext(bool enableCasefold = false)
     {
         var fixture = new PackageStoreFixture();
         PhysicalStoreDirectoryHandle? parent = null;
@@ -183,7 +183,7 @@ public sealed class UnixPhysicalStorePublicationTests
         return result.Metadata;
     }
 
-    private static SafeFileHandle OpenDirectoryPath(UnixPlatform platform, string path)
+    internal static SafeFileHandle OpenDirectoryPath(UnixPlatform platform, string path)
     {
         var canonicalPath = ResolveRealPath(path);
         var current = new SafeFileHandle((IntPtr)UnixNative.OpenNamespaceRoot(platform), ownsHandle: true);

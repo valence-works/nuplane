@@ -49,22 +49,30 @@ internal static partial class UnixNative
     }
 
     internal static byte[] FindEntryName(UnixPlatform platform, int parentFd, int fileFd, int maximumNameBytes)
+        => FindEntryName(platform, parentFd, fileFd, maximumNameBytes, directory: false);
+
+    internal static byte[] FindDirectoryEntryName(UnixPlatform platform, int parentFd, int directoryFd, int maximumNameBytes)
+        => FindEntryName(platform, parentFd, directoryFd, maximumNameBytes, directory: true);
+
+    private static byte[] FindEntryName(UnixPlatform platform, int parentFd, int targetFd, int maximumNameBytes, bool directory)
     {
         if (maximumNameBytes <= 0)
             throw new ArgumentOutOfRangeException(nameof(maximumNameBytes));
 
         return platform switch
         {
-            UnixPlatform.Darwin => FindDarwinEntryName(parentFd, fileFd, maximumNameBytes),
-            UnixPlatform.Linux => FindLinuxEntryName(parentFd, fileFd, maximumNameBytes),
+            UnixPlatform.Darwin => FindDarwinEntryName(parentFd, targetFd, maximumNameBytes, directory),
+            UnixPlatform.Linux => FindLinuxEntryName(parentFd, targetFd, maximumNameBytes, directory),
             _ => throw new ArgumentOutOfRangeException(nameof(platform))
         };
     }
 
-    private static byte[] FindDarwinEntryName(int parentFd, int fileFd, int maximumNameBytes)
+    private static byte[] FindDarwinEntryName(int parentFd, int targetFd, int maximumNameBytes, bool directory)
     {
         var buffer = new byte[maximumNameBytes];
-        var result = UnixNamesNative.DarwinFindEntryName(parentFd, fileFd, buffer, (nuint)buffer.Length);
+        var result = directory
+            ? UnixNamesNative.DarwinFindDirectoryEntryName(parentFd, targetFd, buffer, (nuint)buffer.Length)
+            : UnixNamesNative.DarwinFindEntryName(parentFd, targetFd, buffer, (nuint)buffer.Length);
         if (result != 0)
             throw NativeResultException("enumerate Darwin held-parent entry names");
 
@@ -74,11 +82,11 @@ internal static partial class UnixNative
         return buffer.AsSpan(0, terminator).ToArray();
     }
 
-    private static byte[] FindLinuxEntryName(int parentFd, int fileFd, int maximumNameBytes)
+    private static byte[] FindLinuxEntryName(int parentFd, int targetFd, int maximumNameBytes, bool directory)
     {
         var parentBefore = StatHandle(UnixPlatform.Linux, parentFd);
-        var fileBefore = StatHandle(UnixPlatform.Linux, fileFd);
-        RequireNameTarget(parentBefore, fileBefore);
+        var targetBefore = StatHandle(UnixPlatform.Linux, targetFd);
+        RequireNameTarget(parentBefore, targetBefore, directory);
 
         // A fresh open description gives getdents64 an independent stream offset. dup() would share it.
         var enumerationFd = UnixNamesNative.LinuxOpenDirectoryStreamAt(parentFd);
@@ -123,7 +131,7 @@ internal static partial class UnixNative
                     if (recordLength < 20 || recordLength > end - offset)
                         throw new UnixNativeCallException(0, "Linux returned an invalid directory-entry record length.", unsupported: true);
 
-                    if (inode == fileBefore.Inode)
+                    if (inode == targetBefore.Inode)
                     {
                         var nameArea = buffer.AsSpan(offset + 19, recordLength - 19);
                         var nameLength = nameArea.IndexOf((byte)0);
@@ -135,14 +143,13 @@ internal static partial class UnixNative
                             var name = StrictUtf8.GetString(nameBytes);
                             var candidate = StatAt(UnixPlatform.Linux, parentFd, name);
                             if (candidate.Status != UnixStatResultStatus.Success)
-                                throw new UnixNativeCallException(candidate.Error, "inspect a Linux directory entry whose inode matches the held file");
-                            if (candidate.Metadata.Inode == fileBefore.Inode &&
-                                candidate.Metadata.Device == fileBefore.Device &&
-                                candidate.Metadata.LinkCount == 1 &&
-                                (candidate.Metadata.Mode & FileTypeMask) == FileTypeRegular)
+                                throw new UnixNativeCallException(candidate.Error, "inspect a Linux directory entry whose inode matches the held object");
+                            if (candidate.Metadata.Inode == targetBefore.Inode &&
+                                candidate.Metadata.Device == targetBefore.Device &&
+                                IsExpectedNameTarget(candidate.Metadata, directory))
                             {
                                 if (matchedName is not null)
-                                    throw new UnixNativeCallException(0, "The held file has multiple matching directory entries.");
+                                    throw new UnixNativeCallException(0, "The held object has multiple matching directory entries.");
                                 matchedName = name;
                             }
                         }
@@ -152,23 +159,23 @@ internal static partial class UnixNative
                 }
             }
 
-            var fileAfter = StatHandle(UnixPlatform.Linux, fileFd);
+            var targetAfter = StatHandle(UnixPlatform.Linux, targetFd);
             var parentAfter = StatHandle(UnixPlatform.Linux, parentFd);
-            if (fileAfter.Inode != fileBefore.Inode || fileAfter.Device != fileBefore.Device || fileAfter.LinkCount != 1 ||
+            if (targetAfter.Inode != targetBefore.Inode || targetAfter.Device != targetBefore.Device ||
+                !IsExpectedNameTarget(targetAfter, directory) ||
                 parentAfter.Inode != parentBefore.Inode || parentAfter.Device != parentBefore.Device)
             {
-                throw new UnixNativeCallException(0, "The held file or parent changed during name enumeration.");
+                throw new UnixNativeCallException(0, "The held object or parent changed during name enumeration.");
             }
 
             if (matchedName is null)
-                throw new UnixNativeCallException(0, "No unique parent entry matched the held file identity.");
+                throw new UnixNativeCallException(0, "No unique parent entry matched the held object identity.");
 
             var finalEntry = StatAt(UnixPlatform.Linux, parentFd, matchedName);
             if (finalEntry.Status != UnixStatResultStatus.Success ||
-                finalEntry.Metadata.Inode != fileBefore.Inode ||
-                finalEntry.Metadata.Device != fileBefore.Device ||
-                finalEntry.Metadata.LinkCount != 1 ||
-                (finalEntry.Metadata.Mode & FileTypeMask) != FileTypeRegular)
+                finalEntry.Metadata.Inode != targetBefore.Inode ||
+                finalEntry.Metadata.Device != targetBefore.Device ||
+                !IsExpectedNameTarget(finalEntry.Metadata, directory))
             {
                 throw new UnixNativeCallException(0, "The canonical Linux directory entry changed during enumeration.");
             }
@@ -188,16 +195,22 @@ internal static partial class UnixNative
         }
     }
 
-    private static void RequireNameTarget(UnixMetadata parent, UnixMetadata file)
+    private static void RequireNameTarget(UnixMetadata parent, UnixMetadata target, bool directory)
     {
         if ((parent.Mode & FileTypeMask) != FileTypeDirectory ||
-            (file.Mode & FileTypeMask) != FileTypeRegular ||
-            file.LinkCount != 1 ||
-            parent.Device != file.Device)
+            !IsExpectedNameTarget(target, directory) ||
+            parent.Device != target.Device)
         {
-            throw new UnixNativeCallException(0, "Canonical name observation requires a same-volume directory and single-link regular file.");
+            throw new UnixNativeCallException(0, directory
+                ? "Canonical directory-name observation requires a same-volume held directory target."
+                : "Canonical file-name observation requires a same-volume directory and single-link regular file.");
         }
     }
+
+    private static bool IsExpectedNameTarget(UnixMetadata metadata, bool directory)
+        => directory
+            ? (metadata.Mode & FileTypeMask) == FileTypeDirectory
+            : (metadata.Mode & FileTypeMask) == FileTypeRegular && metadata.LinkCount == 1;
 
 }
 
@@ -208,6 +221,9 @@ internal static class UnixNamesNative
 
     [DllImport("nuplane_store_native", EntryPoint = "nuplane_find_entry_name", SetLastError = true)]
     internal static extern int DarwinFindEntryName(int parentFd, int fileFd, [Out] byte[] name, nuint capacity);
+
+    [DllImport("nuplane_store_native", EntryPoint = "nuplane_find_directory_entry_name", SetLastError = true)]
+    internal static extern int DarwinFindDirectoryEntryName(int parentFd, int directoryFd, [Out] byte[] name, nuint capacity);
 
     [DllImport("libc", EntryPoint = "fstatfs", SetLastError = true)]
     internal static extern int LinuxFStatFs(int fd, out LinuxStatFs statfs);

@@ -10,6 +10,17 @@ internal static partial class WindowsNative
     private static readonly UnicodeEncoding PublicationUtf16 = new(false, false, true);
 
     internal static void RenameControlFile(IntPtr file, IntPtr parent, string destinationName, bool replace)
+        => RenameAt(file, parent, destinationName, replace, "rename a staged control file");
+
+    internal static void RenameDirectoryNoReplace(IntPtr directory, IntPtr parent, string destinationName)
+        => RenameAt(
+            directory,
+            parent,
+            destinationName,
+            replace: false,
+            operation: "rename a staged directory without replacement");
+
+    private static void RenameAt(IntPtr entry, IntPtr parent, string destinationName, bool replace, string operation)
     {
         // FILE_RENAME_INFORMATION on the qualified Windows x64 ABI: BOOLEAN at 0,
         // HANDLE at 8, ULONG byte length at 16, WCHAR filename starts at 20.
@@ -23,7 +34,7 @@ internal static partial class WindowsNative
             Marshal.WriteIntPtr(buffer, 8, parent);
             Marshal.WriteInt32(buffer, 16, name.Length);
             Marshal.Copy(name, 0, IntPtr.Add(buffer, 20), name.Length);
-            SetPublicationInformation(file, buffer, length, informationClass: 10, "rename a staged control file");
+            SetPublicationInformation(entry, buffer, length, informationClass: 10, operation);
         }
         finally
         {
@@ -45,12 +56,12 @@ internal static partial class WindowsNative
         }
     }
 
-    private static void SetPublicationInformation(IntPtr file, IntPtr buffer, int length, int informationClass, string operation)
+    private static void SetPublicationInformation(IntPtr entry, IntPtr buffer, int length, int informationClass, string operation)
     {
-        var status = NtSetInformationFile(file, out var ioStatus, buffer, checked((uint)length), informationClass);
+        var status = NtSetInformationFile(entry, out var ioStatus, buffer, checked((uint)length), informationClass);
         var ioStatusCode = unchecked((int)ioStatus.Status.ToInt64());
         if (status == StatusPending || ioStatusCode == StatusPending)
-            throw new WindowsNativeCallException("Synchronous control-file publication returned STATUS_PENDING.", unsupported: true);
+            throw new WindowsNativeCallException("Synchronous native publication returned STATUS_PENDING.", unsupported: true);
         if (status < 0 || ioStatusCode < 0)
             throw new WindowsNativeCallException(operation, ntStatus: status < 0 ? status : ioStatusCode);
     }

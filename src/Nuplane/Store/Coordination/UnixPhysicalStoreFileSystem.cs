@@ -7,14 +7,15 @@ using Nuplane.Store.Coordination.PhysicalFiles.Unix;
 
 namespace Nuplane.Store.Coordination;
 
-/// <summary>Performs bounded no-follow metadata and control-file operations on supported Unix systems.</summary>
+/// <summary>Performs bounded no-follow metadata, control-file, and prepared-directory operations on supported Unix systems.</summary>
 /// <remarks>
 /// The adapter intentionally supports only Darwin arm64 and Linux x64/arm64. It does not resolve arbitrary
-/// paths or delete package content. Its separate publication companion moves/removes only single control files.
+/// paths or delete package content.
 /// All child operations are relative to handles created by
-/// this provider, and all native calls use a scoped SafeHandle reference.
+/// this provider, and all native calls use a scoped SafeHandle reference. Publication companions provide
+/// single-file state updates and same-parent no-replace moves of verified prepared directories.
 /// </remarks>
-internal sealed partial class UnixPhysicalStoreFileSystem : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem
+internal sealed partial class UnixPhysicalStoreFileSystem : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem, IPhysicalStoreDirectoryPublicationFileSystem
 {
     private const int MaximumLinkTargetBytes = 4096;
     private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);

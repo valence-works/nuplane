@@ -47,6 +47,7 @@ The Nuplane Constitution requires automated coverage for changed logic and bound
 ### Physical authority and publication mechanisms
 
 - [ ] T021 Define narrow platform identity/handle-relative filesystem operations in `src/Nuplane/Store/Coordination/IPhysicalStoreFileSystem.cs`; separate non-destructive identity/admission probes from the recursive deletion primitive.
+  - Partial enrollment prerequisite: prepared-directory same-parent native no-replace publication is implemented and locally qualified; [directory-publication evidence](evidence/directory-publication.md) records review, causal controls and explicit platform/integration limits. It grants no enrollment authority and performs no recursive deletion.
 - [ ] T022 Implement Darwin/Linux identity and no-follow metadata adapter in `src/Nuplane/Store/Coordination/UnixPhysicalStoreFileSystem.cs`; unsupported capabilities return an explicit refusal.
   - Partial foundation: provider-owned handles, metadata/control/lock operations and the fixed-signature Darwin creation shim are implemented and locally qualified; [native increment evidence](evidence/native-unix-foundation.md) records exact scope, preserved failures and negative controls. T021/T022 stay open for remaining filesystem operations and hosted/platform qualification.
 - [ ] T023 Implement Windows identity and reparse-safe metadata adapter in `src/Nuplane/Store/Coordination/WindowsPhysicalStoreFileSystem.cs`; unsupported capabilities return an explicit refusal.

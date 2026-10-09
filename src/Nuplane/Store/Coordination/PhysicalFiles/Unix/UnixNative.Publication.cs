@@ -18,6 +18,17 @@ internal static partial class UnixNative
     }
 
     internal static int PublishNoReplaceAt(UnixPlatform platform, int parentFd, string stagedName, string destinationName)
+        => PublishNoReplaceAt(platform, parentFd, stagedName, destinationName, "held-parent control file");
+
+    internal static int PublishDirectoryNoReplaceAt(UnixPlatform platform, int parentFd, string stagedName, string destinationName)
+        => PublishNoReplaceAt(platform, parentFd, stagedName, destinationName, "held-parent directory");
+
+    private static int PublishNoReplaceAt(
+        UnixPlatform platform,
+        int parentFd,
+        string stagedName,
+        string destinationName,
+        string objectDescription)
     {
         var result = platform == UnixPlatform.Darwin
             ? DarwinPublication.RenameAtX(parentFd, stagedName, parentFd, destinationName, DarwinRenameExclusive)
@@ -31,7 +42,7 @@ internal static partial class UnixNative
         if (error == 22)
             throw new UnixNativeCallException(error, "the filesystem does not support atomic no-replace publication", unsupported: true);
 
-        throw new UnixNativeCallException(error, "atomically publish a held-parent control file without replacement");
+        throw new UnixNativeCallException(error, $"atomically publish a {objectDescription} without replacement");
     }
 
     internal static int UnlinkFileAt(UnixPlatform platform, int parentFd, string singleName)

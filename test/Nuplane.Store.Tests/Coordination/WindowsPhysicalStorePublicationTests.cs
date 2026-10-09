@@ -110,7 +110,7 @@ public sealed class WindowsPhysicalStorePublicationTests
         Assert.Equal(staged, File.ReadAllBytes(Path.Combine(parentPath, "state.next")));
     }
 
-    private static PhysicalStorePublicationTestContext CreateContext()
+    internal static PhysicalStorePublicationTestContext CreateContext()
     {
         var fixture = new PackageStoreFixture();
         PhysicalStoreDirectoryHandle? parent = null;
@@ -157,7 +157,7 @@ public sealed class WindowsPhysicalStorePublicationTests
         }
     }
 
-    private static SafeFileHandle OpenRawDirectoryPath(string path)
+    internal static SafeFileHandle OpenRawDirectoryPath(string path)
     {
         var fullPath = Path.GetFullPath(path);
         var anchor = Path.GetPathRoot(fullPath) ?? throw new IOException("The test fixture has no Windows volume root.");
