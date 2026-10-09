@@ -1,0 +1,35 @@
+# Data model
+
+All persisted records are schema-versioned. Unknown/absent data is distinct from KnownEmpty. Immutable projections copy caller collections. Protocol files live in a reserved control directory, outside recognized completed install entries.
+
+| Entity | Fields and validation |
+|---|---|
+| PhysicalRootIdentity | Platform/provider, volume/device identity, open-directory file identity. Obtained from native metadata; display path is descriptive. No lexical containment authority. |
+| StateSlotIdentity | Physical parent-directory identity, validated basename and filesystem case policy. No final symlink/hardlink ambiguity. Stable across state replacement; moving/renaming a slot requires quiescent migration. Component-wise authority lookup refuses enrolled-to-outside alias transitions. |
+| RootMembershipRecord | SchemaVersion, RootIdentity, EnrollmentEpoch, Incomplete/Complete, ordered Members, optional PendingCommit. Complete requires every declared member's exact active/LKG protection. |
+| RootMember | MemberId, StateSlot, diagnostic configured path, ObservedStateFileIdentity, AcknowledgedRevision, StateDigest, ProtectionDigest. Observed file identity changes only through a verified transition/recovery. |
+| PendingStateCommit | MemberId/slot, prior revision/digests/file identity, next revision/state/protection digests. One pending transition under root ownership. Missing/third evidence is refused. |
+| PackageProtectionRecord | Nullable non-positional StoreStateRecord property; SchemaVersion, RootIdentity, Epoch, MemberId, Revision, completeness, ActiveGraphs, RecoverableGraphs, RetiredGraphs, LegacyUnknownRecovery. Missing property does not normalize to empty. |
+| ProtectedGraphSnapshot | GraphId, generation/snapshot ID, root requests, complete selected nodes/edges, disposition and recovery-selection evidence. KnownEmpty has an explicit complete empty projection. |
+| PackageInstallIdentity | Package ID, NuGet version, validated root-relative install name, native directory identity, completion identity, optional verified archive hash. Whole directory protection includes lazy support/native files. |
+| RetiredGraph | Snapshot identity, retiring revision/epoch, explicit reason and proof it is no longer recoverable. Unknown legacy entitlement cannot be implicitly retired. |
+| GraphUseRecord | Schema/root/epoch, unique UseId, immutable complete graph/install identities, sentinel identity, lifetime kind and diagnostic process identity. PID alone is never liveness proof. |
+| RootOperationOwner | Non-forgeable reference to held root handle/lock/epoch; Open → Closing → Closed. Counted borrow creation and close linearize. Closing blocks new borrows and waits for old borrows. |
+| GraphUseLeaseOwner | Non-forgeable release authority, immutable view and counted read pins. Published → Closing → Released; no release during a pinned read. Context lifetime owners are private to Loading. |
+| PruneRequest | Configured root label, optional retention, Preview default or explicit Execute, expected enrollment epoch for Execute, correlation ID. No deletion-path field. |
+| Inventory/Plan | Observed root/epoch/revisions, immutable completed installs, unknown entries, protection reasons and retention classifications. Preview is observational, never authority. |
+| ExecutionReport | Fresh plan, operation outcome, per-install physical result, errors and completed facts. Quarantined/partial is distinct from Deleted; cancellation preserves prior completed outcomes. |
+
+## Publication transitions
+
+1. **Enrollment:** Unenrolled → Incomplete(epoch) → validate/write all declared members → Complete(epoch). Fully quiescent throughout. Any interruption stays denied until exclusive recovery establishes complete authority.
+2. **Membership change:** Complete(old epoch) → Incomplete(new epoch, complete old/new member information) → migrate/retire explicitly → Complete(new epoch). Old participants do not silently rejoin.
+3. **State write:** acknowledged prior → pending prior/next → state plus protection replacement → verified next payload at same slot → acknowledged next. Exact old evidence rolls back pending; exact new evidence completes; ambiguous evidence refuses. All state writes follow this transition.
+4. **Live use:** acquire exclusive sentinel → publish immutable graph record → first retained read → lifetime ownership → close after read pins and actual lifetime end → stale record cleanup under root. A passive local weak observer runs while collectible associations exist, independently of new admissions; it closes sentinels only after weak death. Process death releases OS ownership; persistent state protection remains.
+5. **Prune:** own root → recover/validate authority → lock all members in stable order → reread states/leases/inventory → fresh plan → identity-checked relative quarantine → no-follow recursive removal → report actual facts → release states/root. Never wait for a busy lifetime sentinel while holding these locks.
+
+## Digest and recovery rules
+
+Canonical digests include schema, identities, epoch/revision and deterministically sorted graph/node projections; state digests include every persisted state field except the digest field itself. Specify normalization once in the serializer, including case-insensitive package IDs and case-sensitive platform identity bytes. Do not use JSON dictionary iteration order or timestamps as the only authority. Round-trip and byte/digest stability tests must cover equivalent input ordering.
+
+The failure-atomic writer's `.tmp`/`.bak` files can be recovery evidence. Do not delete ambiguous evidence before deciding exact old/new publication. A process termination test is not proof of power-loss durability. No multi-file atomic transaction is claimed.

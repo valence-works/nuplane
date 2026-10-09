@@ -28,7 +28,7 @@
 ## Feature Readiness
 
 - [X] Requirements are ready for planning after root review of independent findings and amendments.
-- [ ] Architecture plan, data model and contracts reviewed and accepted.
+- [X] Architecture plan, data model and contracts reviewed and accepted.
 - [ ] Implementation and full behavioral/physical-deletion proof accepted.
 - [ ] Public package and final downstream stable acceptance complete.
 
@@ -39,3 +39,5 @@ Root reviewed two independent read-only requirements rounds, corrected four init
 The generic skill's request to omit API/architecture details conflicts with the repository constitution's mandatory prescriptive FR rule; the constitution's narrower requirement governs. No constitution amendment or safety waiver is introduced.
 
 No `.specify/extensions.yml` or preset override exists; before/after specify hooks are absent. The effective template is `.specify/templates/spec-template.md`. Existing init configuration uses deprecated `branch_numbering: sequential`; Spec030 is the next sequential directory, independent of branch108. Legacy scripts use the supported `SPECIFY_FEATURE=030-safe-package-store-pruning` override to resolve this directory; `.specify/feature.json` records it for newer tooling.
+
+2026-10-09 post-design review: three independent findings were fixed and re-reviewed (alias authority escape, custom serializer participation and idle collectible lifetime release). Root verified current-source provenance and final artifact hashes; architecture accepted. FR-016 now expressly permits passive weak-death observation while forbidding automatic pruning timers/drivers. Implementation and physical deletion/platform acceptance remain unchecked.

@@ -1,0 +1,20 @@
+# Optional manual-maintenance contract
+
+Core admission/protection is registered independently of Admin. Add `INuplanePackageStoreMaintenanceOperations` alongside, without changing `INuplaneAdminOperations`. Admin.Api exposes the capability only when explicitly registered; no pruning timer/hosted loop is introduced.
+
+| Operation | Input / behavior |
+|---|---|
+| PreviewEnrollmentAsync | Configured root label, complete configured member set. Metadata/protection analysis only; report unknown legacy closures and required migration. No package deletion/loading. |
+| EnrollAsync / RecoverEnrollmentAsync | Explicit quiescent-cutover confirmation, expected physical root and intended member set, verified recovery evidence/explicit retirement decisions. Hold quiescence through complete publication; no ordinary access on Incomplete. |
+| InspectAsync | Configured root label. Return recognized completed installs, unknown/staging entries and authority diagnostics; no mutation of package payload. |
+| PruneAsync | `PackageStorePruneRequest`: root label, optional retention, mode default Preview, optional correlation/preview ID; Execute requires explicit confirmation and expected enrollment epoch. |
+
+`PackageStoreRetentionPolicy` is a sealed data-only type with `KeepNewestInactiveVersionsPerPackage` (nonnegative integer). Missing policy retains all. For unprotected recognized versions, retain the newest N using NuGet version order, then stable install identity; never override active/LKG/live protection. Validate request policy at the maintenance boundary. Introduce only PackageStoreMaintenanceOptions.RootLabel (default `default`) to name the configured FeedResolutionOptions.PackageInstallRoot; the maintenance root resolver consumes it. A dedicated IValidateOptions<PackageStoreMaintenanceOptions> rejects blank/duplicate labels and incompatible root configuration; registration uses ValidateOnStart. No runtime pruning-enable switch bypasses admission. Every option has a named consumer.
+
+Root labels resolve through trusted configured authority. Public requests contain no candidate paths or arbitrary filesystem root. Preview IDs correlate reports; execution does not need an ephemeral process-local plan cache. Confirmation binds root epoch and retention request, not old candidate identities. A changed root epoch/configuration refuses execution. Changed package/protection state within that epoch causes a fresh locked inventory/plan and can only delete freshly eligible candidates.
+
+Execution owns root and every declared state lock in stable order, validates complete membership, rereads state revisions/digests and all use records, reaps only proven stale uses nonblocking, inventories and plans again. It retains ownership through real candidate quarantine/removal. No policy-only cleanup result is physical proof. Before each candidate, validate exact completed immutable directory identity and protection, quarantine by relative rename, validate again, then perform the native no-follow walk. Never delete staging, control/state files, unknown entries or path replacements. A partial quarantine/removal remains visible for recovery and reporting.
+
+Reports contain observed epoch/revisions, fresh plan, per-install identity/reason and actual outcome: Retained, Refused, Quarantined, PartiallyRemoved, Deleted, AlreadyAbsent, Failed, Cancelled. Return completed outcomes even when a later candidate fails or cancellation arrives. A request cancelled before admission can cancel normally; after physical work starts cancellation returns an honest partial report. Repeat execution recognizes absence safely. Structured diagnostics distinguish preview eligibility from executed IO.
+
+KnownEmpty protection and a valid empty inventory are successful no-ops. Unknown protection, unsupported filesystem, lock capability failure, malformed state, inconsistent leases or failed stale cleanup refuse execution with typed reasons. Busy live leases retain their complete graphs and do not cause a wait under maintenance locks.

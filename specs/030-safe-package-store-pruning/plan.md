@@ -2,7 +2,7 @@
 
 **Branch**: `108-safe-package-store-pruning` | **Date**: 2026-10-09 | **Spec**: [spec.md](spec.md)
 
-**Status**: Architecture research in progress. Requirements are committed; this plan is not yet an implementation authorization/checklist completion record. No product code or package deletion has been performed for Spec030.
+**Status**: Design accepted after independent review and root verification on 2026-10-09. Task generation is next; no product implementation or package-deletion acceptance is claimed.
 
 ## Summary
 
@@ -13,7 +13,7 @@ The root engineering selection is recorded in [Nuplane #108](https://github.com/
 ## Technical Context
 
 **Language/Version**: C# SDK projects; source `net8.0;net9.0;net10.0`, tests `net10.0`.
-**Primary Dependencies**: Existing Microsoft.Extensions DI/Options/Logging, NuGet libraries, System.Runtime.Loader in the optional Loading module, xUnit/NSubstitute. Native filesystem interop design requires review; no new package dependency is selected.
+**Primary Dependencies**: Existing Microsoft.Extensions DI/Options/Logging, NuGet libraries, System.Runtime.Loader in the optional Loading module, xUnit/NSubstitute. An internal per-platform native filesystem adapter is selected; no new package dependency is selected. Runtime platform qualification remains an implementation gate.
 **Storage**: Existing atomic JSON state files; additive complete protection metadata; root-relative coordination/membership and immutable use records with OS-held sentinels. Root coordination must not derive from one state-file path.
 **Testing**: Focused existing runtime/store/loading suites, new filesystem and real-composition boundary tests, then isolated physical deletion and Windows/Linux/macOS runtime acceptance. All heavy commands are serial through the machine build-slot wrapper.
 **Target Platform**: Local supported Windows/Linux/macOS filesystems whose identity/locking/no-follow operations are established by tests. Unsupported providers refuse destructive operations.
@@ -24,7 +24,7 @@ The root engineering selection is recorded in [Nuplane #108](https://github.com/
 
 ## Constitution Check
 
-**Pre-research:** the requirements cover all constitution concerns and permit design research. **Post-design gate: pending**, until the remaining engineering choices below are resolved, data model/contracts are written and independent/root review accepts the complete plan. No implementation may start from this draft.
+**Pre-research:** passed. **Post-design gate:** passed after independent review and root verification of research, data model, contracts and validation guide. Three findings were corrected: component-wise alias authority, optional serializer participation/round-trip checks, and an idle-process weak-death observer. FR-016 explicitly distinguishes passive lifetime observation from automatic pruning. Task decomposition and all implementation acceptance gates remain required.
 
 | Principle | Planned evidence / current constraint |
 |---|---|
@@ -51,7 +51,7 @@ Baseline: Nuplane `eb2cf6c2ee1f79dc2c45fb83cc415bbe4856d0d4`. Root independently
 
 ## Proposed Architecture Boundaries
 
-These responsibilities are selected for planning; exact names/signatures and full integration graph follow in the contracts/tasks after remaining choices are reviewed.
+These responsibilities are selected in the generated contracts; independent/root review and artifact-by-artifact tasks follow before implementation.
 
 1. Core physical-root identity/admission coordinator and durable multi-state membership. Core registration participates on an enrolled root without requiring the optional Admin package or a local pruning flag.
 2. Additive per-state complete protection, atomically committed with current reconciliation state. Quiescent migration reconstructs verifiable closures; incomplete legacy evidence remains unknown rather than inferred empty.
@@ -61,16 +61,19 @@ These responsibilities are selected for planning; exact names/signatures and ful
 6. Separate inventory, pure retention planning, optional manual admin orchestration and filesystem executor. Execution holds current authority through real IO, uses exact completed-install identities, excludes staging, and reports quarantine/partial deletion honestly.
 7. Narrow native filesystem adapter for stable root identity and handle-relative no-follow quarantine/deletion. Root locks serialize admitted mutations; this is not a claim to defeat arbitrary hostile same-identity writers outside the protocol.
 
-## Engineering Research Still To Resolve
+## Selected Engineering Decisions
 
-- Choose precise durable membership/protection schema, incomplete/complete publication and crash recovery transitions, including LKG path reconstruction and member removal/move handling.
-- Settle physical root/state identity and tested per-OS native ABI/handle operations. No lexical-check-plus-recursive-delete fallback is acceptable.
-- Resolve path-only public helpers: metadata-only physical authority discovery must work through supported aliases and fail closed on uncertainty; injected-only or lexical ancestor-marker checks are inadequate. Additive owner-aware reading cannot leave old direct calls as an enrolled-root bypass.
-- Define the smallest explicit cycle-to-observer/loader owner bridge and all standalone resolver/restore/catalog/scanner/static entry points. Verify cancellation, wrong-root and disposed-scope behavior without ambient bypass.
-- Select the exact non-owning weak-context observation/release mechanism that complements the existing unload owner and eventually releases genuinely dead collectible uses without forcing GC/unload or retaining the context itself.
-- Define public maintenance request/retention/result contracts and explicit confirmation/stale-preview behavior. Keep execution and preview distinct and current unknown/refusal/partial outcomes visible.
+[research.md](research.md) records decisions, rationale, rejected alternatives, primary references and limited native-probe evidence. [data-model.md](data-model.md) defines identity/publication/lifetime transitions. [Admission contracts](contracts/admission.md) define opaque capabilities, compatibility and each driver obligation; [maintenance contracts](contracts/maintenance.md) define the optional public entry point and real execute semantics. [quickstart.md](quickstart.md) defines pending reproducible product/platform gates.
 
-These are engineering tasks under existing authorization, not pending owner permission or grounds to pause the Codex goal. Research artifacts are retained in the program workspace; accepted decisions will be copied into repository-owned research/data-model/contracts before implementation.
+- Root membership is multi-state and epoch-bound. Complete authority requires complete known active and recoverable LKG closure for every member. Unknown legacy promises keep enrollment incomplete; no partial-active admission is selected.
+- State membership binds parent directory identity plus basename, surviving verified atomic replacement. Current state file identity is a revision/race observation. Every enrolled state write uses a pending prior/next publication and verified acknowledgement.
+- Physical authority uses component-wise open-handle metadata lookup, tracking enrolled authority across aliases and refusing escapes. Darwin/Linux/Windows adapters implement native identity/no-follow/relative operations; unsupported capabilities fail closed. The selected design has no lexical recursive-delete fallback. C and .NET Darwin probes are limited mechanism evidence, not platform deletion acceptance.
+- Transient resolution reads remain under short root ownership; retained selected graphs acquire immutable leases before first retained read. Lease views have counted read pins; context ownership is weak/non-owning, and actual death or process exit governs release. A passive local weak observer runs while collectible associations exist, so idle owners can release dead-context sentinels without GC/unload or automatic pruning.
+- An optional serializer participation companion preserves the existing serializer interface; unsupported custom serializers refuse enrollment, and every saved state/protection payload is round-trip verified.
+- Explicit optional companions carry root scopes through every driver and awaited observer callback. Existing required interfaces/positional constructors remain. Legacy static readers refuse enrolled/unknown paths; pure state observation remains available.
+- Manual execution confirms root epoch/retention and replans under root/all-state ownership. Preview IDs correlate only. Absent retention keeps all; actual quarantine/partial/deleted outcomes remain distinct.
+
+These are engineering selections under existing authorization, not pending owner permission or grounds to pause the Codex goal. All real component, process-termination, physical deletion and supported-platform gates remain required implementation work.
 
 ## Project Structure
 
@@ -79,10 +82,10 @@ specs/030-safe-package-store-pruning/
   spec.md
   checklists/requirements.md
   plan.md
-  research.md                 # next: accepted design decisions and source references
-  data-model.md               # next: enrollment/protection/use/report transitions
-  contracts/                  # next: additive public/scoped contracts
-  quickstart.md               # next: executable owned-store acceptance guide
+  research.md                 # selected design decisions and evidence limits
+  data-model.md               # enrollment/protection/use/report transitions
+  contracts/                  # additive public/scoped contracts
+  quickstart.md               # pending owned-store/platform acceptance guide
   tasks.md                    # after plan acceptance: one artifact per task
 src/Nuplane/Store/            # core coordination/protection; preserve module direction
 src/Nuplane/Feeds/            # explicit resolver/acquisition admission
@@ -98,4 +101,10 @@ src/Nuplane.Admin.Api/        # separate explicit driver if included in final co
  test/Nuplane.Integration.Tests/
 ```
 
-**Structure Decision**: Keep coordination below Loading and Admin, and keep host-specific readiness/unload policy in its existing owners. Final source files/tasks are enumerated after the research decisions above are accepted; no speculative new package is selected.
+**Structure Decision**: Keep coordination below Loading and Admin, and keep host-specific readiness/unload policy in its existing owners. The next task-generation step enumerates one artifact per task after design acceptance; no new package is selected. AGENTS.md now points to this plan in its managed section.
+
+## Review Record
+
+Independent review found and re-reviewed the three corrections above; final review SHA-256 `d918b61bbaee452b9e3fed923a566176a9707c6cdab1f12a9e6f079a745f59c2`. Root checked all final artifact hashes, 54 distinct current-source files, links and whitespace. The independent source observations used a prior snapshot; root closed that provenance gap by verifying all seven referenced source files byte-identical between `21e2c24` and current `03b48ac`. Spec SHA-256 after the FR-016 clarification is `29154bd3b9a5b1809c8e0b81aff7954261209bcb8279132810cd89cb3fdf78c2`. Original findings, re-review, probe evidence and root verification remain retained in the delivery workspace.
+
+Only plan/checklist acceptance metadata changed after the frozen independent re-review. No product code, store, package version or release changed. Before/after plan hooks are absent because `.specify/extensions.yml` does not exist. AGENTS.md has the managed plan reference.
