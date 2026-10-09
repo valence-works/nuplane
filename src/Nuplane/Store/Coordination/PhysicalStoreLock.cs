@@ -7,10 +7,11 @@ using Nuplane.Store.Coordination.PhysicalFiles;
 
 namespace Nuplane.Store.Coordination;
 
-/// <summary>Acquires existing physical-root and member locks in a deterministic order.</summary>
+/// <summary>Acquires the physical-root lock before member locks in a deterministic order.</summary>
 /// <remarks>
-/// This owner provides only a cooperative lock-ordering primitive. It does not establish root admission,
-/// membership completeness, or state authority. Callers must already hold and validate the control directory.
+/// This owner provides cooperative lock ordering, not root authority or membership completeness. Callers of
+/// <see cref="AcquireAsync"/> must already hold and validate the control directory. The bootstrap callback
+/// resolves member metadata under the root lock; it must not read member payloads.
 /// </remarks>
 internal sealed class PhysicalStoreLock
 {
@@ -73,11 +74,40 @@ internal sealed class PhysicalStoreLock
         cancellationToken.ThrowIfCancellationRequested();
 
         var orderedSlots = ValidateAndOrderSlots(stateSlots);
+        return await AcquireCoreAsync(controlDirectory, orderedSlots, null, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Acquires the root lock, prepares member slots under it, then creates and acquires their locks.</summary>
+    /// <param name="controlDirectory">The held control directory containing <c>root.lock</c>.</param>
+    /// <param name="prepareSlotsUnderRoot">A metadata-only callback that resolves the complete member set while the root lock is held.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>An owner for the root lock and all sorted member locks.</returns>
+    /// <remarks>The callback runs once after root-lock acquisition and must not read member payloads.</remarks>
+    /// <exception cref="PackageStoreAdmissionException">A lock file is unsafe, unsupported, or busy.</exception>
+    /// <exception cref="OperationCanceledException">The operation is canceled while preparing or acquiring the lock set.</exception>
+    internal async Task<IAsyncDisposable> AcquireBootstrapAsync(
+        PhysicalStoreDirectoryHandle controlDirectory,
+        Func<CancellationToken, Task<IReadOnlyList<StateSlotIdentity>>> prepareSlotsUnderRoot,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(controlDirectory);
+        ArgumentNullException.ThrowIfNull(prepareSlotsUnderRoot);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return await AcquireCoreAsync(controlDirectory, null, prepareSlotsUnderRoot, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IAsyncDisposable> AcquireCoreAsync(
+        PhysicalStoreDirectoryHandle controlDirectory,
+        StateSlotIdentity[]? orderedSlots,
+        Func<CancellationToken, Task<IReadOnlyList<StateSlotIdentity>>>? prepareSlotsUnderRoot,
+        CancellationToken cancellationToken)
+    {
         var controlInfo = _fileSystem.InspectHandle(controlDirectory);
         if (controlInfo.Kind != PhysicalStoreEntryKind.Directory)
             throw Refusal(PackageStoreAdmissionReason.UnknownAuthority, "The held control location is not a directory.");
 
-        var heldLocks = new List<HeldFileLock>(orderedSlots.Length + 1);
+        var heldLocks = new List<HeldFileLock>((orderedSlots?.Length ?? 0) + 1);
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -86,6 +116,23 @@ internal sealed class PhysicalStoreLock
             heldLocks.Add(rootLock.Lock);
             var lockDirectorySemantics = rootLock.NameSemantics;
             VerifyStillCanonical(controlDirectory, controlInfo.Identity, RootLockName, rootLock.Lock, lockDirectorySemantics);
+
+            if (prepareSlotsUnderRoot is not null)
+            {
+                var preparedSlots = await prepareSlotsUnderRoot(cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                VerifyRootAndDirectoryProfile(
+                    controlDirectory,
+                    controlInfo.Identity,
+                    rootLock.Lock,
+                    lockDirectorySemantics);
+
+                orderedSlots = ValidateAndOrderSlots(preparedSlots);
+                CreateMissingMemberLockFiles(controlDirectory, orderedSlots, cancellationToken);
+            }
+
+            if (orderedSlots is null)
+                throw new InvalidOperationException("A lock acquisition requires a prepared member-slot set.");
 
             foreach (var slot in orderedSlots)
             {
@@ -97,6 +144,15 @@ internal sealed class PhysicalStoreLock
                 VerifyStillCanonical(controlDirectory, controlInfo.Identity, lockName, memberLock.Lock, lockDirectorySemantics);
                 if (memberLock.NameSemantics != lockDirectorySemantics)
                     throw Refusal(PackageStoreAdmissionReason.UnknownAuthority, "The control-directory name profile changed during lock acquisition.");
+            }
+
+            if (prepareSlotsUnderRoot is not null)
+            {
+                VerifyRootAndDirectoryProfile(
+                    controlDirectory,
+                    controlInfo.Identity,
+                    heldLocks[0],
+                    lockDirectorySemantics);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -113,6 +169,24 @@ internal sealed class PhysicalStoreLock
             }
 
             throw;
+        }
+    }
+
+    private void CreateMissingMemberLockFiles(
+        PhysicalStoreDirectoryHandle controlDirectory,
+        IReadOnlyList<StateSlotIdentity> orderedSlots,
+        CancellationToken cancellationToken)
+    {
+        foreach (var slot in orderedSlots)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var lockName = GetMemberLockName(slot);
+            if (_fileSystem.InspectChildNoFollow(controlDirectory, lockName) is not null)
+                continue;
+
+            using (var created = _fileSystem.CreateFileExclusiveAt(controlDirectory, lockName))
+                _fileSystem.WriteNewControlFile(created, ReadOnlyMemory<byte>.Empty);
+            cancellationToken.ThrowIfCancellationRequested();
         }
     }
 
@@ -216,8 +290,21 @@ internal sealed class PhysicalStoreLock
             throw Refusal(PackageStoreAdmissionReason.UnknownAuthority, "The control-directory name profile changed during lock acquisition.");
     }
 
+    private void VerifyRootAndDirectoryProfile(
+        PhysicalStoreDirectoryHandle controlDirectory,
+        PhysicalFileIdentity expectedParentIdentity,
+        HeldFileLock rootLock,
+        PhysicalStoreNameSemantics expectedSemantics)
+    {
+        VerifyStillCanonical(controlDirectory, expectedParentIdentity, RootLockName, rootLock, expectedSemantics);
+        var observedSemantics = _nameFileSystem.ObserveDirectoryNameSemantics(controlDirectory);
+        if (observedSemantics != expectedSemantics)
+            throw Refusal(PackageStoreAdmissionReason.UnknownAuthority, "The control-directory name profile changed while preparing member slots.");
+    }
+
     private static StateSlotIdentity[] ValidateAndOrderSlots(IReadOnlyList<StateSlotIdentity> stateSlots)
     {
+        ArgumentNullException.ThrowIfNull(stateSlots);
         var slots = new StateSlotIdentity[stateSlots.Count];
         var seen = new HashSet<StateSlotIdentity>();
         for (var index = 0; index < slots.Length; index++)

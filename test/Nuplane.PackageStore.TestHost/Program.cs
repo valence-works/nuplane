@@ -32,7 +32,13 @@ internal static class Program
                     : await RunRecoverAsync(request).ConfigureAwait(false);
             }
 
-            await WriteDiagnosticAsync("Expected --gate <name>, --membership-publish <request.json>, or --membership-recover <request.json>.")
+            if (args.Length == 2 && args[0] == "--membership-initialize")
+            {
+                var request = await ReadInitializationRequestAsync(args[1]).ConfigureAwait(false);
+                return await RunInitializeAsync(request).ConfigureAwait(false);
+            }
+
+            await WriteDiagnosticAsync("Expected --gate <name>, --membership-publish <request.json>, --membership-recover <request.json>, or --membership-initialize <request.json>.")
                 .ConfigureAwait(false);
             return InvalidProtocolExitCode;
         }
@@ -130,6 +136,73 @@ internal static class Program
         }
     }
 
+    private static async Task<int> RunInitializeAsync(InitializationProcessRequest request)
+    {
+        await WriteJsonLineAsync(new StartedMessage("started", request.OperationId, Environment.ProcessId)).ConfigureAwait(false);
+        var files = CreateFileSystem();
+        using var root = OwnedProcessDirectory.Open(files, request.RootPath);
+        var registry = new RootMembershipRegistry(files, new StoreStateSerializer());
+        var expectedRoot = new PhysicalRootIdentity(files.InspectHandle(root).Identity);
+        var declarations = request.DeclaredMembers
+            .Select(member => new RootMemberRecord(member.MemberId, member.ConfiguredLocator,
+                new RootMemberRecord.DeclaredBinding()))
+            .ToArray();
+        RootMembershipEnrollmentPoint? checkpoint = request.Checkpoint is null ? null : ParseRequiredEnrollmentCheckpoint(request.Checkpoint);
+
+        var result = registry.InitializeIncomplete(
+            root,
+            expectedRoot,
+            request.EnrollmentEpoch,
+            declarations,
+            request.QuiescentCutoverConfirmed,
+            CancellationToken.None,
+            point => PauseAtInitializationCheckpoint(request, checkpoint, point, registry, root));
+
+        await WriteJsonLineAsync(new OperationResult("initialized", request.OperationId, Environment.ProcessId,
+            result.Status.ToString(), result.LedgerDigest, result.PendingStateCommit is not null, null, null)).ConfigureAwait(false);
+        return 0;
+    }
+
+    private static void PauseAtInitializationCheckpoint(
+        InitializationProcessRequest request,
+        RootMembershipEnrollmentPoint? expected,
+        RootMembershipEnrollmentPoint actual,
+        RootMembershipRegistry registry,
+        PhysicalStoreDirectoryHandle root)
+    {
+        if (actual != expected)
+            return;
+
+        var observed = actual == RootMembershipEnrollmentPoint.ControlPublished
+            ? registry.ReadCandidate(root)
+            : null;
+        WriteJsonLineAsync(new InitializationCheckpointMessage(
+            "checkpoint",
+            request.OperationId,
+            Environment.ProcessId,
+            actual.ToString(),
+            observed?.Status.ToString(),
+            observed?.LedgerDigest,
+            observed?.Members.Select(member => member.MemberId).ToArray())).GetAwaiter().GetResult();
+
+        var input = Console.In.ReadLine();
+        if (input is null)
+            throw new EndOfStreamException("The parent ended the initialization checkpoint protocol before releasing the child.");
+
+        ReleaseCommand? command;
+        try
+        {
+            command = JsonSerializer.Deserialize<ReleaseCommand>(input, JsonOptions);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("The initialization checkpoint command was malformed.", exception);
+        }
+
+        if (command is null || command.Command != "continue" || command.OperationId != request.OperationId)
+            throw new InvalidDataException("The initialization checkpoint command did not match the operation.");
+    }
+
     private static void PauseAtRequestedCheckpoint(MembershipProcessRequest request,
         RootMembershipPublicationPoint expected, RootMembershipPublicationPoint actual,
         RootMembershipRegistry registry, PhysicalStoreDirectoryHandle root)
@@ -173,6 +246,17 @@ internal static class Program
         return point;
     }
 
+    private static RootMembershipEnrollmentPoint ParseRequiredEnrollmentCheckpoint(string? value)
+    {
+        if (!Enum.TryParse<RootMembershipEnrollmentPoint>(value, ignoreCase: false, out var point) ||
+            !Enum.IsDefined(point))
+        {
+            throw new InvalidDataException("The initialization checkpoint is not supported.");
+        }
+
+        return point;
+    }
+
     private static StoreStateRecord Protect(StoreStateRecord body, PhysicalRootIdentity root,
         long epoch, string memberId, long revision)
     {
@@ -207,12 +291,7 @@ internal static class Program
 
     private static async Task<MembershipProcessRequest> ReadRequestAsync(string path)
     {
-        if (!Path.IsPathFullyQualified(path))
-            throw new InvalidDataException("The process request path must be absolute.");
-        var info = new FileInfo(path);
-        if (!info.Exists || info.Length is <= 0 or > 32 * 1024)
-            throw new InvalidDataException("The process request must be a non-empty file no larger than 32 KiB.");
-        var bytes = await File.ReadAllBytesAsync(path).ConfigureAwait(false);
+        var bytes = await ReadRequestBytesAsync(path).ConfigureAwait(false);
         var request = JsonSerializer.Deserialize<MembershipProcessRequest>(bytes, JsonOptions)
             ?? throw new InvalidDataException("The process request was empty.");
         if (!Guid.TryParseExact(request.OperationId, "N", out _) ||
@@ -232,6 +311,40 @@ internal static class Program
         if (request.Checkpoint is not null)
             _ = ParseRequiredCheckpoint(request.Checkpoint);
         return request;
+    }
+
+    private static async Task<InitializationProcessRequest> ReadInitializationRequestAsync(string path)
+    {
+        var bytes = await ReadRequestBytesAsync(path).ConfigureAwait(false);
+        var request = JsonSerializer.Deserialize<InitializationProcessRequest>(bytes, JsonOptions)
+            ?? throw new InvalidDataException("The initialization process request was empty.");
+        if (!Guid.TryParseExact(request.OperationId, "N", out _) ||
+            string.IsNullOrWhiteSpace(request.RootPath) ||
+            !Path.IsPathFullyQualified(request.RootPath) ||
+            request.EnrollmentEpoch <= 0 ||
+            request.DeclaredMembers is null || request.DeclaredMembers.Length is < 1 or > 16 ||
+            request.DeclaredMembers.Any(member => member is null ||
+                                                  string.IsNullOrWhiteSpace(member.MemberId) ||
+                                                  string.IsNullOrWhiteSpace(member.ConfiguredLocator) ||
+                                                  !Path.IsPathFullyQualified(member.ConfiguredLocator)) ||
+            request.DeclaredMembers.Select(member => member.MemberId).Distinct(StringComparer.Ordinal).Count() != request.DeclaredMembers.Length)
+        {
+            throw new InvalidDataException("The initialization process request fields were invalid.");
+        }
+
+        if (request.Checkpoint is not null)
+            _ = ParseRequiredEnrollmentCheckpoint(request.Checkpoint);
+        return request;
+    }
+
+    private static async Task<byte[]> ReadRequestBytesAsync(string path)
+    {
+        if (!Path.IsPathFullyQualified(path))
+            throw new InvalidDataException("The process request path must be absolute.");
+        var info = new FileInfo(path);
+        if (!info.Exists || info.Length is <= 0 or > 32 * 1024)
+            throw new InvalidDataException("The process request must be a non-empty file no larger than 32 KiB.");
+        return await File.ReadAllBytesAsync(path).ConfigureAwait(false);
     }
 
     private static async Task WriteJsonLineAsync<T>(T message)
@@ -254,9 +367,14 @@ internal static class Program
     private sealed record MembershipProcessRequest(string OperationId, string RootPath,
         string TargetMemberId, Dictionary<string, string> MemberParentPaths,
         string? Checkpoint, int NextStateDay);
+    private sealed record InitializationMemberRequest(string MemberId, string ConfiguredLocator);
+    private sealed record InitializationProcessRequest(string OperationId, string RootPath, long EnrollmentEpoch,
+        bool QuiescentCutoverConfirmed, InitializationMemberRequest[] DeclaredMembers, string? Checkpoint);
     private sealed record CheckpointMessage(string Kind, string OperationId, int ProcessId,
         string Point, string MembershipStatus, string LedgerDigest, string? PublicationId,
         string? Resolution, string? StagedIdentity, string? BackupIdentity);
+    private sealed record InitializationCheckpointMessage(string Kind, string OperationId, int ProcessId,
+        string Point, string? MembershipStatus, string? LedgerDigest, string[]? DeclaredMemberIds);
     private sealed record OperationResult(string Kind, string OperationId, int ProcessId,
         string? MembershipStatus, string? LedgerDigest, bool? HasPending, string? RefusalReason, string? Message);
 

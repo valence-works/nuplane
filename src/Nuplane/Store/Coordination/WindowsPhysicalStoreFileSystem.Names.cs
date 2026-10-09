@@ -9,6 +9,33 @@ internal sealed partial class WindowsPhysicalStoreFileSystem
     private const string NameProfileId = "windows-ntfs-name-v1";
 
     /// <inheritdoc />
+    public PhysicalStoreNameSemantics ObserveDirectoryNameSemantics(PhysicalStoreDirectoryHandle parent)
+    {
+        ArgumentNullException.ThrowIfNull(parent);
+        using var parentLease = parent.AcquireScopedSafeHandle(_providerToken);
+        RequireSupportedPlatform();
+
+        var parentState = GetState(parent);
+        var directoryHandle = parentLease.DangerousHandle;
+        var before = QueryEntry(directoryHandle, "inspect the held directory before observing name semantics");
+        RequireKind(before, PhysicalStoreEntryKind.Directory, "Name-semantics observation requires a held directory.");
+        if (before.Identity != parentState.Identity)
+            throw Unknown("The held directory identity changed before name-semantics observation.");
+
+        var profileBefore = ObserveNameSemantics(directoryHandle);
+        var profileAfter = ObserveNameSemantics(directoryHandle);
+        var after = QueryEntry(directoryHandle, "recheck the held directory after observing name semantics");
+        if (after.Kind != PhysicalStoreEntryKind.Directory ||
+            after.Identity != before.Identity ||
+            profileAfter != profileBefore)
+        {
+            throw Unknown("The held directory identity, kind, or native name profile changed during observation.");
+        }
+
+        return profileBefore;
+    }
+
+    /// <inheritdoc />
     public PhysicalStoreCanonicalName ObserveCanonicalDirectoryNameNoFollow(
         PhysicalStoreDirectoryHandle parent,
         string singleName,

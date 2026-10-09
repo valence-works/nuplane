@@ -228,6 +228,12 @@ public sealed class PhysicalStoreIdentityTests
                 _semantics);
         }
 
+        public PhysicalStoreNameSemantics ObserveDirectoryNameSemantics(PhysicalStoreDirectoryHandle parent)
+        {
+            parent.ValidateCreator(_providerToken);
+            return _semantics;
+        }
+
         public PhysicalStoreEntryInfo? InspectChildNoFollow(PhysicalStoreDirectoryHandle parent, string singleName)
             => throw Unused();
 

@@ -12,9 +12,10 @@ namespace Nuplane.Store.Coordination;
 /// <remarks>
 /// This internal publication seam requires independently resolved held root/member parents. It supplies
 /// no configured-path authority discovery, graph-completeness validation, enrollment completion, or runtime admission.
-/// It opens an already persisted ledger only; enrollment and ordinary authority discovery are separate protocols.
+/// Initial enrollment can publish a verified Incomplete declaration; completing enrollment and ordinary
+/// authority discovery require separate graph and configured-path validation.
 /// </remarks>
-internal sealed class RootMembershipRegistry
+internal sealed partial class RootMembershipRegistry
 {
     internal const string ControlDirectoryName = ".nuplane-store";
     internal const string LedgerName = "membership.json";

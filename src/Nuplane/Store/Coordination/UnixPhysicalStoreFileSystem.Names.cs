@@ -11,6 +11,44 @@ internal sealed partial class UnixPhysicalStoreFileSystem
     private static readonly UTF8Encoding StrictNameUtf8 = new(false, true);
 
     /// <inheritdoc />
+    public PhysicalStoreNameSemantics ObserveDirectoryNameSemantics(PhysicalStoreDirectoryHandle parent)
+    {
+        ArgumentNullException.ThrowIfNull(parent);
+        using var parentHandle = parent.AcquireScopedSafeHandle(_providerToken);
+        var platform = RequireSupportedPlatform();
+        var directoryFd = GetFileDescriptor(parentHandle);
+
+        var before = ToEntryInfo(InvokeNative(
+            "inspect held directory before observing name semantics",
+            () => UnixNative.StatHandle(platform, directoryFd)));
+        if (before.Kind != PhysicalStoreEntryKind.Directory)
+            throw Unknown("Name-semantics observation requires a held directory.");
+
+        var profileBefore = InvokeNative(
+            "inspect held directory name semantics",
+            () => UnixNative.GetNameProfile(platform, directoryFd));
+        var profileAfter = InvokeNative(
+            "recheck held directory name semantics",
+            () => UnixNative.GetNameProfile(platform, directoryFd));
+        var after = ToEntryInfo(InvokeNative(
+            "recheck held directory after observing name semantics",
+            () => UnixNative.StatHandle(platform, directoryFd)));
+
+        if (after.Kind != PhysicalStoreEntryKind.Directory ||
+            after.Identity != before.Identity ||
+            profileAfter != profileBefore)
+        {
+            throw Unknown("The held directory identity, kind, or native name profile changed during observation.");
+        }
+
+        return new PhysicalStoreNameSemantics(
+            profileBefore.ProfileId,
+            PhysicalStoreNameEncoding.Utf8,
+            profileBefore.CaseSensitive,
+            profileBefore.NormalizationInsensitive);
+    }
+
+    /// <inheritdoc />
     public PhysicalStoreCanonicalName ObserveCanonicalFileNameNoFollow(
         PhysicalStoreDirectoryHandle parent,
         string singleName,
