@@ -16,11 +16,11 @@ The Nuplane Constitution requires automated coverage for changed logic and bound
 
 **Purpose:** Establish isolated, deterministic test inputs. No pruning behavior changes.
 
-- [ ] T001 Add reusable unique temporary physical-root/state-slot fixture in `test/Shared/PackageStoreFixture.cs`; own all paths, reject traversal, never reference a user store or network feed, and clean up with idiomatic disposal. Link this one shared source explicitly from each test project that consumes it.
-- [ ] T002 Add a controllable child executable in the tightly coupled `test/Nuplane.PackageStore.TestHost/Nuplane.PackageStore.TestHost.csproj` and `test/Nuplane.PackageStore.TestHost/Program.cs`; own temp paths, expose named crash/read gates and a finite command protocol, and keep it non-packable. No production maintenance behavior is implemented here.
-- [ ] T003 Add process launcher/gate fixture in `test/Nuplane.Integration.Tests/Fixtures/PackageStoreParticipantProcess.cs`; build/copy the test-host artifact through the integration project, launch without a shell, expose deterministic readiness/release/termination and capture child exit/output, and drain/terminate owned children on disposal.
-- [ ] T004 Add early confinement/disposal tests in `test/Nuplane.Store.Tests/PackageStoreFixtureTests.cs`; prove unique roots, traversal/rooted-path rejection, child slot creation, link refusal and cleanup without changing a sibling fixture.
-- [ ] T005 Add real process smoke tests in `test/Nuplane.Integration.Tests/PackageStoreParticipantProcessTests.cs`; prove readiness, controlled release, child exit/output capture, cancellation and disposal termination before the later crash tests rely on this harness.
+- [X] T001 Add reusable unique temporary physical-root/state-slot fixture in `test/Shared/PackageStoreFixture.cs`; own all paths, reject traversal, never reference a user store or network feed, and clean up with idiomatic disposal. Link this one shared source explicitly from each test project that consumes it.
+- [X] T002 Add a controllable child executable in the tightly coupled `test/Nuplane.PackageStore.TestHost/Nuplane.PackageStore.TestHost.csproj` and `test/Nuplane.PackageStore.TestHost/Program.cs`; own temp paths, expose named crash/read gates and a finite command protocol, and keep it non-packable. No production maintenance behavior is implemented here.
+- [X] T003 Add process launcher/gate fixture in `test/Nuplane.Integration.Tests/Fixtures/PackageStoreParticipantProcess.cs`; build/copy the test-host artifact through the integration project, launch without a shell, expose deterministic readiness/release/termination and capture child exit/output, and drain/terminate owned children on disposal.
+- [X] T004 Add early confinement/disposal tests in `test/Nuplane.Store.Tests/PackageStoreFixtureTests.cs`; prove unique roots, traversal/rooted-path rejection, child slot creation, link refusal and cleanup without changing a sibling fixture.
+- [X] T005 Add real process smoke tests in `test/Nuplane.Integration.Tests/PackageStoreParticipantProcessTests.cs`; prove readiness, controlled release, child exit/output capture, cancellation and disposal termination before the later crash tests rely on this harness.
 
 ## Phase 2: Foundational mechanisms
 

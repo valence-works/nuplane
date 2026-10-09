@@ -2,5 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Nuplane\Nuplane.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\PackageStoreFixture.cs" Link="Shared\PackageStoreFixture.cs" />
+  </ItemGroup>
 </Project>
-

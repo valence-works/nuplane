@@ -5,6 +5,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Nuplane.PackageStore.TestHost\Nuplane.PackageStore.TestHost.csproj"
+                      ReferenceOutputAssembly="false" PrivateAssets="all" />
     <ProjectReference Include="..\..\src\Nuplane.Admin\Nuplane.Admin.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Admin.Api\Nuplane.Admin.Api.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Loading\Nuplane.Loading.csproj" />
@@ -12,5 +14,13 @@
     <ProjectReference Include="..\..\src\Nuplane.Sources.Directory\Nuplane.Sources.Directory.csproj" />
   </ItemGroup>
 
-</Project>
+  <Target Name="CopyPackageStoreTestHost" AfterTargets="Build">
+    <ItemGroup>
+      <PackageStoreTestHostArtifact Include="$(MSBuildThisFileDirectory)..\Nuplane.PackageStore.TestHost\bin\$(Configuration)\net10.0\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PackageStoreTestHostArtifact)"
+          DestinationFiles="@(PackageStoreTestHostArtifact->'$(OutDir)PackageStoreTestHost\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
 
+</Project>
