@@ -10,7 +10,8 @@ namespace Nuplane.Store.Coordination;
 /// <summary>Performs bounded no-follow metadata and control-file operations on supported Unix systems.</summary>
 /// <remarks>
 /// The adapter intentionally supports only Darwin arm64 and Linux x64/arm64. It does not resolve arbitrary
-/// paths, rename entries, or delete package content. All child operations are relative to handles created by
+/// paths or delete package content. Its separate publication companion moves/removes only single control files.
+/// All child operations are relative to handles created by
 /// this provider, and all native calls use a scoped SafeHandle reference.
 /// </remarks>
 internal sealed partial class UnixPhysicalStoreFileSystem : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem

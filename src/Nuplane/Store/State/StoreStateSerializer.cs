@@ -7,7 +7,7 @@ namespace Nuplane.Store.State;
 /// <summary>
 /// Serializes and deserializes <see cref="StoreStateRecord"/> to/from JSON files.
 /// </summary>
-public sealed class StoreStateSerializer : IPackageProtectionStateSerializer
+public sealed class StoreStateSerializer : IPackageProtectionStatePayloadSerializer
 {
     private readonly AtomicFileWriter _fileWriter;
 
@@ -50,7 +50,7 @@ public sealed class StoreStateSerializer : IPackageProtectionStateSerializer
             FileShare.ReadWrite | FileShare.Delete,
             bufferSize: 4096,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
-        return await DeserializeAsync(stream, cancellationToken).ConfigureAwait(false);
+        return await ReadPayloadAsync(stream, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -61,8 +61,16 @@ public sealed class StoreStateSerializer : IPackageProtectionStateSerializer
     /// </summary>
     internal static async Task<StoreStateRecord> DeserializeAsync(Stream stream, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(stream);
         var stateFile = await JsonSerializer.DeserializeAsync<StoreStateFileDto>(stream, JsonOptions, cancellationToken);
         return Normalize(stateFile?.ToStoreStateRecord() ?? StoreStateRecord.Empty());
+    }
+
+    /// <inheritdoc />
+    public Task<StoreStateRecord> ReadPayloadAsync(Stream payload, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        return DeserializeAsync(payload, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -70,11 +78,20 @@ public sealed class StoreStateSerializer : IPackageProtectionStateSerializer
     {
         await _fileWriter.WriteAsync(
             stateFilePath,
-            async (stream, token) =>
-            {
-                await JsonSerializer.SerializeAsync(stream, StoreStateFileDto.FromState(Normalize(state)), JsonOptions, token).ConfigureAwait(false);
-            },
+            (stream, token) => WritePayloadAsync(stream, state, token),
             cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task WritePayloadAsync(Stream payload, StoreStateRecord state, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        ArgumentNullException.ThrowIfNull(state);
+        await JsonSerializer.SerializeAsync(
+            payload,
+            StoreStateFileDto.FromState(Normalize(state)),
+            JsonOptions,
+            cancellationToken).ConfigureAwait(false);
     }
 
     internal static StoreStateRecord Normalize(StoreStateRecord state) =>

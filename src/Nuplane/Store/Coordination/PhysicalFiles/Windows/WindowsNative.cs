@@ -74,7 +74,8 @@ internal static partial class WindowsNative
         uint desiredAccess,
         uint disposition,
         uint createOptions,
-        uint attributes = FileAttributeNormal)
+        uint attributes = FileAttributeNormal,
+        uint shareAccess = ShareRead | ShareWrite)
     {
         var byteLength = checked(component.Length * sizeof(char));
         if (byteLength > ushort.MaxValue - sizeof(char))
@@ -111,7 +112,7 @@ internal static partial class WindowsNative
                 out var ioStatus,
                 IntPtr.Zero,
                 attributes,
-                ShareRead | ShareWrite,
+                shareAccess,
                 disposition,
                 createOptions | FileSynchronousIoNonAlert | FileOpenReparsePoint,
                 IntPtr.Zero,

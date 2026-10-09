@@ -29,3 +29,7 @@ Three causal controls independently removed timestamp binding, recovery-policy b
 | Nested-digest causal-control log | `5ec2ce04adb1632b58effe8ee8e63a3b71ebb2842fb6618021a2ae8b24db371e` |
 
 Logs, TRX, source manifests, reference programs/preimages, original mutation backup and independent review are retained in the owned `prune-admission-authorization-audit/native-filesystem-gates/` artifact directory. [Serialization qualification](protection-serialization.md#hosted-qualification) belongs to its earlier exact commit and is not reused as hosted digest proof.
+
+## Hosted qualification
+
+[Validate 37930839996](https://github.com/valence-works/nuplane/actions/runs/37930839996) at exact commit `dc36e8d328ec8709992d5f55e5c0a04a2b9339b5` passed all six jobs. All twelve focused runs (three frameworks on Windows x64, macOS ARM64, Linux x64 and Linux ARM64) passed all **57 cases with zero skips**. The full Ubuntu solution passed **1,516**, failed **0**, with fourteen explicit platform/casefold skips. Native adapter/identity, owned ext4 casefold and packaging gates passed at this head. Root inspected exact head, completed jobs and complete logs; full log SHA-256 `cc41734db64e9fc5d90eafedac65c43fdf09ce6cf3ad0b5657e6d38d5a14dfa9`. This qualifies digest calculation and serialization, not the upcoming publication primitives or recovery protocol.

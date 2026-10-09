@@ -208,7 +208,7 @@ public sealed class UnixPhysicalStoreIdentityTests
             throw new IOException($"The owned hard-link fixture could not be created (native error {Marshal.GetLastPInvokeError()}).");
     }
 
-    private static void EnableExt4Casefold(string directoryPath)
+    internal static void EnableExt4Casefold(string directoryPath)
     {
         const ulong LinuxGetFlagsRequest = 0x80086601;
         const ulong LinuxSetFlagsRequest = 0x40086602;

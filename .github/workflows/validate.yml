@@ -74,7 +74,7 @@ jobs:
           for framework in net8.0 net9.0 net10.0; do
             dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
               --configuration Release -p:NuplaneProtectionFrameworkMatrix=true --framework "$framework" \
-              --filter "FullyQualifiedName~ProtectionStateSerializationTests|FullyQualifiedName~ProtectionDigestTests" \
+              --filter "FullyQualifiedName~ProtectionStateSerializationTests|FullyQualifiedName~ProtectionStatePayloadSerializerTests|FullyQualifiedName~ProtectionDigestTests" \
               --logger "trx;LogFileName=protection-$framework.trx" \
               --results-directory "$RUNNER_TEMP/protection-results/$framework"
           done
@@ -109,7 +109,7 @@ jobs:
 
           dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
             --configuration Release \
-            --filter "(FullyQualifiedName~Nuplane.Store.Tests.Coordination.UnixPhysicalStoreFileSystemTests|FullyQualifiedName~Nuplane.Store.Tests.Coordination.UnixPhysicalStoreIdentityTests)&FullyQualifiedName!~ObserveStateSlot_Ext4Casefold" \
+            --filter "(FullyQualifiedName~Nuplane.Store.Tests.Coordination.UnixPhysicalStoreFileSystemTests|FullyQualifiedName~Nuplane.Store.Tests.Coordination.UnixPhysicalStoreIdentityTests|FullyQualifiedName~Nuplane.Store.Tests.Coordination.UnixPhysicalStorePublicationTests)&FullyQualifiedName!~Ext4Casefold" \
             --logger "trx;LogFileName=native-unix.trx" \
             --results-directory "$RUNNER_TEMP/native-unix-results"
 
@@ -122,7 +122,7 @@ jobs:
               raise SystemExit('Native qualification returned no test counters.')
           total = int(counters.get('total', '0'))
           passed = int(counters.get('passed', '0'))
-          if total < 11 or passed != total:
+          if total < 19 or passed != total:
               raise SystemExit(f'Native qualification requires every test to pass without skips: {counters.attrib}')
           names = {r.get('testName') for r in root.findall('.//{*}UnitTestResult') if r.get('outcome') == 'Passed'}
           required = {
@@ -130,6 +130,10 @@ jobs:
               'ObserveStateSlot_UsesFilesystemSpellingAndNameProfileForAliases',
               'ObserveStateSlot_ParentAliasesConvergeAndAtomicReplacePreservesSlot',
               'ObserveCanonicalFileNameNoFollow_RejectsWrongIdentityLinksAndForeignHandles',
+              'NativeNoReplace_RefusesOccupiedTargetWithoutManagedPreInspection',
+              'Publish_ReplacesExistingSlotAndPreservesItsIdentity',
+              'Remove_RequiresExactRegularSingleLinkIdentity',
+              'Publish_RefusesAliasSpellingForeignAndClosedParents',
           }
           if not all(any(n.endswith('.' + expected) for n in names) for expected in required):
               raise SystemExit('The Unix state-slot identity scenarios did not all execute and pass.')
@@ -157,7 +161,7 @@ jobs:
           TMPDIR="$mount_root" NUPLANE_REQUIRE_EXT4_CASEFOLD=1 \
             dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
             --configuration Release --no-build --no-restore \
-            --filter "FullyQualifiedName~UnixPhysicalStoreIdentityTests.ObserveStateSlot_Ext4Casefold" \
+            --filter "FullyQualifiedName~UnixPhysicalStoreIdentityTests.ObserveStateSlot_Ext4Casefold|FullyQualifiedName~UnixPhysicalStorePublicationTests.Publish_Ext4CasefoldAliasesRequireCanonicalNames" \
             --logger "trx;LogFileName=casefold.trx" \
             --results-directory "$RUNNER_TEMP/casefold-results"
           python3 - "$RUNNER_TEMP/casefold-results/casefold.trx" <<'PY'
@@ -165,8 +169,11 @@ jobs:
           import xml.etree.ElementTree as ET
           root = ET.parse(sys.argv[1]).getroot()
           rows = root.findall('.//{*}UnitTestResult')
-          if len(rows) != 1 or rows[0].get('outcome') != 'Passed':
-              raise SystemExit('The required native ext4 casefold scenario must execute and pass without skips.')
+          required = {'ObserveStateSlot_Ext4CasefoldResolvesCaseAndNormalizationAliases', 'Publish_Ext4CasefoldAliasesRequireCanonicalNames'}
+          if len(rows) != 2 or any(row.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('Both required native ext4 casefold scenarios must execute and pass without skips.')
+          if not all(any(row.get('testName', '').endswith('.' + name) for row in rows) for name in required):
+              raise SystemExit('The required ext4 casefold identity/publication scenarios were not both selected.')
           PY
 
       - name: Run native Windows store adapter tests on Windows x64 NTFS
@@ -185,7 +192,7 @@ jobs:
           $results = Join-Path $env:RUNNER_TEMP 'native-windows-results'
           dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj `
             --configuration Release `
-            --filter 'FullyQualifiedName~Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreFileSystemTests|FullyQualifiedName~Nuplane.Store.Tests.Coordination.WindowsReparseTargetParserTests' `
+            --filter 'FullyQualifiedName~Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreFileSystemTests|FullyQualifiedName~Nuplane.Store.Tests.Coordination.WindowsPhysicalStorePublicationTests|FullyQualifiedName~Nuplane.Store.Tests.Coordination.WindowsReparseTargetParserTests' `
             --logger 'trx;LogFileName=native-windows.trx' `
             --results-directory $results
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -195,8 +202,18 @@ jobs:
           if ($null -eq $counters) { throw 'Native Windows qualification returned no test counters.' }
           $total = [int]$counters.total
           $passed = [int]$counters.passed
-          if ($total -lt 11 -or $passed -ne $total) {
+          if ($total -lt 19 -or $passed -ne $total) {
             throw "Native Windows qualification requires every test to pass without skips: $($counters.OuterXml)"
+          }
+          $rows = @($report.SelectNodes('//*[local-name()="UnitTestResult"]'))
+          foreach ($name in @(
+            'NativeNoReplace_RefusesOccupiedTargetWithoutManagedPreInspection',
+            'Publish_ReplacesExistingSlotAndPreservesItsIdentity',
+            'Remove_RequiresExactRegularSingleLinkIdentity',
+            'Publish_RefusesAliasSpellingForeignAndClosedParents'
+          )) {
+            $matched = @($rows | Where-Object { $_.testName.EndsWith('.' + $name) -and $_.outcome -eq 'Passed' })
+            if ($matched.Count -ne 1) { throw "The required native publication scenario did not execute and pass: $name" }
           }
 
       - name: Run native Windows state-slot identity tests
