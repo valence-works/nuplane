@@ -99,3 +99,24 @@ dea48ab244d3f333cca0765be3b09b9b0de14173fcac3332cfdec43ca99be0e9  test/Nuplane.S
 0c0d01f1600f60f263be6617a5f56d16d1a84e0a64553172b0407a0a0e388709  test/Nuplane.Store.Tests/Coordination/RecoverableGraphSnapshotFactoryTests.cs
 e51cde24d17d157060e05da3eb40c48d3abee7502eaa7e74d2134bb43141a1e3  .github/workflows/validate.yml
 ```
+
+## Hosted run and platform refusal classification correction
+
+Exact head `f6187e4c1b549087adb2bb6c35a1016c0094d9cf` [Validate 37966951502](https://github.com/valence-works/nuplane/actions/runs/37966951502)
+finished **failed**: five jobs passed and the Windows boundary job failed one test's expected refusal reason.
+The Unix adapter checks platform support before foreign-handle ownership; the Windows adapter checks handle
+ownership first. Both refused. The cross-OS test incorrectly expected RootMismatch in both directions.
+The correction preserves exact assertions: a same-platform foreign provider instance must return RootMismatch
+on every OS, while the opposite-OS adapter must return UnsupportedFilesystem on Windows and RootMismatch
+on Unix. Production adapter/reader code and the 25-row workflow validator are unchanged.
+
+The failed run's macOS and both Linux new-boundary lanes passed 23 with two explicit casefold skips each;
+Windows passed 21, failed one, skipped three. Both owned Linux casefold volumes passed all seven cases.
+The full Ubuntu solution passed 1708 with zero failures and 30 explicit skips.
+These successes do not turn the failed run into qualification. Complete run log SHA-256:
+`a960d2bcbc5bf388981b55744bc5c1e9c3a3f2df42401f199d536f9681ae90f8`.
+
+After correction, `native-install-provider-classification-v1` locally passed 23 cases, zero failures, two
+explicit casefold skips at source manifest `68eb9b01e4a930cb0749a094ff01ec2061e38fa74f617355cf3047786c1ba161`;
+log SHA-256 `d5603bcd7cae98db062fc070072b463ec0a60b4101a9189282a048d1a627cb53`.
+Independent/root source review confirms the refusal ordering. Windows hosted requalification remains pending.

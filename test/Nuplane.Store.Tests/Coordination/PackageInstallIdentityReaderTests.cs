@@ -118,12 +118,24 @@ public sealed class PackageInstallIdentityReaderTests
             context.Parent, wrongRoot, tree.RelativePath, tree.PackageId, tree.Version));
         Assert.Equal(PackageStoreAdmissionReason.RootMismatch, error.Reason);
 
-        IPhysicalStoreFileSystem foreign = OperatingSystem.IsWindows()
+        IPhysicalStoreFileSystem samePlatformForeignProvider = OperatingSystem.IsWindows()
+            ? new WindowsPhysicalStoreFileSystem()
+            : new UnixPhysicalStoreFileSystem();
+        var foreignProviderError = Assert.Throws<PackageStoreAdmissionException>(() =>
+            new PackageInstallIdentityReader(samePlatformForeignProvider).Observe(
+                context.Parent, actualRoot, tree.RelativePath, tree.PackageId, tree.Version));
+        Assert.Equal(PackageStoreAdmissionReason.RootMismatch, foreignProviderError.Reason);
+
+        IPhysicalStoreFileSystem unsupportedPlatformProvider = OperatingSystem.IsWindows()
             ? new UnixPhysicalStoreFileSystem()
             : new WindowsPhysicalStoreFileSystem();
-        var foreignError = Assert.Throws<PackageStoreAdmissionException>(() => new PackageInstallIdentityReader(foreign).Observe(
-            context.Parent, actualRoot, tree.RelativePath, tree.PackageId, tree.Version));
-        Assert.Equal(PackageStoreAdmissionReason.RootMismatch, foreignError.Reason);
+        var platformError = Assert.Throws<PackageStoreAdmissionException>(() =>
+            new PackageInstallIdentityReader(unsupportedPlatformProvider).Observe(
+                context.Parent, actualRoot, tree.RelativePath, tree.PackageId, tree.Version));
+        // Unix checks platform support first; Windows checks handle ownership before platform support.
+        Assert.Equal(OperatingSystem.IsWindows()
+            ? PackageStoreAdmissionReason.UnsupportedFilesystem
+            : PackageStoreAdmissionReason.RootMismatch, platformError.Reason);
     }
 
     [SupportedPhysicalStoreFact]
