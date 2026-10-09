@@ -553,6 +553,7 @@ internal sealed partial class RootMembershipRegistry
     {
         private PhysicalFileIdentity _ledgerIdentity = ledgerIdentity;
         internal RootMembershipRecord Ledger { get; private set; } = ledger;
+        internal PhysicalFileIdentity LedgerIdentity => _ledgerIdentity;
 
         internal RootMembershipRecord ReadCurrent()
         {

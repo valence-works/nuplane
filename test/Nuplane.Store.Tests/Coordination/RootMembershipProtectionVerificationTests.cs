@@ -127,7 +127,7 @@ public sealed class RootMembershipProtectionVerificationTests
         Assert.Equal(before.LedgerDigest, context.Registry.ReadCandidate(context.Root).LedgerDigest);
     }
 
-    private sealed class Context : IDisposable
+    internal sealed class Context : IDisposable
     {
         internal PackageStoreFixture Fixture { get; } = new();
         internal IPhysicalStoreFileSystem Files { get; } = OperatingSystem.IsWindows()
@@ -170,6 +170,23 @@ public sealed class RootMembershipProtectionVerificationTests
             }
             catch { context.Dispose(); throw; }
             finally { foreach (var parent in parents.Values.Reverse()) parent.Dispose(); }
+        }
+
+        internal static async Task<Context> CreateCompleteAsync()
+        {
+            var context = await CreateAsync();
+            try
+            {
+                await context.PublishStatesAsync();
+                await context.Registry.CompleteEnrollmentAsync(context.Root, context.RootIdentity, 1,
+                    true, CancellationToken.None);
+                return context;
+            }
+            catch
+            {
+                context.Dispose();
+                throw;
+            }
         }
 
         internal async Task PublishStatesAsync()

@@ -15,6 +15,8 @@ public sealed class PackageStoreOperationBorrow : IDisposable
 
     /// <summary>Gets the owner whose root and lifetime this borrow shares.</summary>
     internal PackageStoreOperationOwner Owner { get; }
+    internal IPackageStoreOperationOwnerControl Control => _control;
+    internal bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
     /// <summary>Gets the physical root associated with this borrow.</summary>
     public PhysicalRootIdentity Root => Owner.Root;

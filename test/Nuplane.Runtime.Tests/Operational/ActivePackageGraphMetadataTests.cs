@@ -343,7 +343,7 @@ public sealed class ActivePackageGraphMetadataTests
     }
 
     [Fact]
-    public void BuildActiveGraphRecords_WhenSameRootSetResolvesExpandedGraph_ReplacesStaleGraphRecord()
+    public void BuildActiveGraphRecords_WhenSameRootSetResolvesExpandedGraph_RemovesStaleGraphRecord()
     {
         var activatedAtUtc = DateTimeOffset.Parse("2026-05-05T10:00:00Z");
         var root = new ResolvedPackage("Plugin.Root", "1.0.0", "feed-a", "/packages/root", activatedAtUtc, "source-a");
@@ -365,9 +365,46 @@ public sealed class ActivePackageGraphMetadataTests
             "corr-new",
             activatedAtUtc);
 
-        var record = Assert.Single(records).Value;
-        Assert.Equal("graph-new", record.GraphId);
-        Assert.Equal([root.Id, dependency.Id, support.Id], record.NodePackageIds);
+        var currentRecord = Assert.Single(records).Value;
+        Assert.Equal(newGraph.GraphId, currentRecord.GraphId);
+        Assert.Equal(GraphActivationStatus.Active, currentRecord.Status);
+        Assert.Equal([root.Id, dependency.Id, support.Id], currentRecord.NodePackageIds);
+    }
+
+    [Theory]
+    [InlineData(GraphActivationStatus.Stale)]
+    [InlineData(GraphActivationStatus.Failed)]
+    [InlineData(GraphActivationStatus.Replaced)]
+    public void BuildActiveGraphRecords_DropsLegacyNonActiveEntriesFromTheCurrentSelection(GraphActivationStatus status)
+    {
+        var timestamp = DateTimeOffset.Parse("2026-05-05T10:00:00Z");
+        var currentState = StoreStateRecord.Empty() with
+        {
+            ActiveGraphsById = new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["legacy-non-active"] = new(
+                    "legacy-non-active",
+                    "generation-old",
+                    ["Plugin.Root"],
+                    ["Plugin.Root"],
+                    timestamp,
+                    "corr-old",
+                    status,
+                    NodeVersionsByPackageId: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["Plugin.Root"] = "1.0.0"
+                    })
+            }
+        };
+
+        var result = ActivePackageCatalogMapper.BuildActiveGraphRecords(
+            currentState,
+            [],
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Plugin.Root"] = "1.0.0" },
+            "corr-current",
+            timestamp.AddMinutes(1));
+
+        Assert.Empty(result);
     }
 
     [Fact]

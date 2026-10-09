@@ -21,19 +21,22 @@ internal sealed class ResolvedPackageStorePath : IDisposable
         PhysicalStoreDirectoryHandle? authorityRoot,
         PhysicalRootIdentity? rootIdentity,
         RootMembershipRecord? membershipCandidate,
+        PhysicalFileIdentity? membershipLedgerIdentity,
         IReadOnlyList<PhysicalStoreHandle> ownedHandles,
         Action revalidate)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(ownedHandles);
         ArgumentNullException.ThrowIfNull(revalidate);
-        if ((authorityRoot is null) != (rootIdentity is null) || (rootIdentity is null) != (membershipCandidate is null))
+        if ((authorityRoot is null) != (rootIdentity is null) || (rootIdentity is null) != (membershipCandidate is null) ||
+            (membershipCandidate is null) != (membershipLedgerIdentity is null))
             throw new ArgumentException("Authority handle, root identity, and membership candidate must be present together.", nameof(authorityRoot));
 
         Target = target;
         AuthorityRoot = authorityRoot;
         RootIdentity = rootIdentity;
         MembershipCandidate = membershipCandidate;
+        MembershipLedgerIdentity = membershipLedgerIdentity;
         _ownedHandles = ownedHandles.ToArray();
         _revalidate = revalidate;
     }
@@ -49,6 +52,9 @@ internal sealed class ResolvedPackageStorePath : IDisposable
 
     /// <summary>Gets the validated structural membership candidate, never an admission capability.</summary>
     internal RootMembershipRecord? MembershipCandidate { get; }
+
+    /// <summary>Gets the exact native ledger-file identity observed with the candidate.</summary>
+    internal PhysicalFileIdentity? MembershipLedgerIdentity { get; }
 
     /// <summary>Rechecks the retained namespace, edge, alias, authority, and target observations.</summary>
     internal void Revalidate()

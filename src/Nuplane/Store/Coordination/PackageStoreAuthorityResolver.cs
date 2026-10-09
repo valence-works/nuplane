@@ -301,6 +301,7 @@ internal sealed class PackageStoreAuthorityResolver
                 state.AuthorityRoot,
                 state.RootIdentity,
                 state.MembershipCandidate,
+                state.MembershipLedgerIdentity,
                 transferredHandles,
                 () => state.Revalidate(finalTarget, target, finalFileParent));
             state.DetachHandles();
@@ -603,6 +604,7 @@ internal sealed class PackageStoreAuthorityResolver
         internal PhysicalRootIdentity? RootIdentity { get; private set; }
         internal PhysicalRootIdentity? AuthorityRootIdentity => RootIdentity;
         internal RootMembershipRecord? MembershipCandidate { get; private set; }
+        internal PhysicalFileIdentity? MembershipLedgerIdentity { get; private set; }
         internal HashSet<PhysicalFileIdentity> ActiveAliases { get; } = [];
         internal int AliasExpansions { get; set; }
 
@@ -728,7 +730,8 @@ internal sealed class PackageStoreAuthorityResolver
             ValidateCandidate(observedRoot, candidate);
 
             if (RootIdentity is not null && (RootIdentity != candidate.RootIdentity ||
-                !string.Equals(MembershipCandidate!.LedgerDigest, candidate.LedgerDigest, StringComparison.Ordinal)))
+                !string.Equals(MembershipCandidate!.LedgerDigest, candidate.LedgerDigest, StringComparison.Ordinal) ||
+                MembershipLedgerIdentity != ledgerInfo.Identity))
             {
                 throw Refusal(PackageStoreAdmissionReason.UnknownAuthority,
                     "The configured path encountered changing or conflicting membership authority.", candidate.RootIdentity);
@@ -737,6 +740,7 @@ internal sealed class PackageStoreAuthorityResolver
             AuthorityRoot ??= directory;
             RootIdentity ??= candidate.RootIdentity;
             MembershipCandidate ??= candidate;
+            MembershipLedgerIdentity ??= ledgerInfo.Identity;
             AddEvidence(_controls, new ControlEvidence(
                 directory, parentInfo.Identity, control, entry.Identity, ledger, ledgerInfo.Identity, candidate));
         }

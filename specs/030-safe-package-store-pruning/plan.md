@@ -2,7 +2,7 @@
 
 **Branch**: `108-safe-package-store-pruning` | **Date**: 2026-10-09 | **Spec**: [spec.md](spec.md)
 
-**Status**: Design accepted after independent review and root verification on 2026-10-09. The 128-artifact implementation checklist is independently reviewed and root-accepted in [tasks.md](tasks.md); implementation is next. No product implementation or package-deletion acceptance is claimed.
+**Status**: Design accepted after independent review and root verification on 2026-10-09. The 128-artifact implementation checklist is independently reviewed and root-accepted in [tasks.md](tasks.md). Foundational implementation is in progress, with 28 bounded tasks accepted and further native admission/graph-projection qualification underway; per-increment evidence is linked from the checklist. Full runtime admission, graph lifetimes and package-deletion acceptance remain outstanding.
 
 ## Summary
 
@@ -101,10 +101,10 @@ src/Nuplane.Admin.Api/        # separate explicit driver if included in final co
  test/Nuplane.Integration.Tests/
 ```
 
-**Structure Decision**: Keep coordination below Loading and Admin, and keep host-specific readiness/unload policy in its existing owners. The next task-generation step enumerates one artifact per task after design acceptance; no new package is selected. AGENTS.md now points to this plan in its managed section.
+**Structure Decision**: Keep coordination below Loading and Admin, and keep host-specific readiness/unload policy in its existing owners. The accepted implementation checklist enumerates the artifact tasks; no new package is selected. AGENTS.md now points to this plan in its managed section.
 
 ## Review Record
 
 Independent review found and re-reviewed the three corrections above; final review SHA-256 `d918b61bbaee452b9e3fed923a566176a9707c6cdab1f12a9e6f079a745f59c2`. Root checked all final artifact hashes, 54 distinct current-source files, links and whitespace. The independent source observations used a prior snapshot; root closed that provenance gap by verifying all seven referenced source files byte-identical between `21e2c24` and current `03b48ac`. Spec SHA-256 after the FR-016 clarification is `29154bd3b9a5b1809c8e0b81aff7954261209bcb8279132810cd89cb3fdf78c2`. Original findings, re-review, probe evidence and root verification remain retained in the delivery workspace.
 
-Only plan/checklist acceptance metadata changed after the frozen independent re-review. No product code, store, package version or release changed. Before/after plan hooks are absent because `.specify/extensions.yml` does not exist. AGENTS.md has the managed plan reference.
+At the original design-acceptance checkpoint, only plan/checklist acceptance metadata changed after the frozen independent re-review; no product code, store, package version or release changed at that checkpoint. Before/after plan hooks were absent because `.specify/extensions.yml` did not exist. AGENTS.md has the managed plan reference. Subsequent implementation and verification are recorded in the checklist and linked evidence.

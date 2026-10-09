@@ -30,6 +30,8 @@ public sealed class PackageStoreOperationOwner : IAsyncDisposable
     /// <summary>Gets the positive admission epoch assigned by Nuplane core.</summary>
     public long Epoch { get; }
 
+    internal IPackageStoreOperationOwnerControl Control => _control;
+
     /// <summary>Creates a counted borrow for a nested operation that shares this admission.</summary>
     /// <exception cref="ObjectDisposedException">The owner is closing or closed.</exception>
     public PackageStoreOperationBorrow Borrow()

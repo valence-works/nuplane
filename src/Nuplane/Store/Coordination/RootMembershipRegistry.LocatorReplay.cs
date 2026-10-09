@@ -29,9 +29,25 @@ internal sealed partial class RootMembershipRegistry
         Func<LockedMemberLocations, CancellationToken, Task<TResult>> callback,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(callback);
+        await using var locked = await AcquireCompleteMemberLocationsAsync(root, expectedRoot,
+            expectedEnrollmentEpoch, expectedLedgerDigest: null, expectedLedgerIdentity: null, cancellationToken)
+            .ConfigureAwait(false);
+        return await callback(locked.Context, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Acquires and retains the exact Complete root/member lock set for one admitted operation.</summary>
+    /// <remarks>Expected digest and file identity bind the earlier path observation to the locked reread.</remarks>
+    internal async Task<CompleteMemberLocationsOwner> AcquireCompleteMemberLocationsAsync(
+        PhysicalStoreDirectoryHandle root,
+        PhysicalRootIdentity expectedRoot,
+        long expectedEnrollmentEpoch,
+        string? expectedLedgerDigest,
+        PhysicalFileIdentity? expectedLedgerIdentity,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(expectedRoot);
-        ArgumentNullException.ThrowIfNull(callback);
         cancellationToken.ThrowIfCancellationRequested();
         RequireEpoch(expectedEnrollmentEpoch);
         RequireRoot(root, expectedRoot);
@@ -42,34 +58,44 @@ internal sealed partial class RootMembershipRegistry
         MemberLocatorReplayScope? scope = null;
         LockedMemberLocations? context = null;
         IReadOnlyDictionary<string, ResolvedMemberStateLocation>? preparedLocations = null;
+        var ownershipTransferred = false;
         try
         {
-            // The unlocked copy is used only to name existing member locks. Its digest and full shape are
-            // rechecked after acquiring root plus every hinted member lock.
-            var hints = ReadLedger(root, control);
+            // This copy names only existing lock files. Its digest and native ledger identity are checked again
+            // after acquiring the root and every member lock, before any member payload can be read.
+            var hints = ReadLedger(root, control, out var hintsIdentity);
             RequireCompleteLocatorLedger(hints, expectedRoot, expectedEnrollmentEpoch);
+            RequireExpectedLedgerObservation(hints, hintsIdentity, expectedLedgerDigest, expectedLedgerIdentity);
             var lockHints = hints.Members.Select(GetSlot).ToArray();
             owner = await _locks.AcquireAsync(control, lockHints, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
             var lockedLedger = ReadLedger(root, control, out var lockedLedgerIdentity);
             RequireSameDigest(hints, lockedLedger);
+            RequireExpectedLedgerObservation(lockedLedger, lockedLedgerIdentity, expectedLedgerDigest, expectedLedgerIdentity);
+            if (hintsIdentity != lockedLedgerIdentity)
+                throw Refused("The membership ledger file identity changed while acquiring all locks.");
             RequireCompleteLocatorLedger(lockedLedger, expectedRoot, expectedEnrollmentEpoch);
             scope = new MemberLocatorReplayScope(lockedLedger);
             preparedLocations = ResolveMemberLocatorMap(lockedLedger, scope, LocatorReplayBindingPolicy.Acknowledged);
             cancellationToken.ThrowIfCancellationRequested();
 
-            var ownedTransaction = new Transaction(this, root, control, owner, lockedLedger, lockedLedgerIdentity);
-            transaction = ownedTransaction;
+            transaction = new Transaction(this, root, control, owner, lockedLedger, lockedLedgerIdentity);
             owner = null;
-            context = CreateLockedMemberLocations(ownedTransaction, scope, preparedLocations,
+            context = CreateLockedMemberLocations(transaction, scope, preparedLocations,
                 LocatorReplayBindingPolicy.Acknowledged, expectedRoot, expectedEnrollmentEpoch);
             preparedLocations = null; // Context now owns the resolved parent handles.
-            return await callback(context, cancellationToken).ConfigureAwait(false);
+            var result = new CompleteMemberLocationsOwner(
+                scope ?? throw new InvalidOperationException("The locator scope was not created."),
+                context ?? throw new InvalidOperationException("The locked member context was not created."),
+                () => (transaction ?? throw new InvalidOperationException("The locked transaction was not created.")).LedgerIdentity,
+                () => (transaction ?? throw new InvalidOperationException("The locked transaction was not created.")).DisposeAsync());
+            ownershipTransferred = true;
+            return result;
         }
         finally
         {
-            try
+            if (!ownershipTransferred)
             {
                 try
                 {
@@ -80,23 +106,82 @@ internal sealed partial class RootMembershipRegistry
                 finally
                 {
                     scope?.Expire();
+                    try
+                    {
+                        if (transaction is not null)
+                            await transaction.DisposeAsync().ConfigureAwait(false);
+                        else if (owner is not null)
+                            await owner.DisposeAsync().ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        if (transaction is null)
+                            control.Dispose();
+                    }
                 }
             }
-            finally
+        }
+    }
+
+    private static void RequireExpectedLedgerObservation(
+        RootMembershipRecord ledger,
+        PhysicalFileIdentity ledgerIdentity,
+        string? expectedDigest,
+        PhysicalFileIdentity? expectedIdentity)
+    {
+        if ((expectedDigest is not null && !string.Equals(ledger.LedgerDigest, expectedDigest, StringComparison.Ordinal)) ||
+            (expectedIdentity is not null && ledgerIdentity != expectedIdentity))
+            throw Refused("The Complete membership ledger no longer matches the retained path observation.");
+    }
+
+    /// <summary>Retains the registry transaction and locator scope until the operation owner drains.</summary>
+    internal sealed class CompleteMemberLocationsOwner : IAsyncDisposable
+    {
+        private readonly MemberLocatorReplayScope _scope;
+        private readonly Func<PhysicalFileIdentity> _getLedgerIdentity;
+        private readonly Func<ValueTask> _disposeTransaction;
+        private readonly object _disposeGate = new();
+        private Task? _disposeTask;
+
+        internal CompleteMemberLocationsOwner(
+            MemberLocatorReplayScope scope,
+            LockedMemberLocations context,
+            Func<PhysicalFileIdentity> getLedgerIdentity,
+            Func<ValueTask> disposeTransaction)
+        {
+            _scope = scope;
+            Context = context;
+            _getLedgerIdentity = getLedgerIdentity;
+            _disposeTransaction = disposeTransaction;
+        }
+
+        internal LockedMemberLocations Context { get; }
+        internal RootMembershipRecord Ledger => Context.Ledger;
+        internal PhysicalFileIdentity LedgerIdentity => _getLedgerIdentity();
+
+        public ValueTask DisposeAsync()
+        {
+            lock (_disposeGate)
             {
-                try
-                {
-                    if (transaction is not null)
-                        await transaction.DisposeAsync().ConfigureAwait(false);
-                    else if (owner is not null)
-                        await owner.DisposeAsync().ConfigureAwait(false);
-                }
-                finally
-                {
-                    if (transaction is null)
-                        control.Dispose();
-                }
+                _disposeTask ??= DisposeCoreAsync();
+                return new ValueTask(_disposeTask);
             }
+        }
+
+        private async Task DisposeCoreAsync()
+        {
+            var errors = new List<Exception>(2);
+            try { Context.Dispose(); }
+            catch (Exception exception) { errors.Add(exception); }
+
+            _scope.Expire();
+            try { await _disposeTransaction().ConfigureAwait(false); }
+            catch (Exception exception) { errors.Add(exception); }
+
+            if (errors.Count == 1)
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(errors[0]).Throw();
+            if (errors.Count > 1)
+                throw new AggregateException("Complete member-location ownership cleanup encountered multiple failures.", errors);
         }
     }
 

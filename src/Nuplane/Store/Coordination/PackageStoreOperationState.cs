@@ -7,6 +7,7 @@ internal sealed class PackageStoreOperationState : IPackageStoreOperationOwnerCo
 {
     private readonly object _gate = new();
     private readonly HashSet<PackageStoreOperationBorrow> _activeBorrows = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<PackageStoreOperationBorrow, string?> _borrowPathRestrictions = new(ReferenceEqualityComparer.Instance);
     private readonly PhysicalRootIdentity _root;
     private readonly long _epoch;
     private readonly IAsyncDisposable _heldRootOwnership;
@@ -42,6 +43,15 @@ internal sealed class PackageStoreOperationState : IPackageStoreOperationOwnerCo
     internal PackageStoreOperationOwner Owner => _owner;
 
     public PackageStoreOperationBorrow Borrow(PackageStoreOperationOwner owner)
+        => CreateBorrow(owner, allowedInstallPath: null);
+
+    internal PackageStoreOperationBorrow BorrowForPath(PackageStoreOperationOwner owner, string installPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+        return CreateBorrow(owner, installPath);
+    }
+
+    private PackageStoreOperationBorrow CreateBorrow(PackageStoreOperationOwner owner, string? allowedInstallPath)
     {
         ArgumentNullException.ThrowIfNull(owner);
 
@@ -55,6 +65,7 @@ internal sealed class PackageStoreOperationState : IPackageStoreOperationOwnerCo
 
             var borrow = new PackageStoreOperationBorrow(owner, this);
             _activeBorrows.Add(borrow);
+            _borrowPathRestrictions.Add(borrow, allowedInstallPath);
             return borrow;
         }
     }
@@ -104,6 +115,7 @@ internal sealed class PackageStoreOperationState : IPackageStoreOperationOwnerCo
             {
                 throw ExpiredBorrow(borrow);
             }
+            _borrowPathRestrictions.Remove(borrow);
 
             if (_closing && _activeBorrows.Count == 0 && _activeValidations == 0)
             {
@@ -127,6 +139,15 @@ internal sealed class PackageStoreOperationState : IPackageStoreOperationOwnerCo
                 throw ExpiredBorrow(borrow);
             }
 
+            var allowedPath = _borrowPathRestrictions[borrow];
+            if (allowedPath is not null && !string.Equals(allowedPath, installPath, StringComparison.Ordinal))
+            {
+                throw new PackageStoreAdmissionException(
+                    PackageStoreAdmissionReason.RootMismatch,
+                    "The operation borrow is restricted to its exactly admitted install path.",
+                    _root);
+            }
+
             _activeValidations++;
         }
 
@@ -148,6 +169,27 @@ internal sealed class PackageStoreOperationState : IPackageStoreOperationOwnerCo
             }
 
             drained?.TrySetResult(true);
+        }
+    }
+
+    internal RootMembershipRegistry.LockedMemberLocations GetLockedMemberLocations(
+        PackageStoreOperationOwner owner,
+        PackageStoreOperationBorrow borrow)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(borrow);
+        lock (_gate)
+        {
+            EnsureOwnerMatches(owner);
+            EnsureBorrowOwnerMatches(borrow);
+            if (borrow.IsDisposed || !_activeBorrows.Contains(borrow))
+                throw ExpiredBorrow(borrow);
+            if (_heldRootOwnership is not IStoreOperationLockedMemberContext held)
+                throw new PackageStoreAdmissionException(
+                    PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "This admitted operation does not expose a registry-locked member publication context.",
+                    _root);
+            return held.LockedMemberLocations;
         }
     }
 

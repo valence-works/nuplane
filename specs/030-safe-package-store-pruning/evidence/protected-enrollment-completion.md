@@ -42,7 +42,7 @@ The preceding candidate head `a27b1c71e73f64d01affa7a0f823f2f7ecb0a500` passed a
 
 ## Remaining integration
 
-The actual catalog mapper can retain an obsolete root graph as Active when a former root becomes a dependency. T062 must reconcile its active-generation projection with failed-root retention before runtime publication consumes the full verifier. A bounded actual-producer reproduction is being executed; the verifier must not be weakened to accept inconsistent projections.
+The mapper correction now reconciles successful root contraction and same-version failed-root retention; see [retained-admission and transition evidence](retained-operation-admission.md). T062 remains partial: if one successful root changes version while a failed root needs an old subclosure, selection/conflict checks must run before pointer transactions and protected publication. The verifier must not be weakened to accept inconsistent projections.
 
 Still required: public quiescent enrollment orchestration and recovery/migration, configured and multi-path operation admission, complete protection on every runtime write, exact startup selector consumption, every reader/loader/restore/contributor/observer boundary, real two-DI-composition before-first-read proof, graph lifetime leases, safe manual preview/execute, upstream releases and Foundation adoption. No pruning eligibility, deletion, merge readiness or release readiness is claimed by these local gates.
 
