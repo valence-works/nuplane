@@ -1,6 +1,6 @@
 # Tasks: Safe Manual Package-Store Pruning
 
-**Status:** Independently reviewed and root-accepted implementation checklist, 2026-10-09. No implementation, deletion or platform gate is claimed.
+**Status:** Independently reviewed and root-accepted implementation checklist, 2026-10-09. Setup is accepted; foundational implementation is in progress. No deletion or platform gate is claimed.
 
 **Inputs:** Accepted design at `b86d9affa982a645d9afe6329229a5a22ef10c38`, product baseline `eb2cf6c2ee1f79dc2c45fb83cc415bbe4856d0d4`; [spec](spec.md), [plan](plan.md), [research](research.md), [data model](data-model.md), [admission contract](contracts/admission.md), [maintenance contract](contracts/maintenance.md), [validation guide](quickstart.md). No external review-credit dependency.
 
@@ -28,21 +28,21 @@ The Nuplane Constitution requires automated coverage for changed logic and bound
 
 ### Shared and module-owned contracts / records
 
-- [ ] T006 Add the neutral opaque capability family and immutable graph/install identities in `src/Nuplane.Abstractions/PackageStoreProtection/PackageStoreProtectionContracts.cs`: IPackageStoreAdmission, root/path admission, owner/borrow, graph-use provider/owner/view and typed refusal. Keep constructors non-public with narrow core friend access; no persisted ledger records or implementation dependencies.
-- [ ] T007 Add optional resolver companion in `src/Nuplane.Abstractions/IScopedPackageResolver.cs` extending IPackageResolver; a scoped call consumes an exact live borrow without reacquiring root ownership.
-- [ ] T008 Add optional acquisition companion beside IRemotePackageAcquirer in `src/Nuplane/Feeds/IScopedRemotePackageAcquirer.cs`; propagate the exact borrow before local completion/hash/staging reads. Keep this companion with the existing core-owned interface.
+- [X] T006 Add the neutral opaque capability family and immutable graph/install identities in the tightly coupled one-type-per-file group `src/Nuplane.Abstractions/PackageStoreProtection/` (with narrow core friend access in `src/Nuplane.Abstractions/Nuplane.Abstractions.csproj`): IPackageStoreAdmission, root/path admission, owner/borrow, graph-use provider/owner/view and typed refusal. Keep authority-bearing constructors non-public with narrow core friend access; public descriptive identity values grant no authority; no persisted ledger records or implementation dependencies.
+- [X] T007 Add optional resolver companion in `src/Nuplane.Abstractions/IScopedPackageResolver.cs` extending IPackageResolver; a scoped call consumes an exact live borrow without reacquiring root ownership.
+- [X] T008 Add optional acquisition companion beside IRemotePackageAcquirer in `src/Nuplane/Feeds/IScopedRemotePackageAcquirer.cs`; propagate the exact borrow before local completion/hash/staging reads. Keep this companion with the existing core-owned interface.
 - [ ] T009 Add schema-versioned root enrollment, member, state-protection, active/LKG/retired graph, pending-publication and recovery records in `src/Nuplane/Store/Coordination/PackageStoreProtectionRecords.cs`; preserve Unknown versus KnownEmpty and immutable copied collections.
-- [ ] T010 Add optional protection-payload serializer companion beside `IStoreStateSerializer` in `src/Nuplane/Store/State/IPackageProtectionStateSerializer.cs`; preserve the required serializer interface and reject silent metadata loss.
+- [X] T010 Add optional protection-payload serializer companion beside `IStoreStateSerializer` in `src/Nuplane/Store/State/IPackageProtectionStateSerializer.cs`; preserve the required serializer interface and reject silent metadata loss.
 - [ ] T011 Add optional coordinated publication companion beside IStoreRegistry in `src/Nuplane/Store/State/ICoordinatedStoreRegistry.cs`; accept a live borrow and complete next protection without changing required registry members.
-- [ ] T012 Add optional metadata-reader scope companion beside internal `IPackageMetadataReader` in `src/Nuplane/Metadata/IScopedPackageMetadataReader.cs`; do not extend the reader interface.
-- [ ] T013 Add internal scoped-loader companion in `src/Nuplane.Loading/IScopedPackageLoader.cs` extending internal IPackageLoader via existing friend access; keep this enforcement helper in the Loading implementation, not Abstractions.
-- [ ] T014 Add optional scoped observer contract beside `INuplaneObserver` in `src/Nuplane.Abstractions/IScopedNuplaneObserver.cs`; it may reference only the neutral opaque scope handle.
-- [ ] T015 Add optional contributor scope companion beside `IDesiredStateContributor` in `src/Nuplane.Abstractions/IScopedDesiredStateContributor.cs`.
-- [ ] T016 Add optional scoped activation-gate contract beside IPackageActivationGate in `src/Nuplane.Loading.Abstractions/IScopedPackageActivationGate.cs`; include explicit path-independent participation, using neutral graph-lease views only.
-- [ ] T017 Add optional scoped load-mode advisor contract beside IPackageLoadModeAdvisor in `src/Nuplane.Loading.Abstractions/IScopedPackageLoadModeAdvisor.cs`; include explicit path-independent participation and use the neutral graph-lease view.
-- [ ] T018 Add non-positional graph-lease context data in `src/Nuplane.Loading.Abstractions/PackageActivationContext.cs`; preserve its positional constructor/deconstruction.
-- [ ] T019 Add non-positional graph-lease context data in `src/Nuplane.Loading.Abstractions/LoadModeAdvisorContext.cs`; preserve its positional constructor/deconstruction.
-- [ ] T020 Add dispatcher scope overload/companion beside core `IObserverEventDispatcher` in `src/Nuplane/Events/IScopedObserverEventDispatcher.cs`; keep callbacks awaited and existing dispatcher contract source-compatible.
+- [X] T012 Add optional metadata-reader scope companion beside internal `IPackageMetadataReader` in `src/Nuplane/Metadata/IScopedPackageMetadataReader.cs`; do not extend the reader interface.
+- [X] T013 Add internal scoped-loader companion in `src/Nuplane.Loading/IScopedPackageLoader.cs` extending internal IPackageLoader via existing friend access; keep this enforcement helper in the Loading implementation, not Abstractions.
+- [X] T014 Add optional scoped observer contract beside `INuplaneObserver` in the tightly coupled `src/Nuplane.Abstractions/IScopedNuplaneObserver.cs` and `src/Nuplane.Abstractions/IPackagePathIndependentNuplaneObserver.cs`; it may reference only the neutral opaque scope handle.
+- [X] T015 Add optional contributor scope companion beside `IDesiredStateContributor` in the tightly coupled `src/Nuplane.Abstractions/IScopedDesiredStateContributor.cs` and `src/Nuplane.Abstractions/IPackagePathIndependentDesiredStateContributor.cs`.
+- [X] T016 Add optional scoped activation-gate contract beside IPackageActivationGate in the tightly coupled `src/Nuplane.Loading.Abstractions/IScopedPackageActivationGate.cs` and `src/Nuplane.Loading.Abstractions/IPackagePathIndependentActivationGate.cs`; include explicit path-independent participation, using neutral graph-lease views only.
+- [X] T017 Add optional scoped load-mode advisor contract beside IPackageLoadModeAdvisor in the tightly coupled `src/Nuplane.Loading.Abstractions/IScopedPackageLoadModeAdvisor.cs` and `src/Nuplane.Loading.Abstractions/IPackagePathIndependentLoadModeAdvisor.cs`; include explicit path-independent participation and use the neutral graph-lease view.
+- [X] T018 Add non-positional graph-lease context data in `src/Nuplane.Loading.Abstractions/PackageActivationContext.cs`; preserve its positional constructor/deconstruction.
+- [X] T019 Add non-positional graph-lease context data in `src/Nuplane.Loading.Abstractions/LoadModeAdvisorContext.cs`; preserve its positional constructor/deconstruction.
+- [X] T020 Add dispatcher scope overload/companion beside core `IObserverEventDispatcher` in `src/Nuplane/Events/IScopedObserverEventDispatcher.cs`; keep callbacks awaited and existing dispatcher contract source-compatible.
 
 ### Physical authority and publication mechanisms
 
@@ -60,7 +60,7 @@ The Nuplane Constitution requires automated coverage for changed logic and bound
 - [ ] T032 Implement canonical state/protection digest calculation in `src/Nuplane/Store/Coordination/ProtectionDigest.cs`; define sort, normalization and case rules once.
 - [ ] T033 Implement pending enrollment/state-publication recovery in `src/Nuplane/Store/Coordination/RootMembershipRecovery.cs`; reconcile exact prior/next evidence at an unchanged slot, refresh observed file identity only after verified replacement, and refuse third/missing evidence.
 - [ ] T034 Implement atomic held-directory state-file replacement in `src/Nuplane/Store/State/AtomicFileWriter.cs`; retain existing `.tmp`/`.bak` recovery contract while validating the held parent and exact state slot with no-follow, handle-relative operations. Do not claim power-loss durability beyond tests.
-- [ ] T035 Implement counted root owner and borrow lifetime in `src/Nuplane/Store/Coordination/PackageStoreOperationOwner.cs`; close rejects new borrows and waits for existing borrows before releasing OS ownership.
+- [X] T035 Implement counted root owner and borrow lifetime in the tightly coupled `src/Nuplane/Store/Coordination/PackageStoreOperationState.cs` and `src/Nuplane/Store/Coordination/IPackageStoreOperationPathValidator.cs`; back the opaque owner without a type-name collision, reject new borrows on close, and drain borrows plus in-flight validation before releasing an already-held ownership primitive. Native acquisition is T028, not this counted-state unit.
 - [ ] T036 Implement immutable graph-use record publication and nonblocking stale-use inspection in `src/Nuplane/Store/Coordination/PackageGraphUseLeaseProvider.cs`; malformed, missing, mismatched or uncleanable use records deny deletion.
 - [ ] T037 Implement graph-use owner/view read-pin lifetime in `src/Nuplane/Store/Coordination/PackageGraphUseLeaseOwner.cs`; prevent new pins after close and release only after all pins and lifetime evidence end.
 - [ ] T038 Add only selected maintenance root-label option in `src/Nuplane/Store/Maintenance/PackageStoreMaintenanceOptions.cs`; property is `RootLabel`, default `default`, consumed by the configured root resolver. Do not add coordination/pruning-enable options.
@@ -73,7 +73,7 @@ The Nuplane Constitution requires automated coverage for changed logic and bound
 - [ ] T042 Add authority and configured-alias tests in `test/Nuplane.Store.Tests/PackageStoreAuthorityResolverTests.cs`; prove ancestor checks precede alias resolution and no payload read occurs on Unknown.
 - [ ] T043 Add multi-root ordering/unwind tests in `test/Nuplane.Store.Tests/PackageStorePathAdmissionTests.cs`; include duplicate aliases for one root, reverse acquisition completion, cancellation, and partial-acquire cleanup.
 - [ ] T044 Add serializer/ledger/digest/pending recovery tests in `test/Nuplane.Store.Tests/RootMembershipRegistryTests.cs`; cover legacy data, KnownEmpty, custom serializer dropping metadata, stable digest, crashes at each publication point, and prior/next/third evidence.
-- [ ] T045 Add root-before-state lock and concurrent borrow/close tests in `test/Nuplane.Store.Tests/PhysicalStoreLockTests.cs`.
+- [ ] T045 (**Partial:** counted-state tests accepted; native ordering pending.) Add root-before-state lock tests in `test/Nuplane.Store.Tests/PhysicalStoreLockTests.cs` and counted borrow/close tests in `test/Nuplane.Store.Tests/Coordination/PackageStoreOperationStateTests.cs`; native ordering remains separate from the deterministic state-unit proof.
 - [ ] T046 Add held-directory atomic-writer tests in `test/Nuplane.Store.Tests/AtomicFileWriterIdentityTests.cs`; preserve existing failure-atomic `.tmp`/`.bak` behavior and prove state-file replacement changes observed file identity without changing slot identity.
 - [ ] T047 Add graph lease/sentinel/read-pin tests in `test/Nuplane.Store.Tests/PackageGraphUseLeaseProviderTests.cs`; cover publish-before-read, nonblocking busy status, close/read overlap, stale/missing/mismatched records, and persistent active/LKG protection after stale-use reaping.
 - [ ] T048 Add package maintenance option validation/registration tests in `test/Nuplane.Runtime.Tests/PackageStoreMaintenanceOptionsTests.cs`; assert the sole new option is consumed and startup validation runs.
@@ -224,3 +224,7 @@ Before any recursive-delete implementation or executor tests, the real two-compo
 ## Implementation strategy
 
 Deliver reviewable increments: safe identity/admission and complete durable protection; explainable read-only preview; every runtime driver and actual lifetime proof; then native deletion; crash recovery and platform qualification. US1 is independently useful, but the feature is incomplete until explicit execution, recovery and supported-platform proof pass. Preserve failed evidence, check host load before diagnosing timing-shaped failures, and use only owned isolated stores.
+
+## Accepted contract/counting increment
+
+T006–T008, T010, T012–T020 and T035 are accepted for their bounded contract/counting scope; see [evidence](evidence/contracts-and-counted-scope.md). T045 remains partial: six deterministic counted-state tests pass, but native root-before-state locking is unimplemented and unproved. The optional interfaces alone enforce no runtime driver; those tasks remain open.

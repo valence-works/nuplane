@@ -5,5 +5,8 @@
     <PackageTags>$(NuplanePackageTags);abstractions;contracts;observers</PackageTags>
     <RootNamespace>Nuplane</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Nuplane" />
+  </ItemGroup>
 </Project>
 
