@@ -25,8 +25,8 @@ Directory SafeHandles own shared reference-counted ancestry frames containing an
 owned parent duplicate, exact component, child/parent identities and parent frame.
 Ascent rechecks the edge before returning a duplicate of the already-held parent.
 There is no native `..` traversal or remembered-path reopening. Directory handles omit
-delete sharing; actual Windows qualification must demonstrate the rename conflict
-and retained-parent lifetime. SafeHandle final release owns ancestry cleanup, so
+delete sharing; Windows qualification covers the rename conflict and retained-parent
+lifetime. SafeHandle final release owns ancestry cleanup, so
 operation leases survive caller wrapper disposal.
 
 Control files require regular single-link identity. Reads are bounded by the caller;
@@ -49,7 +49,7 @@ found and corrected a missing native query buffer-size argument, raw error paths
 relative-target flag handling, an unselected provider size limit, a test handle leak,
 and synchronous status checks. The first core build caught a named-argument casing
 error; it is preserved as a failed gate. Four bounded root review passes ended with
-no remaining static findings. Actual Windows execution is still required.
+no remaining static findings. The subsequent Windows execution result is below.
 
 Owned artifacts are under
 `/Users/sipke/.codex-workspaces/artifacts/modular-hosting-2500/prune-admission-authorization-audit/native-filesystem-gates/`.
@@ -78,7 +78,21 @@ Root verified those hashes against the restored candidate. The native helper has
 `d4dcd280ebaa6070b7964100c0278bdefce1354ed9f346d9f37aa1a81c9f49d8`.
 `actionlint .github/workflows/validate.yml` and `git diff --check` pass.
 
-## Hosted qualification still pending
+## Hosted qualification
+
+Exact product commit `71be1453386d9ec1b5682f6343cff9e4507006a0` passed
+[Validate 37919278107](https://github.com/valence-works/nuplane/actions/runs/37919278107):
+all five jobs succeeded. Windows x64/NTFS passed all **11** selected cases with
+**zero skips**. macOS arm64 passed all **7** Unix native cases without skips.
+Ubuntu full solution passed **1,393** cases with zero failures and **7 explicit
+Windows-native skips**; those mechanisms ran successfully on the Windows lane.
+The Linux package-asset check and existing three-OS state-persistence gates passed.
+
+Preserved hosted log SHA-256 values:
+
+- Windows native: `5f608b4e193d5257cfaafa95fab741cfecf6e6220d6661e25ffbca1c94506053`.
+- macOS native: `a4f3e29fa439dbd37ef70ab0c3d1e979b5d98923d621bf35c3a67693cf097c45`.
+- Ubuntu full build/test/pack: `49dbcd011d58c159da3268e8b0185a88b5a871b24a8aad7c57c9182decc62764`.
 
 The existing Windows state-persistence job additionally runs the seven native
 Windows cases, the unsupported-runtime check and three pure parser cases. The lane
@@ -86,6 +100,6 @@ asserts OS x64 and an NTFS temporary root, requires at least **11 passed tests w
 zero skips**, and fails on missing TRX counters. Local macOS skips do not count as
 Windows acceptance. Existing Darwin native and Linux/package-asset gates remain.
 
-T021/T022/T023 and platform acceptance remain open for the remaining operations and
-actual qualification. No runtime service registration, package deletion, recursive
+T021/T022/T023 and full platform acceptance remain open for the remaining operations,
+actual admission/lifetime/process and deletion qualification. No runtime service registration, package deletion, recursive
 walker, release or Foundation adoption is included in this increment.
