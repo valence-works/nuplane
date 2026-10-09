@@ -14,6 +14,7 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly IStoreStateSerializer _serializer;
     private readonly string? _stateFilePath;
+    private readonly string? _coordinatedStateFileLocator;
     private readonly ILogger<StoreRegistry> _logger;
     private readonly EffectiveStorePersistenceSettings? _effectiveSettings;
     private StoreStateRecord _currentState = StoreStateRecord.Empty();
@@ -29,6 +30,7 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _stateFilePath = stateFilePath;
+        _coordinatedStateFileLocator = CreateReplayLocator(stateFilePath);
         _logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<StoreRegistry>.Instance;
     }
 
@@ -46,6 +48,20 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _effectiveSettings = effectiveSettings;
         _stateFilePath = effectiveSettings.ResolvedStateFilePath;
+        _coordinatedStateFileLocator = effectiveSettings.CoordinatedStateFileLocator;
+    }
+
+    internal IStoreStateSerializer PayloadSerializer => _serializer;
+
+    internal string? CoordinatedStateFileLocator => _coordinatedStateFileLocator;
+
+    private static string? CreateReplayLocator(string? configuredPath)
+    {
+        if (string.IsNullOrWhiteSpace(configuredPath))
+            return null;
+        return Path.IsPathFullyQualified(configuredPath)
+            ? configuredPath
+            : Path.Combine(Directory.GetCurrentDirectory(), configuredPath);
     }
 
 

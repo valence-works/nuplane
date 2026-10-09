@@ -6,6 +6,9 @@ namespace Nuplane.Events;
 /// <summary>Dispatches awaited observers by borrowing the existing root owner instead of reacquiring its lock.</summary>
 public interface IScopedObserverEventDispatcher : IObserverEventDispatcher
 {
+    /// <summary>Validates every registered observer before an enrolled cycle invokes its first callback.</summary>
+    void ValidateCoordinatedParticipants();
+
     /// <summary>Publishes pending changes and drains every callback borrow before return.</summary>
     /// <param name="changeSet">The pending changes.</param>
     /// <param name="owner">The caller-owned live root operation.</param>

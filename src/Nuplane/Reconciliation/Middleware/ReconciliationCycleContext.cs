@@ -2,6 +2,7 @@ using Nuplane.Abstractions;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Sources;
+using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Reconciliation.Middleware;
 
@@ -13,6 +14,9 @@ internal sealed class ReconciliationCycleContext
 
     // Trigger metadata
     public ReconciliationTrigger? Trigger { get; set; }
+
+    /// <summary>Present only while this cycle retains its enrolled package-store owner.</summary>
+    public PackageStoreOperationOwner? PackageStoreOwner { get; set; }
 
     // Desired state
     public IReadOnlyList<PackageRequest> DesiredRequests { get; set; } = [];
@@ -41,4 +45,3 @@ internal sealed class ReconciliationCycleContext
     // Result
     public ReconciliationRunResult? Result { get; set; }
 }
-

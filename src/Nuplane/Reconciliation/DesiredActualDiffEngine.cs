@@ -7,7 +7,7 @@ namespace Nuplane.Reconciliation;
 /// Computes the difference between desired and actual package state using deterministic
 /// version ordering. Deduplicates desired packages by selecting the highest version.
 /// </summary>
-public sealed class DesiredActualDiffEngine : IDesiredActualDiffEngine
+public sealed class DesiredActualDiffEngine : IPackagePathIndependentDesiredActualDiffEngine
 {
     /// <inheritdoc />
     public PackageChangeSet Compute(

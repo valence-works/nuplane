@@ -9,6 +9,10 @@ internal sealed class TransactionExecutionMiddleware(
 {
     public async Task InvokeAsync(ReconciliationCycleContext context, Func<Task> next)
     {
+        if (context.PackageStoreOwner is { } owner)
+            EnrolledReconciliationTransitionGuard.RefuseNonemptyTransition(
+                context.ResolutionResult!, context.ChangeSet, owner);
+
         // Phase 2: Execute transactions for resolved packages
         var applyResult = await applyExecutor.ExecuteTransactionsAsync(
             context.ResolutionResult!,

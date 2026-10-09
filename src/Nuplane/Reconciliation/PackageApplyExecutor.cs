@@ -1,4 +1,5 @@
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Capabilities;
 using Nuplane.Feeds;
 using Nuplane.Feeds.Policy;
@@ -102,6 +103,10 @@ public sealed class PackageApplyExecutor(
                 var root = await ResolveRootAsync(request, cancellationToken);
                 resolvedRootsById[request.Id] = root;
                 rootRequests.Add(request);
+            }
+            catch (PackageStoreAdmissionException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -332,6 +337,10 @@ public sealed class PackageApplyExecutor(
                         contributedSoFar.Add(request);
                         changedRootSet = true;
                     }
+                    catch (PackageStoreAdmissionException)
+                    {
+                        throw;
+                    }
                     catch (Exception ex)
                     {
                         // The contributed root fails exactly as any unacquirable root does, feed
@@ -435,6 +444,10 @@ public sealed class PackageApplyExecutor(
                 }
 
                 return true;
+            }
+            catch (PackageStoreAdmissionException)
+            {
+                throw;
             }
             catch (Exception ex)
             {

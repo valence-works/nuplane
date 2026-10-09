@@ -37,6 +37,9 @@ internal sealed class DiffAndChangeEventMiddleware(
         changeSet = PreserveActivePackagesForFailedRoots(changeSet, context.ResolutionResult.FailedPackageIds, storeState);
         context.ChangeSet = changeSet;
 
+        if (context.PackageStoreOwner is { } owner)
+            EnrolledReconciliationTransitionGuard.RefuseNonemptyTransition(context.ResolutionResult, changeSet, owner);
+
         // Emit Changing before transactions begin (observer contract)
         if (changeSet.Added.Count + changeSet.Updated.Count + changeSet.Removed.Count > 0)
         {

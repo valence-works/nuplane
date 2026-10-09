@@ -3,6 +3,8 @@ using Nuplane.Abstractions;
 using Nuplane.Events;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Store.State;
+using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Registration;
 
 namespace Nuplane.Hosting;
 
@@ -40,6 +42,8 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
     private readonly StartupRecoveryState _startupRecoveryState;
     private readonly IReadOnlyList<ICycleFailureContributor> _cycleFailureContributors;
     private readonly IStoreLock? _storeLock;
+    private readonly IPackageStoreAdmission _installPathAdmission;
+    private readonly IPackageStoreAdmission? _configuredRootAdmission;
     private readonly TimeSpan _storeLockTimeout;
 
     /// <summary>
@@ -73,7 +77,8 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
             startupRecoveryState,
             cycleFailureContributors,
             reconciliationOptions,
-            storeLock: null)
+            storeLock: null,
+            packageStoreAdmission: null)
     {
     }
 
@@ -93,13 +98,19 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
     /// directly and so names no resolved state file. Recovery then runs exactly as it did before the
     /// store lock existed.
     /// </param>
+    /// <param name="packageStoreAdmission">
+    /// Configured-root membership admission acquired before state reads by dependency injection.
+    /// When omitted, the public manual composition classifies exact active install paths after its
+    /// selected registry supplies descriptive state.
+    /// </param>
     internal LastKnownGoodStartupRecoveryService(
         IStoreRegistry storeRegistry,
         IObserverEventDispatcher observerEventDispatcher,
         StartupRecoveryState startupRecoveryState,
         IEnumerable<ICycleFailureContributor>? cycleFailureContributors,
         IOptions<ReconciliationOptions>? reconciliationOptions,
-        IStoreLock? storeLock)
+        IStoreLock? storeLock,
+        IPackageStoreAdmission? packageStoreAdmission = null)
     {
         _storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
         _observerEventDispatcher = observerEventDispatcher ?? throw new ArgumentNullException(nameof(observerEventDispatcher));
@@ -107,6 +118,9 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
         _cycleFailureContributors = cycleFailureContributors?.ToArray() ?? [];
         _storeLockTimeout = (reconciliationOptions?.Value ?? new ReconciliationOptions()).StartupRecoveryStoreLockTimeout;
         _storeLock = storeLock;
+        _configuredRootAdmission = packageStoreAdmission;
+        _installPathAdmission = packageStoreAdmission ??
+            PackageStoreRuntimeAdmission.CreateManualInstallPathClassifier();
     }
 
     public async Task<LastKnownGoodStartupRecoveryResult> TryRecoverAsync(
@@ -115,6 +129,21 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
+        if (_configuredRootAdmission is null)
+            return await TryRecoverAfterRootAdmissionAsync(correlationId, cancellationToken).ConfigureAwait(false);
+
+        await using var rootAdmission = await _configuredRootAdmission.AcquireConfiguredRootOperationAsync(
+            PackageStoreAdmissionKind.StartupRecovery, cancellationToken).ConfigureAwait(false);
+        if (rootAdmission.Status == PackageStoreAdmissionStatus.Enrolled)
+            throw RefuseEnrolled(rootAdmission.Root);
+
+        return await TryRecoverAfterRootAdmissionAsync(correlationId, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<LastKnownGoodStartupRecoveryResult> TryRecoverAfterRootAdmissionAsync(
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
         // The store lock spans the whole read-then-act cycle below, for the same reason it spans a
         // reconciliation cycle: everything between the read and the republish is part of it. Unlike a
         // reconciliation cycle, recovery waits for a store already owned elsewhere — see
@@ -133,6 +162,21 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
         }
 
         var state = await _storeRegistry.GetStateAsync(cancellationToken);
+        var activeDescriptors = state.ActivePackageDescriptorsByIdNormalized.Values
+            .Where(descriptor => state.ActiveVersionById.ContainsKey(descriptor.PackageId))
+            .ToArray();
+
+        // Manual compositions have no configured root to classify. Their selected registry is
+        // allowed to provide descriptive state, after which every exact active descriptor path is
+        // checked through the ledger-only metadata path before Directory.Exists or an observer.
+        await using var pathAdmission = await _installPathAdmission.AcquireForInstallPathsAsync(
+            activeDescriptors.Select(static descriptor => descriptor.InstallPath).ToArray(),
+            PackageStoreAdmissionKind.StartupRecovery, cancellationToken).ConfigureAwait(false);
+        var enrolledPath = pathAdmission.Entries.FirstOrDefault(static entry =>
+            entry.Status == PackageStoreAdmissionStatus.Enrolled);
+        if (enrolledPath is not null)
+            throw RefuseEnrolled(enrolledPath.Root);
+
         var validation = Validate(state);
         if (!validation.Succeeded)
         {
@@ -140,7 +184,7 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
             return validation;
         }
 
-        var recoveredPackages = state.ActivePackageDescriptorsByIdNormalized.Values
+        var recoveredPackages = activeDescriptors
             .Where(descriptor => state.ActiveVersionById.TryGetValue(descriptor.PackageId, out var activeVersion)
                 && string.Equals(activeVersion, descriptor.Version, StringComparison.OrdinalIgnoreCase))
             .OrderBy(descriptor => descriptor.PackageId, StringComparer.OrdinalIgnoreCase)
@@ -168,6 +212,11 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
 
         return new(true, recoveredPackages, [], "last-known-good-recovered");
     }
+
+    private static PackageStoreAdmissionException RefuseEnrolled(PhysicalRootIdentity? root)
+        => new(PackageStoreAdmissionReason.UnsupportedParticipant,
+            "Startup LKG recovery has no enrolled graph-lease path and is refused before target validation or observers.",
+            root);
 
     /// <summary>
     /// Tries once, without waiting, to take the store lock; if that finds it held elsewhere, polls

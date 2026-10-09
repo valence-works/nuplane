@@ -394,6 +394,63 @@ jobs:
       - name: Run lock-held state refresh and snapshot tests
         run: dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj --configuration Release --filter "FullyQualifiedName~DesiredSourceSnapshotCacheTests.SaveAsync_WhenRegistryPersistenceFails|FullyQualifiedName~ReconciliationServiceStoreLockTests.TriggerAsync_WhenAnotherRegistryUpdatesState_RefreshesStateAndSnapshotBeforeSourceFallback|FullyQualifiedName~LastKnownGoodStartupRecoveryServiceStoreLockTests.TryRecoverAsync_WhenAnotherRegistryUpdatesLoadedState_UsesRefreshedLastKnownGoodVersion"
 
+      - name: Qualify coordinated runtime admission and public startup compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~CoordinatedReconciliationAdmissionTests|FullyQualifiedName~StartupCycleTests" \
+            --logger "trx;LogFileName=coordinated-runtime.trx" \
+            --results-directory "$RUNNER_TEMP/coordinated-runtime"
+          python3 - "$RUNNER_TEMP/coordinated-runtime/coordinated-runtime.trx" <<'PYCODE'
+          import collections
+          import sys
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          required = [
+              'Nuplane.Runtime.Tests.Hosting.StartupCycleTests.LastKnownGoodRecovery_PublicManualConstructor_RecoversValidUnenrolledState',
+              'Nuplane.Runtime.Tests.Hosting.StartupCycleTests.LastKnownGoodRecovery_WhenActiveGraphVersionMismatches_ReturnsFailure',
+              'Nuplane.Runtime.Tests.Hosting.StartupCycleTests.LastKnownGoodRecovery_WhenRecoveredLoadFails_ReturnsFailure',
+              'Nuplane.Runtime.Tests.Hosting.StartupCycleTests.LastKnownGoodRecovery_WhenStaleGraphReferencesMissingPackage_IgnoresStaleGraph',
+              'Nuplane.Runtime.Tests.Hosting.StartupCycleTests.NoStartupCycle_WhenAutomaticReconciliationDisabled',
+              'Nuplane.Runtime.Tests.Hosting.StartupCycleTests.PollEvery_RegistersAutomaticReconciliationOptionsAndHostedServices',
+              'Nuplane.Runtime.Tests.Hosting.StartupCycleTests.StartupCycleFailurePolicyFailHost_WhenStartupCompletesDegraded_ThrowsStartupException',
+              'Nuplane.Runtime.Tests.Hosting.StartupCycleTests.StartupCycleFailurePolicyStartDegraded_WhenStartupCompletesDegraded_DoesNotThrow',
+              'Nuplane.Runtime.Tests.Hosting.StartupCycleTests.StartupCycleFailurePolicyUnknownValue_WhenStartupCompletesDegraded_ThrowsNotSupported',
+              'Nuplane.Runtime.Tests.Hosting.StartupCycleTests.StartupCycleFailurePolicyUseLastKnownGood_WhenStartupCompletesDegraded_Throws',
+              'Nuplane.Runtime.Tests.Hosting.StartupCycleTests.StartupCycleFailurePolicyUseLastKnownGood_WhenValidActiveLkgExists_PublishesRecoveredPackages',
+              'Nuplane.Runtime.Tests.Hosting.StartupCycleTests.StartupCycleFailure_IsNonFatal_HostContinuesToPeriodicLoop',
+              'Nuplane.Runtime.Tests.Hosting.StartupCycleTests.StartupCycle_FiresBeforePeriodicTick',
+              'Nuplane.Runtime.Tests.Hosting.StartupCycleTests.StopAsync_Completes_WhenStartupDispatchObservesCancellation',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.AddNuplaneCustomRegistry_PreservesUnenrolledExistingAndMissingRootBehavior(missingRoot: False)',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.AddNuplaneCustomRegistry_PreservesUnenrolledExistingAndMissingRootBehavior(missingRoot: True)',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.AddNuplaneCustomRegistry_RefusesCompleteRootBeforeSelectedStatePayloadOrRegistryRead',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.AddNuplaneUnsupportedSerializer_PreservesUnenrolledExistingAndMissingRootBehavior(missingRoot: False)',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.AddNuplaneUnsupportedSerializer_PreservesUnenrolledExistingAndMissingRootBehavior(missingRoot: True)',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.AddNuplaneUnsupportedSerializer_RefusesCompleteRootBeforeSelectedStatePayloadRead',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.EnabledManifestInsideEnrolledInstall_IsRefusedBeforeManifestRead',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.EnrolledNonemptyTransition_IsRefusedBeforeChangingObserversOrTransactionArtifacts',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.ManualCustomStoreComposition_PreservesOnlyPositivelyUnenrolledRootBehavior',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.PublicManualLkg_RefusesProtectedInstallPathBeforeValidationOrObservers',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.ScopedResolverReturningInstall_IsRefusedBeforeBuiltInDependencyExpansion',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.ThirdUnlistedStateSlot_IsRefusedBeforeSourceCallback',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.TwoAddNuplaneProviders_SerializeScopedSourceReadsAndPublishFailureAndStateUnderTheirMembers',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.UnknownPathConsumingParticipant_IsRefusedBeforeSourceCallback(participant: DiffEngine)',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.UnknownPathConsumingParticipant_IsRefusedBeforeSourceCallback(participant: DryRunPlanner)',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.UnknownPathConsumingParticipant_IsRefusedBeforeSourceCallback(participant: DryRunPlannerWithUnknownNestedDiff)',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.UnknownPathConsumingParticipant_IsRefusedBeforeSourceCallback(participant: LockFileCoordinator)',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.UnknownPathConsumingParticipant_IsRefusedBeforeSourceCallback(participant: RetryPolicy)',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.UnscopedCustomSource_IsRefusedBeforeAnyCallback',
+          ]
+          actual = collections.Counter(row.attrib['testName'] for row in rows)
+          if actual != collections.Counter(required):
+              raise SystemExit('Coordinated runtime result names or multiplicity differ from the 33 required cases.')
+          if any(row.attrib.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('Every coordinated runtime/startup case must pass without skips.')
+          print('Qualified all 33 coordinated runtime/startup cases with no skips.')
+          PYCODE
+
       - name: Run native Unix store adapter and identity tests
         if: matrix.os != 'windows-latest'
         shell: bash

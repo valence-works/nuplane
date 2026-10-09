@@ -6,7 +6,7 @@ namespace Nuplane.Store.Cleanup;
 /// Executes automatic package cleanup by evaluating each version against the configured
 /// cleanup policy, grouping by package and processing in order from newest to oldest.
 /// </summary>
-public sealed class PackageCleanupService(CleanupPolicyEvaluator evaluator) : IPackageCleanupService
+public sealed class PackageCleanupService(CleanupPolicyEvaluator evaluator) : IPackagePathIndependentPackageCleanupService
 {
     private readonly CleanupPolicyEvaluator _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
 

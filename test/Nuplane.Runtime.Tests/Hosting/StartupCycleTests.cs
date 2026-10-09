@@ -201,7 +201,7 @@ public sealed class StartupCycleTests
         var (store, packageInstallPath) = await CreateValidLastKnownGoodStoreAsync(installRoot);
         var dispatcher = new RecordingObserverDispatcher();
         var startupRecoveryState = new StartupRecoveryState();
-        var recovery = new LastKnownGoodStartupRecoveryService(store, dispatcher, startupRecoveryState);
+        var recovery = CreateUnenrolledRecovery(store, dispatcher, startupRecoveryState);
         var (queueDispatcher, scheduler, startup) = CreateHostedServices(service, options, recovery);
 
         await queueDispatcher.StartAsync(CancellationToken.None);
@@ -237,7 +237,7 @@ public sealed class StartupCycleTests
             }
         });
         var startupRecoveryState = new StartupRecoveryState();
-        var recovery = new LastKnownGoodStartupRecoveryService(store, dispatcher, startupRecoveryState, [loadFailures]);
+        var recovery = CreateUnenrolledRecovery(store, dispatcher, startupRecoveryState, [loadFailures]);
 
         var result = await recovery.TryRecoverAsync("corr-recovery", CancellationToken.None);
 
@@ -245,6 +245,20 @@ public sealed class StartupCycleTests
         Assert.Equal("last-known-good-load-failed", result.Reason);
         Assert.Equal(["pkg-a"], result.FailedPackageIds);
         Assert.Contains("startup-lkg-recovery-failed:last-known-good-load-failed", startupRecoveryState.GetContribution().DegradedReasons);
+    }
+
+    [Fact]
+    public async Task LastKnownGoodRecovery_PublicManualConstructor_RecoversValidUnenrolledState()
+    {
+        using var installRoot = new TempDirectory();
+        var (store, packageInstallPath) = await CreateValidLastKnownGoodStoreAsync(installRoot);
+        var dispatcher = new RecordingObserverDispatcher();
+        var recovery = new LastKnownGoodStartupRecoveryService(store, dispatcher, new StartupRecoveryState());
+
+        var result = await recovery.TryRecoverAsync("corr-manual-lkg", CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(packageInstallPath, Assert.Single(dispatcher.ReconciledPackages).InstallPath);
     }
 
     [Fact]
@@ -269,7 +283,7 @@ public sealed class StartupCycleTests
             {
                 [staleGraph.GraphId] = staleGraph
             });
-        var recovery = new LastKnownGoodStartupRecoveryService(store, new RecordingObserverDispatcher(), new StartupRecoveryState());
+        var recovery = CreateUnenrolledRecovery(store, new RecordingObserverDispatcher(), new StartupRecoveryState());
 
         var result = await recovery.TryRecoverAsync("corr-recovery", CancellationToken.None);
 
@@ -298,7 +312,7 @@ public sealed class StartupCycleTests
             {
                 [activeGraph.GraphId] = activeGraph
             });
-        var recovery = new LastKnownGoodStartupRecoveryService(store, new RecordingObserverDispatcher(), new StartupRecoveryState());
+        var recovery = CreateUnenrolledRecovery(store, new RecordingObserverDispatcher(), new StartupRecoveryState());
 
         var result = await recovery.TryRecoverAsync("corr-recovery", CancellationToken.None);
 
@@ -425,6 +439,14 @@ public sealed class StartupCycleTests
 
         return (store, packageInstallPath);
     }
+
+    private static LastKnownGoodStartupRecoveryService CreateUnenrolledRecovery(
+        StoreRegistry store,
+        IObserverEventDispatcher dispatcher,
+        StartupRecoveryState recoveryState,
+        IEnumerable<ICycleFailureContributor>? cycleFailureContributors = null)
+        => new(store, dispatcher, recoveryState, cycleFailureContributors,
+            new OptionsWrapper<ReconciliationOptions>(new()));
 
     private static async Task StopHostedServicesAsync(ReconciliationHostedService scheduler, ReconciliationTriggerDispatcherHostedService dispatcher)
     {

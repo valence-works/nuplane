@@ -2,6 +2,7 @@ using Nuplane.Abstractions;
 using Nuplane.Observability;
 using Nuplane.Sources;
 using Nuplane.Store.State;
+using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Reconciliation.Middleware;
 
@@ -74,6 +75,10 @@ internal sealed class DesiredStateReadMiddleware(
             {
                 throw;
             }
+            catch (PackageStoreAdmissionException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 usedFallback = true;
@@ -96,4 +101,3 @@ internal sealed class DesiredStateReadMiddleware(
             AllSourcesFresh: freshReads == orderedSources.Length), sourceOutageCount);
     }
 }
-

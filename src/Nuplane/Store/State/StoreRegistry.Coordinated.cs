@@ -20,7 +20,7 @@ public sealed partial class StoreRegistry
         {
             var context = PackageStoreOperationAccess.GetLockedMemberLocations(borrow);
             context.RequirePayloadSerializer(_serializer);
-            var state = await context.ReadConfiguredStateAsync(_stateFilePath!, cancellationToken).ConfigureAwait(false);
+            var state = await context.ReadConfiguredStateAsync(_coordinatedStateFileLocator!, cancellationToken).ConfigureAwait(false);
             _currentState = CopyState(state);
             _loaded = true;
             return CopyState(state);
@@ -113,7 +113,7 @@ public sealed partial class StoreRegistry
             var context = PackageStoreOperationAccess.GetLockedMemberLocations(borrow);
             context.RequirePayloadSerializer(_serializer);
             var nextState = await context.MutateConfiguredStateAsync(
-                _stateFilePath!, createNextState, cancellationToken).ConfigureAwait(false);
+                _coordinatedStateFileLocator!, createNextState, cancellationToken).ConfigureAwait(false);
             _currentState = CopyState(nextState);
             _loaded = true;
         }
@@ -130,7 +130,7 @@ public sealed partial class StoreRegistry
 
     private void RequireCoordinatedPersistence()
     {
-        if (string.IsNullOrWhiteSpace(_stateFilePath))
+        if (string.IsNullOrWhiteSpace(_stateFilePath) || string.IsNullOrWhiteSpace(_coordinatedStateFileLocator))
             throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
                 "Coordinated state access requires one configured on-disk state slot.");
         if (_serializer is not IPackageProtectionStatePayloadSerializer)
@@ -138,7 +138,7 @@ public sealed partial class StoreRegistry
                 "Coordinated state access requires a caller-stream protection serializer.");
     }
 
-    private static StoreStateRecord ProtectRegistryMutation(StoreStateRecord state)
+    internal static StoreStateRecord ProtectRegistryMutation(StoreStateRecord state)
     {
         var prior = state.ProtectionRecord
             ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,

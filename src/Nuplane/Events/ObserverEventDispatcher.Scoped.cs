@@ -60,6 +60,8 @@ public sealed partial class ObserverEventDispatcher
         }
     }
 
+    void IScopedObserverEventDispatcher.ValidateCoordinatedParticipants() => ValidateCoordinatedParticipants();
+
     private async Task DispatchScopedAsync(PackageStoreOperationOwner owner, string correlationId, string callbackName,
         Func<IScopedNuplaneObserver, PackageStoreOperationBorrow, Task> scopedCallback,
         Func<INuplaneObserver, Task> independentCallback, CancellationToken cancellationToken)

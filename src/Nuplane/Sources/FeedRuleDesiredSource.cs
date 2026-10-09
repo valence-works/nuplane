@@ -21,7 +21,7 @@ namespace Nuplane.Sources;
 /// </list>
 /// </para>
 /// </summary>
-public sealed class FeedRuleDesiredSource : IDesiredPackageSource
+public sealed class FeedRuleDesiredSource : IPackagePathIndependentDesiredPackageSource
 {
     private readonly string _feedName;
     private readonly IReadOnlyList<string> _includePatterns;

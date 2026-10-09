@@ -128,6 +128,8 @@ Each driver integration is separate from the mechanism and from other drivers as
 
 ### Reconciliation and package path drivers
 
+The [coordinated runtime increment](evidence/coordinated-runtime-admission.md) supplies partial T068–T070/T079/T089/T100–T101 routing and compatibility proof. Root/independent review and restored-source local Runtime/Store/all-TFM gates pass. Default native drivers, exact historical/transaction integration and graph lifetimes remain open; this is not the mandatory production-driver/overlapping-generation before-read gate and does not authorize recursive deletion. Accepted checklist scope remains 30/128.
+
 - [ ] T068 [US3] Integrate root admission before state locking/refresh in `src/Nuplane/Reconciliation/ReconciliationService.cs`; carry the exact owner through the awaited pipeline.
 - [ ] T069 [US3] Add scoped borrow propagation to `src/Nuplane/Reconciliation/Middleware/ReconciliationCycleContext.cs`; nested calls borrow the existing owner without reacquiring root ownership.
 - [ ] T070 [US3] Add scoped package resolution in `src/Nuplane/Reconciliation/Middleware/PackageResolutionMiddleware.cs`; legacy-only custom resolvers refuse enrolled roots before invocation.
