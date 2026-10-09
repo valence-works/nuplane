@@ -14,6 +14,52 @@ namespace Nuplane.Store.Tests.Coordination;
 public sealed class RecoverableGraphSnapshotFactoryTests
 {
     [Fact]
+    public void CreateActiveCandidate_PreservesCompleteSelectionWithoutRecoveryEntitlement()
+    {
+        var fixture = new Fixture();
+        var candidate = RecoverableGraphSnapshotFactory.CreateActiveCandidate(
+            fixture.Graph, fixture.Requests, fixture.Installs);
+
+        Assert.Equal(ProtectedGraphDisposition.Active, candidate.Disposition);
+        Assert.Null(candidate.RecoverySelectionEvidence);
+        Assert.Equal(fixture.Graph.GraphId, candidate.GraphId);
+        Assert.Equal(fixture.Graph.GenerationId, candidate.GenerationId);
+        Assert.Equal(fixture.Requests, candidate.RequestedRoots.Select(static selection => selection.Request));
+        Assert.Equal(fixture.Installs.OrderBy(static install => install.PackageId),
+            candidate.Nodes.Select(static node => node.Install).OrderBy(static install => install.PackageId));
+        Assert.Equal(3, candidate.Edges.Count);
+        Assert.Equal(candidate.Edges[0], candidate.Edges[1]);
+        Assert.Equal("net8.0", candidate.Edges[2].TargetFramework);
+        Assert.True(candidate.Edges[2].IsOptional);
+        Assert.Equal(fixture.Root, Assert.Single(candidate.Roots));
+
+        fixture.Requests.Clear();
+        fixture.Installs.Clear();
+        Assert.Equal(3, candidate.RequestedRoots.Count);
+        Assert.Equal(3, candidate.Nodes.Count);
+    }
+
+    [Fact]
+    public void CreateActiveCandidate_RejectsIncompleteOrMismatchedGraphSelection()
+    {
+        var fixture = new Fixture();
+        Assert.Throws<ArgumentException>(() => RecoverableGraphSnapshotFactory.CreateActiveCandidate(
+            fixture.Graph, fixture.Requests, fixture.Installs.Take(2).ToArray()));
+        Assert.Throws<ArgumentException>(() => RecoverableGraphSnapshotFactory.CreateActiveCandidate(
+            fixture.Graph, fixture.Requests.Take(1).ToArray(), fixture.Installs));
+        Assert.Throws<ArgumentException>(() => RecoverableGraphSnapshotFactory.CreateActiveCandidate(
+            fixture.Graph with { GraphId = "different-graph" }, fixture.Requests, fixture.Installs));
+        var disconnected = Fixture.MakeGraph(fixture.Roots, fixture.Nodes, [], fixture.Decisions);
+        Assert.Throws<ArgumentException>(() => RecoverableGraphSnapshotFactory.CreateActiveCandidate(
+            disconnected, fixture.Requests, fixture.Installs));
+        var changedRoots = fixture.Roots.Select(root => root with { InstallPath = root.InstallPath + "/different" }).ToArray();
+        var differentRootPaths = Fixture.MakeGraph(changedRoots, fixture.Nodes, fixture.Edges, fixture.Decisions);
+        Assert.Equal(fixture.Graph.GraphId, differentRootPaths.GraphId);
+        Assert.Throws<ArgumentException>(() => RecoverableGraphSnapshotFactory.CreateActiveCandidate(
+            differentRootPaths, fixture.Requests, fixture.Installs));
+    }
+
+    [Fact]
     public void CreateCandidate_PreservesCompleteGraphRequestsInstallSetAndEdgeMultiplicity()
     {
         var fixture = new Fixture();

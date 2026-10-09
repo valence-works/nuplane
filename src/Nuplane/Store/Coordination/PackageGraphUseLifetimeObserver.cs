@@ -26,9 +26,9 @@ internal sealed class PackageGraphUseLifetimeObserver : IPackageGraphUseLifetime
     private bool _stopping;
     private Task? _disposeTask;
 
-    internal PackageGraphUseLifetimeObserver()
+    internal PackageGraphUseLifetimeObserver(TimeProvider? timeProvider = null)
     {
-        _loop = ObserveAsync(_stop.Token);
+        _loop = ObserveAsync(timeProvider ?? TimeProvider.System, _stop.Token);
     }
 
     public bool TryRegisterCollectible(PackageGraphUseLeaseOwner owner, WeakReference<object> lifetime)
@@ -46,23 +46,44 @@ internal sealed class PackageGraphUseLifetimeObserver : IPackageGraphUseLifetime
 
     public ValueTask DisposeAsync()
     {
+        TaskCompletionSource<bool> completion;
         lock (_gate)
         {
             if (_disposeTask is not null)
                 return new ValueTask(_disposeTask);
 
             _stopping = true;
-            _stop.Cancel();
-            _disposeTask = DrainLoopAsync();
-            return new ValueTask(_disposeTask);
+            completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _disposeTask = completion.Task;
         }
+
+        Exception? cancellationFailure = null;
+        try
+        {
+            _stop.Cancel();
+        }
+        catch (Exception exception)
+        {
+            cancellationFailure = exception;
+        }
+
+        _ = DrainLoopAsync(completion, cancellationFailure);
+        return new ValueTask(completion.Task);
     }
 
-    private async Task DrainLoopAsync()
+    private async Task DrainLoopAsync(TaskCompletionSource<bool> completion, Exception? cancellationFailure)
     {
         try
         {
             await _loop.ConfigureAwait(false);
+            if (cancellationFailure is null)
+                completion.TrySetResult(true);
+            else
+                completion.TrySetException(cancellationFailure);
+        }
+        catch (Exception exception)
+        {
+            completion.TrySetException(exception);
         }
         finally
         {
@@ -70,32 +91,107 @@ internal sealed class PackageGraphUseLifetimeObserver : IPackageGraphUseLifetime
         }
     }
 
-    private static async Task ObserveAsync(CancellationToken cancellationToken)
+    private static async Task ObserveAsync(TimeProvider timeProvider, CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(PollInterval);
+        var releases = new List<Task>();
+        var stopRequested = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
         try
         {
-            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            while (!cancellationToken.IsCancellationRequested)
             {
-                while (!cancellationToken.IsCancellationRequested &&
-                       PackageGraphUseLifetimeRetention.TryTakeDeadCollectible(out var owner))
+                var observation = PackageGraphUseLifetimeRetention.ObserveCollectibleWork();
+                RemoveCompletedReleases(releases);
+                if (!observation.HasPending)
                 {
-                    try
+                    if (releases.Count == 0)
                     {
-                        await owner.DisposeTransferredAsync().ConfigureAwait(false);
+                        await Task.WhenAny(observation.Changed, stopRequested).ConfigureAwait(false);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        continue;
                     }
-                    catch (Exception exception)
+
+                    var releaseCompleted = Task.WhenAny(releases);
+                    await Task.WhenAny(observation.Changed, releaseCompleted, stopRequested)
+                        .ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    continue;
+                }
+
+                using var timer = new PeriodicTimer(PollInterval, timeProvider);
+                Task<bool>? nextTick = null;
+                try
+                {
+                    while (!cancellationToken.IsCancellationRequested)
                     {
-                        // The registry keeps the owner and its immutable in-memory use state. A
-                        // release that threw has an unknown native outcome and is never retried here.
-                        PackageGraphUseLifetimeRetention.ReleaseFailed(owner, exception);
+                        observation = PackageGraphUseLifetimeRetention.ObserveCollectibleWork();
+                        if (!observation.HasPending)
+                            break;
+
+                        nextTick ??= timer.WaitForNextTickAsync(cancellationToken).AsTask();
+                        var releaseCompleted = releases.Count == 0 ? null : Task.WhenAny(releases);
+                        var changed = observation.Changed;
+                        var completed = releaseCompleted is null
+                            ? await Task.WhenAny(nextTick, changed, stopRequested).ConfigureAwait(false)
+                            : await Task.WhenAny(nextTick, changed, releaseCompleted, stopRequested).ConfigureAwait(false);
+
+                        if (completed == stopRequested)
+                            cancellationToken.ThrowIfCancellationRequested();
+
+                        if (completed == changed)
+                            break;
+
+                        if (completed == releaseCompleted)
+                        {
+                            RemoveCompletedReleases(releases);
+                            continue;
+                        }
+
+                        var ticked = await nextTick.ConfigureAwait(false);
+                        nextTick = null;
+                        if (!ticked)
+                            break;
+
+                        RemoveCompletedReleases(releases);
+                        while (!cancellationToken.IsCancellationRequested &&
+                               PackageGraphUseLifetimeRetention.TryTakeDeadCollectible(out var owner, out var hasPending))
+                        {
+                            releases.Add(ReleaseClaimedOwnerAsync(owner));
+                            if (!hasPending)
+                                break;
+                        }
                     }
+                }
+                finally
+                {
+                    timer.Dispose();
+                    if (nextTick is not null)
+                        await nextTick.ConfigureAwait(false);
                 }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Disposal drains the one in-flight release and prevents later background work.
+            // Disposal drains claimed releases and prevents later background work.
+        }
+        finally
+        {
+            await Task.WhenAll(releases).ConfigureAwait(false);
+        }
+    }
+
+    private static void RemoveCompletedReleases(List<Task> releases)
+        => releases.RemoveAll(static release => release.IsCompleted);
+
+    private static async Task ReleaseClaimedOwnerAsync(PackageGraphUseLeaseOwner owner)
+    {
+        try
+        {
+            await owner.DisposeTransferredAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            // The registry keeps uncertain ownership evidence and the failed attempt is never retried.
+            PackageGraphUseLifetimeRetention.ReleaseFailed(owner, exception);
         }
     }
 }
@@ -107,18 +203,25 @@ internal static class PackageGraphUseLifetimeRetention
     private static readonly Dictionary<PackageGraphUseLeaseOwner, Entry> Transferred =
         new(ReferenceEqualityComparer.Instance);
     private static readonly List<PackageGraphUseLeaseOwnerControl> UntransferredReleaseFailures = [];
+    private static int PendingCollectibleCount;
+    private static TaskCompletionSource<bool> CollectibleWorkChanged = NewSignal();
 
     internal static bool TryRetainCollectible(
         PackageGraphUseLeaseOwner owner,
         WeakReference<object> lifetime)
     {
+        TaskCompletionSource<bool>? changed = null;
         lock (Gate)
         {
             if (Transferred.ContainsKey(owner))
                 return false;
             Transferred.Add(owner, new Entry(lifetime, isCollectible: true));
-            return true;
+            if (PendingCollectibleCount++ == 0)
+                changed = RotateWorkSignalUnderLock();
         }
+
+        changed?.TrySetResult(true);
+        return true;
     }
 
     internal static bool RetainNonCollectible(PackageGraphUseLeaseOwner owner)
@@ -132,8 +235,17 @@ internal static class PackageGraphUseLifetimeRetention
         }
     }
 
-    internal static bool TryTakeDeadCollectible(out PackageGraphUseLeaseOwner owner)
+    internal static CollectibleWorkObservation ObserveCollectibleWork()
     {
+        lock (Gate)
+            return new CollectibleWorkObservation(PendingCollectibleCount > 0, CollectibleWorkChanged.Task);
+    }
+
+    internal static bool TryTakeDeadCollectible(out PackageGraphUseLeaseOwner owner, out bool hasPending)
+    {
+        owner = null!;
+        hasPending = false;
+        TaskCompletionSource<bool>? changed = null;
         lock (Gate)
         {
             foreach (var pair in Transferred)
@@ -145,14 +257,23 @@ internal static class PackageGraphUseLifetimeRetention
                     continue;
                 }
 
+                if (PendingCollectibleCount <= 0)
+                    throw new InvalidOperationException("The collectible graph-use pending count is inconsistent.");
                 entry.ReleaseAttempted = true;
+                PendingCollectibleCount--;
+                if (PendingCollectibleCount == 0)
+                    changed = RotateWorkSignalUnderLock();
                 owner = pair.Key;
-                return true;
+                hasPending = PendingCollectibleCount > 0;
+                break;
             }
+
+            if (owner is null)
+                hasPending = PendingCollectibleCount > 0;
         }
 
-        owner = null!;
-        return false;
+        changed?.TrySetResult(true);
+        return owner is not null;
     }
 
     internal static void ReleaseSucceeded(PackageGraphUseLeaseOwner owner)
@@ -198,4 +319,16 @@ internal static class PackageGraphUseLifetimeRetention
         internal bool ReleaseAttempted { get; set; }
         internal Exception? ReleaseFailure { get; set; }
     }
+
+    private static TaskCompletionSource<bool> RotateWorkSignalUnderLock()
+    {
+        var changed = CollectibleWorkChanged;
+        CollectibleWorkChanged = NewSignal();
+        return changed;
+    }
+
+    private static TaskCompletionSource<bool> NewSignal()
+        => new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    internal readonly record struct CollectibleWorkObservation(bool HasPending, Task Changed);
 }

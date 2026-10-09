@@ -71,7 +71,13 @@ the seven-case native gate after the original `2be238f` run failed. Its final
 adapter/native source SHA-256 pins are respectively
 `2ce271be10696ef00d6e85f7d288cb5172c3f689215138f24ff3bb612fed3891`
 and `850be17ae21b7cf417be5b051f41f0933e02f5f84106eba082b2329112a9fa2b`.
-Hosted qualification of the combined correction/codec head remains pending;
-earlier successful heads do not qualify these bytes. Checklist acceptance stays
+Exact head `22cdc9177673e904174c1a97dcf5db857b895bfa` passed all six jobs in
+[Validate 37998468984](https://github.com/valence-works/nuplane/actions/runs/37998468984),
+including Windows. The full Ubuntu solution passed 1,909 cases with zero failures
+and 38 explicit platform skips. All four native lanes passed their required
+root-access, enumeration, metadata and lifetime cases without skips; all twelve
+platform/framework codec executions passed 123 cases each. That qualification
+applies to this codec/cursor head, not subsequent native publication changes.
+Checklist acceptance stays
 **32/128**, with T036 open. Stable releases and Foundation host/e2e adoption remain
 program obligations after complete pruning and before-read lifetime acceptance.

@@ -559,7 +559,7 @@ jobs:
           set -euo pipefail
           dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
             --configuration Release --framework net10.0 \
-            --filter "(FullyQualifiedName~PackageGraphUseLeaseLifetimeTests)&FullyQualifiedName!~Ext4Casefold" \
+            --filter "(FullyQualifiedName~PackageGraphUseLeaseLifetimeTests|FullyQualifiedName~PackageGraphUseLifetimeObserverIdleTests)&FullyQualifiedName!~Ext4Casefold" \
             --logger "trx;LogFileName=graph-use-lifetime.trx" \
             --results-directory "$RUNNER_TEMP/graph-use-lifetime"
           python3 - "$RUNNER_TEMP/graph-use-lifetime/graph-use-lifetime.trx" <<'PYCODE'
@@ -578,13 +578,61 @@ jobs:
               "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.FailedTransferredRelease_IsRetainedDiagnosedAndNotRetried",
               "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.NativeSentinelLock_RemainsExclusiveUntilGraphReadPinsDrain",
               "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.TransferToCollectibleLifetime_ReleasesPassivelyAfterWeakDeathWithoutAnotherAdmission",
-              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.TransferToNonCollectibleLifetime_RetainsOwnerAfterCallerAndObserverDisposal"
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.TransferToNonCollectibleLifetime_RetainsOwnerAfterCallerAndObserverDisposal",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLifetimeObserverIdleTests.CollectibleWork_StartsTimerAndLastClaimStopsEveryObserver_TimerRestartsForNewWork",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLifetimeObserverIdleTests.CompletedRelease_DoesNotAbandonOutstandingTickBeforeNextCollectibleRelease",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLifetimeObserverIdleTests.DisposingDuringRelease_DrainsClaimedOwnerAndLeavesUnclaimedWorkForNextObserver",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLifetimeObserverIdleTests.NonCollectibleAndFailedRelease_DoNotKeepPollingAlive",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLifetimeObserverIdleTests.DisposingIdleObserver_DrainsWithoutCreatingTimerOrAcceptingNewWork",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLifetimeObserverIdleTests.DisposingWithLiveCollectible_DrainsTickWaitAndAllowsNextObserverToResume",
           ]
           if collections.Counter(row.attrib['testName'] for row in rows) != collections.Counter(required):
               raise SystemExit('graph-use-lifetime: required scenario names or multiplicity differ.')
           if any(row.attrib.get('outcome') != 'Passed' for row in rows):
               raise SystemExit('graph-use-lifetime: every required scenario must pass without skips.')
-          print('Qualified all 11 graph-use-lifetime cases with no skips.')
+          print('Qualified all 17 graph-use-lifetime and passive-observer cases with no skips.')
+          PYCODE
+
+      - name: Qualify native graph-use publication and trusted acquisition
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~PackageGraphUseRecordStoreTests|FullyQualifiedName~PackageGraphUseInstallBindingTests|FullyQualifiedName~PackageGraphUseLeaseAcquisitionTests" \
+            --logger "trx;LogFileName=graph-use-publication.trx" \
+            --results-directory "$RUNNER_TEMP/graph-use-publication"
+          python3 - "$RUNNER_TEMP/graph-use-publication/graph-use-publication.trx" <<'PYCODE'
+          import collections
+          import sys
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          required = [
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_RefusesMismatchedHeldRootBeforeCreatingArtifacts",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_InvalidCandidateMetadataIsRejectedBeforeCreatingArtifacts",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_ReopensExactRecordAndRetainsNativeSentinelUntilDisposal",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_RefusesWhenNativeSentinelLockIsBusyAndPreservesCreatedFile",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_NoReplaceRaceLeavesUnpublishedStageAndNeverReturnsOwnership",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_RejectsStagedByteTamperingAndLeavesArtifactsForInspection",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_CancellationAfterStageFlushReleasesSentinelAndPreservesEvidence",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_CancellationAfterNativePublicationLeavesVerifiedArtifactsWithoutOwner",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_ProviderFailureAfterNativePublicationLeavesEvidenceWithoutOwner",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_RefusesSentinelTamperingDuringExclusiveInitialization",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseInstallBindingTests.Observe_ActualResolvedClosure_BindsEveryExactPathAndNativeInstall",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseInstallBindingTests.CreateActiveCandidate_BindingPairedWithChangedGraphPath_RefusesDespiteSameGraphId",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseInstallBindingTests.Observe_PathChangedWithoutGraphIdChange_RefusesDifferentNativeInstall",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseInstallBindingTests.Observe_OriginalPathSpelling_IsPreservedAfterNativeVerification",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseInstallBindingTests.Observe_ForeignRootOrDuplicateNativePath_RefusesTheSelection",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseInstallBindingTests.Observe_PartialFailure_ReleasesObservationsAndAllowsFreshVerification",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseAcquisitionTests.AcquireForRootAsync_PublishesCompleteGraphBeforeReads_AndDrainsPinsBeforeUnlock",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseAcquisitionTests.AcquireForRootAsync_MemberChangesAfterPublication_RefusesAndReleasesUnreturnedSentinel",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseAcquisitionTests.AcquireForRootAsync_ExpiredOrPathRestrictedBorrow_RefusesBeforePublication",
+          ]
+          if collections.Counter(row.attrib['testName'] for row in rows) != collections.Counter(required):
+              raise SystemExit('graph-use-publication: required scenario names or multiplicity differ.')
+          if any(row.attrib.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('graph-use-publication: every required scenario must pass without skips.')
+          print('Qualified all 19 native graph-use publication, binding and acquisition cases with no skips.')
           PYCODE
 
       - name: Qualify counted native root access across awaits and member replay

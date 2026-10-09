@@ -7,7 +7,7 @@ using Nuplane.Store.Coordination.ProtectionRecords;
 
 namespace Nuplane.Store.Coordination;
 
-/// <summary>Builds a structurally complete candidate for an active graph retained by recovery.</summary>
+/// <summary>Builds structurally complete active graph candidates, optionally retained by recovery.</summary>
 /// <remarks>
 /// The result is descriptive candidate data. The supplied install identities are caller-provided
 /// values and do not prove physical verification; core must validate them against current native
@@ -20,6 +20,13 @@ internal static class RecoverableGraphSnapshotFactory
 
     /// <summary>The versioned policy identity for retaining the active graph for startup recovery.</summary>
     internal const string RecoveryPolicyId = "nuplane.startup-use-last-known-good.graph-v1";
+
+    /// <summary>Copies a complete active graph without asserting durable recovery selection.</summary>
+    internal static ProtectedGraphSnapshot CreateActiveCandidate(
+        ResolvedPackageGraph graph,
+        IReadOnlyList<PackageRequest> originalRootRequests,
+        IReadOnlyList<PackageInstallIdentity> installIdentities)
+        => CreateCandidate(graph, originalRootRequests, installIdentities, sourceRevision: null);
 
     /// <summary>
     /// Copies one complete resolved graph and its original requests into an active-and-recoverable
@@ -42,6 +49,19 @@ internal static class RecoverableGraphSnapshotFactory
         if (sourceRevision <= 0)
             throw new ArgumentOutOfRangeException(nameof(sourceRevision));
 
+        return CreateCandidate(graph, originalRootRequests, installIdentities, sourceRevision);
+    }
+
+    private static ProtectedGraphSnapshot CreateCandidate(
+        ResolvedPackageGraph graph,
+        IReadOnlyList<PackageRequest> originalRootRequests,
+        IReadOnlyList<PackageInstallIdentity> installIdentities,
+        long? sourceRevision)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(originalRootRequests);
+        ArgumentNullException.ThrowIfNull(installIdentities);
+
         var requests = originalRootRequests.ToArray();
         var installs = installIdentities.ToArray();
         var roots = graph.Roots?.ToArray() ?? throw Invalid("The resolved graph has no root collection.");
@@ -50,7 +70,7 @@ internal static class RecoverableGraphSnapshotFactory
         var sourceDecisions = graph.SourceDecisions?.ToArray() ?? throw Invalid("The resolved graph has no source-decision collection.");
 
         if (requests.Length == 0 || roots.Length == 0 || nodes.Length == 0 || installs.Length == 0)
-            throw Invalid("A recoverable graph candidate requires roots, nodes, requests, and install observations.");
+            throw Invalid("A graph candidate requires roots, nodes, requests, and install observations.");
         if (requests.Any(static item => item is null) || roots.Any(static item => item is null) ||
             nodes.Any(static item => item is null) || edges.Any(static item => item is null) ||
             sourceDecisions.Any(static item => item is null) || installs.Any(static item => item is null))
@@ -79,6 +99,8 @@ internal static class RecoverableGraphSnapshotFactory
             var key = MakeKey(root.PackageId, root.Version, "graph root");
             if (!nodeByKey.TryGetValue(key, out var selectedNode) || selectedNode.Role != root.Role)
                 throw Invalid($"Graph root '{root.PackageId}@{root.Version}' is not represented by its selected node.");
+            if (!string.Equals(root.InstallPath, selectedNode.InstallPath, StringComparison.Ordinal))
+                throw Invalid($"Graph root '{root.PackageId}@{root.Version}' names a different path from its selected node.");
             if (root.Role is not (PackageNodeRole.Root or PackageNodeRole.RootAndDependency))
                 throw Invalid($"Graph root '{root.PackageId}@{root.Version}' has a non-root role.");
             if (!rootKeys.Add(key))
@@ -185,15 +207,14 @@ internal static class RecoverableGraphSnapshotFactory
             throw Invalid("The resolved graph contains nodes unreachable from all requested roots.");
 
         var physicalRoots = snapshotNodes.Select(static node => node.Install.Root).Distinct().ToArray();
-        var recoveryEvidence = new ProtectedGraphRecoverySelectionEvidence(
-            RecoveryPolicyId,
-            sourceRevision,
-            selectedRootIds);
+        var recoveryEvidence = sourceRevision is { } revision
+            ? new ProtectedGraphRecoverySelectionEvidence(RecoveryPolicyId, revision, selectedRootIds)
+            : null;
         return new ProtectedGraphSnapshot(
             Guid.NewGuid(),
             graph.GraphId,
             graph.GenerationId,
-            ProtectedGraphDisposition.ActiveAndRecoverable,
+            recoveryEvidence is null ? ProtectedGraphDisposition.Active : ProtectedGraphDisposition.ActiveAndRecoverable,
             physicalRoots,
             selectedRoots,
             snapshotNodes,

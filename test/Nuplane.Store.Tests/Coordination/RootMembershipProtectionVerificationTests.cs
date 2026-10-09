@@ -137,6 +137,8 @@ public sealed class RootMembershipProtectionVerificationTests
         internal RootMembershipRegistry Registry { get; private set; } = null!;
         internal Dictionary<string, string> StatePaths { get; } = new(StringComparer.Ordinal);
         internal Dictionary<string, StoreStateRecord> States { get; } = new(StringComparer.Ordinal);
+        internal Dictionary<string, ResolvedPackageGraph> Graphs { get; } = new(StringComparer.Ordinal);
+        internal Dictionary<string, PackageRequest[]> Requests { get; } = new(StringComparer.Ordinal);
         internal string SharedInstallPath { get; private set; } = null!;
 
         internal static async Task<Context> CreateAsync()
@@ -223,6 +225,8 @@ public sealed class RootMembershipProtectionVerificationTests
             var resolution = await resolver.ResolveAsync(requests, (_, _) => Task.FromResult(packages[0]),
                 (_, _) => Task.FromResult(packages[1]), CancellationToken.None);
             var graph = Assert.Single(resolution.ResolvedGraphs);
+            Graphs[memberId] = graph;
+            Requests[memberId] = requests;
             var installs = new List<PackageInstallIdentity>();
             foreach (var node in graph.Nodes)
             {

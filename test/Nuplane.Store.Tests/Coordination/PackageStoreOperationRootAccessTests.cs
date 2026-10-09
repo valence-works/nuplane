@@ -2,6 +2,7 @@ using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.MembershipRecords;
 using Nuplane.Store.Coordination.PhysicalFiles;
+using Nuplane.Store.State;
 using Nuplane.Tests.Shared;
 
 namespace Nuplane.Store.Tests.Coordination;
@@ -157,32 +158,37 @@ public sealed class PackageStoreOperationRootAccessTests
         }
     }
 
-    private sealed class AdmissionFixture : IAsyncDisposable
+    internal sealed class AdmissionFixture : IAsyncDisposable
     {
         private readonly PackageStoreRootOperationAdmission _admission;
 
         private AdmissionFixture(RootMembershipProtectionVerificationTests.Context context,
-            PackageStoreRootOperationAdmission admission)
+            PackageStoreRootOperationAdmission admission, RootMembershipRegistry registry)
         {
             Context = context;
+            Registry = registry;
             _admission = admission;
             Owner = Assert.IsType<PackageStoreOperationOwner>(admission.Owner);
             Borrow = Owner.Borrow();
         }
 
         internal RootMembershipProtectionVerificationTests.Context Context { get; }
+        internal RootMembershipRegistry Registry { get; }
         internal PackageStoreOperationOwner Owner { get; }
         internal PackageStoreOperationBorrow Borrow { get; }
 
-        internal static async Task<AdmissionFixture> CreateAsync()
+        internal static async Task<AdmissionFixture> CreateAsync(
+            Func<IPhysicalStoreFileSystem, IPhysicalStoreFileSystem>? decorate = null)
         {
             var context = await RootMembershipProtectionVerificationTests.Context.CreateCompleteAsync();
             PackageStoreRootOperationAdmission? admission = null;
             try
             {
-                admission = await new PackageStoreAdmission(context.Files, context.Registry,
+                var files = decorate?.Invoke(context.Files) ?? context.Files;
+                var registry = ReferenceEquals(files, context.Files) ? context.Registry : new RootMembershipRegistry(files, new StoreStateSerializer());
+                admission = await new PackageStoreAdmission(files, registry,
                     context.Fixture.PackageInstallRoot).AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Loading);
-                return new AdmissionFixture(context, admission);
+                return new AdmissionFixture(context, admission, registry);
             }
             catch
             {
