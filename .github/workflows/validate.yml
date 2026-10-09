@@ -62,7 +62,22 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Verify protection serialization and canonical digests on every supported framework
+        shell: bash
+        run: |
+          set -euo pipefail
+          for framework in net8.0 net9.0 net10.0; do
+            dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+              --configuration Release -p:NuplaneProtectionFrameworkMatrix=true --framework "$framework" \
+              --filter "FullyQualifiedName~ProtectionStateSerializationTests|FullyQualifiedName~ProtectionDigestTests" \
+              --logger "trx;LogFileName=protection-$framework.trx" \
+              --results-directory "$RUNNER_TEMP/protection-results/$framework"
+          done
 
       - name: Run atomic state and registry tests
         run: dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj --configuration Release --filter "FullyQualifiedName~StoreRegistryTests.PersistActiveVersions_WhenSaveFails|FullyQualifiedName~StoreRegistryTests.PersistFailure_WhenSaveFails|FullyQualifiedName~StoreRegistryTests.PersistSourceSnapshot_WhenSaveFails|FullyQualifiedName~StoreRegistryTests.PersistMutations_TwoLockCoordinatedRegistriesLoadedBeforeWrites_RetainsAllUpdates|FullyQualifiedName~StoreStateSerializerTests"

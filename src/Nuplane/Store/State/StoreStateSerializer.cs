@@ -77,7 +77,7 @@ public sealed class StoreStateSerializer : IPackageProtectionStateSerializer
             cancellationToken);
     }
 
-    private static StoreStateRecord Normalize(StoreStateRecord state) =>
+    internal static StoreStateRecord Normalize(StoreStateRecord state) =>
         state with
         {
             ActivePackageDescriptorsById = new(state.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase),

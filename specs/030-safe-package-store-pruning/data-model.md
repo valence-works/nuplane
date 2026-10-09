@@ -50,6 +50,47 @@ Canonical digests include schema, identities, epoch/revision and deterministical
 
 The state-body digest includes every existing state field, including `UpdatedAt`, and excludes only the non-positional protection property. The protection digest binds that body digest and every persisted protection field except its own digest. The root-ledger digest binds every persisted ledger, member and pending-publication field except itself, including diagnostic paths as record data. Each layer uses domain-separated, length-delimited canonical input; dictionary and graph ordering cannot change its result.
 
+### Canonical encoding revision 1
+
+The core digest preimage starts with ASCII `NUPLANE-CANONICAL\0`, a UInt32-big-endian length-prefixed strict UTF-8 domain (`StoreStateBody`, `PackageProtection`, or `RootMembershipLedger`), and UInt32-big-endian encoding revision `1`. Every record field uses a fixed ascending UInt16 tag, UInt32 payload length, then payload bytes. Strings are strict UTF-8 without replacement fallback; nested sequence/map items are individually UInt32-length-prefixed after a UInt32 count. Nullable values have a distinct zero/one presence byte. Integers/enums are fixed-width signed big-endian (Int32 or Int64); booleans are one zero/one byte; GUIDs use RFC/network-order bytes. DateTimeOffset binds both UTC ticks and original offset ticks. Embedded SHA-256 digests use their validated 32 raw bytes. JSON layout, reflection order, culture and platform path normalization never enter the preimage.
+
+State-body tags 1–7 follow the existing seven constructor fields. Protection tags 1–10 are schema, physical root, enrollment epoch, member ID, revision, body digest, active closure, recoverable closure, retired graphs and legacy-unknown marker. Ledger tags 1–8 are schema, physical root, epoch, status, members, targets, retirements and nullable pending commit. Nested records bind every field in their declared encoding order. Each layer omits only its own digest; nested protection digests remain bound by the ledger.
+
+All nested record tags start at 1 and follow the exact order below. PhysicalRootIdentity uses its handle identity's three-field encoding directly. A nested complete protection value uses the same tags 1–10 as its standalone payload and appends its stored protection digest at tag 11. Binding tags are fixed: Declared=0, Prospective=1, ExistingUnprotected=2, Acknowledged=3; Declared has an empty variant payload.
+
+| Nested value | Fields in ascending tag order |
+|---|---|
+| Physical file/root identity | provider; volume/device ID; file ID |
+| Failure | package ID; stage; message; occurrence timestamp; correlation ID |
+| Source snapshot | version; capture timestamp; nullable requests |
+| Package request | package ID; version range; nullable feed; update policy; source name |
+| Active descriptor | package ID; version; nullable feed; nullable source; install path; activation timestamp; activation correlation; graph ID; generation ID; role; root package IDs; dependency-of package IDs; discoverable |
+| Activation graph | graph ID; generation ID; ordered root package IDs; ordered node package IDs; activation timestamp; correlation ID; status; nullable failure; nullable node-version map |
+| Activation failure | stage; reason; message; nullable cycle path; nullable unsupported asset path |
+| Protection closure | knowledge enum; nullable unknown reason; nullable graph sequence (presence byte remains explicit even though knowledge also constrains it) |
+| Protected graph | snapshot GUID; graph ID; generation ID; disposition; physical roots; requested-root selections; nodes; edges; nullable recovery evidence |
+| Requested-root selection | request; selected-node GUID |
+| Node | node GUID; install identity |
+| Install identity | physical root; package ID; version; exact root-relative path; directory identity; completion identity; nullable archive hash |
+| Edge | from-node GUID; to-node GUID; requested package ID; requested version range; target framework; optional flag |
+| Recovery selection | policy ID; source revision; selected-root GUIDs |
+| Retired graph | snapshot GUID; graph ID; generation ID; retiring epoch; retiring revision; reason; proof digest |
+| Member | member ID; diagnostic locator; binding tag; binding variant payload |
+| Prospective binding | parent identity; name semantics; exact requested basename |
+| Existing-unprotected binding | state slot; observed file identity; body digest; protection-absent flag |
+| Acknowledged binding | state slot; observed file identity; complete nested protection value |
+| State slot | parent identity; name semantics; exact canonical basename |
+| Name semantics | profile ID; encoding enum; case-sensitive flag; normalization-insensitive flag |
+| Retired member | member ID; complete prior acknowledged binding; retiring epoch; proof digest |
+| Pending commit | physical root; epoch; member ID; prior binding record; complete next protection value |
+| Pending prior binding record | binding tag; binding variant payload |
+
+Canonical map keys sort with `StringComparer.Ordinal` after folding. GUID-based set keys use lexicographic comparison of the 16 network-order bytes. Root identities, request selections and edges sort by lexicographic comparison of their complete framed canonical bytes; this includes all fields and retains equal repeated entries. Snapshot, node and retired-graph GUID keys are unique by construction. Recovery-selected GUIDs use network-byte ordering. These comparators are independent of culture and host filesystem lookup behavior.
+
+The body uses the default serializer's existing optional descriptor/graph null-to-empty normalization. Every other nullable field remains distinct from empty. Case-insensitive dictionary keys and package-ID values use invariant uppercase, checked against ordinal-ignore-case equality; collisions refuse instead of being merged. Dictionary entries sort by canonical key, independent of insertion order. Source/graph map keys follow that comparer rule, while embedded source/graph labels, versions and ranges remain exact. Physical identities, native names, install paths and diagnostic locators remain exact strict UTF-8 bytes without folding or Unicode normalization. Runtime-dependent case behavior must agree across supported target frameworks before revision 1 is released.
+
+Protected snapshots, roots, nodes, requested-root selections, edges, recovery-selected root IDs and retired graphs are set projections and sort by their canonical identity/full tuple. Allowed duplicate requests or edges retain their multiplicity. Existing body list fields remain sequences, including requests, descriptor/activation package lists and failure cycle paths. Ledger members, target IDs and retired members likewise remain ordered sequences. Order-independence does not permit rewriting these sequence semantics. Golden vectors and save/reload checks pin the revision; changing encoding, field tags or case policy requires an encoding revision change.
+
 A pending transition records the prior file identity with its prior revision/digests. Its required next tuple contains revision/digests, because the next file identity need not be known before replacement. Recovery of exact next content at the unchanged slot acknowledges the newly observed identity; an optional staged identity is additional evidence, never a requirement to predict the replacement identity.
 
 The failure-atomic writer's `.tmp`/`.bak` files can be recovery evidence. Do not delete ambiguous evidence before deciding exact old/new publication. A process termination test is not proof of power-loss durability. No multi-file atomic transaction is claimed.

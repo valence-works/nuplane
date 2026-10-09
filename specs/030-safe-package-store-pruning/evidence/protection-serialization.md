@@ -26,4 +26,8 @@ Removing only the outer duplicate-field rejection caused exactly **two** missing
 | Duplicate-guard causal-control log | `e99cb34d1351734c24d0e55d37f32495e8cec554c8d35b422e8f73334a00c0f7` |
 | Restored DTO | `a9713f8b2ca58597112ab5a179988ed902531518cb505e25c98e4854d79aea6d` |
 
-Logs, source manifests, TRX, mutation backup/control and independent reviews are retained under the owned `prune-admission-authorization-audit/native-filesystem-gates/` artifact directory. Hosted qualification of this serialization increment remains pending; the previous record commit is qualified separately in [record evidence](protection-records.md).
+Logs, source manifests, TRX, mutation backup/control and independent reviews are retained under the owned `prune-admission-authorization-audit/native-filesystem-gates/` artifact directory. The previous record commit is qualified separately in [record evidence](protection-records.md).
+
+## Hosted qualification
+
+[Validate 37927766593](https://github.com/valence-works/nuplane/actions/runs/37927766593) at exact serialization commit `4d28a7bf34f689a66d57c88660a36bbb28b46b09` passed all six jobs. The full Ubuntu solution passed **1,488**, failed **0**, with fourteen explicit platform/casefold skips. Store passed all **226** local/portable cases, including the 29 new serialization cases. Each Unix native lane passed eleven cases without skips; both Linux lanes passed owned ext4 casefold; Windows passed eleven adapter/parser plus six identity cases without skips. Root verified completed job states, exact head and complete logs. Full log SHA-256: `afd1e344dd8ef149fae47501dd7af14e0cb1880d4538f3e4c0cdcbf4c32f437a`. The upcoming digest increment adds focused serialization/digest execution across all three target frameworks on all four platform lanes; this run does not claim that future matrix.
