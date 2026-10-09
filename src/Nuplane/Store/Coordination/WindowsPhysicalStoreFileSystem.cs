@@ -14,7 +14,7 @@ namespace Nuplane.Store.Coordination;
 /// relative to an already held directory handle. The provider does not rename or delete entries and does not
 /// resolve paths from remembered absolute names.
 /// </remarks>
-internal sealed class WindowsPhysicalStoreFileSystem : IPhysicalStoreFileSystem
+internal sealed partial class WindowsPhysicalStoreFileSystem : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem
 {
     private static readonly Encoding StrictUnicode = new UnicodeEncoding(bigEndian: false, byteOrderMark: false, throwOnInvalidBytes: true);
     private readonly object _providerToken = new();

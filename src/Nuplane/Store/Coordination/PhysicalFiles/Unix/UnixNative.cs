@@ -35,7 +35,7 @@ internal enum UnixLockStatus
 internal readonly record struct UnixLockResult(UnixLockStatus Status, int Error);
 
 /// <summary>Private Darwin/Linux ABI boundary. Struct layouts are explicit and platform-gated.</summary>
-internal static class UnixNative
+internal static partial class UnixNative
 {
     internal const int FileTypeMask = 0xF000;
     internal const int FileTypeRegular = 0x8000;

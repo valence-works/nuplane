@@ -5,7 +5,7 @@ using Microsoft.Win32.SafeHandles;
 namespace Nuplane.Store.Coordination.PhysicalFiles.Windows;
 
 /// <summary>Isolates the Windows handle-relative and bounded file APIs used by the store adapter.</summary>
-internal static class WindowsNative
+internal static partial class WindowsNative
 {
     internal const uint FileReadData = 0x0001;
     internal const uint FileWriteData = 0x0002;
@@ -95,13 +95,14 @@ internal static class WindowsNative
                 unicodeStringPointer,
                 fDeleteOld: false);
 
+            var caseSensitiveBefore = QueryDirectoryCaseSensitive(parent);
             var objectAttributes = new ObjectAttributes
             {
                 Length = checked((uint)Marshal.SizeOf<ObjectAttributes>()),
                 RootDirectory = parent,
                 ObjectName = unicodeStringPointer,
-                // No OBJ_CASE_INSENSITIVE: exact component lookup is required until the shared name policy is settled.
-                Attributes = 0
+                // Follow the held directory's native lookup profile; do not emulate it with managed folding.
+                Attributes = caseSensitiveBefore ? 0u : ObjectCaseInsensitive
             };
             var status = NtCreateFile(
                 out var rawHandle,
@@ -122,6 +123,25 @@ internal static class WindowsNative
                 if (rawHandle != IntPtr.Zero && rawHandle != new IntPtr(-1))
                     _ = CloseHandle(rawHandle);
                 throw new WindowsNativeCallException("Synchronous NtCreateFile unexpectedly returned STATUS_PENDING.", unsupported: true);
+            }
+
+            bool caseSensitiveAfter;
+            try
+            {
+                caseSensitiveAfter = QueryDirectoryCaseSensitive(parent);
+            }
+            catch
+            {
+                if (rawHandle != IntPtr.Zero && rawHandle != new IntPtr(-1))
+                    _ = CloseHandle(rawHandle);
+                throw;
+            }
+
+            if (caseSensitiveAfter != caseSensitiveBefore)
+            {
+                if (rawHandle != IntPtr.Zero && rawHandle != new IntPtr(-1))
+                    _ = CloseHandle(rawHandle);
+                throw new WindowsNativeCallException("The held directory's case-sensitivity profile changed during a relative lookup.");
             }
 
             if (status < 0 || ioStatusCode < 0)

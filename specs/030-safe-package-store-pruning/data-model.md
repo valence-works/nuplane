@@ -5,7 +5,7 @@ All persisted records are schema-versioned. Unknown/absent data is distinct from
 | Entity | Fields and validation |
 |---|---|
 | PhysicalRootIdentity | Platform/provider, volume/device identity, open-directory file identity. Obtained from native metadata; display path is descriptive. No lexical containment authority. |
-| StateSlotIdentity | Physical parent-directory identity, validated basename and filesystem case policy. No final symlink/hardlink ambiguity. Stable across state replacement; moving/renaming a slot requires quiescent migration. Component-wise authority lookup refuses enrolled-to-outside alias transitions. |
+| StateSlotIdentity | Physical parent-directory identity, native canonical stored basename and versioned observed name profile (encoding, actual case sensitivity and normalization behavior). No final symlink/hardlink ambiguity. Stable across state replacement; moving/renaming a slot requires quiescent migration. Component-wise authority lookup refuses enrolled-to-outside alias transitions. |
 | RootMembershipRecord | SchemaVersion, RootIdentity, EnrollmentEpoch, Incomplete/Complete, ordered Members, optional PendingCommit. Complete requires every declared member's exact active/LKG protection. |
 | RootMember | MemberId, StateSlot, diagnostic configured path, ObservedStateFileIdentity, AcknowledgedRevision, StateDigest, ProtectionDigest. Observed file identity changes only through a verified transition/recovery. |
 | PendingStateCommit | MemberId/slot, prior revision/digests/file identity, next revision/state/protection digests. One pending transition under root ownership. Missing/third evidence is refused. |
@@ -22,6 +22,18 @@ All persisted records are schema-versioned. Unknown/absent data is distinct from
 
 ## Publication transitions
 
+### State-slot name observations
+
+The native provider resolves the configured component beneath a held parent, observes the single-link regular file identity, obtains its actual stored entry spelling, and reopens that canonical component beneath the same parent. Parent, file, and name-profile observations must agree across the operation. A returned full native path may supply a leaf candidate only; it grants no authority and is never reopened. Unix providers enumerate an independent held-parent directory stream rather than infer spelling from a diagnostic path. No managed case folding, Unicode normalization, or guessed Windows short-name expansion supplies identity.
+
+Canonical spelling compares exactly. Native aliases may converge only after provider validation; a case-only rename changes the recorded slot spelling and requires quiescent migration. The observed final file identity is a separate revision token, not part of slot equality. Observing a replacement at the same slot does not itself authorize that replacement: the publication/recovery protocol must acknowledge it.
+
+These internal descriptive records are not directly persisted with default `System.Text.Json` constructor discovery. T009 uses serializer-owned DTOs and validated conversion so internal constructors remain internal and malformed persisted identity data cannot bypass validation.
+
+Missing-state initialization belongs only to explicitly quiescent, Incomplete enrollment after parent authority and root ownership are established. Exclusively create a valid empty state, then observe its native canonical slot. A missing, unreadable, or legacy state never implies KnownEmpty; preview never initializes state.
+
+### Coordinated transitions
+
 1. **Enrollment:** Unenrolled → Incomplete(epoch) → validate/write all declared members → Complete(epoch). Fully quiescent throughout. Any interruption stays denied until exclusive recovery establishes complete authority.
 2. **Membership change:** Complete(old epoch) → Incomplete(new epoch, complete old/new member information) → migrate/retire explicitly → Complete(new epoch). Old participants do not silently rejoin.
 3. **State write:** acknowledged prior → pending prior/next → state plus protection replacement → verified next payload at same slot → acknowledged next. Exact old evidence rolls back pending; exact new evidence completes; ambiguous evidence refuses. All state writes follow this transition.
@@ -30,6 +42,10 @@ All persisted records are schema-versioned. Unknown/absent data is distinct from
 
 ## Digest and recovery rules
 
-Canonical digests include schema, identities, epoch/revision and deterministically sorted graph/node projections; state digests include every persisted state field except the digest field itself. Specify normalization once in the serializer, including case-insensitive package IDs and case-sensitive platform identity bytes. Do not use JSON dictionary iteration order or timestamps as the only authority. Round-trip and byte/digest stability tests must cover equivalent input ordering.
+Canonical digests include schema, identities, epoch/revision and deterministically sorted graph/node projections, using the layers below to avoid self-reference. Specify normalization once in the serializer, including case-insensitive package IDs and case-sensitive platform identity bytes. Do not use JSON dictionary iteration order or timestamps as the only authority. Round-trip and byte/digest stability tests must cover equivalent input ordering.
+
+The state-body digest includes every existing state field, including `UpdatedAt`, and excludes only the non-positional protection property. The protection digest binds that body digest and every persisted protection field except its own digest. The root-ledger digest binds every persisted ledger, member and pending-publication field except itself, including diagnostic paths as record data. Each layer uses domain-separated, length-delimited canonical input; dictionary and graph ordering cannot change its result.
+
+A pending transition records the prior file identity with its prior revision/digests. Its required next tuple contains revision/digests, because the next file identity need not be known before replacement. Recovery of exact next content at the unchanged slot acknowledges the newly observed identity; an optional staged identity is additional evidence, never a requirement to predict the replacement identity.
 
 The failure-atomic writer's `.tmp`/`.bak` files can be recovery evidence. Do not delete ambiguous evidence before deciding exact old/new publication. A process termination test is not proof of power-loss durability. No multi-file atomic transaction is claimed.

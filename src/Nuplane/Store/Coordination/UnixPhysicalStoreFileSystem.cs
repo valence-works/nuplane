@@ -13,7 +13,7 @@ namespace Nuplane.Store.Coordination;
 /// paths, rename entries, or delete package content. All child operations are relative to handles created by
 /// this provider, and all native calls use a scoped SafeHandle reference.
 /// </remarks>
-internal sealed class UnixPhysicalStoreFileSystem : IPhysicalStoreFileSystem
+internal sealed partial class UnixPhysicalStoreFileSystem : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem
 {
     private const int MaximumLinkTargetBytes = 4096;
     private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);

@@ -49,6 +49,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
+          - ubuntu-24.04-arm
           - macos-latest
           - windows-latest
     steps:
@@ -69,25 +70,31 @@ jobs:
       - name: Run lock-held state refresh and snapshot tests
         run: dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj --configuration Release --filter "FullyQualifiedName~DesiredSourceSnapshotCacheTests.SaveAsync_WhenRegistryPersistenceFails|FullyQualifiedName~ReconciliationServiceStoreLockTests.TriggerAsync_WhenAnotherRegistryUpdatesState_RefreshesStateAndSnapshotBeforeSourceFallback|FullyQualifiedName~LastKnownGoodStartupRecoveryServiceStoreLockTests.TryRecoverAsync_WhenAnotherRegistryUpdatesLoadedState_UsesRefreshedLastKnownGoodVersion"
 
-      - name: Run native Unix store adapter tests on macOS arm64
-        if: matrix.os == 'macos-latest'
+      - name: Run native Unix store adapter and identity tests
+        if: matrix.os != 'windows-latest'
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$(uname -m)" != "arm64" ]]; then
+          if [[ "$RUNNER_OS" == "macOS" && "$(uname -m)" != "arm64" ]]; then
             echo "The native Unix store adapter qualification requires a macOS arm64 runner."
             exit 1
           fi
-
-          native_shim=$(find test/Nuplane.Store.Tests/bin/Release -type f -name libnuplane_store_native.dylib -print -quit)
-          if [[ -z "${native_shim}" ]]; then
-            echo "The project-reference build did not copy libnuplane_store_native.dylib to the Store test output."
+          if [[ "${{ matrix.os }}" == "ubuntu-24.04-arm" && "$(uname -m)" != "aarch64" ]]; then
+            echo "The Linux arm64 lane must execute natively on arm64."
             exit 1
+          fi
+
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            native_shim=$(find test/Nuplane.Store.Tests/bin/Release -type f -name libnuplane_store_native.dylib -print -quit)
+            if [[ -z "${native_shim}" ]]; then
+              echo "The project-reference build did not copy libnuplane_store_native.dylib to the Store test output."
+              exit 1
+            fi
           fi
 
           dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
             --configuration Release \
-            --filter "FullyQualifiedName~Nuplane.Store.Tests.Coordination.UnixPhysicalStoreFileSystemTests" \
+            --filter "(FullyQualifiedName~Nuplane.Store.Tests.Coordination.UnixPhysicalStoreFileSystemTests|FullyQualifiedName~Nuplane.Store.Tests.Coordination.UnixPhysicalStoreIdentityTests)&FullyQualifiedName!~ObserveStateSlot_Ext4Casefold" \
             --logger "trx;LogFileName=native-unix.trx" \
             --results-directory "$RUNNER_TEMP/native-unix-results"
 
@@ -100,8 +107,50 @@ jobs:
               raise SystemExit('Native qualification returned no test counters.')
           total = int(counters.get('total', '0'))
           passed = int(counters.get('passed', '0'))
-          if total < 7 or passed != total:
+          if total < 10 or passed != total:
               raise SystemExit(f'Native qualification requires every test to pass without skips: {counters.attrib}')
+          names = {r.get('testName') for r in root.findall('.//{*}UnitTestResult') if r.get('outcome') == 'Passed'}
+          required = {
+              'ObserveStateSlot_UsesFilesystemSpellingAndNameProfileForAliases',
+              'ObserveStateSlot_ParentAliasesConvergeAndAtomicReplacePreservesSlot',
+              'ObserveCanonicalFileNameNoFollow_RejectsWrongIdentityLinksAndForeignHandles',
+          }
+          if not all(any(n.endswith('.' + expected) for n in names) for expected in required):
+              raise SystemExit('The Unix state-slot identity scenarios did not all execute and pass.')
+          PY
+
+      - name: Qualify ext4 casefold aliases on an owned loopback filesystem
+        if: startsWith(matrix.os, 'ubuntu-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          owned_root=$(mktemp -d "$RUNNER_TEMP/nuplane-casefold.XXXXXX")
+          image="$owned_root/store.ext4"
+          mount_root="$owned_root/mount"
+          mkdir "$mount_root"
+          cleanup() {
+            if mountpoint -q "$mount_root"; then
+              sudo umount "$mount_root"
+            fi
+          }
+          trap cleanup EXIT
+          truncate -s 256M "$image"
+          mkfs.ext4 -q -F -O casefold -E encoding=utf8-12.1 "$image"
+          sudo mount -o loop,nosuid,nodev,noexec "$image" "$mount_root"
+          sudo chown "$(id -u):$(id -g)" "$mount_root"
+          TMPDIR="$mount_root" NUPLANE_REQUIRE_EXT4_CASEFOLD=1 \
+            dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --no-build --no-restore \
+            --filter "FullyQualifiedName~UnixPhysicalStoreIdentityTests.ObserveStateSlot_Ext4Casefold" \
+            --logger "trx;LogFileName=casefold.trx" \
+            --results-directory "$RUNNER_TEMP/casefold-results"
+          python3 - "$RUNNER_TEMP/casefold-results/casefold.trx" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          root = ET.parse(sys.argv[1]).getroot()
+          rows = root.findall('.//{*}UnitTestResult')
+          if len(rows) != 1 or rows[0].get('outcome') != 'Passed':
+              raise SystemExit('The required native ext4 casefold scenario must execute and pass without skips.')
           PY
 
       - name: Run native Windows store adapter tests on Windows x64 NTFS
@@ -132,6 +181,44 @@ jobs:
           $passed = [int]$counters.passed
           if ($total -lt 11 -or $passed -ne $total) {
             throw "Native Windows qualification requires every test to pass without skips: $($counters.OuterXml)"
+          }
+
+      - name: Run native Windows state-slot identity tests
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $results = Join-Path $env:RUNNER_TEMP 'identity-windows-results'
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj `
+            --configuration Release `
+            --filter 'FullyQualifiedName~Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreIdentityTests' `
+            --logger 'trx;LogFileName=identity-windows.trx' `
+            --results-directory $results
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          [xml]$report = Get-Content (Join-Path $results 'identity-windows.trx') -Raw
+          $rows = @($report.SelectNodes('//*[local-name()="UnitTestResult"]'))
+          $required = @(
+            'StateSlotObservation_UsesStoredCaseAndNativeCaseInsensitiveProfile',
+            'StateSlotObservation_CaseSensitiveDirectoryKeepsCaseVariantsDistinct',
+            'StateSlotObservation_RefusesWrongIdentityReparseAndHardLinkEntries',
+            'CanonicalNameObservation_RequiresTheOwnedParentHandleToRemainOpen',
+            'StateSlotObservation_AtomicReplacementKeepsSlotButChangesFileIdentityAndRenameChangesSlot'
+          )
+          foreach ($name in $required) {
+            $matched = @($rows | Where-Object { $_.testName.EndsWith('.' + $name) -and $_.outcome -eq 'Passed' })
+            if ($matched.Count -ne 1) { throw "The required native identity scenario did not execute and pass: $name" }
+          }
+          $aliasName = '.StateSlotObservation_8Dot3AliasResolvesToTheStoredLongBasenameWhenEnabled'
+          $alias = @($rows | Where-Object { $_.testName.EndsWith($aliasName) })
+          if ($alias.Count -ne 1 -or $alias[0].outcome -notin @('Passed', 'NotExecuted')) {
+            throw 'The 8.3 alias scenario must either pass or report an explicit capability skip.'
+          }
+          if (@($rows | Where-Object { $_.outcome -ne 'Passed' -and -not $_.testName.EndsWith($aliasName) }).Count -ne 0) {
+            throw 'Only the optional 8.3 alias capability scenario may be skipped.'
+          }
+          if ($alias[0].outcome -eq 'NotExecuted') {
+            Write-Host '8.3 aliases are unavailable on this test volume; that scenario remains unqualified.'
           }
 
   build-test:
