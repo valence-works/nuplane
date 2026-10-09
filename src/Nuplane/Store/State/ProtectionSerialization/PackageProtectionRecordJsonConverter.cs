@@ -28,7 +28,7 @@ public sealed class PackageProtectionRecordJsonConverter : JsonConverter<Package
     public override PackageProtectionRecord Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         using var document = JsonDocument.ParseValue(ref reader);
-        EnsureUniqueProperties(document.RootElement);
+        PersistedJsonChecks.EnsureUniqueProperties(document.RootElement, "protection");
 
         try
         {
@@ -55,28 +55,6 @@ public sealed class PackageProtectionRecordJsonConverter : JsonConverter<Package
         foreach (var retiredGraph in value.RetiredGraphs)
             ValidateDigest(retiredGraph.ProofDigest, "retiredGraphs.proofDigest");
         JsonSerializer.Serialize(writer, PackageProtectionRecordDto.FromRecord(value), ProtectionJsonOptions);
-    }
-
-    private static void EnsureUniqueProperties(JsonElement element)
-    {
-        switch (element.ValueKind)
-        {
-            case JsonValueKind.Object:
-            {
-                var names = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var property in element.EnumerateObject())
-                {
-                    if (!names.Add(property.Name))
-                        throw new JsonException($"The protection record contains duplicate property '{property.Name}'.");
-                    EnsureUniqueProperties(property.Value);
-                }
-                break;
-            }
-            case JsonValueKind.Array:
-                foreach (var item in element.EnumerateArray())
-                    EnsureUniqueProperties(item);
-                break;
-        }
     }
 
     internal static void ValidateDigest(string? digest, string fieldName)

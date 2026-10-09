@@ -34,3 +34,7 @@ Removing Darwin's native no-replace flag caused exactly one intended missing-exc
 | Canonical basename causal-control log | `ac7ab52abb3d98a2a1f5b1fce53e00ef8b113d4fc4876ac8777cacd350de9fdb` |
 
 Logs, TRX, original mutation backups, source manifests, native integration proposals and independent review reports are retained under the owned `prune-admission-authorization-audit/native-filesystem-gates/` artifact directory. The digest commit's separate hosted qualification is recorded in [digest evidence](canonical-digests.md#hosted-qualification).
+
+## Hosted qualification
+
+[Validate 37932986723](https://github.com/valence-works/nuplane/actions/runs/37932986723) qualified exact commit `6190f1f8b35af0f498481499afdd22a3c34ada07`: all six jobs passed. The full Ubuntu solution passed **1,531**, failed **0**, skipped **23** explicitly. Each of the twelve framework/platform focused runs passed **64**, failed/skipped **0**. Each Unix lane passed all nineteen native adapter/identity/publication cases. Windows passed nineteen adapter/publication and six identity cases. Both Linux lanes passed both demanded owned ext4 casefold cases. Root verified exact head, jobs and full logs; full log SHA-256 `dd1c15836a11bd459e599658cb479950372f2ba08e07663ed4a8a34d38f890b4`. The earlier pending statements describe the local checkpoint; this section records subsequent hosted execution. Full coordinated state publication/recovery remains a separate increment.

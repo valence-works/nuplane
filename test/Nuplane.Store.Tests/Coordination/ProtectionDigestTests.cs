@@ -728,28 +728,61 @@ public sealed class ProtectionDigestTests
     {
         var prior = Member("member", Prospective());
         var next = Protection("member", stateBodyDigest: new string('a', 64));
-        var pending = new PendingStateCommit(Root(), 1, prior, next);
+        var pending = Pending(Root(), 1, prior, next);
         var baseline = Ledger([prior], ["member"], pending: pending);
         var changedNext = Protection("member", stateBodyDigest: new string('d', 64));
-        var changedPending = new PendingStateCommit(Root(), 1, prior, changedNext);
+        var changedPending = Pending(Root(), 1, prior, changedNext);
         Assert.NotEqual(ProtectionDigest.Ledger(baseline), ProtectionDigest.Ledger(Ledger([prior], ["member"], pending: changedPending)));
 
         var changedPrior = Member("member", Prospective("other-parent", "state.json"));
-        var changedPriorPending = new PendingStateCommit(Root(), 1, changedPrior, next);
+        var changedPriorPending = Pending(Root(), 1, changedPrior, next);
         Assert.NotEqual(
             ProtectionDigest.Ledger(baseline),
             ProtectionDigest.Ledger(Ledger([changedPrior], ["member"], pending: changedPriorPending)));
 
         var otherRoot = Root("pending-root");
-        var otherRootPending = new PendingStateCommit(otherRoot, 1, prior, Protection("member", root: otherRoot));
+        var otherRootPending = Pending(otherRoot, 1, prior, Protection("member", root: otherRoot));
         Assert.NotEqual(
             ProtectionDigest.Ledger(baseline),
             ProtectionDigest.Ledger(Ledger([prior], ["member"], root: otherRoot, pending: otherRootPending)));
 
-        var laterPending = new PendingStateCommit(Root(), 2, prior, Protection("member", epoch: 2));
+        var laterPending = Pending(Root(), 2, prior, Protection("member", epoch: 2));
         Assert.NotEqual(
             ProtectionDigest.Ledger(baseline),
             ProtectionDigest.Ledger(Ledger([prior], ["member"], epoch: 2, pending: laterPending)));
+
+        var acknowledgedPrior = Member("member", Acknowledged("member", "parent", "state.json", "file", "old-body"));
+        var acknowledgedNext = Protection("member", stateBodyDigest: FixtureDigest("next-body"), revision: 2);
+        var recoveryBaselinePending = Pending(Root(), 1, acknowledgedPrior, acknowledgedNext);
+        var recoveryBaseline = Ledger([acknowledgedPrior], ["member"], pending: recoveryBaselinePending);
+        Assert.NotEqual(
+            ProtectionDigest.Ledger(recoveryBaseline),
+            ProtectionDigest.Ledger(Ledger([acknowledgedPrior], ["member"], pending:
+                Pending(Root(), 1, acknowledgedPrior, acknowledgedNext, RootMembershipStatus.Complete))));
+        Assert.NotEqual(
+            ProtectionDigest.Ledger(recoveryBaseline),
+            ProtectionDigest.Ledger(Ledger([acknowledgedPrior], ["member"], pending:
+                Pending(Root(), 1, acknowledgedPrior, acknowledgedNext, priorLedgerDigest: FixtureDigest("other-prior-ledger")))));
+        Assert.NotEqual(
+            ProtectionDigest.Ledger(recoveryBaseline),
+            ProtectionDigest.Ledger(Ledger([acknowledgedPrior], ["member"], pending:
+                Pending(Root(), 1, acknowledgedPrior, acknowledgedNext, publicationId: Guid.Parse("20000000-0000-0000-0000-000000000002")))));
+        var stagedIdentity = Identity("staged-file");
+        var backupIdentity = Identity("backup-file");
+        var artifactBoundPending = Pending(Root(), 1, acknowledgedPrior, acknowledgedNext,
+            stagedStateFileIdentity: stagedIdentity, backupStateFileIdentity: backupIdentity);
+        var artifactBoundLedger = Ledger([acknowledgedPrior], ["member"], pending: artifactBoundPending);
+        Assert.NotEqual(ProtectionDigest.Ledger(recoveryBaseline), ProtectionDigest.Ledger(artifactBoundLedger));
+        Assert.NotEqual(
+            ProtectionDigest.Ledger(artifactBoundLedger),
+            ProtectionDigest.Ledger(Ledger([acknowledgedPrior], ["member"], pending:
+                Pending(Root(), 1, acknowledgedPrior, acknowledgedNext,
+                    stagedStateFileIdentity: Identity("other-staged-file"), backupStateFileIdentity: backupIdentity))));
+        Assert.NotEqual(
+            ProtectionDigest.Ledger(artifactBoundLedger),
+            ProtectionDigest.Ledger(Ledger([acknowledgedPrior], ["member"], pending:
+                Pending(Root(), 1, acknowledgedPrior, acknowledgedNext,
+                    stagedStateFileIdentity: stagedIdentity, backupStateFileIdentity: Identity("other-backup-file")))));
 
         var ack = Acknowledged("old", "parent", "old.json", "old-file", "old-body");
         var newMember = Member("new", Acknowledged("new", "parent", "new.json", "new-file", "new-body", epoch: 2));
@@ -934,6 +967,20 @@ public sealed class ProtectionDigestTests
         long epoch = 1,
         string ledgerDigest = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
         => new(1, root ?? Root(), epoch, status, members, targets, retired ?? [], pending, ledgerDigest);
+
+    private static PendingStateCommit Pending(
+        PhysicalRootIdentity root,
+        long epoch,
+        RootMemberRecord member,
+        PackageProtectionRecord next,
+        RootMembershipStatus priorStatus = RootMembershipStatus.Incomplete,
+        string priorLedgerDigest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        Guid? publicationId = null,
+        PhysicalFileIdentity? stagedStateFileIdentity = null,
+        PhysicalFileIdentity? backupStateFileIdentity = null)
+        => new(root, epoch, priorStatus, priorLedgerDigest,
+            publicationId ?? Guid.Parse("10000000-0000-0000-0000-000000000001"), member, next,
+            stagedStateFileIdentity, backupStateFileIdentity);
 
     private static RootMemberRecord Member(string id, RootMemberRecord.MemberBinding binding, string? locator = null)
         => new(id, locator ?? $"/state/{id}.json", binding);

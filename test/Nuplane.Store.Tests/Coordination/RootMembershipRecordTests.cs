@@ -67,8 +67,8 @@ public sealed class RootMembershipRecordTests
     {
         var absent = Member("new", Prospective());
         var legacy = Member("legacy", Unprotected());
-        var first = new PendingStateCommit(Root(), 1, absent, Protection("new"));
-        var migration = new PendingStateCommit(Root(), 1, legacy, Protection("legacy"));
+        var first = Pending(Root(), 1, absent, Protection("new"));
+        var migration = Pending(Root(), 1, legacy, Protection("legacy"));
 
         Assert.IsType<RootMemberRecord.ProspectiveBinding>(first.Prior);
         var prior = Assert.IsType<RootMemberRecord.ExistingUnprotectedBinding>(migration.Prior);
@@ -77,21 +77,71 @@ public sealed class RootMembershipRecordTests
         Assert.Equal(1, first.NextProtectionRecord.Revision);
         Assert.Equal(1, migration.NextProtectionRecord.Revision);
         Assert.Single(Ledger([absent, legacy], ["new", "legacy"], pending: migration).TargetMemberIds.Where(id => id == "legacy"));
-        Assert.Throws<ArgumentException>(() => new PendingStateCommit(Root(), 1, legacy, Protection("legacy", revision: 2)));
-        Assert.Throws<ArgumentException>(() => new PendingStateCommit(Root(), 1, Member("declared", new RootMemberRecord.DeclaredBinding()), Protection("declared")));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, legacy, Protection("legacy", revision: 2)));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, Member("declared", new RootMemberRecord.DeclaredBinding()), Protection("declared")));
+    }
+
+    [Fact]
+    public void Pending_RecordsPriorLedgerAndPublicationIdentityAndValidatesRecoveryBaseline()
+    {
+        var prospective = Member("member", Prospective());
+        var nextFirst = Protection("member");
+        var incomplete = Pending(Root(), 1, prospective, nextFirst);
+
+        Assert.Equal(RootMembershipStatus.Incomplete, incomplete.PriorMembershipStatus);
+        Assert.Equal("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", incomplete.PriorLedgerDigest);
+        Assert.NotEqual(Guid.Empty, incomplete.PublicationId);
+
+        var acknowledged = Member("member", Ack("member"));
+        var complete = Pending(Root(), 1, acknowledged, Protection("member", revision: 2), RootMembershipStatus.Complete);
+        Assert.Equal(RootMembershipStatus.Complete, complete.PriorMembershipStatus);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => Pending(Root(), 1, acknowledged, Protection("member", revision: 2), (RootMembershipStatus)9));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, prospective, nextFirst, RootMembershipStatus.Complete));
+        Assert.Throws<ArgumentNullException>(() => Pending(Root(), 1, prospective, nextFirst, priorLedgerDigest: null!));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, prospective, nextFirst, priorLedgerDigest: " "));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, prospective, nextFirst, priorLedgerDigest: "A".PadRight(64, 'a')));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, prospective, nextFirst, priorLedgerDigest: "bad-digest"));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, prospective, nextFirst, publicationId: Guid.Empty));
+
+        var stagedProspective = Identity("staged");
+        var prospectivePublication = Pending(Root(), 1, prospective, nextFirst, stagedStateFileIdentity: stagedProspective);
+        Assert.Equal(stagedProspective, prospectivePublication.StagedStateFileIdentity);
+        Assert.NotSame(stagedProspective, prospectivePublication.StagedStateFileIdentity);
+        Assert.Null(prospectivePublication.BackupStateFileIdentity);
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, prospective, nextFirst,
+            backupStateFileIdentity: Identity("backup")));
+
+        var existing = Member("existing", Unprotected());
+        var staged = Identity("staged-existing");
+        var backup = Identity("backup-existing");
+        var existingPublication = Pending(Root(), 1, existing, Protection("existing"),
+            stagedStateFileIdentity: staged, backupStateFileIdentity: backup);
+        Assert.NotSame(staged, existingPublication.StagedStateFileIdentity);
+        Assert.NotSame(backup, existingPublication.BackupStateFileIdentity);
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, existing, Protection("existing"),
+            backupStateFileIdentity: backup));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, existing, Protection("existing"),
+            stagedStateFileIdentity: staged));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, existing, Protection("existing"),
+            stagedStateFileIdentity: Identity("legacy-file"), backupStateFileIdentity: backup));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, existing, Protection("existing"),
+            stagedStateFileIdentity: staged, backupStateFileIdentity: Identity("legacy-file")));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, existing, Protection("existing"),
+            stagedStateFileIdentity: staged, backupStateFileIdentity: staged));
     }
 
     [Fact]
     public void Pending_AcknowledgedPrior_BindsExactSlotFileBodyAndRevision()
     {
         var member = Member("member", Ack("member", revision: 3));
-        var pending = new PendingStateCommit(Root(), 1, member, Protection("member", revision: 4));
+        var pending = Pending(Root(), 1, member, Protection("member", revision: 4), RootMembershipStatus.Complete);
         var ledger = Ledger([member], ["member"], pending: pending);
 
         Assert.Same(pending, ledger.PendingStateCommit);
         Assert.Equal(3, Assert.IsType<RootMemberRecord.AcknowledgedBinding>(pending.Prior).ProtectionRecord.Revision);
-        Assert.Throws<ArgumentException>(() => new PendingStateCommit(Root(), 1, member, Protection("member", revision: 3)));
-        Assert.Throws<ArgumentException>(() => new PendingStateCommit(Root(), 1, member, Protection("member", revision: 5)));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, member, Protection("member", revision: 3)));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, member, Protection("member", revision: 5)));
         Assert.Throws<ArgumentException>(() => Ledger([member], ["member"], RootMembershipStatus.Complete, pending));
 
         foreach (var changed in new[]
@@ -114,7 +164,7 @@ public sealed class RootMembershipRecordTests
     public void Pending_SameDigestsButDifferentProtectionPayload_Refuses(string changedField)
     {
         var original = Member("member", Ack("member", revision: 3));
-        var pending = new PendingStateCommit(Root(), 1, original, Protection("member", revision: 4));
+        var pending = Pending(Root(), 1, original, Protection("member", revision: 4));
         var substituted = Member("member", Ack("member", revision: 3, unknownActive: changedField == "active",
             unknownRecovery: changedField == "recovery", legacyUnknown: changedField == "legacy"));
 
@@ -134,23 +184,23 @@ public sealed class RootMembershipRecordTests
         var next = Protection(mismatch == "member" ? "foreign" : "member", epoch: mismatch == "epoch" ? 2 : 1,
             root: mismatch == "root" ? Root("foreign") : null, unknownActive: mismatch == "active",
             unknownRecovery: mismatch == "recovery", legacyUnknown: mismatch == "legacy");
-        Assert.Throws<ArgumentException>(() => new PendingStateCommit(Root(), 1, member, next));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, member, next));
     }
 
     [Fact]
     public void Pending_FuturePriorOrOverflow_Refuses()
     {
         var future = Member("member", Ack("member", epoch: 2));
-        Assert.Throws<ArgumentException>(() => new PendingStateCommit(Root(), 1, future, Protection("member", revision: 2)));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, future, Protection("member", revision: 2)));
         var overflow = Member("member", Ack("member", revision: long.MaxValue));
-        Assert.Throws<ArgumentException>(() => new PendingStateCommit(Root(), 1, overflow, Protection("member")));
+        Assert.Throws<ArgumentException>(() => Pending(Root(), 1, overflow, Protection("member")));
     }
 
     [Fact]
     public void Constructor_PendingMustMatchRootEpochMemberAndProspectiveParent()
     {
         var member = Member("member", Prospective());
-        var pending = new PendingStateCommit(Root(), 1, member, Protection("member"));
+        var pending = Pending(Root(), 1, member, Protection("member"));
         Assert.Throws<ArgumentException>(() => Ledger([member], ["member"], pending: pending, root: Root("foreign")));
         Assert.Throws<ArgumentException>(() => Ledger([member], ["member"], pending: pending, epoch: 2));
         Assert.Throws<ArgumentException>(() => Ledger([], [], pending: pending));
@@ -219,6 +269,15 @@ public sealed class RootMembershipRecordTests
         RootMembershipStatus status = RootMembershipStatus.Incomplete, PendingStateCommit? pending = null,
         IEnumerable<RootMemberRetirementEvidence>? retired = null, long epoch = 1, PhysicalRootIdentity? root = null, int schema = 1)
         => new(schema, root ?? Root(), epoch, status, members, targets, retired ?? [], pending, "ledger-digest");
+
+    private static PendingStateCommit Pending(PhysicalRootIdentity root, long epoch, RootMemberRecord member,
+        PackageProtectionRecord next, RootMembershipStatus priorStatus = RootMembershipStatus.Incomplete,
+        string priorLedgerDigest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        Guid? publicationId = null, PhysicalFileIdentity? stagedStateFileIdentity = null,
+        PhysicalFileIdentity? backupStateFileIdentity = null)
+        => new(root, epoch, priorStatus, priorLedgerDigest,
+            publicationId ?? Guid.Parse("10000000-0000-0000-0000-000000000001"), member, next,
+            stagedStateFileIdentity, backupStateFileIdentity);
 
     private static RootMemberRecord Member(string id, RootMemberRecord.MemberBinding binding)
         => new(id, $"/external-state/{id}.json", binding);

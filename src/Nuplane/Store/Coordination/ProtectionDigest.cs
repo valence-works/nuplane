@@ -69,6 +69,11 @@ internal static class ProtectionDigest
         });
     }
 
+    internal static void ValidateCanonicalDigest(string value)
+    {
+        _ = DecodeDigest(value);
+    }
+
     private static string Digest(string domain, Action<CanonicalWriter> encodeFields)
     {
         using var writer = new CanonicalWriter();
@@ -471,6 +476,11 @@ internal static class ProtectionDigest
             writer.Field(3, EncodeString(value.MemberId));
             writer.Field(4, EncodeBindingRecord(value.Prior));
             writer.Field(5, EncodeProtectionRecord(value.NextProtectionRecord));
+            writer.Field(6, EncodeEnum(value.PriorMembershipStatus));
+            writer.Field(7, DecodeDigest(value.PriorLedgerDigest));
+            writer.Field(8, GuidBytes(value.PublicationId));
+            writer.Field(9, EncodeNullableRecord(value.StagedStateFileIdentity, EncodePhysicalFile));
+            writer.Field(10, EncodeNullableRecord(value.BackupStateFileIdentity, EncodePhysicalFile));
         });
 
     private static byte[] EncodeBindingRecord(RootMemberRecord.MemberBinding value)
