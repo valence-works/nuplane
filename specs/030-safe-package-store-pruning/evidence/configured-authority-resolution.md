@@ -28,3 +28,11 @@ Independent source/test/workflow review found no production blocker at the recor
 Final source/test/workflow input manifest SHA-256: `bbde521af4e3dbcde516725fd1ce970c2819a63b644e49b1b932bb03fba19bad`. Resolver SHA-256: `27ee02b9eeaa8cc6567d5db20f79866c4fae6548d22d654a5dab083ca3ad78ff`; test SHA-256: `cc2ee9496bb592cdaf0690c5093fee6ccc14bec0a17ad999497239b825a6b401`; workflow SHA-256: `8f81789c14354dae618fcc580c3f5ccfffe21415237a2bcd4eea89537c440354`.
 
 Gate manifests/results, full logs, TRX, independent/root reviews and causal-control evidence are retained under the program artifact directory `prune-admission-authorization-audit/native-filesystem-gates/`, with prefixes `authority-`. Hosted results will be recorded after exact-head completion. T025/T042 remain open until that qualification settles; the full feature and program remain active.
+
+## Hosted failure and fixture correction
+
+[Validate 37960612273](https://github.com/valence-works/nuplane/actions/runs/37960612273) completed on `99eb76d13e245db4c5b8815756e75df2700b0116` with five successful jobs and one failed Windows job. The configured-authority Windows suite ran thirteen cases: twelve passed and the escape/return case failed during fixture cleanup because a membership handle remained open. Later Windows steps were skipped, so this is not Windows qualification. The original failure log is retained as `hosted-99eb76d-windows.log`.
+
+The corrective test increment uses a relative escape/return link and immediately reads its native target to prove the literal `..` survived creation. It also scopes any unexpectedly successful resolver result inside each refusal assertion; such a result is now disposed before the assertion reports its failure, preventing that result from causing a misleading Windows cleanup error. Whether the original absolute-target creation rewrote its spelling remains unconfirmed. Production resolver, native adapters and workflow counts are unchanged.
+
+Independent/root review found the test correction well targeted. All thirteen focused native cases pass locally without skips at test SHA-256 `bd527b9182aebd36a13fa0fd44a2cdf57441e5e7be4a0234d46f7d8d4d0e4899`, input manifest `303c9d15999c66ce9c4f0d32753b96c789d9856b229386ed2e45286f5872f1b2`. The corrected head still requires exact-head hosted verification; no failed gate has been represented as passed.

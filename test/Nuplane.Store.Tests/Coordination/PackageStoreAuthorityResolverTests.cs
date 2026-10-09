@@ -252,9 +252,12 @@ public sealed class PackageStoreAuthorityResolverTests
         context.Observed.Reset();
         context.Observed.ObserveOrderFor(rootIdentity.HandleIdentity, "escape-alias");
 
-        var exception = Assert.Throws<PackageStoreAdmissionException>(() => context.Resolver.Resolve(
-            Join(context.Fixture.PackageInstallRoot, "escape-alias", "package"),
-            PhysicalStorePathTarget.PackageDirectory));
+        var exception = Assert.Throws<PackageStoreAdmissionException>(() =>
+        {
+            using var unexpected = context.Resolver.Resolve(
+                Join(context.Fixture.PackageInstallRoot, "escape-alias", "package"),
+                PhysicalStorePathTarget.PackageDirectory);
+        });
         AssertRefusalReason(exception);
         context.AssertNoResolverSideEffects();
         context.AssertTrackedHandlesClosed();
@@ -301,7 +304,12 @@ public sealed class PackageStoreAuthorityResolverTests
                 "The literal parent component must be replayed through native parent handles.");
 
             var aliasPath = Path.Combine(escapeReturn.Fixture.PackageInstallRoot, "escape-return");
-            Directory.CreateSymbolicLink(aliasPath, escapeAndReturn);
+            // Preserve the parent step without depending on absolute-target normalization during link creation.
+            Directory.CreateSymbolicLink(aliasPath, Join("..", "packages", "child"));
+            var aliasEntry = escapeReturn.NativeFiles.InspectChildNoFollow(escapeReturn.PackageRoot, "escape-return")!;
+            var nativeTarget = escapeReturn.NativeFiles.ReadLinkTargetNoFollow(
+                escapeReturn.PackageRoot, "escape-return", aliasEntry.Identity);
+            Assert.Contains("..", nativeTarget.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries));
             escapeReturn.AssertRefused(aliasPath, PhysicalStorePathTarget.ConfiguredRootDirectory);
             Assert.True(escapeReturn.Observed.LinkReadCount > 0,
                 "Configured-root resolution must replay the final alias target before refusing its authority escape.");
@@ -489,8 +497,10 @@ public sealed class PackageStoreAuthorityResolverTests
                 }
             };
 
-            var exception = Assert.Throws<PackageStoreAdmissionException>(() => aliasRace.Resolver.Resolve(
-                alias, PhysicalStorePathTarget.ConfiguredRootDirectory));
+            var exception = Assert.Throws<PackageStoreAdmissionException>(() =>
+            {
+                using var unexpected = aliasRace.Resolver.Resolve(alias, PhysicalStorePathTarget.ConfiguredRootDirectory);
+            });
             AssertRefusalReason(exception);
             Assert.True(aliasMutationRan, "The configured-root path must read the alias before the test replaces it.");
             aliasRace.AssertNoResolverSideEffects();
@@ -516,8 +526,11 @@ public sealed class PackageStoreAuthorityResolverTests
                 }
             };
 
-            var exception = Assert.Throws<PackageStoreAdmissionException>(() => edgeRace.Resolver.Resolve(
-                Join(edgeRace.Fixture.PackageInstallRoot, "edge"), PhysicalStorePathTarget.PackageDirectory));
+            var exception = Assert.Throws<PackageStoreAdmissionException>(() =>
+            {
+                using var unexpected = edgeRace.Resolver.Resolve(
+                    Join(edgeRace.Fixture.PackageInstallRoot, "edge"), PhysicalStorePathTarget.PackageDirectory);
+            });
             AssertRefusalReason(exception);
             Assert.True(edgeMutationRan, "The observed directory edge must be replaced before the held open is checked.");
             edgeRace.AssertNoResolverSideEffects();
@@ -758,8 +771,10 @@ public sealed class PackageStoreAuthorityResolverTests
             PhysicalRootIdentity? requiredRoot = null)
         {
             Observed.Reset();
-            var exception = Assert.Throws<PackageStoreAdmissionException>(() => Resolver.Resolve(
-                locator, target, requiredRoot, exactBaseLocator));
+            var exception = Assert.Throws<PackageStoreAdmissionException>(() =>
+            {
+                using var unexpected = Resolver.Resolve(locator, target, requiredRoot, exactBaseLocator);
+            });
             AssertRefusalReason(exception);
             AssertNoResolverSideEffects();
             AssertTrackedHandlesClosed();
