@@ -1,6 +1,6 @@
 # Coordinated state publication and borrowed observer dispatch
 
-Date: 2026-10-09. Root reviewed and integrated this bounded increment on top of `ebe5385953d39eaba89b790958b00cbf49f27931`. The root and independent reviews cover the exact source hashes below. Hosted qualification for the resulting commit remains pending until its own CI completes.
+Date: 2026-10-09. Root reviewed and integrated this bounded increment on top of `ebe5385953d39eaba89b790958b00cbf49f27931`, producing `4e15b4714c8e69730053fa8c3e041652260271c7`. The root and independent reviews cover the exact source hashes below. Its hosted run exposed a Windows publication failure; the head is not cross-platform qualified.
 
 ## Implemented boundaries
 
@@ -50,6 +50,12 @@ Two compiled causal controls establish relevant regression sensitivity:
 Both production files were restored byte-exactly before the final gates. An earlier observer-test compile attempt referenced unavailable abstraction internals; the tests were corrected to use the public root/epoch and post-disposal path-validation behavior, with no added friend access. That compilation failure is retained and is not causal behavioral evidence.
 
 Root review found the serializer-instance bypass and the independent observer review found final-callback cancellation; both are corrected and covered. Independent re-review found no remaining concrete blocker in these bounded paths. Root performed the final diff, source-pin and gate review.
+
+## Hosted qualification failure
+
+[Validate 37978839840](https://github.com/valence-works/nuplane/actions/runs/37978839840), on exact head `4e15b4714c8e69730053fa8c3e041652260271c7`, completed with five of six jobs green. The build/test, universal Darwin shim, Ubuntu x64, Ubuntu ARM64 and macOS persistence jobs passed. Windows failed `CoordinatedStateReadAndThreePublicationsUseOneExistingOwnerAcrossTwoMembers`: the first coordinated failure-state publication could not replace `membership.json`, with native status `0xC0000022`. The Windows boundary produced 48 passes, one failure and three explicit platform skips; subsequent Windows stages did not execute.
+
+The native resolver retained a ledger read handle for the whole admitted operation. Windows opens that ordinary handle without delete sharing, so retaining it blocks the same owner's atomic ledger replacement. This affects both configured-root and install-path admission observations. The correction must preserve native identity/digest replay and ordinary file sharing policy while ending the ledger observation handle's lifetime before publication. Fresh hosted Windows proof is required after the correction; Unix success does not qualify this boundary. The failed-run log is retained with SHA-256 `07993799418b59eabbb62a1874b4adb707827c6fc5d676a8cd1f610ebcf41fe4`.
 
 ## Acceptance limits and next integration
 

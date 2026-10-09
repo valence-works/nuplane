@@ -39,7 +39,7 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
         cancellationToken.ThrowIfCancellationRequested();
 
         var resolved = _resolver.Resolve(_configuredRootLocator,
-            PhysicalStorePathTarget.ConfiguredRootDirectory, exactBaseLocator: _configuredRootBaseLocator);
+            PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix, exactBaseLocator: _configuredRootBaseLocator);
         var transferred = false;
         Exception? admissionError = null;
         try
@@ -50,6 +50,15 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
             var targetInfo = _files.InspectHandle(target);
             if (targetInfo.Kind != PhysicalStoreEntryKind.Directory)
                 throw Refusal("The configured package-store root changed kind during admission.");
+
+            if (resolved.IsProspectiveConfiguredRoot)
+            {
+                if (resolved.RootIdentity is not null || resolved.MembershipCandidate is not null)
+                    throw Refusal("A prospective configured root cannot carry an observed membership authority.");
+                resolved.Revalidate();
+                return new PackageStoreRootOperationAdmission(PackageStoreAdmissionStatus.Unenrolled,
+                    root: null, owner: null);
+            }
 
             if (resolved.RootIdentity is null)
             {

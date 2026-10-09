@@ -7,7 +7,8 @@ namespace Nuplane.Store.Coordination;
 /// <summary>Owns a metadata-only configured-path resolution and its retained native evidence.</summary>
 /// <remarks>
 /// A null authority, root identity, and membership candidate means only that resolution positively
-/// observed no reserved authority on the complete path. This result is not an admission capability.
+/// observed no reserved authority on the resolved namespace. A configured-root result may also retain
+/// a verified absent child edge for a prospective first-run suffix. This result is not an admission capability.
 /// </remarks>
 internal sealed class ResolvedPackageStorePath : IDisposable
 {
@@ -23,7 +24,8 @@ internal sealed class ResolvedPackageStorePath : IDisposable
         RootMembershipRecord? membershipCandidate,
         PhysicalFileIdentity? membershipLedgerIdentity,
         IReadOnlyList<PhysicalStoreHandle> ownedHandles,
-        Action revalidate)
+        Action revalidate,
+        bool isProspectiveConfiguredRoot = false)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(ownedHandles);
@@ -31,17 +33,20 @@ internal sealed class ResolvedPackageStorePath : IDisposable
         if ((authorityRoot is null) != (rootIdentity is null) || (rootIdentity is null) != (membershipCandidate is null) ||
             (membershipCandidate is null) != (membershipLedgerIdentity is null))
             throw new ArgumentException("Authority handle, root identity, and membership candidate must be present together.", nameof(authorityRoot));
+        if (isProspectiveConfiguredRoot && (rootIdentity is not null || target is not PhysicalStoreDirectoryHandle))
+            throw new ArgumentException("A prospective configured root requires an absent authority and a held existing parent.", nameof(isProspectiveConfiguredRoot));
 
         Target = target;
         AuthorityRoot = authorityRoot;
         RootIdentity = rootIdentity;
         MembershipCandidate = membershipCandidate;
         MembershipLedgerIdentity = membershipLedgerIdentity;
+        IsProspectiveConfiguredRoot = isProspectiveConfiguredRoot;
         _ownedHandles = ownedHandles.ToArray();
         _revalidate = revalidate;
     }
 
-    /// <summary>Gets the held final directory or archive handle.</summary>
+    /// <summary>Gets the held final target, or the nearest existing parent for a prospective configured root.</summary>
     internal PhysicalStoreHandle Target { get; }
 
     /// <summary>Gets the held authority-root directory, when one was positively observed.</summary>
@@ -55,6 +60,9 @@ internal sealed class ResolvedPackageStorePath : IDisposable
 
     /// <summary>Gets the exact native ledger-file identity observed with the candidate.</summary>
     internal PhysicalFileIdentity? MembershipLedgerIdentity { get; }
+
+    /// <summary>Whether the configured-root result ends at an absent suffix below its held existing parent.</summary>
+    internal bool IsProspectiveConfiguredRoot { get; }
 
     /// <summary>Rechecks the retained namespace, edge, alias, authority, and target observations.</summary>
     internal void Revalidate()

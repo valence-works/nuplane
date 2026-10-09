@@ -291,6 +291,14 @@ internal sealed partial class RootMembershipRegistry
         return ReadLedger(root, control);
     }
 
+    internal RootMembershipRecord ReadCandidate(PhysicalStoreDirectoryHandle root,
+        PhysicalFileIdentity expectedLedgerIdentity, out PhysicalFileIdentity actualLedgerIdentity)
+    {
+        ArgumentNullException.ThrowIfNull(expectedLedgerIdentity);
+        using var control = OpenControl(root);
+        return ReadLedger(root, control, out actualLedgerIdentity, expectedLedgerIdentity);
+    }
+
     private async Task<Transaction> OpenLockedAsync(PhysicalStoreDirectoryHandle root, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

@@ -446,25 +446,18 @@ public sealed class PackageStoreAuthorityResolverTests
                     RootMembershipRegistry.LedgerName)!.Identity);
 
             File.WriteAllBytes(replacementPath, originalBytes);
-            var replaceError = Record.Exception(() => File.Move(replacementPath, ledgerPath, overwrite: true));
-            if (replaceError is null)
+            File.Move(replacementPath, ledgerPath, overwrite: true);
+            using (var root = PhysicalStoreTestDirectory.Open(context.NativeFiles, rootPath))
+            using (var control = context.NativeFiles.OpenDirectoryChildNoFollow(root, RootMembershipRegistry.ControlDirectoryName))
             {
-                using var root = PhysicalStoreTestDirectory.Open(context.NativeFiles, rootPath);
-                using var control = context.NativeFiles.OpenDirectoryChildNoFollow(root, RootMembershipRegistry.ControlDirectoryName);
                 var replacementIdentity = context.NativeFiles.InspectChildNoFollow(control, RootMembershipRegistry.LedgerName)!.Identity;
                 Assert.NotEqual(originalIdentity, replacementIdentity);
-                context.RefreshControlTracking(rootPath);
+            }
+            context.RefreshControlTracking(rootPath);
 
-                var exception = Assert.Throws<PackageStoreAdmissionException>(resolved.Revalidate);
-                AssertRefusalReason(exception);
-                Assert.Equal(originalDigest, resolved.MembershipCandidate!.LedgerDigest);
-            }
-            else
-            {
-                Assert.True(OperatingSystem.IsWindows() && (replaceError is IOException or UnauthorizedAccessException),
-                    $"Only a Windows non-delete-sharing ledger handle may block atomic replacement; got {replaceError.GetType().Name}.");
-                resolved.Revalidate();
-            }
+            var exception = Assert.Throws<PackageStoreAdmissionException>(resolved.Revalidate);
+            AssertRefusalReason(exception);
+            Assert.Equal(originalDigest, resolved.MembershipCandidate!.LedgerDigest);
 
             Assert.Equal(0, context.Observed.PackagePayloadReadCount);
             Assert.Equal(0, context.Observed.CreateCount);

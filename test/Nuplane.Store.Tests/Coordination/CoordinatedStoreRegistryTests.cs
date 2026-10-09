@@ -16,42 +16,75 @@ public sealed class CoordinatedStoreRegistryTests
     public async Task CoordinatedStateReadAndThreePublicationsUseOneExistingOwnerAcrossTwoMembers()
     {
         await using var context = await CoordinatedContext.CreateAsync();
-        var first = new StoreRegistry(context.Serializer, context.Fixture.StateFilePath);
-        var second = new StoreRegistry(context.Serializer, context.StoreContext.StatePaths["second"]);
+        var installPath = GetAdmittedInstallPath(context.StoreContext);
         var borrow = context.Admission.Owner!.Borrow();
         using (borrow)
-        {
-            var firstBefore = await first.ReadCoordinatedStateAsync(borrow, CancellationToken.None);
-            Assert.Equal(1, firstBefore.ProtectionRecord!.Revision);
+            await ExerciseTwoMemberCoordinatedWritesAsync(context.StoreContext, context.Serializer, borrow,
+                installPath, "coordinated-1");
+    }
 
-            await first.PersistCoordinatedFailureAsync(borrow, "Root.First", "apply", "failed once",
-                "coordinated-1", CancellationToken.None);
-            await first.PersistCoordinatedSourceSnapshotAsync(borrow, "feed",
-                new SourceSnapshotRef("snapshot-2", DateTimeOffset.UnixEpoch.AddMinutes(2)), CancellationToken.None);
+    [SupportedPhysicalStoreFact]
+    public async Task CoordinatedStateReadAndPublicationsRemainAvailableWithRetainedMultiPathAdmission()
+    {
+        using var storeContext = await RootMembershipProtectionVerificationTests.Context.CreateCompleteAsync();
+        var serializer = new CountingPayloadSerializer();
+        var membershipRegistry = new RootMembershipRegistry(storeContext.Files, serializer);
+        var admission = new PackageStoreAdmission(storeContext.Files, membershipRegistry,
+            storeContext.Fixture.PackageInstallRoot);
+        var installPath = GetAdmittedInstallPath(storeContext);
+        await using var pathAdmission = await admission.AcquireForInstallPathsAsync([installPath],
+            PackageStoreAdmissionKind.Reconciliation);
+        using var borrow = pathAdmission.BorrowFor(installPath);
+        await ExerciseTwoMemberCoordinatedWritesAsync(storeContext, serializer, borrow, installPath,
+            "multipath-coordinated-1");
+    }
 
-            var secondBefore = await second.ReadCoordinatedStateAsync(borrow, CancellationToken.None);
-            var secondCandidate = await context.StoreContext.BuildStateAsync("second", "Root.Second", "1.1.0");
-            secondCandidate = context.StoreContext.Reprotect(secondCandidate, legacyUnknown: false,
-                revision: checked(secondBefore.ProtectionRecord!.Revision + 1));
-            await second.PersistCoordinatedActiveStateAsync(borrow, secondCandidate, CancellationToken.None);
+    private static string GetAdmittedInstallPath(RootMembershipProtectionVerificationTests.Context context)
+        => context.States.Values
+            .SelectMany(static state => state.ActivePackageDescriptorsByIdNormalized.Values)
+            .Select(static descriptor => descriptor.InstallPath)
+            .First();
 
-            var firstAfter = await new StoreRegistry(context.Serializer, context.Fixture.StateFilePath)
-                .ReadCoordinatedStateAsync(borrow, CancellationToken.None);
-            var secondAfter = await new StoreRegistry(context.Serializer, context.StoreContext.StatePaths["second"])
-                .ReadCoordinatedStateAsync(borrow, CancellationToken.None);
+    private static async Task ExerciseTwoMemberCoordinatedWritesAsync(
+        RootMembershipProtectionVerificationTests.Context storeContext,
+        CountingPayloadSerializer serializer,
+        PackageStoreOperationBorrow borrow,
+        string installPath,
+        string correlationId)
+    {
+        var first = new StoreRegistry(serializer, storeContext.Fixture.StateFilePath);
+        var second = new StoreRegistry(serializer, storeContext.StatePaths["second"]);
+        var firstBefore = await first.ReadCoordinatedStateAsync(borrow, CancellationToken.None);
+        Assert.Equal(1, firstBefore.ProtectionRecord!.Revision);
+        borrow.ValidateForInstallPath(installPath);
 
-            Assert.Equal("failed once", firstAfter.LastFailureById["Root.First"].Message);
-            Assert.Equal("snapshot-2", firstAfter.LastSuccessfulSourceSnapshots["feed"].Version);
-            Assert.Equal(3, firstAfter.ProtectionRecord!.Revision);
-            Assert.Equal("1.1.0", secondAfter.ActiveVersionById["Root.Second"]);
-            Assert.Equal(2, secondAfter.ProtectionRecord!.Revision);
+        await first.PersistCoordinatedFailureAsync(borrow, "Root.First", "apply", "failed once",
+            correlationId, CancellationToken.None);
+        borrow.ValidateForInstallPath(installPath);
+        await first.PersistCoordinatedSourceSnapshotAsync(borrow, "feed",
+            new SourceSnapshotRef("snapshot-2", DateTimeOffset.UnixEpoch.AddMinutes(2)), CancellationToken.None);
+        borrow.ValidateForInstallPath(installPath);
 
-            var ledger = PackageStoreOperationAccess.GetLockedMemberLocations(borrow).Ledger;
-            Assert.Equal(3, Assert.IsType<RootMemberRecord.AcknowledgedBinding>(
-                ledger.Members.Single(member => member.MemberId == "first").Binding).ProtectionRecord.Revision);
-            Assert.Equal(2, Assert.IsType<RootMemberRecord.AcknowledgedBinding>(
-                ledger.Members.Single(member => member.MemberId == "second").Binding).ProtectionRecord.Revision);
-        }
+        var secondBefore = await second.ReadCoordinatedStateAsync(borrow, CancellationToken.None);
+        var secondCandidate = await storeContext.BuildStateAsync("second", "Root.Second", "1.1.0");
+        secondCandidate = storeContext.Reprotect(secondCandidate, legacyUnknown: false,
+            revision: checked(secondBefore.ProtectionRecord!.Revision + 1));
+        await second.PersistCoordinatedActiveStateAsync(borrow, secondCandidate, CancellationToken.None);
+        borrow.ValidateForInstallPath(installPath);
+
+        var firstAfter = await first.ReadCoordinatedStateAsync(borrow, CancellationToken.None);
+        var secondAfter = await second.ReadCoordinatedStateAsync(borrow, CancellationToken.None);
+        Assert.Equal("failed once", firstAfter.LastFailureById["Root.First"].Message);
+        Assert.Equal("snapshot-2", firstAfter.LastSuccessfulSourceSnapshots["feed"].Version);
+        Assert.Equal(3, firstAfter.ProtectionRecord!.Revision);
+        Assert.Equal("1.1.0", secondAfter.ActiveVersionById["Root.Second"]);
+        Assert.Equal(2, secondAfter.ProtectionRecord!.Revision);
+
+        var ledger = PackageStoreOperationAccess.GetLockedMemberLocations(borrow).Ledger;
+        Assert.Equal(3, Assert.IsType<RootMemberRecord.AcknowledgedBinding>(
+            ledger.Members.Single(member => member.MemberId == "first").Binding).ProtectionRecord.Revision);
+        Assert.Equal(2, Assert.IsType<RootMemberRecord.AcknowledgedBinding>(
+            ledger.Members.Single(member => member.MemberId == "second").Binding).ProtectionRecord.Revision);
     }
 
     [SupportedPhysicalStoreFact]

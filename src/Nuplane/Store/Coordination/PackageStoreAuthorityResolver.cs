@@ -168,6 +168,7 @@ internal sealed class PackageStoreAuthorityResolver
             var frames = new List<ComponentFrame> { new(path.Components) };
             PhysicalStoreFileHandle? finalFile = null;
             PhysicalStoreDirectoryHandle? finalFileParent = null;
+            var prospectiveConfiguredRoot = false;
 
             while (frames.Count > 0)
             {
@@ -212,13 +213,26 @@ internal sealed class PackageStoreAuthorityResolver
                     throw Unknown("A configured path component is not one supported native name.", state.RootIdentity, exception);
                 }
                 ValidateComponentEncoding(component);
-                var entry = _files.InspectChildNoFollow(current, component)
-                    ?? throw Unknown("The configured path contains a missing component.", state.RootIdentity);
+                var entry = _files.InspectChildNoFollow(current, component);
+                if (entry is null)
+                {
+                    if (target != PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix ||
+                        state.RootIdentity is not null ||
+                        frames.Any(static candidate => candidate.Alias is not null) ||
+                        !TryGetOrdinaryRemainingSuffix(frames, out var remainingSuffix))
+                    {
+                        throw Unknown("The configured path contains a missing component.", state.RootIdentity);
+                    }
+
+                    state.RecordMissingSuffix(current, component, remainingSuffix);
+                    prospectiveConfiguredRoot = true;
+                    break;
+                }
 
                 if (entry.Kind == PhysicalStoreEntryKind.SymbolicLink)
                 {
                     var terminalLink = !HasMeaningfulRemainingComponents(frames);
-                    if (terminalLink && target != PhysicalStorePathTarget.ConfiguredRootDirectory)
+                    if (terminalLink && !AllowsConfiguredRootAlias(target))
                     {
                         throw Unknown("A final package, member, content, or archive link is not an accepted target.", state.RootIdentity);
                     }
@@ -303,7 +317,8 @@ internal sealed class PackageStoreAuthorityResolver
                 state.MembershipCandidate,
                 state.MembershipLedgerIdentity,
                 transferredHandles,
-                () => state.Revalidate(finalTarget, target, finalFileParent));
+                () => state.Revalidate(finalTarget, target, finalFileParent),
+                prospectiveConfiguredRoot);
             state.DetachHandles();
             return result;
         }
@@ -530,6 +545,43 @@ internal sealed class PackageStoreAuthorityResolver
         return false;
     }
 
+    private bool TryGetOrdinaryRemainingSuffix(IReadOnlyList<ComponentFrame> frames, out string[] suffix)
+    {
+        var remaining = new List<string>();
+        foreach (var frame in frames)
+        {
+            for (var index = frame.Index; index < frame.Components.Length; index++)
+            {
+                var component = frame.Components[index];
+                if (component is "." or "..")
+                {
+                    suffix = [];
+                    return false;
+                }
+
+                try
+                {
+                    PhysicalStoreNames.ValidateSingleComponent(component);
+                    ValidateComponentEncoding(component);
+                }
+                catch (ArgumentException)
+                {
+                    suffix = [];
+                    return false;
+                }
+
+                remaining.Add(component);
+            }
+        }
+
+        suffix = remaining.ToArray();
+        return true;
+    }
+
+    private static bool AllowsConfiguredRootAlias(PhysicalStorePathTarget target)
+        => target is PhysicalStorePathTarget.ConfiguredRootDirectory or
+            PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix;
+
     private static bool HasAnyRemainingComponents(IReadOnlyList<ComponentFrame> frames)
         => frames.Any(frame => frame.Index < frame.Components.Length);
 
@@ -597,6 +649,7 @@ internal sealed class PackageStoreAuthorityResolver
         private readonly List<ParentEdgeEvidence> _parentEdges = [];
         private readonly List<AliasEvidence> _aliases = [];
         private readonly List<ControlEvidence> _controls = [];
+        private readonly List<MissingSuffixEvidence> _missingSuffixes = [];
 
         internal PhysicalRootIdentity? RequiredRoot { get; } = requiredRoot;
         internal RootMembershipRegistry.MemberLocatorReplayScope? MemberLocatorScope { get; } = memberLocatorScope;
@@ -694,7 +747,7 @@ internal sealed class PackageStoreAuthorityResolver
             var entry = resolver._files.InspectChildNoFollow(directory, ControlDirectoryName);
             if (entry is null)
             {
-                AddEvidence(_controls, new ControlEvidence(directory, parentInfo.Identity, null, null, null, null, null));
+                AddEvidence(_controls, new ControlEvidence(directory, parentInfo.Identity, null, null, null, null));
                 return;
             }
 
@@ -711,18 +764,10 @@ internal sealed class PackageStoreAuthorityResolver
             var ledgerEntry = resolver._files.InspectChildNoFollow(control, LedgerName);
             if (ledgerEntry is null || ledgerEntry.Kind != PhysicalStoreEntryKind.RegularFile || ledgerEntry.LinkCount != 1)
                 throw Unknown("A present reserved control directory has no unambiguous membership ledger.", RootIdentity);
-            var ledger = resolver._files.OpenFileChildNoFollow(control, LedgerName, FileAccess.Read);
-            Track(ledger);
-            var ledgerInfo = resolver._files.InspectHandle(ledger);
-            if (ledgerInfo.Kind != PhysicalStoreEntryKind.RegularFile || ledgerInfo.LinkCount != 1 || ledgerInfo.Identity != ledgerEntry.Identity)
-                throw Unknown("The membership ledger changed between no-follow inspection and held open.", RootIdentity);
-            RecordFileEdge(control, LedgerName, ledger, ledgerInfo.Identity);
-
-            var candidate = resolver._registry.ReadCandidate(directory);
+            var candidate = resolver._registry.ReadCandidate(directory, ledgerEntry.Identity, out var ledgerIdentity);
             var ledgerAfter = resolver._files.InspectChildNoFollow(control, LedgerName);
-            var ledgerHandleAfter = resolver._files.InspectHandle(ledger);
             if (ledgerAfter is null || ledgerAfter.Kind != PhysicalStoreEntryKind.RegularFile || ledgerAfter.LinkCount != 1 ||
-                ledgerAfter.Identity != ledgerInfo.Identity || ledgerHandleAfter.Identity != ledgerInfo.Identity)
+                ledgerAfter.Identity != ledgerIdentity || ledgerIdentity != ledgerEntry.Identity)
             {
                 throw Unknown("The membership ledger changed while its structural candidate was read.", RootIdentity);
             }
@@ -731,7 +776,7 @@ internal sealed class PackageStoreAuthorityResolver
 
             if (RootIdentity is not null && (RootIdentity != candidate.RootIdentity ||
                 !string.Equals(MembershipCandidate!.LedgerDigest, candidate.LedgerDigest, StringComparison.Ordinal) ||
-                MembershipLedgerIdentity != ledgerInfo.Identity))
+                MembershipLedgerIdentity != ledgerIdentity))
             {
                 throw Refusal(PackageStoreAdmissionReason.UnknownAuthority,
                     "The configured path encountered changing or conflicting membership authority.", candidate.RootIdentity);
@@ -740,9 +785,9 @@ internal sealed class PackageStoreAuthorityResolver
             AuthorityRoot ??= directory;
             RootIdentity ??= candidate.RootIdentity;
             MembershipCandidate ??= candidate;
-            MembershipLedgerIdentity ??= ledgerInfo.Identity;
+            MembershipLedgerIdentity ??= ledgerIdentity;
             AddEvidence(_controls, new ControlEvidence(
-                directory, parentInfo.Identity, control, entry.Identity, ledger, ledgerInfo.Identity, candidate));
+                directory, parentInfo.Identity, control, entry.Identity, ledgerIdentity, candidate));
         }
 
         internal AliasEvidence ReadAlias(PhysicalStoreDirectoryHandle parent, string name, PhysicalFileIdentity identity)
@@ -753,11 +798,102 @@ internal sealed class PackageStoreAuthorityResolver
             return evidence;
         }
 
+        internal void RecordMissingSuffix(
+            PhysicalStoreDirectoryHandle parent,
+            string firstMissingName,
+            IReadOnlyList<string> remainingSuffix)
+        {
+            if (RootIdentity is not null || ActiveAliases.Count != 0)
+                throw Unknown("A missing configured-root suffix cannot follow observed authority or an unresolved alias.", RootIdentity);
+
+            var before = resolver._files.InspectHandle(parent);
+            var semantics = resolver._names.ObserveDirectoryNameSemantics(parent);
+            RequireSupportedMissingNameProfile(semantics);
+            if (IsReservedControlName(firstMissingName, semantics) ||
+                remainingSuffix.Any(IsPotentialReservedControlName))
+            {
+                throw Unknown("A prospective configured root cannot occupy the reserved control-directory name.", RootIdentity);
+            }
+
+            var missing = resolver._files.InspectChildNoFollow(parent, firstMissingName);
+            var after = resolver._files.InspectHandle(parent);
+            var semanticsAfter = resolver._names.ObserveDirectoryNameSemantics(parent);
+            var missingAfter = resolver._files.InspectChildNoFollow(parent, firstMissingName);
+            if (before.Kind != PhysicalStoreEntryKind.Directory || after.Kind != PhysicalStoreEntryKind.Directory ||
+                before.Identity != after.Identity || semantics != semanticsAfter || missing is not null || missingAfter is not null)
+            {
+                throw Unknown("The prospective configured-root edge changed during native absence observation.", RootIdentity);
+            }
+
+            AddEvidence(_missingSuffixes, new MissingSuffixEvidence(parent, before.Identity, semantics, firstMissingName));
+        }
+
+        private static bool IsReservedControlName(string name, PhysicalStoreNameSemantics semantics)
+        {
+            // The profile reports lookup properties, not its native Unicode folding table. Keep Unicode names
+            // on the strict sensitive path only; under broader profiles, refuse when equivalence is unknowable.
+            if (semantics.CaseSensitive && !semantics.NormalizationInsensitive)
+                return string.Equals(name, ControlDirectoryName, StringComparison.Ordinal);
+
+            if (!IsAscii(name))
+            {
+                throw Refusal(PackageStoreAdmissionReason.UnsupportedFilesystem,
+                    "The configured-root name may alias the reserved control directory under native name semantics.");
+            }
+
+            // Both operands are ASCII here, so this checks only ASCII case variants.
+            return semantics.CaseSensitive
+                ? string.Equals(name, ControlDirectoryName, StringComparison.Ordinal)
+                : string.Equals(name, ControlDirectoryName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsPotentialReservedControlName(string name)
+        {
+            // Parent directories below the first absent edge have no observable native profile yet.
+            // ASCII is the only equivalence class we can compare exactly across every supported profile.
+            if (!IsAscii(name))
+            {
+                throw Refusal(PackageStoreAdmissionReason.UnsupportedFilesystem,
+                    "A later configured-root component has no observable native name profile for reserved-name comparison.");
+            }
+
+            // The explicit ASCII guard above keeps this comparison out of Unicode folding semantics.
+            return string.Equals(name, ControlDirectoryName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsAscii(string value) => value.All(static character => character <= 0x7f);
+
+        private static void RequireSupportedMissingNameProfile(PhysicalStoreNameSemantics semantics)
+        {
+            var expectedEncoding = OperatingSystem.IsWindows()
+                ? PhysicalStoreNameEncoding.Utf16LittleEndian
+                : PhysicalStoreNameEncoding.Utf8;
+            var supported = semantics.ProfileId switch
+            {
+                "windows-ntfs-name-v1" => OperatingSystem.IsWindows() &&
+                    semantics.Encoding == expectedEncoding && !semantics.NormalizationInsensitive,
+                "darwin-apfs-v1" => OperatingSystem.IsMacOS() && semantics.Encoding == expectedEncoding,
+                "linux-ext4-sensitive-v1" => OperatingSystem.IsLinux() && semantics.Encoding == expectedEncoding &&
+                    semantics.CaseSensitive && !semantics.NormalizationInsensitive,
+                "linux-ext4-casefold-v1" => OperatingSystem.IsLinux() && semantics.Encoding == expectedEncoding &&
+                    !semantics.CaseSensitive && semantics.NormalizationInsensitive,
+                _ => false
+            };
+            if (!supported)
+            {
+                throw Refusal(PackageStoreAdmissionReason.UnsupportedFilesystem,
+                    "The filesystem returned an unsupported native name profile for a prospective configured root.");
+            }
+        }
+
         internal void Revalidate(
             PhysicalStoreHandle target,
             PhysicalStorePathTarget targetKind,
             PhysicalStoreDirectoryHandle? targetParent)
         {
+            if (_missingSuffixes.Count > 0 && targetKind != PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix)
+                throw Unknown("Missing-suffix evidence is valid only for configured-root admission.", RootIdentity);
+
             foreach (var anchor in _anchors)
             {
                 var held = resolver._files.InspectHandle(anchor.Directory);
@@ -824,6 +960,28 @@ internal sealed class PackageStoreAuthorityResolver
                     throw Unknown("A configured symbolic-link target changed after expansion.", RootIdentity);
             }
 
+            foreach (var missing in _missingSuffixes)
+            {
+                var parent = resolver._files.InspectHandle(missing.Parent);
+                var semantics = resolver._names.ObserveDirectoryNameSemantics(missing.Parent);
+                var entry = resolver._files.InspectChildNoFollow(missing.Parent, missing.FirstMissingName);
+                var parentAfter = resolver._files.InspectHandle(missing.Parent);
+                var semanticsAfter = resolver._names.ObserveDirectoryNameSemantics(missing.Parent);
+                if (!ReferenceEquals(target, missing.Parent) || parent.Kind != PhysicalStoreEntryKind.Directory ||
+                    parent.Identity != missing.ParentIdentity || semantics != missing.Semantics || entry is not null ||
+                    parentAfter.Kind != PhysicalStoreEntryKind.Directory || parentAfter.Identity != missing.ParentIdentity ||
+                    semanticsAfter != missing.Semantics)
+                {
+                    throw Unknown("A prospective configured-root suffix changed after native absence observation.", RootIdentity);
+                }
+            }
+
+            if (targetKind == PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix &&
+                _missingSuffixes.Count > 1)
+            {
+                throw Unknown("A configured-root resolution observed multiple missing suffixes.", RootIdentity);
+            }
+
             foreach (var control in _controls)
             {
                 var parent = resolver._files.InspectHandle(control.Parent);
@@ -843,14 +1001,12 @@ internal sealed class PackageStoreAuthorityResolver
                 if (heldControl.Kind != PhysicalStoreEntryKind.Directory || heldControl.Identity != control.ControlIdentity)
                     throw Unknown("A retained control-directory handle changed identity.", RootIdentity);
                 var ledger = resolver._files.InspectChildNoFollow(control.ControlHandle!, LedgerName);
-                var heldLedger = resolver._files.InspectHandle(control.LedgerHandle!);
                 if (ledger is null || ledger.Kind != PhysicalStoreEntryKind.RegularFile || ledger.LinkCount != 1 ||
-                    ledger.Identity != control.LedgerIdentity || heldLedger.Kind != PhysicalStoreEntryKind.RegularFile ||
-                    heldLedger.LinkCount != 1 || heldLedger.Identity != control.LedgerIdentity)
+                    ledger.Identity != control.LedgerIdentity)
                 {
-                    throw Unknown("The held membership ledger changed after authority observation.", RootIdentity);
+                    throw Unknown("The membership ledger changed after authority observation.", RootIdentity);
                 }
-                var candidate = resolver._registry.ReadCandidate(control.Parent);
+                var candidate = resolver._registry.ReadCandidate(control.Parent, control.LedgerIdentity!, out var ledgerIdentity);
                 if (candidate.RootIdentity != control.Candidate!.RootIdentity ||
                     !string.Equals(candidate.LedgerDigest, control.Candidate.LedgerDigest, StringComparison.Ordinal))
                 {
@@ -858,10 +1014,9 @@ internal sealed class PackageStoreAuthorityResolver
                 }
                 ValidateCandidate(control.Candidate.RootIdentity, candidate);
                 var ledgerAfterRead = resolver._files.InspectChildNoFollow(control.ControlHandle!, LedgerName);
-                var heldLedgerAfterRead = resolver._files.InspectHandle(control.LedgerHandle!);
                 if (ledgerAfterRead is null || ledgerAfterRead.Kind != PhysicalStoreEntryKind.RegularFile ||
                     ledgerAfterRead.LinkCount != 1 || ledgerAfterRead.Identity != control.LedgerIdentity ||
-                    heldLedgerAfterRead.Identity != control.LedgerIdentity)
+                    ledgerIdentity != control.LedgerIdentity)
                 {
                     throw Unknown("The membership ledger identity changed during candidate revalidation.", RootIdentity);
                 }
@@ -952,8 +1107,13 @@ internal sealed class PackageStoreAuthorityResolver
             PhysicalFileIdentity ParentIdentity,
             PhysicalStoreDirectoryHandle? ControlHandle,
             PhysicalFileIdentity? ControlIdentity,
-            PhysicalStoreFileHandle? LedgerHandle,
             PhysicalFileIdentity? LedgerIdentity,
             RootMembershipRecord? Candidate);
+
+        private sealed record MissingSuffixEvidence(
+            PhysicalStoreDirectoryHandle Parent,
+            PhysicalFileIdentity ParentIdentity,
+            PhysicalStoreNameSemantics Semantics,
+            string FirstMissingName);
     }
 }
