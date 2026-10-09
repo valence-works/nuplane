@@ -54,8 +54,22 @@ The first read-drain mutation used a compile-time constant and failed compilatio
 
 The workflow adds exact-name/multiplicity/no-skip gates for 26 native metadata cases, 11 lifetime cases and both consumer regressions on all four platform lanes, plus the ninth owned-ext4 case on both Linux architectures. All sixteen embedded Python validators compile. Locally, the validators accept the actual final Store TRX subsets (26 and 11 cases) and both actual consumer regression TRXs; fourteen missing/duplicate/skipped/failed/unexpected/empty-result controls are rejected. These local validator checks are not hosted workflow execution.
 
-The final independent read-only review and root diff review found no remaining actionable issue in this bounded increment; all nineteen reviewed source/test/workflow hashes match the final candidate. Hosted execution of this increment remains pending. Earlier-head hosted success is recorded separately in the coordinated-runtime evidence and does not qualify these new sources.
+The final independent read-only review and root diff review found no remaining actionable issue in this bounded increment; all nineteen reviewed source/test/workflow hashes match the final candidate.
+
+Exact committed head `13dc3745ecb5406beee62448900f9af30544bfd9` passed all six jobs in
+[Validate 37992882170](https://github.com/valence-works/nuplane/actions/runs/37992882170).
+Root parsed the complete logs: the full Ubuntu solution passed 1,865 cases, failed zero and skipped
+32 explicitly platform-inapplicable cases (Runtime 855, Store 513, Loading 258, Integration 193,
+Directory 21, NuGet 25). Each Windows x64, macOS ARM64 and Linux x64/ARM64 lane passed all 26 metadata,
+11 lifetime, two consumer and 33 runtime/startup gate cases without skips. All twelve serialization
+framework/platform executions passed 97 cases each without skips; both owned-ext4 lanes passed nine
+cases each without skips. Complete log SHA-256 is
+`38145974a9f7298067887372a3dc390f6cdef9f4b091ee3944ff1730f07777b7`; parsed qualification SHA-256 is
+`383f658409aab961d95eb0b82ba35a1836ec6909b7732e0b029407ede6e46d7a`.
+This hosted run qualifies this committed increment only, including the bounded T037 owner/control
+and T080 metadata-reader implementations. It does not qualify subsequent root-access or native
+enumeration work.
 
 ## Acceptance limits
 
-No native graph-use record/provider, complete scoped contributor/advisor/resolver, actual Loading context lifetime, two-composition overlapping-generation first-read gate, manual deletion, stable release or Foundation adoption is proved here. T036, T086–T099 and the mandatory non-destructive integration gate remain required. T080 and bounded T037/T085 acceptance await hosted qualification; the checklist count remains unchanged.
+No native graph-use record/provider, complete scoped contributor/advisor/resolver, actual Loading context lifetime, two-composition overlapping-generation first-read gate, manual deletion, stable release or Foundation adoption is proved here. T036, T086–T099 and the mandatory non-destructive integration gate remain required. T037 and T080 are accepted only for their defined owner/control and reader scope; native binding/provider and Loading integration remain required elsewhere. T085 stays open for complete observer lifecycle/registration integration. The bounded checklist count is 32/128, not a program completion percentage.

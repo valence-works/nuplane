@@ -22,6 +22,19 @@ All persisted records are schema-versioned. Unknown/absent data is distinct from
 
 ## Publication transitions
 
+### Immutable graph-use lifetime mechanism
+
+The graph-use record's lifetime kind identifies its native ownership mechanism: schema 1 uses
+`OsExclusiveSentinel`. It does not predict collectible versus noncollectible Loading ownership,
+because that transfer happens after lease acquisition. The immutable record binds the already-held
+sentinel's exact native identity, the physical root/enrollment epoch, and the complete snapshot;
+PID is diagnostic only. Weak-target state and counted read pins remain process-local. Publication
+must finish and native graph bindings must be revalidated before the first retained read. Releasing
+the sentinel leaves the record for independently verified stale-use inspection and cleanup.
+
+This clarifies the unreleased format before its codec/provider implementation. No current file or
+public API has this newly specified record format yet. Unknown lifetime kinds refuse.
+
 ### State-slot name observations
 
 The native provider resolves the configured component beneath a held parent, observes the single-link regular file identity, obtains its actual stored entry spelling, and reopens that canonical component beneath the same parent. Parent, file, and name-profile observations must agree across the operation. A returned full native path may supply a leaf candidate only; it grants no authority and is never reopened. Unix providers enumerate an independent held-parent directory stream rather than infer spelling from a diagnostic path. No managed case folding, Unicode normalization, or guessed Windows short-name expansion supplies identity.

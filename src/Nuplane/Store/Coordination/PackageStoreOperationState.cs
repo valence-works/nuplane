@@ -170,7 +170,36 @@ internal sealed class PackageStoreOperationState : IPackageStoreOperationOwnerCo
         }
     }
 
-    private void BeginValidation(PackageStoreOperationBorrow borrow, string installPath)
+    internal async Task<TResult> WithValidatedRootAsync<TResult>(
+        PackageStoreOperationBorrow borrow,
+        Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle, CancellationToken, Task<TResult>> callback,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(borrow);
+        ArgumentNullException.ThrowIfNull(callback);
+        cancellationToken.ThrowIfCancellationRequested();
+        // A path-restricted read borrow cannot expand into root-wide native access.
+        BeginValidation(borrow, installPath: null);
+        try
+        {
+            if (_heldRootOwnership is not IStoreOperationLockedMemberContext held)
+            {
+                throw new PackageStoreAdmissionException(
+                    PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "This admitted operation does not expose a retained native root context.",
+                    _root);
+            }
+
+            return await held.LockedMemberLocations.WithValidatedRootAsync(callback, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            EndValidation();
+        }
+    }
+
+    private void BeginValidation(PackageStoreOperationBorrow borrow, string? installPath)
     {
         lock (_gate)
         {

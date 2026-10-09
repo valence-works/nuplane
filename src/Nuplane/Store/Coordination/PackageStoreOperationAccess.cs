@@ -6,6 +6,25 @@ namespace Nuplane.Store.Coordination;
 /// <summary>Validates owner/borrow identity before exposing existing root/member locks to coordinated writers.</summary>
 internal static class PackageStoreOperationAccess
 {
+    /// <summary>Runs core work through the existing root/member owner, retaining it across awaits.</summary>
+    internal static Task<TResult> WithValidatedRootAsync<TResult>(
+        PackageStoreOperationBorrow borrow,
+        Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle, CancellationToken, Task<TResult>> callback,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(borrow);
+        ArgumentNullException.ThrowIfNull(callback);
+        if (borrow.Control is not PackageStoreOperationState state)
+        {
+            throw new PackageStoreAdmissionException(
+                PackageStoreAdmissionReason.UnsupportedParticipant,
+                "The operation owner does not provide retained native root access.",
+                borrow.Root);
+        }
+
+        return state.WithValidatedRootAsync(borrow, callback, cancellationToken);
+    }
+
     internal static TResult WithValidatedPackageDirectory<TResult>(
         PackageStoreOperationBorrow borrow,
         string installPath,

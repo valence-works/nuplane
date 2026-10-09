@@ -4,6 +4,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/attr.h>
 #include <sys/mount.h>
@@ -185,4 +186,141 @@ __attribute__((visibility("default")))
 int nuplane_find_directory_entry_name(int parent_fd, int directory_fd, char *name, size_t capacity)
 {
     return find_entry_name(parent_fd, directory_fd, 1, name, capacity);
+}
+
+/*
+ * Copy every direct child name from an already-held directory descriptor.
+ * Each call opens a new file description, so callers never share a directory
+ * stream cursor. The result is a packed NUL-delimited byte buffer; managed code
+ * validates UTF-8 and portable components without losing the stored spelling.
+ */
+__attribute__((visibility("default")))
+int nuplane_enumerate_child_names(int parent_fd, size_t maximum_entries, char **names, size_t *byte_length, size_t *count)
+{
+    if (maximum_entries == 0 || names == NULL || byte_length == NULL || count == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    *names = NULL;
+    *byte_length = 0;
+    *count = 0;
+
+    struct stat parent_before;
+    if (fstat(parent_fd, &parent_before) != 0)
+        return -1;
+    if (!S_ISDIR(parent_before.st_mode)) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    int enumeration_fd = openat(parent_fd, ".", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (enumeration_fd < 0)
+        return -1;
+
+    struct stat opened_parent;
+    if (fstat(enumeration_fd, &opened_parent) != 0) {
+        int saved_errno = errno;
+        close(enumeration_fd);
+        errno = saved_errno;
+        return -1;
+    }
+    if (!S_ISDIR(opened_parent.st_mode) ||
+        opened_parent.st_dev != parent_before.st_dev ||
+        opened_parent.st_ino != parent_before.st_ino) {
+        close(enumeration_fd);
+        errno = ESTALE;
+        return -1;
+    }
+
+    DIR *stream = fdopendir(enumeration_fd);
+    if (stream == NULL) {
+        int saved_errno = errno;
+        close(enumeration_fd);
+        errno = saved_errno;
+        return -1;
+    }
+
+    char *buffer = NULL;
+    size_t capacity = 0;
+    size_t used = 0;
+    size_t entries = 0;
+    int status = -1;
+    int saved_errno = 0;
+    struct dirent *entry;
+    for (;;) {
+        errno = 0;
+        entry = readdir(stream);
+        if (entry == NULL) {
+            if (errno != 0) {
+                saved_errno = errno;
+                goto cleanup;
+            }
+            break;
+        }
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        if (entries == maximum_entries) {
+            saved_errno = EOVERFLOW;
+            goto cleanup;
+        }
+
+        size_t name_length = strlen(entry->d_name);
+        if (name_length == 0 || used == SIZE_MAX || name_length > SIZE_MAX - used - 1) {
+            saved_errno = EOVERFLOW;
+            goto cleanup;
+        }
+        size_t required = used + name_length + 1;
+        if (required > capacity) {
+            size_t next_capacity = capacity == 0 ? 256 : capacity;
+            while (next_capacity < required) {
+                if (next_capacity > SIZE_MAX / 2) {
+                    next_capacity = required;
+                    break;
+                }
+                next_capacity *= 2;
+            }
+            char *next = realloc(buffer, next_capacity);
+            if (next == NULL) {
+                saved_errno = errno;
+                goto cleanup;
+            }
+            buffer = next;
+            capacity = next_capacity;
+        }
+
+        memcpy(buffer + used, entry->d_name, name_length + 1);
+        used = required;
+        entries++;
+    }
+
+    struct stat parent_after;
+    if (fstat(parent_fd, &parent_after) != 0) {
+        saved_errno = errno;
+        goto cleanup;
+    }
+    if (!S_ISDIR(parent_after.st_mode) ||
+        parent_after.st_dev != parent_before.st_dev ||
+        parent_after.st_ino != parent_before.st_ino) {
+        saved_errno = ESTALE;
+        goto cleanup;
+    }
+
+    status = 0;
+
+cleanup:
+    if (closedir(stream) != 0 && status == 0) {
+        saved_errno = errno;
+        status = -1;
+    }
+    if (status != 0) {
+        free(buffer);
+        errno = saved_errno == 0 ? EIO : saved_errno;
+        return -1;
+    }
+
+    *names = buffer;
+    *byte_length = used;
+    *count = entries;
+    return 0;
 }

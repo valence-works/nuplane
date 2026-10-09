@@ -241,6 +241,50 @@ public sealed class PackageStoreOperationStateTests
         }
     }
 
+    [Fact]
+    public async Task WithValidatedRootAsync_PathRestrictedBorrow_RefusesExpansionBeforeCallback()
+    {
+        var held = new GatedRootOwnership();
+        var state = CreateState(held, new RecordingPathValidator());
+        using var borrow = state.BorrowForPath(state.Owner, "packages/module/1.0.0");
+        var calls = 0;
+        try
+        {
+            var error = await Assert.ThrowsAsync<PackageStoreAdmissionException>(() =>
+                PackageStoreOperationAccess.WithValidatedRootAsync(borrow, (_, _, _) => Task.FromResult(++calls)));
+            Assert.Equal(PackageStoreAdmissionReason.RootMismatch, error.Reason);
+            Assert.Equal(0, calls);
+        }
+        finally
+        {
+            borrow.Dispose();
+            held.Release();
+            await state.Owner.DisposeAsync().AsTask().WaitAsync(WaitLimit);
+        }
+    }
+
+    [Fact]
+    public async Task WithValidatedRootAsync_OwnerWithoutNativeContext_RefusesBeforeCallback()
+    {
+        var held = new GatedRootOwnership();
+        var state = CreateState(held, new RecordingPathValidator());
+        using var borrow = state.Owner.Borrow();
+        var calls = 0;
+        try
+        {
+            var error = await Assert.ThrowsAsync<PackageStoreAdmissionException>(() =>
+                PackageStoreOperationAccess.WithValidatedRootAsync(borrow, (_, _, _) => Task.FromResult(++calls)));
+            Assert.Equal(PackageStoreAdmissionReason.UnsupportedParticipant, error.Reason);
+            Assert.Equal(0, calls);
+        }
+        finally
+        {
+            borrow.Dispose();
+            held.Release();
+            await state.Owner.DisposeAsync().AsTask().WaitAsync(WaitLimit);
+        }
+    }
+
     private static PackageStoreOperationState CreateState(
         IAsyncDisposable heldOwnership,
         IPackageStoreOperationPathValidator validator,

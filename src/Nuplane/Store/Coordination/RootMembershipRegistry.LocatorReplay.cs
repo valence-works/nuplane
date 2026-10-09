@@ -558,6 +558,8 @@ internal sealed partial class RootMembershipRegistry
         long expectedEnrollmentEpoch)
     {
         return new LockedMemberLocations(
+            _files,
+            root,
             () => transaction.ReadCurrent(),
             scope,
             locations,
@@ -820,6 +822,8 @@ internal sealed partial class RootMembershipRegistry
     /// <summary>Exposes held metadata and transaction lifetime only during one root/member-lock callback.</summary>
     internal sealed class LockedMemberLocations : IDisposable
     {
+        private readonly IPhysicalStoreFileSystem _files;
+        private readonly PhysicalStoreDirectoryHandle _root;
         private readonly Func<RootMembershipRecord> _getLedger;
         private readonly LocatorReplayBindingPolicy _policy;
         private readonly IPackageProtectionStatePayloadSerializer _stateSerializer;
@@ -840,6 +844,8 @@ internal sealed partial class RootMembershipRegistry
         private bool _disposed;
 
         internal LockedMemberLocations(
+            IPhysicalStoreFileSystem files,
+            PhysicalStoreDirectoryHandle root,
             Func<RootMembershipRecord> getLedger,
             MemberLocatorReplayScope scope,
             IReadOnlyDictionary<string, ResolvedMemberStateLocation> locations,
@@ -857,6 +863,8 @@ internal sealed partial class RootMembershipRegistry
             Func<MemberLocatorReplayScope, IReadOnlyDictionary<string, ResolvedMemberStateLocation>, string,
                 StoreStateRecord, StoreStateRecord, CancellationToken, Task> verifyCandidate)
         {
+            ArgumentNullException.ThrowIfNull(files);
+            ArgumentNullException.ThrowIfNull(root);
             ArgumentNullException.ThrowIfNull(getLedger);
             ArgumentNullException.ThrowIfNull(scope);
             ArgumentNullException.ThrowIfNull(locations);
@@ -867,6 +875,8 @@ internal sealed partial class RootMembershipRegistry
             ArgumentNullException.ThrowIfNull(bindConfiguredStateFile);
             ArgumentNullException.ThrowIfNull(verifyCurrentStates);
             ArgumentNullException.ThrowIfNull(verifyCandidate);
+            _files = files;
+            _root = root;
             _getLedger = getLedger;
             _scope = scope;
             _locations = locations;
@@ -942,6 +952,51 @@ internal sealed partial class RootMembershipRegistry
         internal void Revalidate()
         {
             EnsureValidMap();
+        }
+
+        /// <summary>Uses the held root under serialized, fully verified Complete membership.</summary>
+        /// <remarks>
+        /// The operation state retains ownership while this callback and its replay run. Callers must
+        /// not retain the supplied handle, reenter this member context, or return ownership that they
+        /// cannot clean up if final verification refuses. This method acquires no native lock or path.
+        /// </remarks>
+        internal async Task<TResult> WithValidatedRootAsync<TResult>(
+            Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle, CancellationToken, Task<TResult>> callback,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(callback);
+            await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                EnsureValidMap();
+                RequireAcknowledgedPolicy();
+                await _verifyCurrentStates(_scope, _locations, cancellationToken).ConfigureAwait(false);
+                EnsureValidMap();
+
+                TResult result;
+                try
+                {
+                    result = await callback(_files, _root, cancellationToken).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Cancellation or a failed callback cannot skip the native/semantic replay.
+                    EnsureValidMap();
+                    await _verifyCurrentStates(_scope, _locations, CancellationToken.None).ConfigureAwait(false);
+                    EnsureValidMap();
+                    throw;
+                }
+
+                EnsureValidMap();
+                await _verifyCurrentStates(_scope, _locations, CancellationToken.None).ConfigureAwait(false);
+                EnsureValidMap();
+                cancellationToken.ThrowIfCancellationRequested();
+                return result;
+            }
+            finally
+            {
+                _operationGate.Release();
+            }
         }
 
         /// <summary>Reads and verifies one member state while the complete scoped location map remains locked.</summary>
