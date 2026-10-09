@@ -104,6 +104,36 @@ jobs:
               raise SystemExit(f'Native qualification requires every test to pass without skips: {counters.attrib}')
           PY
 
+      - name: Run native Windows store adapter tests on Windows x64 NTFS
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64') {
+            throw 'Native Windows store qualification requires a Windows x64 runner.'
+          }
+          $temporaryDrive = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot([System.IO.Path]::GetTempPath()))
+          if ($temporaryDrive.DriveFormat -ne 'NTFS') {
+            throw 'Native Windows store qualification requires the owned test temporary root to reside on NTFS.'
+          }
+
+          $results = Join-Path $env:RUNNER_TEMP 'native-windows-results'
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj `
+            --configuration Release `
+            --filter 'FullyQualifiedName~Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreFileSystemTests|FullyQualifiedName~Nuplane.Store.Tests.Coordination.WindowsReparseTargetParserTests' `
+            --logger 'trx;LogFileName=native-windows.trx' `
+            --results-directory $results
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          [xml]$report = Get-Content (Join-Path $results 'native-windows.trx') -Raw
+          $counters = $report.SelectSingleNode('//*[local-name()="Counters"]')
+          if ($null -eq $counters) { throw 'Native Windows qualification returned no test counters.' }
+          $total = [int]$counters.total
+          $passed = [int]$counters.passed
+          if ($total -lt 11 -or $passed -ne $total) {
+            throw "Native Windows qualification requires every test to pass without skips: $($counters.OuterXml)"
+          }
+
   build-test:
     needs:
       - darwin-native-shim
