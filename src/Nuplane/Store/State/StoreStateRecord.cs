@@ -1,4 +1,6 @@
+using System.Text.Json.Serialization;
 using Nuplane.Abstractions;
+using Nuplane.Store.Coordination.ProtectionRecords;
 
 namespace Nuplane.Store.State;
 
@@ -22,6 +24,14 @@ public sealed record StoreStateRecord(
     Dictionary<string, ActivePackageDescriptor>? ActivePackageDescriptorsById = null,
     Dictionary<string, GraphActivationRecord>? ActiveGraphsById = null)
 {
+    /// <summary>Gets or initializes the optional validated package-protection metadata.</summary>
+    /// <remarks>
+    /// This non-positional property preserves the existing constructor and deconstruction shape.
+    /// A null value is legacy absence and must not be interpreted as a known-empty closure.
+    /// </remarks>
+    [JsonPropertyName("protection")]
+    public PackageProtectionRecord? ProtectionRecord { get; init; }
+
     /// <summary>
     /// Creates an empty store state record with the current timestamp.
     /// </summary>

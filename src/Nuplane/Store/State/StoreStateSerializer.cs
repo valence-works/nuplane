@@ -1,12 +1,13 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Nuplane.Store.State.ProtectionSerialization;
 
 namespace Nuplane.Store.State;
 
 /// <summary>
 /// Serializes and deserializes <see cref="StoreStateRecord"/> to/from JSON files.
 /// </summary>
-public sealed class StoreStateSerializer : IStoreStateSerializer
+public sealed class StoreStateSerializer : IPackageProtectionStateSerializer
 {
     private readonly AtomicFileWriter _fileWriter;
 
@@ -14,7 +15,8 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new PackageProtectionRecordJsonConverter() }
     };
 
     /// <summary>Initializes a serializer that writes state through atomic file replacement.</summary>
@@ -59,8 +61,8 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
     /// </summary>
     internal static async Task<StoreStateRecord> DeserializeAsync(Stream stream, CancellationToken cancellationToken)
     {
-        var state = await JsonSerializer.DeserializeAsync<StoreStateRecord>(stream, JsonOptions, cancellationToken);
-        return Normalize(state ?? StoreStateRecord.Empty());
+        var stateFile = await JsonSerializer.DeserializeAsync<StoreStateFileDto>(stream, JsonOptions, cancellationToken);
+        return Normalize(stateFile?.ToStoreStateRecord() ?? StoreStateRecord.Empty());
     }
 
     /// <inheritdoc />
@@ -70,7 +72,7 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
             stateFilePath,
             async (stream, token) =>
             {
-                await JsonSerializer.SerializeAsync(stream, Normalize(state), JsonOptions, token).ConfigureAwait(false);
+                await JsonSerializer.SerializeAsync(stream, StoreStateFileDto.FromState(Normalize(state)), JsonOptions, token).ConfigureAwait(false);
             },
             cancellationToken);
     }

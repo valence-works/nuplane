@@ -266,7 +266,7 @@ public sealed class PackageProtectionRecordTests
     private static T Internal<T>(params object[] arguments)
         => (T)Activator.CreateInstance(typeof(T), BindingFlags.Instance | BindingFlags.NonPublic, null, arguments, null)!;
 
-    private sealed class GraphFixture
+    internal sealed class GraphFixture
     {
         internal GraphFixture(string version = "1.0.0")
         {

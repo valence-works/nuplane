@@ -72,14 +72,17 @@ public sealed partial class StoreRegistry : IStoreRegistry, IStoreStateCycleRefr
         try
         {
             await EnsureLoadedUnderLockAsync(cancellationToken);
-            return new(
+            return new StoreStateRecord(
                 new(_currentState.ActiveVersionById, StringComparer.OrdinalIgnoreCase),
                 new(_currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase),
                 new(_currentState.LastFailureById, StringComparer.OrdinalIgnoreCase),
                 new(_currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
                 _currentState.UpdatedAt,
                 new(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase),
-                new(_currentState.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase));
+                new(_currentState.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase))
+            {
+                ProtectionRecord = _currentState.ProtectionRecord
+            };
         }
         finally
         {
