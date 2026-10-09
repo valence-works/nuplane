@@ -40,4 +40,22 @@ The ARM64 lane failed nine of ten native cases during namespace opening with nat
 
 The correction adds a direct native-open regression against directory and file symlinks, bypassing managed pre-inspection. Disabling Darwin's native no-follow flag caused that regression to fail because the link was followed; root restored the original source byte-for-byte. Its expected-failure log SHA-256 is `11a339a15f36f1f4adba215ed868f987426989bf89fc651aa4222d26432d71d9`. The workflow now requires eleven Unix native cases and the direct regression by name.
 
-Final correction checks passed after restoration: all three production TFMs built with zero warnings/errors; Mac Store **142 passed, zero failed, fourteen explicit Windows/casefold skips**, including eleven actual Unix native cases. Build/test source-input manifests match exactly (`dd1cefeffdb0c7de8510a12a60487984d976547574dfce9fa35efb7d5335422b`). The final build log SHA-256 is `5f8cdfdb2475394fb68e3d7693096fbd74f2a04e9a7620f56c8754b0ae6cb27b`; Store log SHA-256 is `5cb77eb98706d81cbbb8d587500d199c04da804023c138dba67e8a704bd107ab`. A new hosted run remains pending; no ARM64, admission or deletion acceptance is inferred from review or the passing other lanes.
+Final correction checks passed after restoration: all three production TFMs built with zero warnings/errors; Mac Store **142 passed, zero failed, fourteen explicit Windows/casefold skips**, including eleven actual Unix native cases. Build/test source-input manifests match exactly (`dd1cefeffdb0c7de8510a12a60487984d976547574dfce9fa35efb7d5335422b`). The final build log SHA-256 is `5f8cdfdb2475394fb68e3d7693096fbd74f2a04e9a7620f56c8754b0ae6cb27b`; Store log SHA-256 is `5cb77eb98706d81cbbb8d587500d199c04da804023c138dba67e8a704bd107ab`.
+
+## Corrected hosted qualification
+
+[Validate 37923419056](https://github.com/valence-works/nuplane/actions/runs/37923419056) at exact commit `e23ddea84213ba5307f54582b3693bd016f2a7df` passed all six jobs. Root inspected the completed job states and preserved the full log, rather than inferring success from an intermediate lane.
+
+| Platform / gate | Executed result |
+|---|---|
+| macOS ARM64 APFS native adapter/identity | 11 passed, zero failed/skipped |
+| Linux x64 ext4 native adapter/identity | 11 passed, zero failed/skipped |
+| Linux ARM64 ext4 native adapter/identity | 11 passed, zero failed/skipped |
+| Owned ext4 casefold image, each Linux architecture | 1 passed, zero failed/skipped per lane |
+| Windows x64 NTFS adapter/parser | 11 passed, zero failed/skipped |
+| Windows x64 NTFS state-slot identity | 6 passed, zero failed/skipped, including actual 8.3 alias |
+| Atomic state / registry and lock-held refresh, each of four platforms | 10 + 3 passed, zero failed/skipped per lane |
+| Full Ubuntu solution | 1,404 passed, zero failed, fourteen explicit platform/casefold skips |
+| Universal Darwin shim and packaged Darwin assets on Linux | Both checks passed |
+
+The specialized platform lanes executed the scenarios skipped by the general Ubuntu suite. The complete hosted log (`hosted-e23ddea-all.log`) has SHA-256 `d2c65fbee10fc29999890c1d65c412fda526ffd8200cfab40af06ae4660f8290`; the exact-head job snapshot and parsed qualification are preserved alongside it. This qualifies the native observation increment on the listed profiles. Component-wise authority, enrollment/publication, admission, leases and deletion remain unaccepted.
