@@ -93,8 +93,26 @@ no native runtime credit. Both unchanged nine-case validators also accept their
 actual earlier Store TRX subsets. Workflow SHA-256 is
 `0fc3b0c4319b26fdc168f6497b3fd8acb87ef75b73da973ba8116279de90e995`.
 
-Exact-head hosted Windows/Linux/macOS qualification remains pending publication
-of this increment. T021–T026 and T036 remain open for complete native authority,
-publication and runtime integration. The accepted checklist remains **32/128**;
-that count is not a program completion percentage. The real two-composition
-overlap/before-first-read proof is still mandatory before recursive deletion.
+The measurements above describe the original `2be238f` increment. Its hosted
+[Validate 37996462506](https://github.com/valence-works/nuplane/actions/runs/37996462506)
+finished with five successful jobs and a failed Windows enumeration gate. Four
+actual Windows cases failed before enumeration because `NtCreateFile(parent, ".")`
+returned `0xC0000033` (invalid object name). Failed-log SHA-256 is
+`1b5e65bcf6e2c9ac3b127f3560d648a150d6161797cacf66fd052c655c6fe816`.
+The portable parser/status tests passed; they do not qualify native cursor acquisition.
+
+The correction opens a fresh independent cursor with `OpenFileById`, supplying
+the retained directory as volume hint and its verified 64-bit NTFS file reference.
+Microsoft documents [the volume hint and directory/reparse flags](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-openfilebyid)
+and [the file-ID descriptor layout](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_descriptor).
+The provider refuses unsupported ID shapes, retains the parent, and rechecks both
+parent and cursor identity/kind/name profiles. It performs no path reopen and
+preserves all seven Windows gate cases. Independent source review is separate
+from required native Windows CI qualification; a prepared correction is not a
+passing result. Combined correction/codec gates are recorded in
+[graph-use record evidence](graph-use-record-codec.md).
+
+T021–T026 and T036 remain open for complete native authority, publication and
+runtime integration. The accepted checklist remains **32/128**; that count is not
+a program completion percentage. The real two-composition overlap/before-first-read
+proof is still mandatory before recursive deletion.

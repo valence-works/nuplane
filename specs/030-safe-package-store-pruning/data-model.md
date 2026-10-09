@@ -13,7 +13,7 @@ All persisted records are schema-versioned. Unknown/absent data is distinct from
 | ProtectedGraphSnapshot | GraphId, generation/snapshot ID, root requests, complete selected nodes/edges, disposition and recovery-selection evidence. KnownEmpty has an explicit complete empty projection. |
 | PackageInstallIdentity | Package ID, NuGet version, validated root-relative install name, native directory identity, completion identity, optional verified archive hash. Whole directory protection includes lazy support/native files. |
 | RetiredGraph | Snapshot identity, retiring revision/epoch, explicit reason and proof it is no longer recoverable. Unknown legacy entitlement cannot be implicitly retired. |
-| GraphUseRecord | Schema/root/epoch, unique UseId, immutable complete graph/install identities, sentinel identity, lifetime kind and diagnostic process identity. PID alone is never liveness proof. |
+| GraphUseRecord | Schema/root/epoch, unique UseId, immutable complete graph/install identities, pending/committed SnapshotState, sentinel identity, lifetime kind, diagnostic process identity and canonical PayloadDigest. PID alone is never liveness proof; the digest binds every other record field. |
 | RootOperationOwner | Non-forgeable reference to held root handle/lock/epoch; Open → Closing → Closed. Counted borrow creation and close linearize. Closing blocks new borrows and waits for old borrows. |
 | GraphUseLeaseOwner | Non-forgeable release authority, immutable view and counted read pins. Published → Closing → Released; no release during a pinned read. Context lifetime owners are private to Loading. |
 | PruneRequest | Configured root label, optional retention, Preview default or explicit Execute, expected enrollment epoch for Execute, correlation ID. No deletion-path field. |
@@ -32,8 +32,9 @@ PID is diagnostic only. Weak-target state and counted read pins remain process-l
 must finish and native graph bindings must be revalidated before the first retained read. Releasing
 the sentinel leaves the record for independently verified stale-use inspection and cleanup.
 
-This clarifies the unreleased format before its codec/provider implementation. No current file or
-public API has this newly specified record format yet. Unknown lifetime kinds refuse.
+The internal descriptive record/codec uses this unreleased format; the native publication/provider
+is a separate required implementation. Decoding a valid record does not mint a trusted graph-use
+snapshot, prove sentinel liveness or grant read/deletion authority. Unknown lifetime kinds refuse.
 
 ### State-slot name observations
 
@@ -65,7 +66,18 @@ The state-body digest includes every existing state field, including `UpdatedAt`
 
 ### Canonical encoding revision 1
 
-The core digest preimage starts with ASCII `NUPLANE-CANONICAL\0`, a UInt32-big-endian length-prefixed strict UTF-8 domain (`StoreStateBody`, `PackageProtection`, or `RootMembershipLedger`), and UInt32-big-endian encoding revision `1`. Every record field uses a fixed ascending UInt16 tag, UInt32 payload length, then payload bytes. Strings are strict UTF-8 without replacement fallback; nested sequence/map items are individually UInt32-length-prefixed after a UInt32 count. Nullable values have a distinct zero/one presence byte. Integers/enums are fixed-width signed big-endian (Int32 or Int64); booleans are one zero/one byte; GUIDs use RFC/network-order bytes. DateTimeOffset binds both UTC ticks and original offset ticks. Embedded SHA-256 digests use their validated 32 raw bytes. JSON layout, reflection order, culture and platform path normalization never enter the preimage.
+The core digest preimage starts with ASCII `NUPLANE-CANONICAL\0`, a UInt32-big-endian length-prefixed strict UTF-8 domain (`StoreStateBody`, `PackageProtection`, `RootMembershipLedger`, or `GraphUseRecord`), and UInt32-big-endian encoding revision `1`. Every record field uses a fixed ascending UInt16 tag, UInt32 payload length, then payload bytes. Strings are strict UTF-8 without replacement fallback; nested sequence/map items are individually UInt32-length-prefixed after a UInt32 count. Nullable values have a distinct zero/one presence byte. Integers/enums are fixed-width signed big-endian (Int32 or Int64); booleans are one zero/one byte; GUIDs use RFC/network-order bytes. DateTimeOffset binds both UTC ticks and original offset ticks. Embedded SHA-256 digests use their validated 32 raw bytes. JSON layout, reflection order, culture and platform path normalization never enter the preimage.
+
+Graph-use tags 1–9 are schema, physical root, positive enrollment epoch, UseId GUID,
+full protected graph, pending/committed snapshot state, sentinel file identity,
+lifetime mechanism (`OsExclusiveSentinel=1`) and diagnostic process ID. Only its own
+payload digest is omitted. The graph uses the existing complete nested graph encoding
+with Active-only disposition and null recovery-selection evidence; this disposition
+describes retained use independently of durable active/LKG state. All graph roots,
+requests, nodes and edges remain present, including roots other than this sentinel's
+root. The sentinel and its root must share native provider and volume; each node's
+install directory likewise agrees with its own root. A record cannot prove another
+root's lease. The existing state/protection/ledger encodings and vectors are unchanged.
 
 State-body tags 1–7 follow the existing seven constructor fields. Protection tags 1–10 are schema, physical root, enrollment epoch, member ID, revision, body digest, active closure, recoverable closure, retired graphs and legacy-unknown marker. Ledger tags 1–8 are schema, physical root, epoch, status, members, targets, retirements and nullable pending commit. Nested records bind every field in their declared encoding order. Each layer omits only its own digest; nested protection digests remain bound by the ledger.
 

@@ -20,6 +20,36 @@ internal static partial class WindowsNative
         byteOrderMark: false,
         throwOnInvalidBytes: true);
 
+    internal static SafeFileHandle OpenDirectoryById(IntPtr volumeHint, FileIdInfo identity)
+    {
+        if (identity.FileIdHigh != 0 || identity.FileIdLow is 0 or ulong.MaxValue)
+        {
+            throw new WindowsNativeCallException(
+                "The held NTFS directory does not expose a usable 64-bit file reference number.",
+                unsupported: true);
+        }
+
+        var descriptor = new FileIdDescriptor
+        {
+            Size = checked((uint)Marshal.SizeOf<FileIdDescriptor>()),
+            Type = 0, // FileIdType: the 64-bit NTFS file reference number.
+            FileId = unchecked((long)identity.FileIdLow)
+        };
+        var handle = OpenFileById(
+            volumeHint,
+            ref descriptor,
+            FileReadAttributes | FileListDirectory | Synchronize,
+            ShareRead | ShareWrite | ShareDelete,
+            IntPtr.Zero,
+            FileFlagBackupSemantics | FileFlagOpenReparsePoint);
+        if (!handle.IsInvalid)
+            return handle;
+
+        var error = Marshal.GetLastPInvokeError();
+        handle.Dispose();
+        throw new WindowsNativeCallException("OpenFileById could not open the held directory by identity.", errorCode: error);
+    }
+
     internal static IReadOnlyList<string> EnumerateDirectoryNames(SafeFileHandle directory, int maximumEntries)
     {
         ArgumentNullException.ThrowIfNull(directory);
@@ -204,6 +234,24 @@ internal static partial class WindowsNative
     }
 
     private readonly record struct DirectoryQueryResult(int Status, int IoStatus, int BytesReturned);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FileIdDescriptor
+    {
+        internal uint Size;
+        internal int Type;
+        internal long FileId;
+        internal long Reserved;
+    }
+
+    [DllImport("kernel32.dll", EntryPoint = "OpenFileById", SetLastError = true)]
+    private static extern SafeFileHandle OpenFileById(
+        IntPtr volumeHint,
+        ref FileIdDescriptor fileId,
+        uint desiredAccess,
+        uint shareMode,
+        IntPtr securityAttributes,
+        uint flagsAndAttributes);
 
     [DllImport("ntdll.dll", EntryPoint = "NtQueryDirectoryFile")]
     private static extern int NtQueryDirectoryFile(

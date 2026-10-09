@@ -7,8 +7,6 @@ namespace Nuplane.Store.Coordination;
 
 internal sealed partial class WindowsPhysicalStoreFileSystem : IPhysicalStoreDirectoryEnumerationFileSystem
 {
-    private const string DirectoryCursorComponent = ".";
-
     /// <inheritdoc />
     public IReadOnlyList<string> EnumerateChildNamesNoFollow(
         PhysicalStoreDirectoryHandle parent,
@@ -22,7 +20,17 @@ internal sealed partial class WindowsPhysicalStoreFileSystem : IPhysicalStoreDir
         using var parentLease = parent.AcquireScopedSafeHandle(_providerToken);
         var parentState = GetState(parent);
         var parentHandle = parentLease.DangerousHandle;
-        var parentBefore = QueryEntry(parentHandle, "inspect the held directory before enumerating child names");
+        WindowsNative.WindowsNativeEntry parentNativeBefore;
+        try
+        {
+            parentNativeBefore = WindowsNative.QueryEntry(parentHandle);
+        }
+        catch (WindowsNativeCallException exception)
+        {
+            throw NativeFailure("inspect the held directory before enumerating child names", exception);
+        }
+
+        var parentBefore = ToEntryInfo(parentNativeBefore);
         RequireKind(parentBefore, PhysicalStoreEntryKind.Directory, "Child-name enumeration requires a held directory.");
         if (parentBefore.Identity != parentState.Identity)
             throw Unknown("The held directory identity changed before child-name enumeration.");
@@ -31,15 +39,9 @@ internal sealed partial class WindowsPhysicalStoreFileSystem : IPhysicalStoreDir
         SafeFileHandle? cursor = null;
         try
         {
-            // A new relative open creates an independent native file object and enumeration cursor.
-            // Duplicating the parent handle would share its FILE_OBJECT cursor with any other scan.
-            cursor = WindowsNative.OpenRelative(
-                parentHandle,
-                DirectoryCursorComponent,
-                WindowsNative.FileReadAttributes | WindowsNative.FileListDirectory | WindowsNative.Synchronize,
-                WindowsNative.FileOpen,
-                WindowsNative.FileDirectoryFile,
-                shareAccess: WindowsNative.ShareRead | WindowsNative.ShareWrite | WindowsNative.ShareDelete);
+            // OpenFileById uses the held directory as a volume hint and returns an independent
+            // file object/cursor without resolving any path or sharing the parent's cursor.
+            cursor = WindowsNative.OpenDirectoryById(parentHandle, parentNativeBefore.Identity);
 
             var cursorHandle = cursor.DangerousGetHandle();
             var cursorBefore = QueryEntry(cursorHandle, "inspect the independently opened enumeration cursor");

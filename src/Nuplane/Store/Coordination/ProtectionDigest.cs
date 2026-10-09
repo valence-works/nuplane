@@ -7,6 +7,7 @@ using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Store.Coordination.MembershipRecords;
 using Nuplane.Store.Coordination.PhysicalFiles;
 using Nuplane.Store.Coordination.ProtectionRecords;
+using Nuplane.Store.Coordination.GraphUseRecords;
 using Nuplane.Store.State;
 
 namespace Nuplane.Store.Coordination;
@@ -76,6 +77,24 @@ internal static class ProtectionDigest
         ArgumentNullException.ThrowIfNull(markerIdentity);
         return Digest("PackageInstallCompletionIdentity", writer =>
             writer.Field(1, EncodePhysicalFile(markerIdentity)));
+    }
+
+    /// <summary>Hashes every descriptive graph-use record field except its stored digest.</summary>
+    internal static string GraphUse(GraphUseRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        return Digest("GraphUseRecord", writer =>
+        {
+            writer.Field(1, EncodeInt32(record.SchemaVersion));
+            writer.Field(2, EncodePhysicalRoot(record.RootIdentity));
+            writer.Field(3, EncodeInt64(record.EnrollmentEpoch));
+            writer.Field(4, GuidBytes(record.UseId));
+            writer.Field(5, EncodeProtectedGraph(record.GraphSnapshot));
+            writer.Field(6, EncodeEnum(record.SnapshotState));
+            writer.Field(7, EncodePhysicalFile(record.SentinelIdentity));
+            writer.Field(8, EncodeEnum(record.LifetimeKind));
+            writer.Field(9, EncodeInt32(record.DiagnosticProcessId));
+        });
     }
 
     /// <summary>Derives a stable identity for a selected persisted graph subclosure.</summary>
