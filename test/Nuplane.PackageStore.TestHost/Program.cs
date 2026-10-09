@@ -38,7 +38,13 @@ internal static class Program
                 return await RunInitializeAsync(request).ConfigureAwait(false);
             }
 
-            await WriteDiagnosticAsync("Expected --gate <name>, --membership-publish <request.json>, --membership-recover <request.json>, or --membership-initialize <request.json>.")
+            if (args.Length == 2 && args[0] == "--membership-bind")
+            {
+                var request = await ReadBindingRequestAsync(args[1]).ConfigureAwait(false);
+                return await RunBindAsync(request).ConfigureAwait(false);
+            }
+
+            await WriteDiagnosticAsync("Expected --gate <name>, --membership-publish <request.json>, --membership-recover <request.json>, --membership-initialize <request.json>, or --membership-bind <request.json>.")
                 .ConfigureAwait(false);
             return InvalidProtocolExitCode;
         }
@@ -163,6 +169,58 @@ internal static class Program
         return 0;
     }
 
+    private static async Task<int> RunBindAsync(BindingProcessRequest request)
+    {
+        await WriteJsonLineAsync(new StartedMessage("started", request.OperationId, Environment.ProcessId)).ConfigureAwait(false);
+        var files = CreateFileSystem();
+        using var root = OwnedProcessDirectory.Open(files, request.RootPath);
+        var parentPaths = request.MemberLocations.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.ParentPath,
+            StringComparer.Ordinal);
+        using var parents = OpenParents(files, parentPaths);
+        var registry = new RootMembershipRegistry(files, new StoreStateSerializer());
+        var expectedRoot = new PhysicalRootIdentity(files.InspectHandle(root).Identity);
+        var declarations = request.DeclaredMembers
+            .Select(member => new RootMemberRecord(member.MemberId, member.ConfiguredLocator,
+                new RootMemberRecord.DeclaredBinding()))
+            .ToArray();
+        var locations = request.MemberLocations.ToDictionary(
+            pair => pair.Key,
+            pair => (parents.Paths[pair.Key], pair.Value.RequestedBasename),
+            StringComparer.Ordinal);
+        RootMembershipBindingPoint? checkpoint = request.Checkpoint is null
+            ? null
+            : ParseRequiredBindingCheckpoint(request.Checkpoint);
+
+        try
+        {
+            var result = await registry.BindDeclaredMembersAsync(
+                root,
+                expectedRoot,
+                request.EnrollmentEpoch,
+                declarations,
+                locations,
+                request.QuiescentCutoverConfirmed,
+                CancellationToken.None,
+                checkpoint is null
+                    ? null
+                    : point => PauseAtBindingCheckpoint(request, checkpoint.Value, point, registry, root))
+                .ConfigureAwait(false);
+
+            await WriteJsonLineAsync(new OperationResult("bound", request.OperationId, Environment.ProcessId,
+                result.Status.ToString(), result.LedgerDigest, result.PendingStateCommit is not null, null, null))
+                .ConfigureAwait(false);
+            return 0;
+        }
+        catch (PackageStoreAdmissionException exception)
+        {
+            await WriteJsonLineAsync(new OperationResult("refused", request.OperationId, Environment.ProcessId,
+                null, null, null, exception.Reason.ToString(), exception.Message)).ConfigureAwait(false);
+            return 0;
+        }
+    }
+
     private static void PauseAtInitializationCheckpoint(
         InitializationProcessRequest request,
         RootMembershipEnrollmentPoint? expected,
@@ -185,22 +243,30 @@ internal static class Program
             observed?.LedgerDigest,
             observed?.Members.Select(member => member.MemberId).ToArray())).GetAwaiter().GetResult();
 
-        var input = Console.In.ReadLine();
-        if (input is null)
-            throw new EndOfStreamException("The parent ended the initialization checkpoint protocol before releasing the child.");
+        WaitForContinueCommand(request.OperationId, "initialization checkpoint", "initialization checkpoint");
+    }
 
-        ReleaseCommand? command;
-        try
-        {
-            command = JsonSerializer.Deserialize<ReleaseCommand>(input, JsonOptions);
-        }
-        catch (JsonException exception)
-        {
-            throw new InvalidDataException("The initialization checkpoint command was malformed.", exception);
-        }
+    private static void PauseAtBindingCheckpoint(
+        BindingProcessRequest request,
+        RootMembershipBindingPoint expected,
+        RootMembershipBindingPoint actual,
+        RootMembershipRegistry registry,
+        PhysicalStoreDirectoryHandle root)
+    {
+        if (actual != expected)
+            return;
 
-        if (command is null || command.Command != "continue" || command.OperationId != request.OperationId)
-            throw new InvalidDataException("The initialization checkpoint command did not match the operation.");
+        var observed = registry.ReadCandidate(root);
+        WriteJsonLineAsync(new BindingCheckpointMessage(
+            "checkpoint",
+            request.OperationId,
+            Environment.ProcessId,
+            actual.ToString(),
+            observed.Status.ToString(),
+            observed.LedgerDigest,
+            observed.Members.Select(member => member.MemberId).ToArray())).GetAwaiter().GetResult();
+
+        WaitForContinueCommand(request.OperationId, "binding checkpoint", "binding checkpoint");
     }
 
     private static void PauseAtRequestedCheckpoint(MembershipProcessRequest request,
@@ -217,9 +283,14 @@ internal static class Program
             pending?.Resolution.ToString(), pending?.StagedStateFileIdentity?.FileId,
             pending?.BackupStateFileIdentity?.FileId)).GetAwaiter().GetResult();
 
+        WaitForContinueCommand(request.OperationId, "checkpoint", "parent checkpoint");
+    }
+
+    private static void WaitForContinueCommand(string operationId, string checkpointDescription, string commandDescription)
+    {
         var input = Console.In.ReadLine();
         if (input is null)
-            throw new EndOfStreamException("The parent ended the checkpoint protocol before releasing the child.");
+            throw new EndOfStreamException($"The parent ended the {checkpointDescription} protocol before releasing the child.");
 
         ReleaseCommand? command;
         try
@@ -228,11 +299,11 @@ internal static class Program
         }
         catch (JsonException exception)
         {
-            throw new InvalidDataException("The parent checkpoint command was malformed.", exception);
+            throw new InvalidDataException($"The {commandDescription} command was malformed.", exception);
         }
 
-        if (command is null || command.Command != "continue" || command.OperationId != request.OperationId)
-            throw new InvalidDataException("The parent checkpoint command did not match the operation.");
+        if (command is null || command.Command != "continue" || command.OperationId != operationId)
+            throw new InvalidDataException($"The {commandDescription} command did not match the operation.");
     }
 
     private static RootMembershipPublicationPoint ParseRequiredCheckpoint(string? value)
@@ -252,6 +323,17 @@ internal static class Program
             !Enum.IsDefined(point))
         {
             throw new InvalidDataException("The initialization checkpoint is not supported.");
+        }
+
+        return point;
+    }
+
+    private static RootMembershipBindingPoint ParseRequiredBindingCheckpoint(string? value)
+    {
+        if (!Enum.TryParse<RootMembershipBindingPoint>(value, ignoreCase: false, out var point) ||
+            !Enum.IsDefined(point))
+        {
+            throw new InvalidDataException("The binding checkpoint is not supported.");
         }
 
         return point;
@@ -337,6 +419,37 @@ internal static class Program
         return request;
     }
 
+    private static async Task<BindingProcessRequest> ReadBindingRequestAsync(string path)
+    {
+        var bytes = await ReadRequestBytesAsync(path).ConfigureAwait(false);
+        var request = JsonSerializer.Deserialize<BindingProcessRequest>(bytes, JsonOptions)
+            ?? throw new InvalidDataException("The binding process request was empty.");
+        if (!Guid.TryParseExact(request.OperationId, "N", out _) ||
+            string.IsNullOrWhiteSpace(request.RootPath) ||
+            !Path.IsPathFullyQualified(request.RootPath) ||
+            request.EnrollmentEpoch <= 0 ||
+            request.DeclaredMembers is null || request.DeclaredMembers.Length is < 1 or > 16 ||
+            request.DeclaredMembers.Any(member => member is null ||
+                                                  string.IsNullOrWhiteSpace(member.MemberId) ||
+                                                  string.IsNullOrWhiteSpace(member.ConfiguredLocator) ||
+                                                  !Path.IsPathFullyQualified(member.ConfiguredLocator)) ||
+            request.DeclaredMembers.Select(member => member.MemberId).Distinct(StringComparer.Ordinal).Count() != request.DeclaredMembers.Length ||
+            request.MemberLocations is null || request.MemberLocations.Count != request.DeclaredMembers.Length ||
+            request.MemberLocations.Any(pair => string.IsNullOrWhiteSpace(pair.Key) || pair.Value is null ||
+                                                string.IsNullOrWhiteSpace(pair.Value.ParentPath) ||
+                                                !Path.IsPathFullyQualified(pair.Value.ParentPath) ||
+                                                string.IsNullOrWhiteSpace(pair.Value.RequestedBasename)) ||
+            !request.DeclaredMembers.Select(member => member.MemberId).ToHashSet(StringComparer.Ordinal)
+                .SetEquals(request.MemberLocations.Keys))
+        {
+            throw new InvalidDataException("The binding process request fields were invalid.");
+        }
+
+        if (request.Checkpoint is not null)
+            _ = ParseRequiredBindingCheckpoint(request.Checkpoint);
+        return request;
+    }
+
     private static async Task<byte[]> ReadRequestBytesAsync(string path)
     {
         if (!Path.IsPathFullyQualified(path))
@@ -370,11 +483,17 @@ internal static class Program
     private sealed record InitializationMemberRequest(string MemberId, string ConfiguredLocator);
     private sealed record InitializationProcessRequest(string OperationId, string RootPath, long EnrollmentEpoch,
         bool QuiescentCutoverConfirmed, InitializationMemberRequest[] DeclaredMembers, string? Checkpoint);
+    private sealed record BindingLocationRequest(string ParentPath, string RequestedBasename);
+    private sealed record BindingProcessRequest(string OperationId, string RootPath, long EnrollmentEpoch,
+        bool QuiescentCutoverConfirmed, InitializationMemberRequest[] DeclaredMembers,
+        Dictionary<string, BindingLocationRequest> MemberLocations, string? Checkpoint);
     private sealed record CheckpointMessage(string Kind, string OperationId, int ProcessId,
         string Point, string MembershipStatus, string LedgerDigest, string? PublicationId,
         string? Resolution, string? StagedIdentity, string? BackupIdentity);
     private sealed record InitializationCheckpointMessage(string Kind, string OperationId, int ProcessId,
         string Point, string? MembershipStatus, string? LedgerDigest, string[]? DeclaredMemberIds);
+    private sealed record BindingCheckpointMessage(string Kind, string OperationId, int ProcessId,
+        string Point, string MembershipStatus, string LedgerDigest, string[] MemberIds);
     private sealed record OperationResult(string Kind, string OperationId, int ProcessId,
         string? MembershipStatus, string? LedgerDigest, bool? HasPending, string? RefusalReason, string? Message);
 

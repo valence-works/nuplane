@@ -159,6 +159,62 @@ jobs:
                   raise SystemExit('Missing initial declaration/profile scenario: ' + name)
           PYCODE
 
+      - name: Qualify incomplete declared-member binding before state payload reads
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~RootMembershipBindingTests&FullyQualifiedName!~Ext4Casefold" \
+            --logger "trx;LogFileName=declared-member-binding.trx" \
+            --results-directory "$RUNNER_TEMP/declared-member-binding"
+          python3 - "$RUNNER_TEMP/declared-member-binding/declared-member-binding.trx" <<'PYCODE'
+          import sys
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          required = [
+              'BindDeclaredMembersAsync_BindsOrderedUnionAfterLocksAndPreservesStateSlots',
+              'BindDeclaredMembersAsync_PreconditionMismatchesPreserveDeclaration',
+              'BindDeclaredMembersAsync_DuplicateActualSlotsRefuseBeforeMemberLockProvisioning',
+              'BindDeclaredMembersAsync_ProtectedOrMalformedPriorStateRemainsDeclared',
+              'BindDeclaredMembersAsync_RereadsLedgerAfterAllLocksBeforeDecodingMemberPayload',
+              'BindDeclaredMembersAsync_StateReplacementAfterAllLocksRefusesBeforePayloadDecode',
+              'BindDeclaredMembersAsync_FaultOrCancellationBeforePublishLeavesAllMembersDeclared',
+              'BindDeclaredMembersAsync_ExceptionAfterPublicationLeavesWholeBoundUnionIncomplete',
+              'BindDeclaredMembersAsync_BusyLastSortedMemberLockRefusesAndCanRetry',
+              'BindDeclaredMembersAsync_DoesNotAdoptDigestValidMismatchedOrAlreadyBoundLedger',
+          ]
+          if len(rows) != 10 or any(row.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('All ten incomplete binding scenarios must execute and pass without skips.')
+          for name in required:
+              if sum(row.get('testName', '').endswith('.' + name) for row in rows) != 1:
+                  raise SystemExit('Missing or duplicate incomplete binding scenario: ' + name)
+          PYCODE
+
+      - name: Qualify actual process incomplete member binding interruption
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~RootMembershipBindingProcessTests" \
+            --logger "trx;LogFileName=binding-process.trx" \
+            --results-directory "$RUNNER_TEMP/binding-process"
+          python3 - "$RUNNER_TEMP/binding-process/binding-process.trx" <<'PYCODE'
+          import sys
+          import re
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          if len(rows) != 2 or any(row.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('Both incomplete binding process interruption cases must execute and pass without skips.')
+          for point in ['BindingsPrepared', 'BoundLedgerPublished']:
+              matches = [row for row in rows
+                         if '.BindProcess_TerminationPreservesDeclaredOrWholeBoundIncompleteLedger(' in row.get('testName', '')
+                         and re.findall(r'"([^"]+)"', row.get('testName', '')) == [point]]
+              if len(matches) != 1:
+                  raise SystemExit('Missing or duplicate incomplete binding process checkpoint: ' + point)
+          PYCODE
+
       - name: Qualify actual process initial declaration interruption
         shell: bash
         run: |
@@ -342,7 +398,7 @@ jobs:
           TMPDIR="$mount_root" NUPLANE_REQUIRE_EXT4_CASEFOLD=1 \
             dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
             --configuration Release --no-build --no-restore \
-            --filter "FullyQualifiedName~UnixPhysicalStoreIdentityTests.ObserveStateSlot_Ext4Casefold|FullyQualifiedName~UnixPhysicalStorePublicationTests.Publish_Ext4CasefoldAliasesRequireCanonicalNames|FullyQualifiedName~UnixPhysicalStoreDirectoryPublicationTests.Publish_Ext4CasefoldAliasIsObservedButOnlyCanonicalNameCanMove" \
+            --filter "FullyQualifiedName~UnixPhysicalStoreIdentityTests.ObserveStateSlot_Ext4Casefold|FullyQualifiedName~UnixPhysicalStorePublicationTests.Publish_Ext4CasefoldAliasesRequireCanonicalNames|FullyQualifiedName~UnixPhysicalStoreDirectoryPublicationTests.Publish_Ext4CasefoldAliasIsObservedButOnlyCanonicalNameCanMove|FullyQualifiedName~RootMembershipBindingTests.BindDeclaredMembersAsync_Ext4CasefoldAliasPublishesObservedCanonicalSpelling" \
             --logger "trx;LogFileName=casefold.trx" \
             --results-directory "$RUNNER_TEMP/casefold-results"
           python3 - "$RUNNER_TEMP/casefold-results/casefold.trx" <<'PY'
@@ -350,11 +406,11 @@ jobs:
           import xml.etree.ElementTree as ET
           root = ET.parse(sys.argv[1]).getroot()
           rows = root.findall('.//{*}UnitTestResult')
-          required = {'ObserveStateSlot_Ext4CasefoldResolvesCaseAndNormalizationAliases', 'Publish_Ext4CasefoldAliasesRequireCanonicalNames', 'Publish_Ext4CasefoldAliasIsObservedButOnlyCanonicalNameCanMove'}
-          if len(rows) != 3 or any(row.get('outcome') != 'Passed' for row in rows):
-              raise SystemExit('All three required native ext4 casefold scenarios must execute and pass without skips.')
+          required = {'ObserveStateSlot_Ext4CasefoldResolvesCaseAndNormalizationAliases', 'Publish_Ext4CasefoldAliasesRequireCanonicalNames', 'Publish_Ext4CasefoldAliasIsObservedButOnlyCanonicalNameCanMove', 'BindDeclaredMembersAsync_Ext4CasefoldAliasPublishesObservedCanonicalSpelling'}
+          if len(rows) != 4 or any(row.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('All four required native ext4 casefold scenarios must execute and pass without skips.')
           if not all(any(row.get('testName', '').endswith('.' + name) for row in rows) for name in required):
-              raise SystemExit('The required ext4 casefold identity/file/directory publication scenarios did not all execute.')
+              raise SystemExit('The required ext4 casefold identity/file/directory publication/binding scenarios did not all execute.')
           PY
 
       - name: Run native Windows store adapter tests on Windows x64 NTFS

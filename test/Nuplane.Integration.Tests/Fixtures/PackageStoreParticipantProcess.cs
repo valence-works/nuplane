@@ -49,6 +49,10 @@ internal sealed class PackageStoreParticipantProcess : IAsyncDisposable
         string operationId, string requestPath, CancellationToken cancellationToken)
         => StartOperationAsync("--membership-initialize", operationId, requestPath, cancellationToken);
 
+    public static Task<PackageStoreParticipantProcess> StartBindingAsync(
+        string operationId, string requestPath, CancellationToken cancellationToken)
+        => StartOperationAsync("--membership-bind", operationId, requestPath, cancellationToken);
+
     private static Task<PackageStoreParticipantProcess> StartOperationAsync(
         string command, string operationId, string requestPath, CancellationToken cancellationToken)
     {

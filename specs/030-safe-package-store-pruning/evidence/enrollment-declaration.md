@@ -23,7 +23,7 @@ Executed serially on macOS ARM64/APFS using the build-slot wrapper and an owned 
 | Initial declaration/native profile | `enrollment-final-initial-declaration-v2` | 9 passed, zero failed/skipped | `413d401ea7e3cd1bde5e379f3698ec8fb7a075e177de78880a61c479aae7f0a2` |
 | Initial declaration child termination | `enrollment-final-initial-process-v2` | 2 passed, zero failed/skipped | `9160a6e70e683b31637fcd55187fa04473f1a3e62f7fa9e0e62cc1d354b60c38` |
 
-The workflow adds distinct required nine-case declaration/profile and two-case actual initialization-process checks on all four platform lanes. Root parsed the YAML and executed the exact embedded validators against the final local TRX, alongside the native coordination and unchanged existing 33-process validator. The full Store skips are Windows-native tests on macOS and the three Linux-only owned ext4 casefold scenarios; they are not platform acceptance. Hosted qualification for this new candidate remains pending.
+The workflow adds distinct required nine-case declaration/profile and two-case actual initialization-process checks on all four platform lanes. Root parsed the YAML and executed the exact embedded validators against the final local TRX, alongside the native coordination and unchanged existing 33-process validator. The full Store skips are Windows-native tests on macOS and the three Linux-only owned ext4 casefold scenarios; they are not platform acceptance. Hosted qualification was pending at this local checkpoint; the completed exact-head result is recorded below.
 
 ## Behavioral and review evidence
 
@@ -38,4 +38,14 @@ Local artifacts are retained under `prune-admission-authorization-audit/native-f
 
 ## Next critical-path transition
 
+The subsequent internal all-Declared binding primitive now has its own [native and actual child-process qualification](declared-member-binding.md); it still grants no Complete or runtime authority. The remaining transition below includes trusted location resolution and full graph verification.
+
 Bind the actual all-Declared ledger to every independently resolved held member parent/canonical or prospective slot under root-before-all-member locks; only then read payloads and atomically publish the entire bound union as Incomplete. Pending/previously bound evidence must use explicit validated recovery rather than fresh adoption. Complete enrollment remains contingent on validated full active and recoverable LKG closure, followed by all runtime before-read participation and the real two-composition non-destructive proof before deletion implementation.
+
+## Hosted declaration/bootstrap qualification — 2026-10-09
+
+[Validate 37950324938](https://github.com/valence-works/nuplane/actions/runs/37950324938) completed successfully on exact source commit `db2067d0ef0ac112d078c6e7c1174e73557a5ea8`; all six jobs passed. Each Windows x64/NTFS, macOS ARM64/APFS, Linux x64/ext4 and Linux ARM64/ext4 lane executed **9 initial declaration/profile**, **2 actual initialization child-termination**, **37 native coordination/bootstrap**, **33 existing publisher/recovery process** and **9 directory publication** cases, all without failures or skips. Both owned Linux ext4 casefold volumes passed all three alias cases. Twelve framework/platform protection runs each passed 87 cases.
+
+The full Ubuntu solution passed **1,641 tests, zero failed, 26 explicit platform/casefold skips** (Store 348, Loading 257, Directory 21, NuGet 25, Runtime 799, Integration 191). Native identity, persistence/refresh, universal Darwin shim and package build checks passed. Root fetched the exact completed head/job state and parsed the full log counts; retained metadata SHA-256 `6613d0383e097bd0c00ad74ea44a7a641a5a096a60004fb691f622ad173bddde`, full log SHA-256 `79696464d53051572cf81c3dd729170e47453814d60a710463729c4ff7b41445`.
+
+This qualifies declaration/bootstrap only. The subsequent member-binding candidate, full enrollment, authority, runtime protection and physical deletion remain outside this accepted prerequisite. Spec 030 still has 25/128 accepted tasks.
