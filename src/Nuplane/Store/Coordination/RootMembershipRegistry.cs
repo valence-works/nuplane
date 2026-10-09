@@ -50,16 +50,34 @@ internal sealed partial class RootMembershipRegistry
         Action<RootMembershipPublicationPoint>? checkpoint = null)
     {
         ArgumentNullException.ThrowIfNull(nextState);
+        var parents = CopyParents(memberParents);
         await using var transaction = await OpenLockedAsync(root, cancellationToken).ConfigureAwait(false);
-        var ledger = transaction.Ledger;
+        return await PublishStateAsync(transaction, parents, memberId, nextState, cancellationToken, checkpoint)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<RootMembershipRecord> PublishStateAsync(
+        Transaction transaction,
+        IReadOnlyDictionary<string, PhysicalStoreDirectoryHandle> parents,
+        string memberId,
+        StoreStateRecord nextState,
+        CancellationToken cancellationToken,
+        Action<RootMembershipPublicationPoint>? checkpoint)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+        ArgumentNullException.ThrowIfNull(nextState);
+        var ledger = transaction.ReadCurrent();
         if (ledger.PendingStateCommit is not null)
             throw Refused("Pending membership requires recovery before another state publication.");
         var member = FindMember(ledger, memberId);
-        var parents = CopyParents(memberParents);
         var parent = FindParent(parents, memberId);
         await RequireAllPriorStatesAsync(ledger, parents, cancellationToken).ConfigureAwait(false);
         var nextProtection = nextState.ProtectionRecord ?? throw Refused("The next state must carry explicit protection.");
         RequireProtection(nextState, nextProtection);
+        if (nextProtection.LegacyUnknownRecovery ||
+            nextProtection.ActiveClosure.Knowledge != PackageProtectionClosureKnowledge.Known ||
+            nextProtection.RecoverableClosure.Knowledge != PackageProtectionClosureKnowledge.Known)
+            throw Refused("Protected publication requires known active/recoverable closures without unresolved legacy recovery.");
         var pending = new PendingStateCommit(ledger.RootIdentity, ledger.EnrollmentEpoch, ledger.Status,
             ledger.LedgerDigest, Guid.NewGuid(), member, nextProtection);
         var nextBytes = await EncodeStateAsync(nextState, cancellationToken).ConfigureAwait(false);
@@ -111,11 +129,21 @@ internal sealed partial class RootMembershipRegistry
         CancellationToken cancellationToken,
         Action<RootMembershipPublicationPoint>? checkpoint = null)
     {
+        var parents = CopyParents(memberParents);
         await using var transaction = await OpenLockedAsync(root, cancellationToken).ConfigureAwait(false);
-        var ledger = transaction.Ledger;
+        return await RecoverAsync(transaction, parents, cancellationToken, checkpoint).ConfigureAwait(false);
+    }
+
+    private async Task<RootMembershipRecord> RecoverAsync(
+        Transaction transaction,
+        IReadOnlyDictionary<string, PhysicalStoreDirectoryHandle> parents,
+        CancellationToken cancellationToken,
+        Action<RootMembershipPublicationPoint>? checkpoint)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+        var ledger = transaction.ReadCurrent();
         var pending = ledger.PendingStateCommit ?? throw Refused("There is no pending state publication to recover.");
         var member = FindMember(ledger, pending.MemberId);
-        var parents = CopyParents(memberParents);
         var parent = FindParent(parents, member.MemberId);
         var priorLedger = Rebuild(ledger, pending.PriorMembershipStatus, ledger.Members, pending: null);
         if (!string.Equals(priorLedger.LedgerDigest, pending.PriorLedgerDigest, StringComparison.Ordinal))
@@ -129,6 +157,22 @@ internal sealed partial class RootMembershipRegistry
         };
         return await CompleteResolutionAsync(transaction, priorLedger, member, parents, parent, pending,
             next, cancellationToken, checkpoint).ConfigureAwait(false);
+    }
+
+    private async Task<StoreStateRecord?> ReadMemberStateAsync(Transaction transaction,
+        string memberId, PhysicalStoreDirectoryHandle parent, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+        ArgumentException.ThrowIfNullOrWhiteSpace(memberId);
+        ArgumentNullException.ThrowIfNull(parent);
+        cancellationToken.ThrowIfCancellationRequested();
+        var ledger = transaction.ReadCurrent();
+        if (ledger.PendingStateCommit is not null)
+            throw Refused("Pending membership requires recovery before reading a member state.");
+        var member = FindMember(ledger, memberId);
+        var observation = await ReadPriorAsync(member.Binding, parent, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return observation?.State;
     }
 
     private async Task<RootMembershipRecord> CompleteResolutionAsync(Transaction transaction,

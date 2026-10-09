@@ -120,3 +120,7 @@ After correction, `native-install-provider-classification-v1` locally passed 23 
 explicit casefold skips at source manifest `68eb9b01e4a930cb0749a094ff01ec2061e38fa74f617355cf3047786c1ba161`;
 log SHA-256 `d5603bcd7cae98db062fc070072b463ec0a60b4101a9189282a048d1a627cb53`.
 Independent/root source review confirms the refusal ordering. Windows hosted requalification remains pending.
+
+## Subsequent integration checkpoint
+
+The corrected `a27b1c7` head passed all six hosted jobs; see the [protected completion evidence](protected-enrollment-completion.md) for exact run results and the subsequent locally verified owner/completion integration. Earlier pending statements above describe their historical checkpoints, not current qualification. The new integration requires its own hosted qualification and does not grant runtime admission.

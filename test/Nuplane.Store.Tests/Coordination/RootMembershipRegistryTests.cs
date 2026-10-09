@@ -35,6 +35,166 @@ public sealed class RootMembershipRegistryTests
     }
 
     [SupportedPhysicalStoreFact]
+    public async Task QuiescentBoundContext_PublishesTwiceUnderOneOwnerAndRefreshesEveryLocation()
+    {
+        foreach (var branch in Enum.GetValues<PriorBranch>())
+        {
+            using var context = await Context.CreateAsync(branch, secondMember: true);
+            var secondPrior = await ReadStateAsync(context, "second.json");
+            var secondNext = Protect(secondPrior with
+            {
+                UpdatedAt = secondPrior.UpdatedAt.AddDays(1),
+                ProtectionRecord = null
+            }, context.Initial.RootIdentity, 2, "second");
+            var initialMember = context.Initial.Members.Single(member => member.MemberId == "member").Binding;
+            var initialMemberIdentity = initialMember switch
+            {
+                RootMemberRecord.ExistingUnprotectedBinding existing => existing.ObservedStateFileIdentity,
+                RootMemberRecord.AcknowledgedBinding acknowledged => acknowledged.ObservedStateFileIdentity,
+                _ => null
+            };
+            var initialSecond = Assert.IsType<RootMemberRecord.AcknowledgedBinding>(
+                context.Initial.Members.Single(member => member.MemberId == "second").Binding);
+            var digest = await context.Registry.WithQuiescentBoundIncompleteMemberLocationsAsync(
+                context.Root, context.Initial.RootIdentity, context.Initial.EnrollmentEpoch,
+                quiescentCutoverConfirmed: true,
+                async (locked, token) =>
+                {
+                    Assert.Equal(RootMembershipStatus.Incomplete, locked.Ledger.Status);
+                    Assert.Null(locked.Ledger.PendingStateCommit);
+                    await AssertLockSetHeldAsync(context.Files, context.Root,
+                        locked.Locations.Values.Select(location => location.Slot));
+
+                    var priorMember = await locked.ReadMemberStateAsync("member", token);
+                    switch (initialMember)
+                    {
+                        case RootMemberRecord.ProspectiveBinding:
+                            Assert.Null(priorMember);
+                            break;
+                        case RootMemberRecord.ExistingUnprotectedBinding:
+                            Assert.Null(priorMember!.ProtectionRecord);
+                            break;
+                        case RootMemberRecord.AcknowledgedBinding acknowledged:
+                            Assert.Equal(acknowledged.ProtectionRecord.ProtectionDigest,
+                                priorMember!.ProtectionRecord!.ProtectionDigest);
+                            break;
+                        default:
+                            throw new InvalidOperationException("The test requires a bound Incomplete member variant.");
+                    }
+                    var staleFirstLocation = locked.Locations["member"];
+                    var afterFirst = await locked.PublishStateAsync("member", context.Next, token);
+                    Assert.Equal(RootMembershipStatus.Incomplete, afterFirst.Status);
+                    Assert.Null(afterFirst.PendingStateCommit);
+                    Assert.Throws<PackageStoreAdmissionException>(() => _ = staleFirstLocation.Parent);
+
+                    var firstBinding = Assert.IsType<RootMemberRecord.AcknowledgedBinding>(
+                        locked.Ledger.Members.Single(member => member.MemberId == "member").Binding);
+                    var firstNativeIdentity = context.Files.InspectChildNoFollow(context.Parent, "state.json")!.Identity;
+                    if (initialMemberIdentity is not null)
+                        Assert.NotEqual(initialMemberIdentity, firstNativeIdentity);
+                    Assert.Equal(firstNativeIdentity, firstBinding.ObservedStateFileIdentity);
+                    Assert.Equal(context.Next.ProtectionRecord!.ProtectionDigest, firstBinding.ProtectionRecord.ProtectionDigest);
+                    Assert.Equal(context.Next.ProtectionRecord.ProtectionDigest,
+                        (await locked.ReadMemberStateAsync("member", token))!.ProtectionRecord!.ProtectionDigest);
+                    await AssertLockSetHeldAsync(context.Files, context.Root,
+                        locked.Locations.Values.Select(location => location.Slot));
+
+                    var staleSecondLocation = locked.Locations["second"];
+                    var afterSecond = await locked.PublishStateAsync("second", secondNext, token);
+                    Assert.Equal(RootMembershipStatus.Incomplete, afterSecond.Status);
+                    Assert.Null(afterSecond.PendingStateCommit);
+                    Assert.Throws<PackageStoreAdmissionException>(() => _ = staleSecondLocation.Parent);
+
+                    var refreshedSecond = Assert.IsType<RootMemberRecord.AcknowledgedBinding>(
+                        locked.Ledger.Members.Single(member => member.MemberId == "second").Binding);
+                    var secondNativeIdentity = context.Files.InspectChildNoFollow(context.Parent, "second.json")!.Identity;
+                    Assert.NotEqual(initialSecond.ObservedStateFileIdentity, secondNativeIdentity);
+                    Assert.Equal(secondNativeIdentity, refreshedSecond.ObservedStateFileIdentity);
+                    Assert.Equal(secondNext.ProtectionRecord!.ProtectionDigest, refreshedSecond.ProtectionRecord.ProtectionDigest);
+                    Assert.Equal(secondNext.ProtectionRecord.ProtectionDigest,
+                        (await locked.ReadMemberStateAsync("second", token))!.ProtectionRecord!.ProtectionDigest);
+                    await AssertLockSetHeldAsync(context.Files, context.Root,
+                        locked.Locations.Values.Select(location => location.Slot));
+                    return afterSecond.LedgerDigest;
+                }, CancellationToken.None);
+
+            Assert.False(string.IsNullOrWhiteSpace(digest));
+            var persisted = context.Reopen().ReadCandidate(context.Root);
+            Assert.Equal(digest, persisted.LedgerDigest);
+            Assert.Equal(context.Next.ProtectionRecord!.ProtectionDigest,
+                Assert.IsType<RootMemberRecord.AcknowledgedBinding>(persisted.Members.Single(member => member.MemberId == "member").Binding)
+                    .ProtectionRecord.ProtectionDigest);
+            Assert.Equal(secondNext.ProtectionRecord!.ProtectionDigest,
+                Assert.IsType<RootMemberRecord.AcknowledgedBinding>(persisted.Members.Single(member => member.MemberId == "second").Binding)
+                    .ProtectionRecord.ProtectionDigest);
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task QuiescentBoundContext_InterruptedPendingExpiresLocationsAndCompleteReplayRefusesBeforeStateRead()
+    {
+        using var context = await Context.CreateAsync(PriorBranch.Acknowledged);
+        ResolvedMemberStateLocation? escapedLocation = null;
+
+        await context.Registry.WithQuiescentBoundIncompleteMemberLocationsAsync(
+            context.Root, context.Initial.RootIdentity, context.Initial.EnrollmentEpoch,
+            quiescentCutoverConfirmed: true,
+            async (locked, token) =>
+            {
+                escapedLocation = locked.Locations["member"];
+                await Assert.ThrowsAsync<InterruptedException>(() => locked.PublishStateAsync("member", context.Next, token,
+                    point =>
+                    {
+                        if (point == RootMembershipPublicationPoint.PendingPublished)
+                            throw new InterruptedException();
+                    }));
+                Assert.Throws<PackageStoreAdmissionException>(() => _ = locked.Ledger);
+                return true;
+            }, CancellationToken.None);
+
+        Assert.Throws<PackageStoreAdmissionException>(() => _ = escapedLocation!.Parent);
+        var pending = context.Reopen().ReadCandidate(context.Root);
+        Assert.Equal(RootMembershipStatus.Incomplete, pending.Status);
+        Assert.NotNull(pending.PendingStateCommit);
+        Assert.Null(pending.PendingStateCommit!.StagedStateFileIdentity);
+
+        var stateSerializer = new CountingStatePayloadSerializer();
+        var ordinaryRegistry = new RootMembershipRegistry(context.Files, stateSerializer);
+        var callbackCalled = false;
+        await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => ordinaryRegistry.WithCompleteMemberLocationsAsync(
+            context.Root, context.Initial.RootIdentity, context.Initial.EnrollmentEpoch,
+            (locked, _) =>
+            {
+                callbackCalled = true;
+                return Task.FromResult(locked.Ledger.LedgerDigest);
+            }, CancellationToken.None));
+        Assert.False(callbackCalled);
+        Assert.Equal(0, stateSerializer.ReadCount);
+    }
+
+    private static async Task<StoreStateRecord> ReadStateAsync(Context context, string basename)
+    {
+        using var file = context.Files.OpenFileChildNoFollow(context.Parent, basename, FileAccess.Read);
+        using var stream = new MemoryStream(context.Files.ReadControlFile(file, RootMembershipRegistry.MaximumStateBytes), writable: false);
+        return await new StoreStateSerializer().ReadPayloadAsync(stream, CancellationToken.None);
+    }
+
+    private static async Task AssertLockSetHeldAsync(IPhysicalStoreFileSystem files,
+        PhysicalStoreDirectoryHandle root, IEnumerable<StateSlotIdentity> slots)
+    {
+        using var control = files.OpenDirectoryChildNoFollow(root, RootMembershipRegistry.ControlDirectoryName);
+        var lockNames = new[] { "root.lock" }.Concat(slots.Select(PhysicalStoreLock.GetMemberLockName)).ToArray();
+        foreach (var lockName in lockNames)
+        {
+            using var lockFile = files.OpenFileChildNoFollow(control, lockName, FileAccess.ReadWrite);
+            var competingLock = await files.TryAcquireExclusiveLock(lockFile);
+            if (competingLock is not null)
+                await competingLock.DisposeAsync();
+            Assert.Null(competingLock);
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
     public async Task RecoverAsync_DurablePendingBeforeArtifacts_ExactPriorRollsBackAndRemainsIncomplete()
     {
         foreach (var branch in Enum.GetValues<PriorBranch>())
@@ -507,7 +667,7 @@ public sealed class RootMembershipRegistryTests
                 }
                 context.Next = Protect(prior with { UpdatedAt = DateTimeOffset.UnixEpoch.AddDays(1), ProtectionRecord = null }, rootIdentity,
                     branch == PriorBranch.Acknowledged ? 2 : 1);
-                var member = new RootMemberRecord("member", context.Fixture.StateFilePath, binding);
+                var member = new RootMemberRecord("member", Path.Combine(context.ParentPath, "state.json"), binding);
                 var members = new List<RootMemberRecord> { member };
                 if (secondMember)
                 {
@@ -600,5 +760,26 @@ public sealed class RootMembershipRegistryTests
     {
         public Task<StoreStateRecord> LoadAsync(string path, CancellationToken token) => throw new InvalidOperationException();
         public Task SaveAsync(string path, StoreStateRecord state, CancellationToken token) => throw new InvalidOperationException();
+    }
+
+    private sealed class CountingStatePayloadSerializer : IPackageProtectionStatePayloadSerializer
+    {
+        private readonly StoreStateSerializer _inner = new();
+        internal int ReadCount { get; private set; }
+
+        public Task<StoreStateRecord> LoadAsync(string path, CancellationToken token)
+            => throw new InvalidOperationException("A path-based state reopen is not permitted.");
+
+        public Task SaveAsync(string path, StoreStateRecord state, CancellationToken token)
+            => throw new InvalidOperationException("A path-based state write is not permitted.");
+
+        public Task WritePayloadAsync(Stream payload, StoreStateRecord state, CancellationToken token)
+            => _inner.WritePayloadAsync(payload, state, token);
+
+        public async Task<StoreStateRecord> ReadPayloadAsync(Stream payload, CancellationToken token)
+        {
+            ReadCount++;
+            return await _inner.ReadPayloadAsync(payload, token);
+        }
     }
 }

@@ -73,6 +73,26 @@ public sealed class RootMembershipLocatorReplayTests
     }
 
     [SupportedPhysicalStoreFact]
+    public async Task WithQuiescentIncompleteMemberLocationsAsync_DeclaredMemberStateReadRefusesBeforePayloadRead()
+    {
+        using var context = new Context();
+        var statePath = context.Fixture.StateFilePath;
+        File.WriteAllBytes(statePath, "opaque-state-payload"u8.ToArray());
+        context.InitializeIncomplete([new RootMemberRecord("member", statePath, new RootMemberRecord.DeclaredBinding())]);
+
+        await context.Registry.WithQuiescentIncompleteMemberLocationsAsync(
+            context.Root, context.RootIdentity, EnrollmentEpoch, quiescentCutoverConfirmed: true,
+            async (locked, token) =>
+            {
+                await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => locked.ReadMemberStateAsync("member", token));
+                return locked.Ledger.LedgerDigest;
+            }, CancellationToken.None);
+
+        Assert.Equal(0, context.StateSerializer.ReadCount);
+        Assert.Equal(0, context.Files.MemberPayloadReadCount);
+    }
+
+    [SupportedPhysicalStoreFact]
     public async Task WithCompleteMemberLocationsAsync_ReplaysParentAliasAndUsesOnlyExistingBoundLocks()
     {
         using var context = new Context();
@@ -105,6 +125,27 @@ public sealed class RootMembershipLocatorReplayTests
         Assert.Equal(0, context.StateSerializer.ReadCount);
         Assert.Equal(0, context.Files.MemberPayloadReadCount);
         Assert.Equal(controlBefore, context.ControlEntries());
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task WithCompleteMemberLocationsAsync_ReadsExactBoundStateOnlyInsideTheCallback()
+    {
+        using var context = new Context();
+        var (member, _, _) = await context.InitializeComplete(context.Fixture.StateFilePath, context.Fixture.StateFilePath);
+        var registry = new RootMembershipRegistry(context.Files, new StoreStateSerializer());
+
+        var digest = await registry.WithCompleteMemberLocationsAsync(
+            context.Root, context.RootIdentity, EnrollmentEpoch,
+            async (locked, token) =>
+            {
+                var state = await locked.ReadMemberStateAsync(member.MemberId, token);
+                Assert.NotNull(state?.ProtectionRecord);
+                locked.Revalidate();
+                return state!.ProtectionRecord!.ProtectionDigest;
+            }, CancellationToken.None);
+
+        Assert.False(string.IsNullOrWhiteSpace(digest));
+        Assert.Equal(1, context.Files.MemberPayloadReadCount);
     }
 
     [SupportedPhysicalStoreFact]

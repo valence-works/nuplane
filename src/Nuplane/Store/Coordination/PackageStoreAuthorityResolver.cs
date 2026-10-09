@@ -137,6 +137,19 @@ internal sealed class PackageStoreAuthorityResolver
         }
     }
 
+    /// <summary>Resolves a protected install path while the caller holds the exact root/member replay scope.</summary>
+    /// <remarks>This metadata-only enrollment/verifier seam grants no ordinary package access.</remarks>
+    internal ResolvedPackageStorePath ResolveProtectedInstallPath(
+        string exactLocator,
+        RootMembershipRegistry.MemberLocatorReplayScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(exactLocator);
+        ArgumentNullException.ThrowIfNull(scope);
+        scope.EnsureActive();
+        var path = ParseRequest(exactLocator, exactBaseLocator: null);
+        return ResolveParsed(path, PhysicalStorePathTarget.PackageDirectory, scope.RootIdentity, scope);
+    }
+
     private ResolvedPackageStorePath ResolveParsed(
         ParsedPath path,
         PhysicalStorePathTarget target,
