@@ -87,3 +87,13 @@ Four initial process-harness compile runs failed and remain retained: missing sh
 | cleanup-selected-state-mutation-v1 | `679a08260a31f274e44619b0135c559f6159c73217ff76481b8a8945a7238d0c` |
 
 Local native/process execution is macOS ARM64 only. The updated hosted workflow requires all 31 native and 33 process cases without skips on Windows x64, macOS ARM64 and Linux x64/ARM64. No hosted pass, initial-enrollment, active/LKG graph closure, before-first-read runtime protection, two-composition lifetime proof or deletion acceptance is inferred from the local green results. Spec030 stays **23/128 accepted**.
+
+
+### Hosted qualification of cleanup/process increment
+
+[Validate 37943220221](https://github.com/valence-works/nuplane/actions/runs/37943220221) passed all six jobs on exact commit `360fac6f410abd0963f8b9946dcb23776107abe5`. Full Ubuntu solution: **1,615 passed, zero failed, 23 explicit platform/casefold skips**. All twelve framework/platform executions passed **87 each without skips**. Each of Windows x64, macOS ARM64 and Linux x64/ARM64 executed **31 native coordination cases and 33 actual publisher/recovery/process ownership cases, all passed without skips**. Unix/Windows identity/publication, both demanded ext4 casefold and packaging gates passed. Root verified exact-head jobs and parsed full logs; full-log SHA-256 `894c3c5ba6983dab56b97195962a8716ce64241e499bc2452c62f7c3ede6847f`.
+
+This qualifies the bounded durable-cleanup/process increment. It does not qualify subsequent directory-publication/enrollment changes or any runtime admission, graph-lifetime, two-composition or deletion gate. Full initial enrollment and every runtime mutation/read path remain required.
+
+
+Root and an independent read-only acceptance audit mapped T028/T045 to their actual stated deliverables: the native root-before-sorted-member lock primitive and its tests, plus the separately tested counted borrow/close unit. Both are accepted from the exact-head source and hosted execution above, bringing Spec030 to **25/128 accepted tasks**. Runtime operation-cycle propagation is a separate later-driver obligation and remains open; accepting the primitive/tests does not imply that integration. The test path in T045 is corrected to its actual Coordination directory. T029/T033/T034/T044 remain partial for their still-missing enrollment/runtime scope.
