@@ -4,6 +4,13 @@
     <Title>Nuplane</Title>
     <Description>Primary DI and configuration entrypoint for Nuplane runtime services in .NET applications.</Description>
     <PackageTags>$(NuplanePackageTags);dependency-injection;configuration;hosting;runtime</PackageTags>
+
+    <!-- External callers may supply a provenance-verified macOS shim directory for Linux packaging. -->
+    <_NuplaneDarwinNativeDirectoryProvided Condition="'$(NuplaneDarwinNativeDirectory)' != ''">true</_NuplaneDarwinNativeDirectoryProvided>
+    <NuplaneDarwinNativeDirectory Condition="'$(NuplaneDarwinNativeDirectory)' == '' and $([MSBuild]::IsOSPlatform('OSX'))">$(MSBuildProjectDirectory)/obj/nuplane-store-native</NuplaneDarwinNativeDirectory>
+    <_NuplaneDarwinNativeLibrary>$(NuplaneDarwinNativeDirectory)/libnuplane_store_native.dylib</_NuplaneDarwinNativeLibrary>
+    <_NuplaneDarwinNativeBuildScript>$(MSBuildProjectDirectory)/../../native/nuplane-store/build-darwin.sh</_NuplaneDarwinNativeBuildScript>
+    <_NuplaneDarwinNativeManifest>$(NuplaneDarwinNativeDirectory)/nuplane-store-native.manifest.json</_NuplaneDarwinNativeManifest>
   </PropertyGroup>
 
   <ItemGroup>
@@ -37,5 +44,45 @@
   <ItemGroup>
     <Compile Remove="Operational\OperationalSnapshot.cs" />
   </ItemGroup>
+
+  <ItemGroup Condition="'$(NuplaneDarwinNativeDirectory)' != ''">
+    <Content Include="$(_NuplaneDarwinNativeLibrary)">
+      <Link>libnuplane_store_native.dylib</Link>
+      <TargetPath>libnuplane_store_native.dylib</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <Pack>true</Pack>
+      <PackagePath>runtimes/osx-arm64/native/;runtimes/osx-x64/native/</PackagePath>
+      <Visible>false</Visible>
+    </Content>
+  </ItemGroup>
+
+  <Target Name="BuildNuplaneDarwinNativeShim"
+          BeforeTargets="PrepareForBuild"
+          Condition="$([MSBuild]::IsOSPlatform('OSX')) and '$(_NuplaneDarwinNativeDirectoryProvided)' != 'true'">
+    <MakeDir Directories="$(NuplaneDarwinNativeDirectory)" />
+    <Exec Command="bash &quot;$(_NuplaneDarwinNativeBuildScript)&quot; &quot;$(NuplaneDarwinNativeDirectory)&quot;" />
+  </Target>
+
+  <Target Name="VerifyNuplaneDarwinNativeShim"
+          BeforeTargets="PrepareForBuild"
+          DependsOnTargets="BuildNuplaneDarwinNativeShim"
+          Condition="'$(NuplaneDarwinNativeDirectory)' != ''">
+    <Error Condition="!Exists('$(_NuplaneDarwinNativeBuildScript)')"
+           Text="The Nuplane Darwin shim build/verification script is missing at '$(_NuplaneDarwinNativeBuildScript)'." />
+    <Error Condition="!Exists('$(_NuplaneDarwinNativeLibrary)') or !Exists('$(_NuplaneDarwinNativeManifest)')"
+           Text="The Nuplane Darwin shim binary and provenance manifest are both required in '$(NuplaneDarwinNativeDirectory)'." />
+    <Exec Command="bash &quot;$(_NuplaneDarwinNativeBuildScript)&quot; --verify &quot;$(NuplaneDarwinNativeDirectory)&quot;" />
+  </Target>
+
+  <Target Name="RequireNuplaneDarwinNativeShimForPack"
+          BeforeTargets="_GetPackageFiles;GenerateNuspec"
+          DependsOnTargets="VerifyNuplaneDarwinNativeShim">
+    <Error Condition="'$(NuplaneDarwinNativeDirectory)' == ''"
+           Text="Nuplane packages require a provenance-verified universal Darwin shim. Set NuplaneDarwinNativeDirectory or pack on macOS with xcrun available." />
+    <Error Condition="!Exists('$(_NuplaneDarwinNativeLibrary)') or !Exists('$(_NuplaneDarwinNativeManifest)')"
+           Text="Nuplane packages require libnuplane_store_native.dylib and its provenance manifest in '$(NuplaneDarwinNativeDirectory)'." />
+    <Exec Command="bash &quot;$(_NuplaneDarwinNativeBuildScript)&quot; --verify &quot;$(NuplaneDarwinNativeDirectory)&quot;" />
+  </Target>
 
 </Project>
