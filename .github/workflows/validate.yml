@@ -107,10 +107,11 @@ jobs:
               raise SystemExit('Native qualification returned no test counters.')
           total = int(counters.get('total', '0'))
           passed = int(counters.get('passed', '0'))
-          if total < 10 or passed != total:
+          if total < 11 or passed != total:
               raise SystemExit(f'Native qualification requires every test to pass without skips: {counters.attrib}')
           names = {r.get('testName') for r in root.findall('.//{*}UnitTestResult') if r.get('outcome') == 'Passed'}
           required = {
+              'NativeChildOpen_RefusesFinalLinksWithoutManagedPreInspection',
               'ObserveStateSlot_UsesFilesystemSpellingAndNameProfileForAliases',
               'ObserveStateSlot_ParentAliasesConvergeAndAtomicReplacePreservesSlot',
               'ObserveCanonicalFileNameNoFollow_RejectsWrongIdentityLinksAndForeignHandles',

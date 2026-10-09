@@ -210,9 +210,6 @@ public sealed class UnixPhysicalStoreIdentityTests
 
     private static void EnableExt4Casefold(string directoryPath)
     {
-        const int LinuxOpenCloseOnExec = 0x80000;
-        const int LinuxOpenNoFollow = 0x20000;
-        const int LinuxOpenDirectory = 0x10000;
         const ulong LinuxGetFlagsRequest = 0x80086601;
         const ulong LinuxSetFlagsRequest = 0x40086602;
         const uint LinuxCasefoldFlag = 0x40000000;
@@ -221,7 +218,7 @@ public sealed class UnixPhysicalStoreIdentityTests
 
         var fileDescriptor = LinuxNative.OpenDirectory(
             directoryPath,
-            LinuxOpenCloseOnExec | LinuxOpenNoFollow | LinuxOpenDirectory);
+            UnixNative.LinuxDirectoryStreamFlags);
         if (fileDescriptor < 0)
             throw new IOException($"Could not open the owned ext4 casefold directory (native error {Marshal.GetLastPInvokeError()}).");
 

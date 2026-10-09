@@ -1,8 +1,10 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Microsoft.Win32.SafeHandles;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.PhysicalFiles;
+using Nuplane.Store.Coordination.PhysicalFiles.Unix;
 using Nuplane.Tests.Shared;
 
 namespace Nuplane.Store.Tests.Coordination;
@@ -19,6 +21,33 @@ public sealed class UnixPhysicalStoreFileSystemTests
         var exception = Assert.Throws<PackageStoreAdmissionException>(() => adapter.OpenNamespaceRoot(anchor));
 
         Assert.Equal(PackageStoreAdmissionReason.UnsupportedFilesystem, exception.Reason);
+    }
+
+    [SupportedUnixFact]
+    public void NativeChildOpen_RefusesFinalLinksWithoutManagedPreInspection()
+    {
+        using var fixture = new PackageStoreFixture();
+        fixture.CreateDirectory("target");
+        File.WriteAllText(fixture.GetPath("ordinary-file"), "owned payload");
+        Directory.CreateSymbolicLink(fixture.GetPath("directory-link"), "target");
+        File.CreateSymbolicLink(fixture.GetPath("file-link"), "ordinary-file");
+        var platform = UnixNative.GetPlatform()!.Value;
+        var currentDirectory = platform == UnixPlatform.Darwin ? -2 : -100;
+        using var parent = new SafeFileHandle(
+            (IntPtr)UnixNative.OpenDirectoryAt(platform, currentDirectory, ResolveRealPath(fixture.RootPath)),
+            ownsHandle: true);
+        var parentFd = checked((int)parent.DangerousGetHandle());
+
+        Assert.Throws<UnixNativeCallException>(() =>
+        {
+            using var unexpected = new SafeFileHandle(
+                (IntPtr)UnixNative.OpenDirectoryAt(platform, parentFd, "directory-link"), ownsHandle: true);
+        });
+        Assert.Throws<UnixNativeCallException>(() =>
+        {
+            using var unexpected = new SafeFileHandle(
+                (IntPtr)UnixNative.OpenFileAt(platform, parentFd, "file-link", FileAccess.Read), ownsHandle: true);
+        });
     }
 
     [SupportedUnixFact]

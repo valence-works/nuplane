@@ -203,10 +203,6 @@ internal static partial class UnixNative
 
 internal static class UnixNamesNative
 {
-    private const int LinuxOpenDirectory = 0x10000;
-    private const int LinuxOpenCloseOnExec = 0x80000;
-    private const int LinuxOpenNoFollow = 0x20000;
-
     [DllImport("nuplane_store_native", EntryPoint = "nuplane_apfs_name_profile", SetLastError = true)]
     internal static extern int DarwinGetNameProfile(int directoryFd, out int caseSensitive, out int normalizationInsensitive);
 
@@ -230,7 +226,7 @@ internal static class UnixNamesNative
 
     internal static int LinuxOpenDirectoryStreamAt(int parentFd)
     {
-        var fd = LinuxOpenAt(parentFd, ".", LinuxOpenDirectory | LinuxOpenCloseOnExec | LinuxOpenNoFollow, 0);
+        var fd = LinuxOpenAt(parentFd, ".", UnixNative.LinuxDirectoryStreamFlags, 0);
         return fd < 0
             ? throw new UnixNativeCallException(Marshal.GetLastPInvokeError(), "open an independent held-directory enumeration handle")
             : fd;

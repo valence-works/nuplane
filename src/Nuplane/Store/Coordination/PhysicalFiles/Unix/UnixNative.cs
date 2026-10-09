@@ -52,8 +52,17 @@ internal static partial class UnixNative
 
     private const int LinuxOpenNonBlocking = 0x800;
     private const int LinuxOpenCloseOnExec = 0x80000;
-    private const int LinuxOpenNoFollow = 0x20000;
-    private const int LinuxOpenDirectory = 0x10000;
+    private static int LinuxOpenNoFollow => LinuxArchitectureOpenFlags.NoFollow;
+    private static int LinuxOpenDirectory => LinuxArchitectureOpenFlags.Directory;
+    private static (int Directory, int NoFollow) LinuxArchitectureOpenFlags
+        => RuntimeInformation.ProcessArchitecture switch
+        {
+            // ARM64 overrides these two asm-generic values for AArch32 compatibility.
+            Architecture.Arm64 => (1 << 14, 1 << 15),
+            Architecture.X64 => (1 << 16, 1 << 17),
+            _ => throw new UnixNativeCallException(0, "The Linux open-flag ABI is not qualified for this architecture.", unsupported: true)
+        };
+    internal static int LinuxDirectoryStreamFlags => LinuxOpenDirectory | LinuxOpenCloseOnExec | LinuxOpenNoFollow;
     private const int LinuxOpenCreate = 0x40;
     private const int LinuxOpenExclusive = 0x80;
     private const int LinuxAtSymlinkNoFollow = 0x100;
@@ -84,7 +93,7 @@ internal static partial class UnixNative
         var flags = platform switch
         {
             UnixPlatform.Darwin => DarwinOpenDirectory | DarwinOpenCloseOnExec | DarwinOpenNoFollow,
-            UnixPlatform.Linux => LinuxOpenDirectory | LinuxOpenCloseOnExec | LinuxOpenNoFollow,
+            UnixPlatform.Linux => LinuxDirectoryStreamFlags,
             _ => throw new ArgumentOutOfRangeException(nameof(platform))
         };
 
@@ -128,7 +137,7 @@ internal static partial class UnixNative
         var flags = platform switch
         {
             UnixPlatform.Darwin => DarwinOpenDirectory | DarwinOpenCloseOnExec | DarwinOpenNoFollow,
-            UnixPlatform.Linux => LinuxOpenDirectory | LinuxOpenCloseOnExec | LinuxOpenNoFollow,
+            UnixPlatform.Linux => LinuxDirectoryStreamFlags,
             _ => throw new ArgumentOutOfRangeException(nameof(platform))
         };
         var fd = platform == UnixPlatform.Darwin
