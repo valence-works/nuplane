@@ -200,23 +200,23 @@ public sealed class RootMembershipProtectionVerificationTests
                 }, CancellationToken.None);
         }
 
-        internal StoreStateRecord Reprotect(StoreStateRecord state, bool legacyUnknown)
+        internal StoreStateRecord Reprotect(StoreStateRecord state, bool legacyUnknown, long revision = 1)
         {
             var old = state.ProtectionRecord!;
-            var candidate = new PackageProtectionRecord(1, RootIdentity, 1, old.MemberId, 1,
+            var candidate = new PackageProtectionRecord(1, RootIdentity, 1, old.MemberId, revision,
                 ProtectionDigest.StateBody(state), new string('0', 64), old.ActiveClosure, old.RecoverableClosure, [], legacyUnknown);
-            var protection = new PackageProtectionRecord(1, RootIdentity, 1, old.MemberId, 1,
+            var protection = new PackageProtectionRecord(1, RootIdentity, 1, old.MemberId, revision,
                 candidate.StateBodyDigest, ProtectionDigest.Protection(candidate), old.ActiveClosure, old.RecoverableClosure, [], legacyUnknown);
             return state with { ProtectionRecord = protection };
         }
 
-        private async Task<StoreStateRecord> BuildStateAsync(string memberId, string rootPackageId)
+        internal async Task<StoreStateRecord> BuildStateAsync(string memberId, string rootPackageId, string rootVersion = "1.0.0")
         {
-            var rootPath = Install(rootPackageId, "1.0.0", "Shared.Dependency");
+            var rootPath = Install(rootPackageId, rootVersion, "Shared.Dependency");
             var requests = new[] { new PackageRequest(rootPackageId, string.Empty, "feed", PackageUpdatePolicy.Range, memberId) };
             var packages = new[]
             {
-                new ResolvedPackage(rootPackageId, "1.0.0", "feed", rootPath, DateTimeOffset.UnixEpoch, memberId),
+                new ResolvedPackage(rootPackageId, rootVersion, "feed", rootPath, DateTimeOffset.UnixEpoch, memberId),
                 new ResolvedPackage("Shared.Dependency", "2.1.0", "feed", SharedInstallPath, DateTimeOffset.UnixEpoch, "dependency")
             };
             var resolver = new PackageDependencyGraphResolver(Substitute.For<IPackageResolver>(), Substitute.For<IReconciliationRetryPolicy>());
