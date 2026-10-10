@@ -867,16 +867,17 @@ internal sealed partial class RootMembershipRegistry
         owner.RequireRegistry(this);
         using var operation = owner.EnterOperation(this);
         owner.Owner.RevalidateRetainedEvidence();
-        await using var group = await AcquireNativeGroupOwnerAsync(owner, descriptor, cancellationToken).ConfigureAwait(false);
+        await using var group = await AcquireNativeGroupOwnerAsync(owner, descriptor, cancellationToken, checkpoint).ConfigureAwait(false);
         try
         {
             var result = await PublishNativeGroupCoreAsync(group, descriptor, nextState, cancellationToken, checkpoint)
                 .ConfigureAwait(false);
             await owner.Owner.RefreshAfterOwnedOutcomesAsync(group.Participants.ToDictionary(
                 static participant => participant.Request.RootIdentity,
-                static participant => (participant.Transaction!.ReadCurrent(), participant.Transaction.LedgerIdentity)),
+                participant => (group.ReadCurrent(participant), participant.Transaction!.LedgerIdentity)),
                 descriptor, _catalogOwnerMint)
                 .ConfigureAwait(false);
+            group.RequireBoundMarker();
             return result;
         }
         catch
@@ -897,16 +898,17 @@ internal sealed partial class RootMembershipRegistry
         owner.RequireRegistry(this);
         using var operation = owner.EnterOperation(this);
         owner.Owner.RevalidateRetainedEvidence();
-        await using var group = await AcquireNativeGroupOwnerAsync(owner, descriptor, cancellationToken).ConfigureAwait(false);
+        await using var group = await AcquireNativeGroupOwnerAsync(owner, descriptor, cancellationToken, checkpoint).ConfigureAwait(false);
         try
         {
             var result = await RecoverNativeGroupCoreAsync(group, descriptor, cancellationToken, checkpoint)
                 .ConfigureAwait(false);
             await owner.Owner.RefreshAfterOwnedOutcomesAsync(group.Participants.ToDictionary(
                 static participant => participant.Request.RootIdentity,
-                static participant => (participant.Transaction!.ReadCurrent(), participant.Transaction.LedgerIdentity)),
+                participant => (group.ReadCurrent(participant), participant.Transaction!.LedgerIdentity)),
                 descriptor, _catalogOwnerMint)
                 .ConfigureAwait(false);
+            group.RequireBoundMarker();
             return result;
         }
         catch
@@ -919,7 +921,8 @@ internal sealed partial class RootMembershipRegistry
     private async Task<NativeGroupPublicationOwner> AcquireNativeGroupOwnerAsync(
         NativeCatalogOwnerBorrow owner,
         GroupPublicationDescriptorV2 descriptor,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<NativeGroupPublicationPoint, PhysicalRootIdentity?>? checkpoint)
     {
         owner.RequireRegistry(this);
         cancellationToken.ThrowIfCancellationRequested();
@@ -985,7 +988,8 @@ internal sealed partial class RootMembershipRegistry
                     }
                 }
             }
-            return new NativeGroupPublicationOwner(this, descriptor, participants);
+            return await BindNativeGroupPublicationOwnerAsync(descriptor, participants, cancellationToken, checkpoint)
+                .ConfigureAwait(false);
         }
         catch
         {

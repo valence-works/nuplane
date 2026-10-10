@@ -19,14 +19,26 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
     public async Task PublishAndFreshRecovery_UseSiblingRootsAndExternalSharedStateSlot()
     {
         using var context = await Context.CreateAsync();
+        var events = new List<RootMembershipRegistry.NativeGroupPublicationPoint>();
 
         var completed = await context.Registry().PublishNativeGroupAsync(context.Descriptor, context.Requests,
             context.NextState, CancellationToken.None, (point, root) =>
             {
+                events.Add(point);
+                if (point == RootMembershipRegistry.NativeGroupPublicationPoint.GroupMarkerBound)
+                {
+                    context.AssertAllRootAndMemberLocksHeld();
+                    context.AssertSharedSlotGuardHeld();
+                }
                 if (point == RootMembershipRegistry.NativeGroupPublicationPoint.IntentPublished && root == context.RootAIdentity)
                     context.AssertAllRootAndMemberLocksHeld();
             });
 
+        var markerBound = events.IndexOf(RootMembershipRegistry.NativeGroupPublicationPoint.GroupMarkerBound);
+        var firstPayloadRead = events.IndexOf(RootMembershipRegistry.NativeGroupPublicationPoint.GroupPayloadRead);
+        var firstIntent = events.IndexOf(RootMembershipRegistry.NativeGroupPublicationPoint.IntentPublished);
+        Assert.True(markerBound >= 0 && markerBound < firstPayloadRead && markerBound < firstIntent,
+            "The group marker must be durably bound under the complete root/member lock union before the first payload read or Intent.");
         AssertNextPublished(context, completed);
         var reopened = await context.Registry().RecoverNativeGroupAsync(context.Descriptor, context.Requests,
             CancellationToken.None);
@@ -593,8 +605,30 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
         internal IReadOnlyList<RootMembershipRegistry.NativeGroupRootRequest> Requests { get; }
         internal string StagePath { get; }
         internal string BackupPath { get; }
+        internal string GroupMarkerPath => Path.Combine(Path.GetDirectoryName(_sharedPath)!,
+            PhysicalStoreStateSlotWriteGuard.ControlDirectoryName, SharedSlot.CanonicalBasename,
+            PhysicalStoreStateSlotWriteGuard.GroupMarkerLeafName);
         internal string RootAPath => _rootAPath;
         internal string RootBPath => _rootBPath;
+
+        internal async Task<PhysicalStoreStateSlotWriteGuard.PhysicalStoreStateSlotWriteLease> AcquireSharedSlotGuardAsync(
+            CancellationToken cancellationToken = default)
+        {
+            var guard = new PhysicalStoreStateSlotWriteGuard(_files);
+            return await guard.AcquireAsync(_sharedParent, SharedSlot, cancellationToken);
+        }
+
+        internal async Task<PhysicalStoreGroupBindingMarker> EnsureGroupMarkerAsync(Guid logicalMemberId,
+            string participantSetDigest)
+        {
+            await using var lease = await AcquireSharedSlotGuardAsync();
+            return lease.EnsureGroupBindingMarker(logicalMemberId, participantSetDigest, CancellationToken.None);
+        }
+
+        internal byte[]? ReadGroupMarkerBytes()
+            => File.Exists(GroupMarkerPath) ? File.ReadAllBytes(GroupMarkerPath) : null;
+
+        internal void WriteGroupMarkerBytes(byte[] bytes) => File.WriteAllBytes(GroupMarkerPath, bytes);
 
         internal PhysicalFileIdentity RootControlIdentity(PhysicalRootIdentity rootIdentity)
         {
@@ -640,7 +674,8 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
         internal static Task<Context> CreateProspectiveAsync()
             => Task.FromResult(new Context(true, false));
 
-        internal RootMembershipRegistry Registry() => new(_files, new StoreStateSerializer());
+        internal RootMembershipRegistry Registry(IPackageProtectionStatePayloadSerializer? serializer = null)
+            => new(_files, serializer ?? new StoreStateSerializer());
 
         internal PhysicalFileIdentity? ReadSharedStateIdentity()
             => _files.InspectChildNoFollow(_sharedParent, Path.GetFileName(_sharedPath))?.Identity;
@@ -780,6 +815,29 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
             if (attempt is null) return;
             attempt.DisposeAsync().AsTask().GetAwaiter().GetResult();
             Assert.Fail($"Expected native lock '{lockName}' to remain held through group publication.");
+        }
+
+        internal void AssertSharedSlotGuardHeld()
+        {
+            PhysicalStoreStateSlotWriteGuard.PhysicalStoreStateSlotWriteLease? unexpected = null;
+            try
+            {
+                unexpected = new PhysicalStoreStateSlotWriteGuard(_files)
+                    .AcquireAsync(_sharedParent, SharedSlot, CancellationToken.None).GetAwaiter().GetResult();
+            }
+            catch (PackageStoreAdmissionException)
+            {
+                return;
+            }
+
+            try
+            {
+                Assert.Fail("Expected the shared state-slot guard to remain held through group publication.");
+            }
+            finally
+            {
+                unexpected.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
         }
 
         public void Dispose()

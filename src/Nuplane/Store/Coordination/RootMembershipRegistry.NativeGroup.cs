@@ -11,6 +11,8 @@ internal sealed partial class RootMembershipRegistry
 {
     internal enum NativeGroupPublicationPoint
     {
+        GroupMarkerBound,
+        GroupPayloadRead,
         IntentPublished,
         StageFlushed,
         BackupFlushed,
@@ -41,7 +43,7 @@ internal sealed partial class RootMembershipRegistry
         Action<NativeGroupPublicationPoint, PhysicalRootIdentity?>? checkpoint = null)
     {
         ArgumentNullException.ThrowIfNull(nextState);
-        await using var group = await AcquireNativeGroupOwnerAsync(descriptor, roots, cancellationToken).ConfigureAwait(false);
+        await using var group = await AcquireNativeGroupOwnerAsync(descriptor, roots, cancellationToken, checkpoint).ConfigureAwait(false);
         return await PublishNativeGroupCoreAsync(group, descriptor, nextState, cancellationToken, checkpoint)
             .ConfigureAwait(false);
     }
@@ -61,11 +63,11 @@ internal sealed partial class RootMembershipRegistry
         foreach (var participant in group.Participants)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var ledger = participant.Transaction!.ReadCurrent();
-            participant.Transaction!.Publish(BuildGroupLedger(ledger, RootMembershipStatus.Incomplete,
+            var ledger = group.ReadCurrent(participant);
+            group.Publish(participant, BuildGroupLedger(ledger, RootMembershipStatus.Incomplete,
                 ledger.Members, new PendingGroupPublicationV2(descriptor, participant.Request.RootIdentity,
                     GroupPublicationPhaseV2.Intent, null, null, GroupPublicationResolutionV2.Unresolved)));
-            checkpoint?.Invoke(NativeGroupPublicationPoint.IntentPublished, participant.Request.RootIdentity);
+            group.Checkpoint(NativeGroupPublicationPoint.IntentPublished, participant.Request.RootIdentity);
         }
 
         group.RefreshMemberLocatorScopes();
@@ -75,49 +77,51 @@ internal sealed partial class RootMembershipRegistry
         RequireAbsent(sharedForPreparation, stageName);
         if (backupName is not null)
             RequireAbsent(sharedForPreparation, backupName);
-        var stagedIdentity = CreateFile(sharedForPreparation, stageName, nextBytes);
+        var stagedIdentity = group.CreateFile(sharedForPreparation, stageName, nextBytes);
+        group.RequireBoundMarker();
         await RequireGroupBundleArtifactAsync(sharedForPreparation, stageName, stagedIdentity, descriptor, nextState,
             cancellationToken).ConfigureAwait(false);
+        group.RequireBoundMarker();
         RequireProfile(sharedForPreparation, stageName, stagedIdentity, descriptor.SharedStateSlot);
-        checkpoint?.Invoke(NativeGroupPublicationPoint.StageFlushed, null);
+        group.Checkpoint(NativeGroupPublicationPoint.StageFlushed, null);
 
         PhysicalFileIdentity? backupIdentity = null;
         if (descriptor.Participants[0].PriorStateFileIdentity is not null)
         {
             var prior = await group.ReadAndVerifyPriorAsync(cancellationToken).ConfigureAwait(false)
                 ?? throw Refused("A bound prior identity requires a verified prior payload.");
-            backupIdentity = CreateFile(sharedForPreparation, backupName!, prior.Bytes);
+            backupIdentity = group.CreateFile(sharedForPreparation, backupName!, prior.Bytes);
             await group.RequirePriorArtifactAsync(backupName!, backupIdentity, cancellationToken).ConfigureAwait(false);
-            checkpoint?.Invoke(NativeGroupPublicationPoint.BackupFlushed, null);
+            group.Checkpoint(NativeGroupPublicationPoint.BackupFlushed, null);
         }
 
         foreach (var participant in group.Participants)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var current = participant.Transaction!.ReadCurrent();
+            var current = group.ReadCurrent(participant);
             var pending = current.PendingGroupPublicationV2
                 ?? throw Refused("A group Intent disappeared before artifact binding.");
-            participant.Transaction!.Publish(BuildGroupLedger(current, RootMembershipStatus.Incomplete,
+            group.Publish(participant, BuildGroupLedger(current, RootMembershipStatus.Incomplete,
                 current.Members, pending.BindArtifacts(stagedIdentity, backupIdentity)));
-            checkpoint?.Invoke(NativeGroupPublicationPoint.ArtifactsBound, participant.Request.RootIdentity);
+            group.Checkpoint(NativeGroupPublicationPoint.ArtifactsBound, participant.Request.RootIdentity);
         }
 
         group.RefreshMemberLocatorScopes();
         await group.ReadAndVerifyPriorAsync(cancellationToken).ConfigureAwait(false);
         var shared = group.SharedParent;
-        _publication.PublishControlFileAt(shared, stageName, stagedIdentity,
+        group.PublishState(shared, stageName, stagedIdentity,
             descriptor.SharedStateSlot.CanonicalBasename, descriptor.Participants[0].PriorStateFileIdentity);
-        checkpoint?.Invoke(NativeGroupPublicationPoint.StatePublished, null);
-        var actual = await ReadGroupStateAsync(shared, descriptor.SharedStateSlot, stagedIdentity,
+        group.Checkpoint(NativeGroupPublicationPoint.StatePublished, null);
+        var actual = await group.ReadStateAsync(shared, descriptor.SharedStateSlot, stagedIdentity,
             cancellationToken).ConfigureAwait(false);
         RequireExactGroupBundle(actual.State, descriptor, nextState);
         group.VerifyNextBundleAndInstalls(bundle, actual.State, cancellationToken);
-        checkpoint?.Invoke(NativeGroupPublicationPoint.StateVerified, null);
+        group.Checkpoint(NativeGroupPublicationPoint.StateVerified, null);
 
         foreach (var participant in group.Participants)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var current = participant.Transaction!.ReadCurrent();
+            var current = group.ReadCurrent(participant);
             var pending = current.PendingGroupPublicationV2
                 ?? throw Refused("A group BoundCommit disappeared before resolution.");
             if (pending.Phase != GroupPublicationPhaseV2.ArtifactsBound || pending.StagedStateFileIdentity != stagedIdentity ||
@@ -127,23 +131,23 @@ internal sealed partial class RootMembershipRegistry
         foreach (var participant in group.Participants)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var current = participant.Transaction!.ReadCurrent();
+            var current = group.ReadCurrent(participant);
             var pending = current.PendingGroupPublicationV2!;
-            participant.Transaction!.Publish(BuildGroupLedger(current, RootMembershipStatus.Incomplete,
+            group.Publish(participant, BuildGroupLedger(current, RootMembershipStatus.Incomplete,
                 current.Members, pending.Resolve(GroupPublicationResolutionV2.Next)));
-            checkpoint?.Invoke(NativeGroupPublicationPoint.ResolutionPublished, participant.Request.RootIdentity);
+            group.Checkpoint(NativeGroupPublicationPoint.ResolutionPublished, participant.Request.RootIdentity);
         }
 
         group.RefreshMemberLocatorScopes();
         if (backupIdentity is not null)
         {
             await group.RequirePriorArtifactAsync(backupName!, backupIdentity, cancellationToken).ConfigureAwait(false);
-            RemoveExactArtifact(group.SharedParent, backupName!, backupIdentity);
+            group.RemoveExactArtifact(backupName!, backupIdentity);
         }
         foreach (var participant in group.Participants)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var current = participant.Transaction!.ReadCurrent();
+            var current = group.ReadCurrent(participant);
             var pending = current.PendingGroupPublicationV2
                 ?? throw Refused("A Next resolution disappeared before Complete acknowledgement.");
             if (pending.Resolution != GroupPublicationResolutionV2.Next || pending.Phase != GroupPublicationPhaseV2.Resolved)
@@ -156,9 +160,10 @@ internal sealed partial class RootMembershipRegistry
             var members = current.Members.Select(item => item.MemberId == member.MemberId
                 ? new RootMemberRecord(item.MemberId, item.ConfiguredLocator, binding)
                 : item).ToArray();
-            participant.Transaction!.Publish(BuildGroupLedger(current, RootMembershipStatus.Complete, members, null));
-            checkpoint?.Invoke(NativeGroupPublicationPoint.Acknowledged, participant.Request.RootIdentity);
+            group.Publish(participant, BuildGroupLedger(current, RootMembershipStatus.Complete, members, null));
+            group.Checkpoint(NativeGroupPublicationPoint.Acknowledged, participant.Request.RootIdentity);
         }
+        group.RequireBoundMarker();
         return group.Participants.Select(static participant => participant.Transaction!.Ledger).ToArray();
     }
 
@@ -169,7 +174,7 @@ internal sealed partial class RootMembershipRegistry
         CancellationToken cancellationToken,
         Action<NativeGroupPublicationPoint, PhysicalRootIdentity?>? checkpoint = null)
     {
-        await using var group = await AcquireNativeGroupOwnerAsync(descriptor, roots, cancellationToken).ConfigureAwait(false);
+        await using var group = await AcquireNativeGroupOwnerAsync(descriptor, roots, cancellationToken, checkpoint).ConfigureAwait(false);
         return await RecoverNativeGroupCoreAsync(group, descriptor, cancellationToken, checkpoint)
             .ConfigureAwait(false);
     }
@@ -180,7 +185,7 @@ internal sealed partial class RootMembershipRegistry
         CancellationToken cancellationToken,
         Action<NativeGroupPublicationPoint, PhysicalRootIdentity?>? checkpoint)
     {
-        var beforeIntent = group.Participants.Select(participant => participant.Transaction!.ReadCurrent()).ToArray();
+        var beforeIntent = group.Participants.Select(group.ReadCurrent).ToArray();
         if (beforeIntent.All(static ledger => ledger.PendingGroupPublicationV2 is null))
         {
             // The exact prior can itself be a Complete v2 generation after a completed rollback.
@@ -192,11 +197,16 @@ internal sealed partial class RootMembershipRegistry
                 if (!await group.IsExactPriorStateAsync(current, cancellationToken).ConfigureAwait(false))
                     throw Refused("The completed Prior recovery no longer has its exact pre-intent state installed.");
                 group.RequirePlannedArtifactsAbsent();
+                group.RequireBoundMarker();
                 return beforeIntent;
             }
             if (beforeIntent.All(static ledger => ledger.Status == RootMembershipStatus.Complete &&
                     ledger.SchemaVersion == RootMembershipRecord.BundleSchemaVersion))
-                return await group.ValidateAcknowledgedNextAsync(cancellationToken).ConfigureAwait(false);
+            {
+                var acknowledged = await group.ValidateAcknowledgedNextAsync(cancellationToken).ConfigureAwait(false);
+                group.RequireBoundMarker();
+                return acknowledged;
+            }
             throw Refused("No persisted group transaction is available for recovery.");
         }
         if (beforeIntent.Any(static ledger => ledger.PendingGroupPublicationV2 is not null))
@@ -207,14 +217,18 @@ internal sealed partial class RootMembershipRegistry
             await group.IsExactPriorStateAsync(currentPrior, cancellationToken).ConfigureAwait(false);
         }
         await group.EnsureIntentAcrossGroupAsync(cancellationToken, checkpoint).ConfigureAwait(false);
-        var pendingRecords = group.Participants.Select(participant => participant.Transaction!.ReadCurrent()).ToArray();
+        var pendingRecords = group.Participants.Select(group.ReadCurrent).ToArray();
         var groupPending = pendingRecords.Select(static ledger => ledger.PendingGroupPublicationV2)
             .Where(static pending => pending is not null).Cast<PendingGroupPublicationV2>().ToArray();
         if (groupPending.Length == 0)
         {
             if (pendingRecords.All(ledger => ledger.Status == RootMembershipStatus.Complete &&
                     ledger.SchemaVersion == RootMembershipRecord.BundleSchemaVersion))
-                return await group.ValidateAcknowledgedNextAsync(cancellationToken).ConfigureAwait(false);
+            {
+                var acknowledged = await group.ValidateAcknowledgedNextAsync(cancellationToken).ConfigureAwait(false);
+                group.RequireBoundMarker();
+                return acknowledged;
+            }
             throw Refused("No persisted group transaction is available for recovery.");
         }
 
@@ -237,21 +251,24 @@ internal sealed partial class RootMembershipRegistry
             var wroteNextResolution = false;
             foreach (var participant in group.Participants)
             {
-                var current = participant.Transaction!.ReadCurrent();
+                var current = group.ReadCurrent(participant);
                 if (current.PendingGroupPublicationV2 is { Resolution: GroupPublicationResolutionV2.Unresolved } pending)
                 {
-                    participant.Transaction!.Publish(BuildGroupLedger(current, RootMembershipStatus.Incomplete,
+                    group.Publish(participant, BuildGroupLedger(current, RootMembershipStatus.Incomplete,
                         current.Members, pending.Resolve(GroupPublicationResolutionV2.Next)));
                     wroteNextResolution = true;
                 }
-                checkpoint?.Invoke(NativeGroupPublicationPoint.ResolutionPublished, participant.Request.RootIdentity);
+                group.Checkpoint(NativeGroupPublicationPoint.ResolutionPublished, participant.Request.RootIdentity);
             }
             if (wroteNextResolution)
                 group.RefreshMemberLocatorScopes();
             var backupName = descriptor.Participants[0].BackupName;
             if (backupName is not null && localPending.BackupStateFileIdentity is { } backup)
-                RemoveExactArtifactIfPresent(group.SharedParent, backupName, backup);
-            return await group.AcknowledgeNextAsync(bundle, state.Identity, checkpoint, cancellationToken).ConfigureAwait(false);
+                group.RemoveExactArtifactIfPresent(backupName, backup);
+            var acknowledged = await group.AcknowledgeNextAsync(bundle, state.Identity, checkpoint, cancellationToken)
+                .ConfigureAwait(false);
+            group.RequireBoundMarker();
+            return acknowledged;
         }
 
         var anyNext = pendingRecords.Any(ledger => ledger.PendingGroupPublicationV2?.Resolution == GroupPublicationResolutionV2.Next);
@@ -308,40 +325,42 @@ internal sealed partial class RootMembershipRegistry
             await group.BindIntentRecordsToObservedArtifactsAsync(bound[0], cancellationToken, checkpoint).ConfigureAwait(false);
             foreach (var participant in group.Participants)
             {
-                var current = participant.Transaction!.ReadCurrent();
+                var current = group.ReadCurrent(participant);
                 var pending = current.PendingGroupPublicationV2!;
-                participant.Transaction.Publish(BuildGroupLedger(current, RootMembershipStatus.Incomplete,
+                group.Publish(participant, BuildGroupLedger(current, RootMembershipStatus.Incomplete,
                     current.Members, pending.Resolve(GroupPublicationResolutionV2.Next)));
-                checkpoint?.Invoke(NativeGroupPublicationPoint.ResolutionPublished, participant.Request.RootIdentity);
+                group.Checkpoint(NativeGroupPublicationPoint.ResolutionPublished, participant.Request.RootIdentity);
             }
             group.RefreshMemberLocatorScopes();
             if (bound[0].BackupStateFileIdentity is { } backupIdentity)
             {
                 var backupName = bound[0].LocalParticipant.BackupName!;
                 await group.RequirePriorArtifactAsync(backupName, backupIdentity, cancellationToken).ConfigureAwait(false);
-                RemoveExactArtifact(group.SharedParent, backupName, backupIdentity);
+                group.RemoveExactArtifact(backupName, backupIdentity);
             }
-            return await group.AcknowledgeNextAsync(installedBundle, installed.Identity, checkpoint,
+            var acknowledged = await group.AcknowledgeNextAsync(installedBundle, installed.Identity, checkpoint,
                 cancellationToken).ConfigureAwait(false);
+            group.RequireBoundMarker();
+            return acknowledged;
         }
         foreach (var participant in group.Participants)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var current = participant.Transaction!.ReadCurrent();
+            var current = group.ReadCurrent(participant);
             var pending = current.PendingGroupPublicationV2
                 ?? throw Refused("A Prior decision cannot omit a participant's durable group Intent.");
             if (pending.Resolution == GroupPublicationResolutionV2.Unresolved)
             {
                 if (priorAlreadyDecided && bound.Length > 0 && pending.Phase == GroupPublicationPhaseV2.Intent)
                     pending = pending.BindArtifacts(bound[0].StagedStateFileIdentity!, bound[0].BackupStateFileIdentity);
-                participant.Transaction!.Publish(BuildGroupLedger(current, RootMembershipStatus.Incomplete,
+                group.Publish(participant, BuildGroupLedger(current, RootMembershipStatus.Incomplete,
                     current.Members, pending.Resolve(GroupPublicationResolutionV2.Prior)));
             }
             else if (pending.Resolution != GroupPublicationResolutionV2.Prior)
                 throw Refused("A durable Next decision forbids a Prior resolution.");
-            checkpoint?.Invoke(NativeGroupPublicationPoint.ResolutionPublished, participant.Request.RootIdentity);
+            group.Checkpoint(NativeGroupPublicationPoint.ResolutionPublished, participant.Request.RootIdentity);
         }
-        var priorDecision = group.Participants.Select(participant => participant.Transaction!.ReadCurrent().PendingGroupPublicationV2)
+        var priorDecision = group.Participants.Select(participant => group.ReadCurrent(participant).PendingGroupPublicationV2)
             .ToArray();
         if (priorDecision.Any(static pending => pending is null || pending.Phase != GroupPublicationPhaseV2.Resolved ||
                 pending.Resolution != GroupPublicationResolutionV2.Prior) ||
@@ -364,19 +383,21 @@ internal sealed partial class RootMembershipRegistry
         foreach (var participant in group.Participants)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var current = participant.Transaction!.ReadCurrent();
+            var current = group.ReadCurrent(participant);
             var pending = current.PendingGroupPublicationV2
                 ?? throw Refused("A Prior decision disappeared before restoring the exact prior ledger.");
-            participant.Transaction!.Publish(group.ReconstructPriorLedger(current, pending.LocalParticipant));
-            checkpoint?.Invoke(NativeGroupPublicationPoint.PriorLedgerRestored, participant.Request.RootIdentity);
+            group.Publish(participant, group.ReconstructPriorLedger(current, pending.LocalParticipant));
+            group.Checkpoint(NativeGroupPublicationPoint.PriorLedgerRestored, participant.Request.RootIdentity);
         }
+        group.RequireBoundMarker();
         return group.Participants.Select(static participant => participant.Transaction!.Ledger).ToArray();
     }
 
     private async Task<NativeGroupPublicationOwner> AcquireNativeGroupOwnerAsync(
         GroupPublicationDescriptorV2 descriptor,
         IReadOnlyList<NativeGroupRootRequest> requests,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<NativeGroupPublicationPoint, PhysicalRootIdentity?>? checkpoint)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         ArgumentNullException.ThrowIfNull(requests);
@@ -470,7 +491,8 @@ internal sealed partial class RootMembershipRegistry
             }
             await union.DisposeAsync().ConfigureAwait(false);
             union = null;
-            var owner = new NativeGroupPublicationOwner(this, descriptor, participants);
+            var owner = await BindNativeGroupPublicationOwnerAsync(descriptor, participants, cancellationToken, checkpoint)
+                .ConfigureAwait(false);
             transferred = true;
             return owner;
         }
@@ -513,6 +535,48 @@ internal sealed partial class RootMembershipRegistry
                     throw new AggregateException("Native group acquisition failed and retained resources did not all release.",
                         (failure is null ? Enumerable.Empty<Exception>() : [failure]).Concat(errors));
             }
+        }
+    }
+
+    private async Task<NativeGroupPublicationOwner> BindNativeGroupPublicationOwnerAsync(
+        GroupPublicationDescriptorV2 descriptor,
+        IReadOnlyList<NativeGroupParticipant> participants,
+        CancellationToken cancellationToken,
+        Action<NativeGroupPublicationPoint, PhysicalRootIdentity?>? checkpoint)
+    {
+        var selected = participants[0].SelectedLocation
+            ?? throw Refused("A native group has no retained shared-slot locator.");
+        if (selected.Slot != descriptor.SharedStateSlot)
+            throw Refused("The retained group locator does not match the immutable shared-state slot.");
+
+        var guard = new PhysicalStoreStateSlotWriteGuard(_files);
+        var lease = await guard.AcquireAsync(selected.Parent, descriptor.SharedStateSlot, cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            var marker = lease.EnsureGroupBindingMarker(descriptor.LogicalMemberId,
+                descriptor.ParticipantSetDigest, cancellationToken);
+            lease.Revalidate();
+            try
+            {
+                checkpoint?.Invoke(NativeGroupPublicationPoint.GroupMarkerBound, null);
+            }
+            finally
+            {
+                lease.Revalidate();
+                if (lease.ReadGroupBindingMarker() != marker)
+                    throw Refused("The shared state slot group marker changed during owner acquisition.");
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var owner = new NativeGroupPublicationOwner(this, descriptor, participants, lease, marker, checkpoint);
+            lease = null!;
+            return owner;
+        }
+        finally
+        {
+            if (lease is not null)
+                await lease.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -693,11 +757,15 @@ internal sealed partial class RootMembershipRegistry
     private sealed class NativeGroupPublicationOwner(
         RootMembershipRegistry registry,
         GroupPublicationDescriptorV2 descriptor,
-        IReadOnlyList<NativeGroupParticipant> participants) : IAsyncDisposable
+        IReadOnlyList<NativeGroupParticipant> participants,
+        PhysicalStoreStateSlotWriteGuard.PhysicalStoreStateSlotWriteLease slotLease,
+        PhysicalStoreGroupBindingMarker expectedMarker,
+        Action<NativeGroupPublicationPoint, PhysicalRootIdentity?>? checkpoint) : IAsyncDisposable
     {
         private readonly ResolvedMemberStateLocation _stableSharedLocation = participants[0].SelectedLocation!;
         private readonly MemberLocatorReplayScope _stableSharedScope = participants[0].Scope!;
         private readonly PhysicalStoreDirectoryHandle _stableSharedParent = participants[0].SelectedLocation!.Parent;
+        private PhysicalStoreStateSlotWriteGuard.PhysicalStoreStateSlotWriteLease? _slotLease = slotLease;
         private bool _disposed;
         internal GroupPublicationDescriptorV2 Descriptor { get; } = descriptor;
         internal IReadOnlyList<NativeGroupParticipant> Participants { get; } = participants;
@@ -713,10 +781,88 @@ internal sealed partial class RootMembershipRegistry
 
         private void RequireStableSharedParent()
         {
+            RequireBoundMarker();
             var observed = registry._files.InspectHandle(_stableSharedParent);
             if (observed.Kind != PhysicalStoreEntryKind.Directory ||
                 observed.Identity != Descriptor.SharedStateSlot.ParentIdentity)
                 throw Refused("The retained shared-state parent no longer matches the immutable group slot.");
+        }
+
+        internal void RequireBoundMarker()
+        {
+            var lease = _slotLease ?? throw new ObjectDisposedException(nameof(NativeGroupPublicationOwner));
+            lease.Revalidate();
+            if (lease.ReadGroupBindingMarker() != expectedMarker)
+                throw Refused("The shared state slot no longer carries this exact permanent group binding.");
+        }
+
+        internal PhysicalFileIdentity CreateFile(PhysicalStoreDirectoryHandle parent, string name, byte[] bytes)
+        {
+            RequireBoundMarker();
+            var identity = registry.CreateFile(parent, name, bytes);
+            RequireBoundMarker();
+            return identity;
+        }
+
+        internal void PublishState(PhysicalStoreDirectoryHandle parent, string stagedName,
+            PhysicalFileIdentity stagedIdentity, string destinationName, PhysicalFileIdentity? expectedIdentity)
+        {
+            RequireBoundMarker();
+            registry._publication.PublishControlFileAt(parent, stagedName, stagedIdentity, destinationName, expectedIdentity);
+            RequireBoundMarker();
+        }
+
+        internal void RemoveExactArtifact(string name, PhysicalFileIdentity expectedIdentity)
+        {
+            RequireBoundMarker();
+            registry.RemoveExactArtifact(_stableSharedParent, name, expectedIdentity);
+            RequireBoundMarker();
+        }
+
+        internal void RemoveExactArtifactIfPresent(string name, PhysicalFileIdentity expectedIdentity)
+        {
+            RequireBoundMarker();
+            registry.RemoveExactArtifactIfPresent(_stableSharedParent, name, expectedIdentity);
+            RequireBoundMarker();
+        }
+
+        internal RootMembershipRecord ReadCurrent(NativeGroupParticipant participant)
+        {
+            RequireBoundMarker();
+            try { return participant.Transaction!.ReadCurrent(); }
+            finally { RequireBoundMarker(); }
+        }
+
+        internal void Checkpoint(NativeGroupPublicationPoint point, PhysicalRootIdentity? root)
+        {
+            RequireBoundMarker();
+            try { checkpoint?.Invoke(point, root); }
+            finally { RequireBoundMarker(); }
+        }
+
+        internal void Publish(NativeGroupParticipant participant, RootMembershipRecord ledger)
+        {
+            RequireBoundMarker();
+            participant.Transaction!.Publish(ledger);
+            RequireBoundMarker();
+        }
+
+        internal async Task<StateObservation> ReadStateAsync(PhysicalStoreDirectoryHandle parent,
+            StateSlotIdentity slot, PhysicalFileIdentity expectedIdentity, CancellationToken token)
+        {
+            Checkpoint(NativeGroupPublicationPoint.GroupPayloadRead, null);
+            StateObservation observation;
+            try
+            {
+                observation = await registry.ReadGroupStateAsync(parent, slot, expectedIdentity, token).ConfigureAwait(false);
+            }
+            catch
+            {
+                RequireBoundMarker();
+                throw;
+            }
+            RequireBoundMarker();
+            return observation;
         }
 
         internal async Task RequireAllPriorAsync(CancellationToken token)
@@ -724,7 +870,7 @@ internal sealed partial class RootMembershipRegistry
             foreach (var participant in Participants)
             {
                 token.ThrowIfCancellationRequested();
-                var ledger = participant.Transaction!.ReadCurrent();
+                var ledger = ReadCurrent(participant);
                 if (ledger.LedgerDigest != participant.Local.PriorLedgerDigest ||
                     ledger.SchemaVersion != participant.Local.PriorSchemaVersion || ledger.Status != participant.Local.PriorMembershipStatus ||
                     ledger.PendingGroupPublicationV2 is not null)
@@ -825,7 +971,7 @@ internal sealed partial class RootMembershipRegistry
             foreach (var participant in Participants)
             {
                 token.ThrowIfCancellationRequested();
-                var ledger = participant.Transaction!.ReadCurrent();
+                var ledger = ReadCurrent(participant);
                 if (ledger.PendingGroupPublicationV2 is { } existing)
                 {
                     if (existing.Descriptor.IntentDigest != Descriptor.IntentDigest)
@@ -851,9 +997,9 @@ internal sealed partial class RootMembershipRegistry
                     throw Refused("An untouched participant is not at its exact immutable pre-intent ledger.");
                 var pending = new PendingGroupPublicationV2(Descriptor, participant.Request.RootIdentity,
                     GroupPublicationPhaseV2.Intent, null, null, GroupPublicationResolutionV2.Unresolved);
-                participant.Transaction.Publish(BuildGroupLedger(ledger, RootMembershipStatus.Incomplete,
+                Publish(participant, BuildGroupLedger(ledger, RootMembershipStatus.Incomplete,
                     ledger.Members, pending));
-                checkpoint?.Invoke(NativeGroupPublicationPoint.IntentPublished, participant.Request.RootIdentity);
+                Checkpoint(NativeGroupPublicationPoint.IntentPublished, participant.Request.RootIdentity);
                 RefreshParticipantMemberLocatorScope(participant);
             }
         }
@@ -872,7 +1018,7 @@ internal sealed partial class RootMembershipRegistry
             foreach (var participant in Participants)
             {
                 token.ThrowIfCancellationRequested();
-                var member = participant.Transaction!.ReadCurrent().Members.Single(item => item.MemberId == participant.Local.PriorMember.MemberId);
+                var member = ReadCurrent(participant).Members.Single(item => item.MemberId == participant.Local.PriorMember.MemberId);
                 var binding = member.Binding;
                 var identity = binding switch
                 {
@@ -883,7 +1029,7 @@ internal sealed partial class RootMembershipRegistry
                 };
                 if (identity != local.PriorStateFileIdentity)
                     throw Refused("A participant prior member does not bind the common shared payload identity.");
-                var state = await registry.ReadGroupStateAsync(SharedParent,
+                var state = await ReadStateAsync(SharedParent,
                     Descriptor.SharedStateSlot, identity!, token).ConfigureAwait(false);
                 RequirePriorStateForParticipant(state.State, participant.Local, Descriptor);
                 if (common is not null && (common.Identity != state.Identity ||
@@ -898,7 +1044,7 @@ internal sealed partial class RootMembershipRegistry
         {
             var artifactSlot = new StateSlotIdentity(Descriptor.SharedStateSlot.ParentIdentity,
                 Descriptor.SharedStateSlot.NameSemantics, name);
-            var artifact = await registry.ReadGroupStateAsync(SharedParent, artifactSlot,
+            var artifact = await ReadStateAsync(SharedParent, artifactSlot,
                 identity, token).ConfigureAwait(false);
             foreach (var participant in Participants)
                 RequirePriorStateForParticipant(artifact.State, participant.Local, Descriptor);
@@ -910,7 +1056,7 @@ internal sealed partial class RootMembershipRegistry
                 Descriptor.SharedStateSlot.CanonicalBasename)?.Identity;
             if (identity is null)
                 return null;
-            return await registry.ReadGroupStateAsync(SharedParent, Descriptor.SharedStateSlot, identity, token).ConfigureAwait(false);
+            return await ReadStateAsync(SharedParent, Descriptor.SharedStateSlot, identity, token).ConfigureAwait(false);
         }
 
         internal async Task<StateObservation> ReadCurrentGroupStateAsync(CancellationToken token)
@@ -942,7 +1088,7 @@ internal sealed partial class RootMembershipRegistry
 
         internal async Task RequireBoundArtifactsConsistentAsync(CancellationToken token, bool allowMissingBackup)
         {
-            var ledgers = Participants.Select(item => item.Transaction!.ReadCurrent()).ToArray();
+            var ledgers = Participants.Select(ReadCurrent).ToArray();
             var pending = ledgers.Select(static ledger => ledger.PendingGroupPublicationV2)
                 .Where(static item => item is not null).Cast<PendingGroupPublicationV2>().ToArray();
             if (pending.Length == 0)
@@ -992,7 +1138,7 @@ internal sealed partial class RootMembershipRegistry
         internal void RefreshMemberLocatorScopes()
         {
             RequireStableSharedParent();
-            var ledgers = Participants.Select(static participant => participant.Transaction!.ReadCurrent()).ToArray();
+            var ledgers = Participants.Select(ReadCurrent).ToArray();
             for (var index = 0; index < Participants.Count; index++)
                 RequireGroupLedgerForDescriptor(ledgers[index], Participants[index].Local, Descriptor);
             var pendingRows = ledgers.Select(static ledger => ledger.PendingGroupPublicationV2).ToArray();
@@ -1038,7 +1184,7 @@ internal sealed partial class RootMembershipRegistry
                 previousScope?.Expire();
             }
 
-            var current = participant.Transaction!.ReadCurrent();
+            var current = ReadCurrent(participant);
             RequireGroupLedgerForDescriptor(current, participant.Local, Descriptor);
             var scope = new MemberLocatorReplayScope(current);
             IReadOnlyDictionary<string, ResolvedMemberStateLocation>? locations = null;
@@ -1103,7 +1249,7 @@ internal sealed partial class RootMembershipRegistry
             {
                 if (stage is null || stage.Identity != pending.StagedStateFileIdentity)
                     throw Refused("The bound Next state is neither staged nor installed under its exact identity.");
-                var staged = await registry.ReadGroupStateAsync(SharedParent,
+                var staged = await ReadStateAsync(SharedParent,
                     new StateSlotIdentity(Descriptor.SharedStateSlot.ParentIdentity,
                         Descriptor.SharedStateSlot.NameSemantics, local.StagedName), stage.Identity, token).ConfigureAwait(false);
                 RequireNextBundle(Descriptor, staged.State);
@@ -1135,15 +1281,15 @@ internal sealed partial class RootMembershipRegistry
             foreach (var participant in Participants)
             {
                 token.ThrowIfCancellationRequested();
-                var current = participant.Transaction!.ReadCurrent();
+                var current = ReadCurrent(participant);
                 var pending = current.PendingGroupPublicationV2
                     ?? throw Refused("A participant lost the exact group Intent before binding recovery.");
                 if (pending.Descriptor.IntentDigest != Descriptor.IntentDigest)
                     throw Refused("A participant Intent conflicts with the immutable group descriptor.");
                 if (pending.Phase == GroupPublicationPhaseV2.Intent)
-                    participant.Transaction.Publish(BuildGroupLedger(current, RootMembershipStatus.Incomplete,
+                    Publish(participant, BuildGroupLedger(current, RootMembershipStatus.Incomplete,
                         current.Members, pending.BindArtifacts(bound.StagedStateFileIdentity!, bound.BackupStateFileIdentity)));
-                checkpoint?.Invoke(NativeGroupPublicationPoint.ArtifactsBound, participant.Request.RootIdentity);
+                Checkpoint(NativeGroupPublicationPoint.ArtifactsBound, participant.Request.RootIdentity);
             }
         }
 
@@ -1160,7 +1306,7 @@ internal sealed partial class RootMembershipRegistry
             {
                 if (stage.Identity != pending.StagedStateFileIdentity)
                     throw Refused("An unrecognized stage artifact remains untouched during Prior recovery.");
-                var staged = await registry.ReadGroupStateAsync(SharedParent,
+                var staged = await ReadStateAsync(SharedParent,
                     new StateSlotIdentity(Descriptor.SharedStateSlot.ParentIdentity,
                         Descriptor.SharedStateSlot.NameSemantics, local.StagedName), stage.Identity, token).ConfigureAwait(false);
                 RequireNextBundle(Descriptor, staged.State);
@@ -1187,7 +1333,7 @@ internal sealed partial class RootMembershipRegistry
             VerifyNextBundleAndInstalls(bundle, state.State, token);
             foreach (var participant in Participants)
             {
-                var ledger = participant.Transaction!.ReadCurrent();
+                var ledger = ReadCurrent(participant);
                 var member = ledger.Members.Single(item => item.MemberId == participant.Local.PriorMember.MemberId);
                 if (member.Binding is not RootMemberRecord.BundleAcknowledgedBinding binding ||
                     binding.ObservedStateFileIdentity != state.Identity || binding.RootRow.Revision != participant.Local.NextRevision ||
@@ -1197,12 +1343,14 @@ internal sealed partial class RootMembershipRegistry
                     !binding.RootRow.HasSamePayloadAs(bundle.Rows.Single(row => row.RootIdentity == participant.Request.RootIdentity)))
                     throw Refused("A Complete group ledger no longer matches its shared bundle and local row.");
             }
+            RequireBoundMarker();
             return Participants.Select(static participant => participant.Transaction!.Ledger).ToArray();
         }
 
         internal async Task RemoveBoundArtifactsAfterPriorDecisionAsync(PendingGroupPublicationV2 pending,
             CancellationToken token, Action<NativeGroupPublicationPoint, PhysicalRootIdentity?>? checkpoint)
         {
+            RequireBoundMarker();
             var parent = SharedParent;
             var participant = pending.LocalParticipant;
             var current = registry._files.InspectChildNoFollow(parent, Descriptor.SharedStateSlot.CanonicalBasename);
@@ -1214,11 +1362,13 @@ internal sealed partial class RootMembershipRegistry
             {
                 if (stage.Identity != pending.StagedStateFileIdentity)
                     throw Refused("An unrecognized stage artifact remains untouched.");
+                RequireBoundMarker();
                 var bytes = registry.ReadFile(parent, participant.StagedName, stage.Identity, MaximumStateBytes).Bytes;
+                RequireBoundMarker();
                 var state = await registry.DecodeStateAsync(bytes, token).ConfigureAwait(false);
                 RequireNextBundle(Descriptor, state);
-                registry.RemoveExactArtifact(parent, participant.StagedName, stage.Identity);
-                checkpoint?.Invoke(NativeGroupPublicationPoint.PriorStageRemoved, null);
+                RemoveExactArtifact(participant.StagedName, stage.Identity);
+                Checkpoint(NativeGroupPublicationPoint.PriorStageRemoved, null);
             }
             if (participant.BackupName is not null)
             {
@@ -1228,13 +1378,14 @@ internal sealed partial class RootMembershipRegistry
                     if (backup.Identity != pending.BackupStateFileIdentity)
                         throw Refused("An unrecognized backup artifact remains untouched.");
                     await RequirePriorArtifactAsync(participant.BackupName, backup.Identity, token).ConfigureAwait(false);
-                    registry.RemoveExactArtifact(parent, participant.BackupName, backup.Identity);
-                    checkpoint?.Invoke(NativeGroupPublicationPoint.PriorBackupRemoved, null);
+                    RemoveExactArtifact(participant.BackupName, backup.Identity);
+                    Checkpoint(NativeGroupPublicationPoint.PriorBackupRemoved, null);
                 }
             }
             if (registry._files.InspectChildNoFollow(parent, participant.StagedName) is not null ||
                 participant.BackupName is not null && registry._files.InspectChildNoFollow(parent, participant.BackupName) is not null)
                 throw Refused("Prior recovery requires positive absence of every planned artifact.");
+            RequireBoundMarker();
         }
 
         internal RootMembershipRecord ReconstructPriorLedger(RootMembershipRecord current,
@@ -1251,14 +1402,14 @@ internal sealed partial class RootMembershipRegistry
             Action<NativeGroupPublicationPoint, PhysicalRootIdentity?>? checkpoint,
             CancellationToken token)
         {
-            var installedState = await registry.ReadGroupStateAsync(SharedParent, Descriptor.SharedStateSlot,
+            var installedState = await ReadStateAsync(SharedParent, Descriptor.SharedStateSlot,
                 installedIdentity, token).ConfigureAwait(false);
             RequireNextBundle(Descriptor, installedState.State);
             VerifyNextBundleAndInstalls(bundle, installedState.State, token);
             foreach (var participant in Participants)
             {
                 token.ThrowIfCancellationRequested();
-                var current = participant.Transaction!.ReadCurrent();
+                var current = ReadCurrent(participant);
                 if (current.Status == RootMembershipStatus.Complete && current.PendingGroupPublicationV2 is null)
                     continue;
                 var pending = current.PendingGroupPublicationV2
@@ -1274,9 +1425,10 @@ internal sealed partial class RootMembershipRegistry
                 var members = current.Members.Select(item => item.MemberId == old.MemberId
                     ? new RootMemberRecord(item.MemberId, item.ConfiguredLocator, binding)
                     : item).ToArray();
-                participant.Transaction!.Publish(BuildGroupLedger(current, RootMembershipStatus.Complete, members, null));
-                checkpoint?.Invoke(NativeGroupPublicationPoint.Acknowledged, participant.Request.RootIdentity);
+                Publish(participant, BuildGroupLedger(current, RootMembershipStatus.Complete, members, null));
+                Checkpoint(NativeGroupPublicationPoint.Acknowledged, participant.Request.RootIdentity);
             }
+            RequireBoundMarker();
             return Participants.Select(static participant => participant.Transaction!.Ledger).ToArray();
         }
 
@@ -1285,6 +1437,12 @@ internal sealed partial class RootMembershipRegistry
             if (_disposed) return;
             _disposed = true;
             var errors = new List<Exception>();
+            var slotLease = Interlocked.Exchange(ref _slotLease, null);
+            if (slotLease is not null)
+            {
+                try { await slotLease.DisposeAsync().ConfigureAwait(false); }
+                catch (Exception exception) { errors.Add(exception); }
+            }
             for (var index = Participants.Count - 1; index >= 0; index--)
             {
                 var participant = Participants[index];
