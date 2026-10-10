@@ -618,6 +618,37 @@ jobs:
           python3 build/verify-required-trx.py "$RUNNER_TEMP/retained-loading/retained-loading.trx" \
             build/test-cases/retained-loading.json
 
+      - name: Qualify compatible package-content directory and archive reads
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~Nuplane.Runtime.Tests.PackageContentTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=package-content-runtime.trx" \
+            --results-directory "$RUNNER_TEMP/package-content-runtime"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/package-content-runtime/package-content-runtime.trx" \
+            build/test-cases/package-content-runtime.json
+
+      - name: Qualify package-content admission and held native replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          filter="FullyQualifiedName~PackageContentAdmissionTests"
+          manifest="build/test-cases/package-content-store-unix.json"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            filter="$filter&FullyQualifiedName!~DirectoryEdgeReplacementAfterPayloadReadRefusesDetachedBytes&FullyQualifiedName!~DirectoryEdgeReplacementAfterMissingObservationDoesNotReturnFalseAbsence"
+            manifest="build/test-cases/package-content-store-windows.json"
+          fi
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "$filter" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=package-content-store.trx" \
+            --results-directory "$RUNNER_TEMP/package-content-store"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/package-content-store/package-content-store.trx" "$manifest"
+
       - name: Qualify native installed-package probes and dependency graph inputs
         shell: bash
         run: |
