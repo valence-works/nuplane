@@ -59,8 +59,10 @@ reviews:
 knowledge_base:
   code_guidelines:
     enabled: true
+    # Guideline files apply only to their own directory unless mapped with applyTo.
     filePatterns:
-      - "docs/coding-conventions.md"
+      - files: "docs/coding-conventions.md"
+        applyTo: "**/*"
 
 chat:
   auto_reply: true
