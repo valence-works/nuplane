@@ -1,6 +1,8 @@
 # Scoped direct-restore admission
 
-This bounded T084/T091 prerequisite protects public `NuplaneRestore.DescribeDesiredAsync` and `RequirePinnedVersions` preflight before desired-source reads. It does not accept either task or the complete T101/all-driver before-delete gate: built-in Directory and enabled DesiredManifest sources still need successful enrolled scoped implementations.
+The [Directory follow-on](directory-source-admission.md) now implements scoped native feed reads and replaces the obsolete unsupported-Directory regression with Complete-root success plus foreign-root refusal. The combined local candidate passes its updated twelve-case class and all 224 Integration cases without skips or failures; actual platform qualification remains pending. The eleven-case results below remain evidence for the earlier head.
+
+This bounded T084/T091 prerequisite protects public `NuplaneRestore.DescribeDesiredAsync` and `RequirePinnedVersions` preflight before desired-source reads. It does not accept either task or the complete T101/all-driver before-delete gate: Directory platform qualification and an enabled DesiredManifest scoped implementation remain required.
 
 `RestoreComposition` acquires configured-root Restore admission before source callbacks and retains the exact Complete root/all-member owner across awaited aggregation. Positively Unenrolled calls retain legacy aggregation. Incomplete/unknown authority and unsupported enrolled participants refuse before callbacks. Describe releases its owner before a later reconciliation cycle obtains fresh admission; it adds no source snapshot persistence, acquisition, Loading or remote resolution.
 
