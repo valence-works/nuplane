@@ -12,6 +12,7 @@ internal sealed partial class RootMembershipRegistry
     {
         Acknowledged,
         GroupAcknowledged,
+        PendingStateRecovery,
         Declared,
         BoundIncomplete
     }
@@ -474,6 +475,47 @@ internal sealed partial class RootMembershipRegistry
                     throw Refused("A configured member locator no longer resolves to its exact acknowledged native state slot.");
                 return;
             }
+            case LocatorReplayBindingPolicy.PendingStateRecovery:
+            {
+                var pending = ledger.PendingStateCommit
+                    ?? throw Refused("Local pending-state locator replay requires exact persisted recovery evidence.");
+                var expectedSlot = GetSlot(member);
+                if (location.Slot != expectedSlot)
+                    throw Refused("A local pending-state locator no longer resolves to its exact bound slot.");
+
+                if (string.Equals(member.MemberId, pending.MemberId, StringComparison.Ordinal))
+                {
+                    if (!RootMembershipRecord.BindingsEqualForGroup(member.Binding, pending.Prior))
+                        throw Refused("The pending local member no longer matches its exact prior binding.");
+                    var priorIdentity = member.Binding switch
+                    {
+                        RootMemberRecord.ExistingUnprotectedBinding prior => prior.ObservedStateFileIdentity,
+                        RootMemberRecord.AcknowledgedBinding prior => prior.ObservedStateFileIdentity,
+                        RootMemberRecord.ProspectiveBinding => null,
+                        _ => throw Refused("Local pending-state recovery encountered an unsupported prior binding.")
+                    };
+                    var isPrior = location.ExistingFileIdentity == priorIdentity;
+                    var isStaged = pending.StagedStateFileIdentity is { } staged &&
+                        location.ExistingFileIdentity == staged;
+                    if (pending.Resolution == PendingStateCommitResolution.Prior && !isPrior ||
+                        pending.Resolution == PendingStateCommitResolution.Next && !isStaged ||
+                        pending.Resolution == PendingStateCommitResolution.Unresolved && !isPrior && !isStaged)
+                        throw Refused("The pending local state file does not match its exact prior or staged identity.");
+                }
+                else
+                {
+                    var expectedIdentity = member.Binding switch
+                    {
+                        RootMemberRecord.ProspectiveBinding => null,
+                        RootMemberRecord.ExistingUnprotectedBinding prior => prior.ObservedStateFileIdentity,
+                        RootMemberRecord.AcknowledgedBinding prior => prior.ObservedStateFileIdentity,
+                        _ => throw Refused("Local pending-state recovery encountered an unsupported member binding.")
+                    };
+                    if (location.ExistingFileIdentity != expectedIdentity)
+                        throw Refused("A sibling member changed while local pending-state recovery was retained.");
+                }
+                return;
+            }
             case LocatorReplayBindingPolicy.Declared:
                 if (member.Binding is not RootMemberRecord.DeclaredBinding)
                     throw Refused("Quiescent bootstrap locator replay is limited to an all-Declared Incomplete membership.");
@@ -803,6 +845,9 @@ internal sealed partial class RootMembershipRegistry
                         RootMemberRecord.BundleAcknowledgedBinding or RootMemberRecord.ExistingUnprotectedBinding)))
                     throw Refused("Native group locator replay requires an exact bound membership without a legacy pending commit.");
                 break;
+            case LocatorReplayBindingPolicy.PendingStateRecovery:
+                RequireRecoverablePendingStateLocatorLedger(ledger);
+                break;
             case LocatorReplayBindingPolicy.Declared:
                 RequireAllDeclaredLocatorLedger(ledger, expectedRoot, expectedEnrollmentEpoch);
                 break;
@@ -814,17 +859,45 @@ internal sealed partial class RootMembershipRegistry
         }
     }
 
+    private static void RequireRecoverablePendingStateLocatorLedger(RootMembershipRecord ledger)
+    {
+        var pending = ledger.PendingStateCommit;
+        if (ledger.Status != RootMembershipStatus.Incomplete || pending is null ||
+            ledger.PendingGroupPublicationV2 is not null || ledger.Members.Count == 0 ||
+            pending.RootIdentity != ledger.RootIdentity || pending.EnrollmentEpoch != ledger.EnrollmentEpoch ||
+            ledger.Members.Any(static member => member.Binding is not (RootMemberRecord.ProspectiveBinding or
+                RootMemberRecord.ExistingUnprotectedBinding or RootMemberRecord.AcknowledgedBinding)))
+            throw Refused("Local recovery replay requires one exact recoverable PendingState transaction on fully bound members.");
+
+        var memberIds = ledger.Members.Select(static member => member.MemberId).ToHashSet(StringComparer.Ordinal);
+        if (memberIds.Count != ledger.Members.Count || !memberIds.SetEquals(ledger.TargetMemberIds))
+            throw Refused("Local pending-state recovery requires the exact member and target union.");
+        var pendingMember = ledger.Members.SingleOrDefault(member =>
+            string.Equals(member.MemberId, pending.MemberId, StringComparison.Ordinal));
+        if (pendingMember is null || !RootMembershipRecord.BindingsEqualForGroup(pendingMember.Binding, pending.Prior))
+            throw Refused("The PendingState record does not identify its exact retained prior member binding.");
+
+        var prior = Rebuild(ledger, pending.PriorMembershipStatus, ledger.Members, pending: null);
+        if (prior.LedgerDigest != pending.PriorLedgerDigest)
+            throw Refused("PendingState does not reconstruct the exact prior membership ledger.");
+    }
+
     /// <summary>Short-lived metadata scope for one exact ledger during locked member-locator replay.</summary>
     internal sealed class MemberLocatorReplayScope
     {
         private int _active = 1;
+        private readonly bool _allowPendingStateCommit;
 
-        internal MemberLocatorReplayScope(RootMembershipRecord ledger)
+        internal MemberLocatorReplayScope(RootMembershipRecord ledger, bool allowPendingStateCommit = false)
         {
+            ArgumentNullException.ThrowIfNull(ledger);
+            if (allowPendingStateCommit)
+                RequireRecoverablePendingStateLocatorLedger(ledger);
             RootIdentity = ledger.RootIdentity;
             EnrollmentEpoch = ledger.EnrollmentEpoch;
             Status = ledger.Status;
             LedgerDigest = ledger.LedgerDigest;
+            _allowPendingStateCommit = allowPendingStateCommit;
         }
 
         internal PhysicalRootIdentity RootIdentity { get; }
@@ -846,7 +919,7 @@ internal sealed partial class RootMembershipRegistry
             EnsureActive();
             if (observedRoot != RootIdentity || candidate.RootIdentity != RootIdentity ||
                 candidate.EnrollmentEpoch != EnrollmentEpoch || candidate.Status != Status ||
-                candidate.PendingStateCommit is not null ||
+                (!_allowPendingStateCommit && candidate.PendingStateCommit is not null) ||
                 !string.Equals(candidate.LedgerDigest, LedgerDigest, StringComparison.Ordinal))
             {
                 throw Refused("A configured member locator encountered a different or changing membership authority.");

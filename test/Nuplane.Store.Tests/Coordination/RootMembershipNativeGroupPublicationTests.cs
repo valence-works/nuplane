@@ -13,7 +13,7 @@ using Nuplane.Tests.Shared;
 namespace Nuplane.Store.Tests.Coordination;
 
 [Trait("Platform", "Native")]
-public sealed class RootMembershipNativeGroupPublicationTests
+public sealed partial class RootMembershipNativeGroupPublicationTests
 {
     [SupportedPhysicalStoreFact]
     public async Task PublishAndFreshRecovery_UseSiblingRootsAndExternalSharedStateSlot()
@@ -412,9 +412,7 @@ public sealed class RootMembershipNativeGroupPublicationTests
     private sealed class Context : IDisposable
     {
         private readonly PackageStoreFixture _fixture = new();
-        private readonly IPhysicalStoreFileSystem _files = OperatingSystem.IsWindows()
-            ? new WindowsPhysicalStoreFileSystem()
-            : new UnixPhysicalStoreFileSystem();
+        private readonly IPhysicalStoreFileSystem _files;
         private readonly PhysicalStoreDirectoryHandle _rootA;
         private readonly PhysicalStoreDirectoryHandle _rootB;
         private readonly PhysicalStoreDirectoryHandle _sharedParent;
@@ -428,8 +426,12 @@ public sealed class RootMembershipNativeGroupPublicationTests
         private readonly string _rootBPath;
         private string? _rootAInstallPath;
 
-        private Context(bool prospective, bool nonEmptyActiveMapsWithKnownEmptyRows, bool withCrossRootGraph = false)
+        private Context(bool prospective, bool nonEmptyActiveMapsWithKnownEmptyRows,
+            IPhysicalStoreFileSystem? fileSystem = null, bool withCrossRootGraph = false)
         {
+            _files = fileSystem ?? (OperatingSystem.IsWindows()
+                ? new WindowsPhysicalStoreFileSystem()
+                : new UnixPhysicalStoreFileSystem());
             _rootAPath = _fixture.CreateDirectory("root-a");
             _rootBPath = _fixture.CreateDirectory("root-b");
             var sharedDir = _fixture.CreateDirectory("shared");
@@ -580,6 +582,7 @@ public sealed class RootMembershipNativeGroupPublicationTests
         internal PhysicalRootIdentity RootAIdentity { get; }
         internal PhysicalRootIdentity RootBIdentity { get; }
         internal PhysicalRootIdentity FirstParticipantIdentity => Descriptor.Participants[0].RootIdentity;
+        internal IPhysicalStoreFileSystem Files => _files;
         internal RootMembershipRecord[] PriorLedgers { get; }
         internal StoreStateRecord PriorState { get; }
         internal PhysicalFileIdentity? PriorStateIdentity { get; }
@@ -590,9 +593,46 @@ public sealed class RootMembershipNativeGroupPublicationTests
         internal IReadOnlyList<RootMembershipRegistry.NativeGroupRootRequest> Requests { get; }
         internal string StagePath { get; }
         internal string BackupPath { get; }
+        internal string RootAPath => _rootAPath;
+        internal string RootBPath => _rootBPath;
 
-        internal static Task<Context> CreateAsync(bool nonEmptyActiveMapsWithKnownEmptyRows = false)
-            => Task.FromResult(new Context(false, nonEmptyActiveMapsWithKnownEmptyRows));
+        internal PhysicalFileIdentity RootControlIdentity(PhysicalRootIdentity rootIdentity)
+        {
+            var path = rootIdentity == RootAIdentity ? _rootAPath :
+                rootIdentity == RootBIdentity ? _rootBPath :
+                throw new ArgumentOutOfRangeException(nameof(rootIdentity));
+            using var root = PhysicalStoreTestDirectory.Open(_files, path);
+            return _files.InspectChildNoFollow(root, RootMembershipRegistry.ControlDirectoryName)?.Identity
+                ?? throw new InvalidOperationException("The fixture root control directory is missing.");
+        }
+
+        internal string CreateUnboundRootPath() => _fixture.CreateDirectory("unbound-root");
+
+        internal (string RootPath, GroupPublicationParticipantV2 Participant) AddSharedSlotRoot()
+        {
+            var rootPath = _fixture.CreateDirectory("extra-catalog-root");
+            using var root = PhysicalStoreTestDirectory.Open(_files, rootPath);
+            var rootIdentity = new PhysicalRootIdentity(_files.InspectHandle(root).Identity);
+            var declaration = new RootMemberRecord("shared-c", _sharedPath, new RootMemberRecord.DeclaredBinding());
+            _registry.InitializeIncomplete(root, rootIdentity, 1, [declaration], true, CancellationToken.None);
+            var locations = new Dictionary<string, (PhysicalStoreDirectoryHandle Parent, string RequestedBasename)>
+            {
+                [declaration.MemberId] = (_sharedParent, Path.GetFileName(_sharedPath))
+            };
+            var ledger = _registry.BindDeclaredMembersAsync(root, rootIdentity, 1, [declaration], locations,
+                true, CancellationToken.None).GetAwaiter().GetResult();
+            var member = ledger.Members.Single();
+            var template = Descriptor.Participants[0];
+            var participant = new GroupPublicationParticipantV2(rootIdentity, ledger.EnrollmentEpoch, member,
+                ledger.Status, ledger.SchemaVersion, ledger.LedgerDigest, 0, null,
+                PriorStateIdentity ?? throw new InvalidOperationException("The shared fixture state must exist."),
+                1, template.NextRowDigest, template.StagedName, template.BackupName);
+            return (rootPath, participant);
+        }
+
+        internal static Task<Context> CreateAsync(bool nonEmptyActiveMapsWithKnownEmptyRows = false,
+            IPhysicalStoreFileSystem? fileSystem = null)
+            => Task.FromResult(new Context(false, nonEmptyActiveMapsWithKnownEmptyRows, fileSystem));
 
         internal static Task<Context> CreateWithGraphAsync()
             => Task.FromResult(new Context(false, false, withCrossRootGraph: true));

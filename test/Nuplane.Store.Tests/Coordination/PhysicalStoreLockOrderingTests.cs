@@ -411,18 +411,25 @@ public sealed class PhysicalStoreLockOrderingTests
         Assert.Equal(new[] { "acquire:root.lock", "release:root.lock" }, files.Events);
     }
 
-    private sealed class RecordingPhysicalStoreFileSystem(IPhysicalStoreFileSystem inner)
-        : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem
+    internal sealed class RecordingPhysicalStoreFileSystem(IPhysicalStoreFileSystem inner)
+        : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem, IPhysicalStorePublicationFileSystem,
+            IPhysicalStoreDirectoryPublicationFileSystem
     {
         private readonly object _gate = new();
-        private readonly Dictionary<PhysicalStoreFileHandle, string> _fileNames = new();
+        private readonly Dictionary<PhysicalStoreFileHandle, (string Name, PhysicalFileIdentity Parent)> _fileNames = new();
         private readonly List<string> _events = [];
+        private readonly List<(PhysicalFileIdentity Parent, string Name)> _lockAcquisitions = [];
         private string? _cancelName;
         private CancellationTokenSource? _cancelSource;
 
         internal IReadOnlyList<string> Events
         {
             get { lock (_gate) return _events.ToArray(); }
+        }
+
+        internal IReadOnlyList<(PhysicalFileIdentity Parent, string Name)> LockAcquisitions
+        {
+            get { lock (_gate) return _lockAcquisitions.ToArray(); }
         }
 
         internal void CancelAfterNextAcquisitionOf(string name, CancellationTokenSource source)
@@ -436,7 +443,11 @@ public sealed class PhysicalStoreLockOrderingTests
 
         internal void ClearEvents()
         {
-            lock (_gate) _events.Clear();
+            lock (_gate)
+            {
+                _events.Clear();
+                _lockAcquisitions.Clear();
+            }
         }
 
         internal void RecordEvent(string eventName)
@@ -455,7 +466,7 @@ public sealed class PhysicalStoreLockOrderingTests
         public PhysicalStoreFileHandle OpenFileChildNoFollow(PhysicalStoreDirectoryHandle parent, string singleName, FileAccess access)
         {
             var file = inner.OpenFileChildNoFollow(parent, singleName, access);
-            lock (_gate) _fileNames[file] = singleName;
+            lock (_gate) _fileNames[file] = (singleName, inner.InspectHandle(parent).Identity);
             return file;
         }
 
@@ -470,7 +481,7 @@ public sealed class PhysicalStoreLockOrderingTests
             var file = inner.CreateFileExclusiveAt(parent, singleName);
             lock (_gate)
             {
-                _fileNames[file] = singleName;
+                _fileNames[file] = (singleName, inner.InspectHandle(parent).Identity);
                 _events.Add($"create:{singleName}");
             }
             return file;
@@ -483,8 +494,8 @@ public sealed class PhysicalStoreLockOrderingTests
             inner.WriteNewControlFile(file, contents);
             lock (_gate)
             {
-                if (_fileNames.TryGetValue(file, out var name))
-                    _events.Add($"write:{name}");
+                if (_fileNames.TryGetValue(file, out var observed))
+                    _events.Add($"write:{observed.Name}");
             }
         }
 
@@ -495,13 +506,24 @@ public sealed class PhysicalStoreLockOrderingTests
                 return null;
 
             string? name;
+            PhysicalFileIdentity? parentIdentity;
             CancellationTokenSource? cancellation = null;
             lock (_gate)
             {
-                _fileNames.TryGetValue(file, out name);
+                if (_fileNames.TryGetValue(file, out var observed))
+                {
+                    name = observed.Name;
+                    parentIdentity = observed.Parent;
+                }
+                else
+                {
+                    name = null;
+                    parentIdentity = null;
+                }
                 if (name is not null)
                 {
                     _events.Add($"acquire:{name}");
+                    _lockAcquisitions.Add((parentIdentity!, name));
                     if (string.Equals(name, _cancelName, StringComparison.Ordinal))
                     {
                         cancellation = _cancelSource;
@@ -529,6 +551,36 @@ public sealed class PhysicalStoreLockOrderingTests
 
         public PhysicalStoreNameSemantics ObserveDirectoryNameSemantics(PhysicalStoreDirectoryHandle parent)
             => ((IPhysicalStoreNameFileSystem)inner).ObserveDirectoryNameSemantics(parent);
+
+        public PhysicalStoreCanonicalName ObserveCanonicalDirectoryNameNoFollow(
+            PhysicalStoreDirectoryHandle parent,
+            string singleName,
+            PhysicalFileIdentity expectedDirectoryIdentity)
+            => ((IPhysicalStoreDirectoryNameFileSystem)inner).ObserveCanonicalDirectoryNameNoFollow(
+                parent, singleName, expectedDirectoryIdentity);
+
+        public PhysicalStoreEntryInfo PublishDirectoryNoReplaceAt(
+            PhysicalStoreDirectoryHandle parent,
+            string stagedName,
+            PhysicalFileIdentity expectedStagedIdentity,
+            string destinationName)
+            => ((IPhysicalStoreDirectoryPublicationFileSystem)inner).PublishDirectoryNoReplaceAt(
+                parent, stagedName, expectedStagedIdentity, destinationName);
+
+        public PhysicalStoreEntryInfo PublishControlFileAt(
+            PhysicalStoreDirectoryHandle parent,
+            string stagedName,
+            PhysicalFileIdentity expectedStagedIdentity,
+            string destinationName,
+            PhysicalFileIdentity? expectedDestinationIdentity)
+            => ((IPhysicalStorePublicationFileSystem)inner).PublishControlFileAt(parent, stagedName,
+                expectedStagedIdentity, destinationName, expectedDestinationIdentity);
+
+        public void RemoveControlFileAt(
+            PhysicalStoreDirectoryHandle parent,
+            string singleName,
+            PhysicalFileIdentity expectedIdentity)
+            => ((IPhysicalStorePublicationFileSystem)inner).RemoveControlFileAt(parent, singleName, expectedIdentity);
 
         private void RecordRelease(string name)
         {

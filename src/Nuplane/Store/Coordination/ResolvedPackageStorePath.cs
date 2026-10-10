@@ -15,6 +15,7 @@ internal sealed class ResolvedPackageStorePath : IDisposable
 {
     private readonly IReadOnlyList<PhysicalStoreHandle> _ownedHandles;
     private readonly Action<bool> _revalidate;
+    private readonly Action<RootMembershipRecord, PhysicalFileIdentity> _revalidateOwnedLedgerOutcome;
     private readonly object _gate = new();
     private bool _disposed;
 
@@ -26,6 +27,7 @@ internal sealed class ResolvedPackageStorePath : IDisposable
         PhysicalFileIdentity? membershipLedgerIdentity,
         IReadOnlyList<PhysicalStoreHandle> ownedHandles,
         Action<bool> revalidate,
+        Action<RootMembershipRecord, PhysicalFileIdentity> revalidateOwnedLedgerOutcome,
         PhysicalStoreDirectoryHandle? targetParent = null,
         string? targetName = null,
         bool isProspectiveConfiguredRoot = false,
@@ -35,6 +37,7 @@ internal sealed class ResolvedPackageStorePath : IDisposable
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(ownedHandles);
         ArgumentNullException.ThrowIfNull(revalidate);
+        ArgumentNullException.ThrowIfNull(revalidateOwnedLedgerOutcome);
         if ((authorityRoot is null) != (rootIdentity is null) ||
             (membershipCandidate is null) != (membershipLedgerIdentity is null) ||
             (membershipCandidate is null && rootIdentity is not null && !isRetainedGraphUseRoot) ||
@@ -61,6 +64,7 @@ internal sealed class ResolvedPackageStorePath : IDisposable
         IsRetainedGraphUseRoot = isRetainedGraphUseRoot;
         _ownedHandles = ownedHandles.ToArray();
         _revalidate = revalidate;
+        _revalidateOwnedLedgerOutcome = revalidateOwnedLedgerOutcome;
     }
 
     /// <summary>Gets the held final target, or the nearest existing parent for a permitted missing suffix.</summary>
@@ -101,6 +105,22 @@ internal sealed class ResolvedPackageStorePath : IDisposable
     /// <remarks>Post-callback and all other callers must use strict <see cref="Revalidate()"/>.</remarks>
     internal void RevalidateForUnenrolledPackageProbe()
         => Revalidate(allowStableMissingDirectoryRetry: true);
+
+    /// <summary>Revalidates original native path evidence after one registry-owned exact ledger replacement.</summary>
+    internal void RevalidateOwnedLedgerOutcome(RootMembershipRecord expectedLedger, PhysicalFileIdentity expectedIdentity)
+    {
+        ArgumentNullException.ThrowIfNull(expectedLedger);
+        ArgumentNullException.ThrowIfNull(expectedIdentity);
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (MembershipCandidate is null || RootIdentity != expectedLedger.RootIdentity ||
+                MembershipCandidate.EnrollmentEpoch != expectedLedger.EnrollmentEpoch)
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
+                    "An owned ledger refresh does not match the retained native root and epoch.", expectedLedger.RootIdentity);
+            _revalidateOwnedLedgerOutcome(expectedLedger, expectedIdentity);
+        }
+    }
 
     private void Revalidate(bool allowStableMissingDirectoryRetry)
     {

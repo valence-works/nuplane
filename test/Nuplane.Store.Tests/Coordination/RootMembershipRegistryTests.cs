@@ -9,7 +9,7 @@ using Nuplane.Tests.Shared;
 namespace Nuplane.Store.Tests.Coordination;
 
 [Trait("Platform", "Native")]
-public sealed class RootMembershipRegistryTests
+public sealed partial class RootMembershipRegistryTests
 {
     [SupportedPhysicalStoreFact]
     public async Task PublishStateAsync_AllPriorBranches_ReopensActualNativePayloadAndAcknowledgesNewIdentity()

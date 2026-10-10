@@ -42,6 +42,17 @@ internal sealed partial class RootMembershipRegistry
     {
         ArgumentNullException.ThrowIfNull(nextState);
         await using var group = await AcquireNativeGroupOwnerAsync(descriptor, roots, cancellationToken).ConfigureAwait(false);
+        return await PublishNativeGroupCoreAsync(group, descriptor, nextState, cancellationToken, checkpoint)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<RootMembershipRecord>> PublishNativeGroupCoreAsync(
+        NativeGroupPublicationOwner group,
+        GroupPublicationDescriptorV2 descriptor,
+        StoreStateRecord nextState,
+        CancellationToken cancellationToken,
+        Action<NativeGroupPublicationPoint, PhysicalRootIdentity?>? checkpoint)
+    {
         await group.RequireAllPriorAsync(cancellationToken).ConfigureAwait(false);
         var bundle = RequireNextBundle(descriptor, nextState);
         group.VerifyNextBundleAndInstalls(bundle, nextState, cancellationToken);
@@ -159,6 +170,16 @@ internal sealed partial class RootMembershipRegistry
         Action<NativeGroupPublicationPoint, PhysicalRootIdentity?>? checkpoint = null)
     {
         await using var group = await AcquireNativeGroupOwnerAsync(descriptor, roots, cancellationToken).ConfigureAwait(false);
+        return await RecoverNativeGroupCoreAsync(group, descriptor, cancellationToken, checkpoint)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<RootMembershipRecord>> RecoverNativeGroupCoreAsync(
+        NativeGroupPublicationOwner group,
+        GroupPublicationDescriptorV2 descriptor,
+        CancellationToken cancellationToken,
+        Action<NativeGroupPublicationPoint, PhysicalRootIdentity?>? checkpoint)
+    {
         var beforeIntent = group.Participants.Select(participant => participant.Transaction!.ReadCurrent()).ToArray();
         if (beforeIntent.All(static ledger => ledger.PendingGroupPublicationV2 is null))
         {
@@ -403,7 +424,7 @@ internal sealed partial class RootMembershipRegistry
 
             foreach (var participant in participants)
             {
-                participant.RootScope.VerifyCanonical();
+                participant.RootScope!.VerifyCanonical();
                 var locked = ReadLedger(participant.Request.RootHandle, participant.ControlDirectory, out var identity);
                 RequireGroupLedgerForDescriptor(locked, participant.Local, descriptor);
                 RequireSameDigest(participant.InitialLedger, locked);
@@ -414,8 +435,8 @@ internal sealed partial class RootMembershipRegistry
             }
 
             union = await _locks.AcquireMemberLockUnionAsync(
-                participants.Select(static item => item.RootScope).ToArray(),
-                participants.Select(static item => new PhysicalStoreLock.RootMemberLockRequest(item.RootScope,
+                participants.Select(static item => item.RootScope!).ToArray(),
+                participants.Select(static item => new PhysicalStoreLock.RootMemberLockRequest(item.RootScope!,
                     item.LockedLedger!.Members.Select(GetSlot).ToArray())).ToArray(), cancellationToken).ConfigureAwait(false);
 
             foreach (var participant in participants)
@@ -484,7 +505,7 @@ internal sealed partial class RootMembershipRegistry
                 {
                     for (var index = participants.Count - 1; index >= 0; index--)
                     {
-                        try { await participants[index].RootScope.DisposeAsync().ConfigureAwait(false); }
+                        try { await participants[index].RootScope!.DisposeAsync().ConfigureAwait(false); }
                         catch (Exception exception) { errors.Add(exception); }
                     }
                 }
@@ -649,14 +670,14 @@ internal sealed partial class RootMembershipRegistry
     private sealed class NativeGroupParticipant(
         NativeGroupRootRequest request,
         GroupPublicationParticipantV2 local,
-        PhysicalStoreLock.RootLockScope rootScope,
+        PhysicalStoreLock.RootLockScope? rootScope,
         PhysicalStoreDirectoryHandle controlDirectory,
         RootMembershipRecord initialLedger,
         PhysicalFileIdentity initialLedgerIdentity)
     {
         internal NativeGroupRootRequest Request { get; } = request;
         internal GroupPublicationParticipantV2 Local { get; } = local;
-        internal PhysicalStoreLock.RootLockScope RootScope { get; } = rootScope;
+        internal PhysicalStoreLock.RootLockScope? RootScope { get; } = rootScope;
         internal PhysicalStoreDirectoryHandle ControlDirectory { get; } = controlDirectory;
         internal RootMembershipRecord InitialLedger { get; } = initialLedger;
         internal PhysicalFileIdentity InitialLedgerIdentity { get; } = initialLedgerIdentity;

@@ -60,6 +60,16 @@ internal sealed class PackageStoreAuthorityResolver
         return ResolveParsed(path, target, requiredRoot, memberLocatorScope: null);
     }
 
+    /// <summary>Retains a trusted catalog root candidate even when it records one exact recoverable transaction.</summary>
+    /// <remarks>This is structural owner evidence only; adoption still validates the exact locked ledger class.</remarks>
+    internal ResolvedPackageStorePath ResolveTrustedCatalogRoot(string exactLocator)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(exactLocator);
+        return ResolveParsed(ParseRequest(exactLocator, exactBaseLocator: null),
+            PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix,
+            requiredRoot: null, memberLocatorScope: null, allowCatalogCandidate: true);
+    }
+
     /// <summary>Resolves an unscoped package probe with a precise signal for a concurrently-created missing directory.</summary>
     /// <remarks>
     /// The caller may reclassify the entire locator before any callback when a stable ordinary directory appears
@@ -209,12 +219,13 @@ internal sealed class PackageStoreAuthorityResolver
         PhysicalRootIdentity? requiredRoot,
         RootMembershipRegistry.MemberLocatorReplayScope? memberLocatorScope,
         PackageInstallIdentity? retainedInstall = null,
-        bool allowStableMissingDirectoryRetry = false)
+        bool allowStableMissingDirectoryRetry = false,
+        bool allowCatalogCandidate = false)
     {
         if (!Enum.IsDefined(target))
             throw new ArgumentOutOfRangeException(nameof(target));
         memberLocatorScope?.EnsureActive();
-        var state = new ResolutionState(this, requiredRoot, memberLocatorScope, retainedInstall);
+        var state = new ResolutionState(this, requiredRoot, memberLocatorScope, retainedInstall, allowCatalogCandidate);
         try
         {
             var anchor = OpenAnchor(state, path.Anchor
@@ -394,6 +405,8 @@ internal sealed class PackageStoreAuthorityResolver
                 transferredHandles,
                 allowMissingDirectoryRetry => state.Revalidate(finalTarget, target, finalFileParent,
                     allowMissingDirectoryRetry),
+                (expectedLedger, expectedIdentity) => state.Revalidate(finalTarget, target, finalFileParent,
+                    expectedOwnedLedger: expectedLedger, expectedOwnedLedgerIdentity: expectedIdentity),
                 targetParent: finalFileParent,
                 targetName: finalFileName,
                 isProspectiveConfiguredRoot: prospectiveMissingSuffix &&
@@ -722,7 +735,8 @@ internal sealed class PackageStoreAuthorityResolver
         PackageStoreAuthorityResolver resolver,
         PhysicalRootIdentity? requiredRoot,
         RootMembershipRegistry.MemberLocatorReplayScope? memberLocatorScope,
-        PackageInstallIdentity? retainedInstall)
+        PackageInstallIdentity? retainedInstall,
+        bool allowCatalogCandidate)
     {
         private readonly List<PhysicalStoreHandle> _handles = [];
         private readonly List<DirectoryEvidence> _directories = [];
@@ -736,6 +750,7 @@ internal sealed class PackageStoreAuthorityResolver
         internal PhysicalRootIdentity? RequiredRoot { get; } = requiredRoot;
         internal RootMembershipRegistry.MemberLocatorReplayScope? MemberLocatorScope { get; } = memberLocatorScope;
         internal PackageInstallIdentity? RetainedInstall { get; } = retainedInstall;
+        internal bool AllowCatalogCandidate { get; } = allowCatalogCandidate;
         internal PhysicalStoreDirectoryHandle? AuthorityRoot { get; private set; }
         internal PhysicalRootIdentity? RootIdentity { get; private set; }
         internal PhysicalRootIdentity? AuthorityRootIdentity => RootIdentity;
@@ -1043,8 +1058,14 @@ internal sealed class PackageStoreAuthorityResolver
             PhysicalStoreHandle target,
             PhysicalStorePathTarget targetKind,
             PhysicalStoreDirectoryHandle? targetParent,
-            bool allowStableMissingDirectoryRetry = false)
+            bool allowStableMissingDirectoryRetry = false,
+            RootMembershipRecord? expectedOwnedLedger = null,
+            PhysicalFileIdentity? expectedOwnedLedgerIdentity = null)
         {
+            if ((expectedOwnedLedger is null) != (expectedOwnedLedgerIdentity is null))
+                throw new ArgumentException("An owned ledger replay requires both the expected record and native identity.");
+            if (expectedOwnedLedger is not null && !AllowCatalogCandidate)
+                throw new InvalidOperationException("Only a trusted catalog resolution can replay an owned ledger outcome.");
             var missingDirectoryAppeared = false;
             if (_missingSuffixes.Count > 0 && targetKind is not (
                     PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix or
@@ -1195,22 +1216,33 @@ internal sealed class PackageStoreAuthorityResolver
                 if (heldControl.Kind != PhysicalStoreEntryKind.Directory || heldControl.Identity != control.ControlIdentity)
                     throw Unknown("A retained control-directory handle changed identity.", RootIdentity);
                 var ledger = resolver._files.InspectChildNoFollow(control.ControlHandle!, LedgerName);
+                var replayOwnedOutcome = expectedOwnedLedger is not null &&
+                    control.Candidate!.RootIdentity == expectedOwnedLedger.RootIdentity;
                 if (ledger is null || ledger.Kind != PhysicalStoreEntryKind.RegularFile || ledger.LinkCount != 1 ||
-                    ledger.Identity != control.LedgerIdentity)
+                    (!replayOwnedOutcome && ledger.Identity != control.LedgerIdentity) ||
+                    (replayOwnedOutcome && ledger.Identity != expectedOwnedLedgerIdentity))
                 {
-                    throw Unknown("The membership ledger changed after authority observation.", RootIdentity);
+                    throw Unknown(replayOwnedOutcome
+                        ? "The owned membership ledger outcome changed after publication."
+                        : "The membership ledger changed after authority observation.", RootIdentity);
                 }
-                var candidate = resolver._registry.ReadCandidate(control.Parent, control.LedgerIdentity!, out var ledgerIdentity);
+                var candidate = resolver._registry.ReadCandidate(control.Parent,
+                    replayOwnedOutcome ? expectedOwnedLedgerIdentity! : control.LedgerIdentity!, out var ledgerIdentity);
+                var expectedDigest = replayOwnedOutcome ? expectedOwnedLedger!.LedgerDigest : control.Candidate!.LedgerDigest;
                 if (candidate.RootIdentity != control.Candidate!.RootIdentity ||
-                    !string.Equals(candidate.LedgerDigest, control.Candidate.LedgerDigest, StringComparison.Ordinal))
+                    (replayOwnedOutcome && candidate.EnrollmentEpoch != expectedOwnedLedger!.EnrollmentEpoch) ||
+                    !string.Equals(candidate.LedgerDigest, expectedDigest, StringComparison.Ordinal))
                 {
-                    throw Unknown("The membership candidate changed after metadata-only path resolution.", RootIdentity);
+                    throw Unknown(replayOwnedOutcome
+                        ? "The owned membership candidate differs from the exact transaction outcome."
+                        : "The membership candidate changed after metadata-only path resolution.", RootIdentity);
                 }
                 ValidateCandidate(control.Candidate.RootIdentity, candidate);
                 var ledgerAfterRead = resolver._files.InspectChildNoFollow(control.ControlHandle!, LedgerName);
                 if (ledgerAfterRead is null || ledgerAfterRead.Kind != PhysicalStoreEntryKind.RegularFile ||
-                    ledgerAfterRead.LinkCount != 1 || ledgerAfterRead.Identity != control.LedgerIdentity ||
-                    ledgerIdentity != control.LedgerIdentity)
+                    ledgerAfterRead.LinkCount != 1 ||
+                    ledgerAfterRead.Identity != (replayOwnedOutcome ? expectedOwnedLedgerIdentity : control.LedgerIdentity) ||
+                    ledgerIdentity != (replayOwnedOutcome ? expectedOwnedLedgerIdentity : control.LedgerIdentity))
                 {
                     throw Unknown("The membership ledger identity changed during candidate revalidation.", RootIdentity);
                 }
@@ -1267,6 +1299,8 @@ internal sealed class PackageStoreAuthorityResolver
             if (RequiredRoot is not null && candidate.RootIdentity != RequiredRoot)
                 throw Refusal(PackageStoreAdmissionReason.RootMismatch,
                     "The configured path encountered a different physical authority root.", RequiredRoot);
+            if (AllowCatalogCandidate)
+                return;
             if (MemberLocatorScope is { } scope)
             {
                 scope.RequireCandidate(observedRoot, candidate);
