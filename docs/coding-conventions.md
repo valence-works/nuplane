@@ -374,7 +374,7 @@ Nuplane.Loading.Api (ASP.NET Core)
 ```
 
 - **Nuplane** (consumer package) owns core composition, feed abstractions, and generic runtime registration. It does NOT own module-specific builder conveniences, options, hosted services, or registration helpers.
-- **Module packages** own their module-specific builder extensions and configuration-driven setup translation, under a `.Hosting` namespace (e.g. `Nuplane.Sources.Directory.Hosting`, `Nuplane.Loading.Hosting.Builder`).
+- **Module packages** own their module-specific builder extensions (`Builder/`) and configuration-driven setup translation (`Configuration/`). There are no separate `*.Hosting` packages.
 
 ### Multi-Targeting
 
@@ -410,24 +410,24 @@ Each optional or source-specific capability (e.g., directory-source, loading) is
 |---------|-------|
 | Options classes | Module implementation package (`Nuplane.Loading`, `Nuplane.Sources.Directory`) |
 | Registration services | Module implementation package |
-| Hosted services | Module implementation or hosting package |
+| Hosted services | Module implementation package (`Hosting/`) |
 | Direct `IServiceCollection` extensions | Module implementation package |
-| Builder extensions (`NuplaneBuilder`) | Module hosting/builder integration package (`*.Hosting`) |
-| Configuration-driven setup translation | Module hosting/builder integration package |
+| Builder extensions (`NuplaneBuilder`) | Module implementation package (`Builder/`) |
+| Configuration-driven setup translation | Module implementation package (`Configuration/`) |
 
 ### Registration Surface Rules
 
 - Every module MUST expose at least one `IServiceCollection.Add{Module}(...)` extension method for direct registration.
-- Module-specific `NuplaneBuilder` extensions (fluent builder APIs) live in the module's hosting package.
+- Module-specific `NuplaneBuilder` extensions (fluent builder APIs) live in the module package's `Builder/` folder.
 - Duplicate registration follows **last-registration-wins** semantics using `TryAdd` / replace patterns.
 - Core `Nuplane` retains only generic runtime composition, feed abstractions, and URI-based feed registration.
 
 ### Builder Integration Pattern
 
-Module hosting packages provide builder extensions that delegate to module-owned registration services:
+Module builder extensions delegate to module-owned registration services:
 
 ```csharp
-// Nuplane.Sources.Directory.Hosting
+// Nuplane.Sources.Directory.Builder
 public static NuplaneBuilder AddDirectoryFeed(
     this NuplaneBuilder builder, string name, string path,
     Action<NuplaneDirectoryFeedConfiguration>? configure = null)
@@ -448,11 +448,10 @@ services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
 
 ### Adding a New Module
 
-1. Create the implementation package with options, registration services, and direct `IServiceCollection` extension.
-2. Create a `*.Hosting` package for builder extensions and configuration-driven setup translation.
-3. Add `InternalsVisibleTo` from relevant packages to the hosting package.
-4. Add tests in the module's test project and integration test project.
-5. Do NOT add module-specific code to the core `Nuplane` package.
+1. Create the module package with options, registration services, and direct `IServiceCollection` extension.
+2. Put builder extensions in its `Builder/` folder and configuration-driven setup translation in its `Configuration/` folder.
+3. Add tests in the module's test project and integration test project.
+4. Do NOT add module-specific code to the core `Nuplane` package.
 
 ---
 

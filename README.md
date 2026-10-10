@@ -241,8 +241,7 @@ Use the `Nuplane` configuration section for infrastructure, then keep host-owned
 ```csharp
 using Nuplane;
 using Nuplane.Loading.Hosting.Builder;
-using Nuplane.Sources.Directory.Hosting.Builder;
-using Nuplane.Sources.Directory.Hosting.Configuration;
+using Nuplane.Sources.Directory.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 var nuplaneConfiguration = builder.Configuration.GetSection("Nuplane");
