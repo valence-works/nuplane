@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.PhysicalFiles;
 using Nuplane.Store.Coordination.PhysicalFiles.Windows;
@@ -15,6 +16,57 @@ public sealed class WindowsPhysicalStorePublicationTests
     {
         using var context = CreateContext();
         PhysicalStorePublicationTestCases.ReplacesExistingSlotAndPreservesItsIdentity(context);
+    }
+
+    [SupportedWindowsPosixReplacementFact]
+    public void Publish_DeleteSharingReaderRetainsPriorBytesWhileNewOpensSeeReplacement()
+    {
+        using var context = CreateContext();
+        var prior = "prior-state"u8.ToArray();
+        var next = "next-state"u8.ToArray();
+        var priorIdentity = CreateFile(context, "state.json", prior);
+        var stagedIdentity = CreateFile(context, "state.next", next);
+        using var oldReader = new FileStream(
+            Path.Combine(context.ParentPath, "state.json"),
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+
+        var published = context.Publication.PublishControlFileAt(
+            context.Parent, "state.next", stagedIdentity, "state.json", priorIdentity);
+
+        using var oldContents = new MemoryStream();
+        oldReader.CopyTo(oldContents);
+        Assert.Equal(prior, oldContents.ToArray());
+        Assert.Equal(stagedIdentity, published.Identity);
+        Assert.Equal(next, File.ReadAllBytes(Path.Combine(context.ParentPath, "state.json")));
+    }
+
+    [SupportedWindowsPosixReplacementFact]
+    public void Publish_NonDeleteSharingReaderRefusesReplacementAndPreservesBothFiles()
+    {
+        using var context = CreateContext();
+        var prior = "prior-state"u8.ToArray();
+        var next = "next-state"u8.ToArray();
+        var priorIdentity = CreateFile(context, "state.json", prior);
+        var stagedIdentity = CreateFile(context, "state.next", next);
+        using var reader = new FileStream(
+            Path.Combine(context.ParentPath, "state.json"),
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite);
+
+        var refusal = Assert.Throws<PackageStoreAdmissionException>(() => context.Publication.PublishControlFileAt(
+            context.Parent, "state.next", stagedIdentity, "state.json", priorIdentity));
+
+        Assert.Equal(PackageStoreAdmissionReason.UnknownAuthority, refusal.Reason);
+        Assert.Equal(priorIdentity, context.FileSystem.InspectChildNoFollow(context.Parent, "state.json")!.Identity);
+        Assert.Equal(stagedIdentity, context.FileSystem.InspectChildNoFollow(context.Parent, "state.next")!.Identity);
+        Assert.Equal(prior, File.ReadAllBytes(Path.Combine(context.ParentPath, "state.json")));
+        Assert.Equal(next, File.ReadAllBytes(Path.Combine(context.ParentPath, "state.next")));
+        using var oldContents = new MemoryStream();
+        reader.CopyTo(oldContents);
+        Assert.Equal(prior, oldContents.ToArray());
     }
 
     [SupportedWindowsFact]
@@ -185,6 +237,13 @@ public sealed class WindowsPhysicalStorePublicationTests
         }
     }
 
+    private static PhysicalFileIdentity CreateFile(PhysicalStorePublicationTestContext context, string name, byte[] contents)
+    {
+        using var file = context.FileSystem.CreateFileExclusiveAt(context.Parent, name);
+        context.FileSystem.WriteNewControlFile(file, contents);
+        return context.FileSystem.InspectHandle(file).Identity;
+    }
+
     private static void CreateHardLink(string existingPath, string newPath)
     {
         if (!CreateHardLinkW(newPath, existingPath, IntPtr.Zero))
@@ -194,4 +253,15 @@ public sealed class WindowsPhysicalStorePublicationTests
     [DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CreateHardLinkW(string newFileName, string existingFileName, IntPtr securityAttributes);
+}
+
+internal sealed class SupportedWindowsPosixReplacementFactAttribute : Xunit.FactAttribute
+{
+    public SupportedWindowsPosixReplacementFactAttribute()
+    {
+        if (!WindowsPhysicalStoreFileSystem.IsSupportedPlatform)
+            Skip = "Native Windows store operations are qualified only on Windows x64.";
+        else if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 16299))
+            Skip = "Open-reader replacement semantics require FileRenameInformationEx on Windows 10 version 1709 or later.";
+    }
 }

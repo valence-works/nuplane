@@ -1167,13 +1167,15 @@ jobs:
           if ($null -eq $counters) { throw 'Native Windows qualification returned no test counters.' }
           $total = [int]$counters.total
           $passed = [int]$counters.passed
-          if ($total -lt 19 -or $passed -ne $total) {
+          if ($total -lt 21 -or $passed -ne $total) {
             throw "Native Windows qualification requires every test to pass without skips: $($counters.OuterXml)"
           }
           $rows = @($report.SelectNodes('//*[local-name()="UnitTestResult"]'))
           foreach ($name in @(
             'NativeNoReplace_RefusesOccupiedTargetWithoutManagedPreInspection',
             'Publish_ReplacesExistingSlotAndPreservesItsIdentity',
+            'Publish_DeleteSharingReaderRetainsPriorBytesWhileNewOpensSeeReplacement',
+            'Publish_NonDeleteSharingReaderRefusesReplacementAndPreservesBothFiles',
             'Remove_RequiresExactRegularSingleLinkIdentity',
             'Publish_RefusesAliasSpellingForeignAndClosedParents'
           )) {

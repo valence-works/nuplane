@@ -7,7 +7,13 @@ internal static partial class WindowsNative
 {
     internal const uint DeleteAccess = 0x00010000;
     internal const uint ShareDelete = 0x00000004;
+    private const int FileRenameInformation = 10;
+    private const int FileRenameInformationEx = 65;
+    private const int FileRenameReplaceIfExists = 0x00000001;
+    private const int FileRenamePosixSemantics = 0x00000002;
     private static readonly UnicodeEncoding PublicationUtf16 = new(false, false, true);
+
+    internal static bool SupportsPosixRenameReplacement => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 16299);
 
     internal static void RenameControlFile(IntPtr file, IntPtr parent, string destinationName, bool replace)
         => RenameAt(file, parent, destinationName, replace, "rename a staged control file");
@@ -22,19 +28,34 @@ internal static partial class WindowsNative
 
     private static void RenameAt(IntPtr entry, IntPtr parent, string destinationName, bool replace, string operation)
     {
-        // FILE_RENAME_INFORMATION on the qualified Windows x64 ABI: BOOLEAN at 0,
-        // HANDLE at 8, ULONG byte length at 16, WCHAR filename starts at 20.
+        // Both FILE_RENAME_INFORMATION and FILE_RENAME_INFORMATION_EX share the qualified
+        // Windows x64 layout: the first eight bytes hold BOOLEAN/padding or Flags/Reserved,
+        // followed by HANDLE at 8, ULONG byte length at 16, and WCHAR filename at 20.
+        var usePosixReplacement = replace && SupportsPosixRenameReplacement;
         var name = PublicationUtf16.GetBytes(destinationName);
         var length = checked(24 + name.Length);
         var buffer = Marshal.AllocHGlobal(length);
         try
         {
             Marshal.Copy(new byte[length], 0, buffer, length);
-            Marshal.WriteByte(buffer, replace ? (byte)1 : (byte)0);
+            if (usePosixReplacement)
+            {
+                Marshal.WriteInt32(
+                    buffer,
+                    0,
+                    FileRenameReplaceIfExists | FileRenamePosixSemantics);
+            }
+            else
+                Marshal.WriteByte(buffer, replace ? (byte)1 : (byte)0);
             Marshal.WriteIntPtr(buffer, 8, parent);
             Marshal.WriteInt32(buffer, 16, name.Length);
             Marshal.Copy(name, 0, IntPtr.Add(buffer, 20), name.Length);
-            SetPublicationInformation(entry, buffer, length, informationClass: 10, operation);
+            SetPublicationInformation(
+                entry,
+                buffer,
+                length,
+                usePosixReplacement ? FileRenameInformationEx : FileRenameInformation,
+                operation);
         }
         finally
         {

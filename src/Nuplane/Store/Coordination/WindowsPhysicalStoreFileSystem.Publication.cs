@@ -32,7 +32,23 @@ internal sealed partial class WindowsPhysicalStoreFileSystem : IPhysicalStorePub
                 PhysicalStorePublicationChecks.RequireExpectedEntry(
                     QueryEntry(staged.DangerousGetHandle(), "inspect the staged publication handle"), expectedStagedIdentity);
                 RecheckPublicationEntry(parentRaw, stagedName, expectedStagedIdentity);
-                RecheckPublicationEntry(parentRaw, destinationName, expectedDestinationIdentity);
+
+                // POSIX replacement allows the old file to remain open, so retain a DELETE-capable
+                // destination handle through the rename. Its share-mode check refuses existing
+                // handles that did not allow delete sharing and prevents a new incompatible open
+                // from racing the transition. Release it before the ordinary canonical reopen.
+                using var priorDestination = expectedDestinationIdentity is not null && WindowsNative.SupportsPosixRenameReplacement
+                    ? OpenPublicationFile(parentRaw, destinationName, requestDelete: true)
+                    : null;
+                if (priorDestination is not null)
+                {
+                    PhysicalStorePublicationChecks.RequireExpectedEntry(
+                        QueryEntry(priorDestination.DangerousGetHandle(), "inspect the prior publication handle"),
+                        expectedDestinationIdentity);
+                }
+                else
+                    RecheckPublicationEntry(parentRaw, destinationName, expectedDestinationIdentity);
+
                 RequirePublicationParent(parent, parentRaw, prepared);
                 WindowsNative.RenameControlFile(
                     staged.DangerousGetHandle(), parentRaw, destinationName, replace: expectedDestinationIdentity is not null);

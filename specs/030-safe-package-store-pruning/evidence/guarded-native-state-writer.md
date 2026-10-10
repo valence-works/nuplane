@@ -6,7 +6,7 @@ The writer rejects incoming/existing v2 bundles. It streams ordinary payloads wi
 
 A publisher exception after replacement is classified from actual destination identity and bytes. Verified commits remain observable when backup removal or guard release reports an error. Unknown destination/path/marker evidence refuses with recovery evidence retained. This establishes no power-loss durability guarantee.
 
-## Local verification
+## Local verification of `0a1a19636960f08f81bd640e78293d46a9cda267`
 
 Root ran the gates serially on macOS against the same frozen executable inputs:
 
@@ -27,7 +27,23 @@ Frozen artifact hashes:
 - Core log: `0af6c16acb556220d873196871d4e43e3c5ec78489b8813fca0055436b6326f3`.
 - Independent final review: `b729ac78d39b4a89fb5d113d3b49c839a772e6e1e290eea890c075f01229f5f7`.
 
-Root and independent review found no remaining actionable issue within this bounded increment. The workflow now selects all 17 cases on its existing four native platform lanes; execution against the newly published source remains pending. Earlier hosted group-guard results do not qualify this delta.
+Root and independent review found no remaining actionable issue in the local helper review. Actual hosted validation subsequently found the Windows defect below; local review and green results on other platforms do not override it.
+
+## Hosted qualification of `0a1a19636960f08f81bd640e78293d46a9cda267`
+
+[Validate 38072829645](https://github.com/valence-works/nuplane/actions/runs/38072829645) completed with five successful jobs and one failed Windows job. The full build/test job passed six assemblies: 2,289 passed, zero failed, 48 explicit platform skips (2,337 total). macOS, Linux x64 and Linux ARM64 each passed all 17 required writer cases and the unchanged strict exact-case verifier.
+
+Windows executed 16 passed, one failed and zero skipped. `WriteAsync_CreatesAndReplacesStateWhileOpenDeleteSharingReaderKeepsOldRecord` failed with `NTSTATUS=0xC0000022` during native replacement while its prior delete-sharing reader remained open. The strict verifier did not run after the failed test command. Windows compatibility is therefore unqualified for that candidate.
+
+Root retained all four native job logs and the completed full build/test log. The terminal qualification artifact has SHA-256 `e2d4b1de5f2f61b3a59c3d96c279a09e7f8d2d1e504ee5acc7af6a884eb0b4f5`; the full build/test log has SHA-256 `5409d09f9f23f6e32148ef97b750a0e0498a7f254583c8e149bbde14a28039db`. Hosted TRX artifacts were not uploaded, so these results come from actual job output and verifier output rather than a downloaded TRX.
+
+## Windows replacement correction
+
+Replacement now selects `FileRenameInformationEx` (class 65) with `REPLACE_IF_EXISTS | POSIX_SEMANTICS` on Windows 10 version 1709/build 16299 or later. The qualified x64 held-parent/name layout is unchanged. Earlier Windows retains the existing class-10 operation, and every no-replace operation retains class 10 and its collision behavior. This preserves the earlier operation without claiming open-reader compatibility on those older systems. No bypass-access-check or ignore-readonly flags are used. Microsoft documents the [replacement semantics](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/4217551b-d2c0-42cb-9dc1-69a716cf6d0c) and [class availability](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ne-wdm-_file_information_class).
+
+The Ex path retains a DELETE-access handle to the exact expected prior destination through synchronous rename. Its share-mode check refuses an existing reader which does not share delete and prevents a new incompatible open during that transition. Source and destination publication handles close before ordinary canonical verification. Existing expected identities, held-parent/name checks and no-replace behavior remain in force.
+
+Two direct Windows regressions require old-reader/prior-byte preservation with new-path replacement and refusal with both files preserved under a non-delete-sharing reader. They explicitly require modern Windows; the actual Windows workflow requires each case exactly once and Passed, so a skip cannot qualify that lane. The original 17 writer cases, manifest and strict verifier remain byte-identical to the failed candidate. Compilation, focused local checks and actual new-head Windows execution must qualify this correction separately from the historical results above.
 
 ## Remaining boundary
 
