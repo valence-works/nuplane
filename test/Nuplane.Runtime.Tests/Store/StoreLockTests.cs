@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nuplane.Reconciliation.Configuration;
+using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Store;
@@ -131,7 +132,7 @@ public sealed class StoreLockTests : IDisposable
         Assert.True(handle.CanProceed);
     }
 
-    [Fact]
+    [UnprivilegedFact]
     public void Acquire_WhenTheLockFileIsNotWritable_ReportsNotLockableRatherThanContention()
     {
         var lockFilePath = StoreLock.GetLockFilePath(_stateFilePath);
