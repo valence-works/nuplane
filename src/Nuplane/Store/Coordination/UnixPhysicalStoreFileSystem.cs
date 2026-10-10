@@ -15,7 +15,7 @@ namespace Nuplane.Store.Coordination;
 /// this provider, and all native calls use a scoped SafeHandle reference. Publication companions provide
 /// single-file state updates and same-parent no-replace moves of verified prepared directories.
 /// </remarks>
-internal sealed partial class UnixPhysicalStoreFileSystem : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem, IPhysicalStoreDirectoryPublicationFileSystem
+internal sealed partial class UnixPhysicalStoreFileSystem : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem, IPhysicalStoreDirectoryPublicationFileSystem, IPhysicalStoreDirectoryCandidateProbeFileSystem
 {
     private const int MaximumLinkTargetBytes = 4096;
     private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);

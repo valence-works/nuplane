@@ -1,4 +1,7 @@
+using System.Runtime.InteropServices;
+using Microsoft.Extensions.Logging.Abstractions;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Sources.Directory;
 
 namespace Nuplane.Runtime.Tests.Sources.Directory;
@@ -149,6 +152,144 @@ public sealed class DirectoryNupkgDesiredSourceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetDesiredAsync_ExcludesPackageSuffixDirectories()
+    {
+        CreateNupkg("Good.Package.1.0.0.nupkg");
+        System.IO.Directory.CreateDirectory(Path.Combine(_tempDir, "Folder.Package.2.0.0.nupkg"));
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"]);
+
+        var results = await source.GetDesiredAsync(CancellationToken.None);
+
+        var request = Assert.Single(results);
+        Assert.Equal("Good.Package", request.Id);
+    }
+
+    [Fact]
+    public async Task GetDesiredAsync_UsesLegacyPlatformDefaultExtensionMatching()
+    {
+        const string uppercaseName = "Uppercase.Package.1.0.0.NUPKG";
+        CreateNupkg(uppercaseName);
+        var legacyEnumeratedUppercase = System.IO.Directory
+            .EnumerateFiles(_tempDir, "*.nupkg")
+            .Any(path => string.Equals(Path.GetFileName(path), uppercaseName,
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"]);
+
+        var results = await source.GetDesiredAsync(CancellationToken.None);
+
+        Assert.Equal(legacyEnumeratedUppercase, results.Any(request => request.Id == "Uppercase.Package"));
+    }
+
+    [SupportedWindowsFact]
+    [Trait("Platform", "Windows")]
+    public async Task GetDesiredAsync_WithoutStabilityProbeIncludesMetadataVerifiedBusyRegularCandidateOnWindows()
+    {
+        const string fileName = "Busy.Package.1.0.0.nupkg";
+        CreateNupkg(fileName);
+        using var writer = new FileStream(
+            Path.Combine(_tempDir, fileName), FileMode.Open, FileAccess.Write, FileShare.Write);
+        var legacyEnumerationContainsCandidate = System.IO.Directory
+            .EnumerateFiles(_tempDir, "*.nupkg")
+            .Any(path => string.Equals(Path.GetFileName(path), fileName, StringComparison.OrdinalIgnoreCase));
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"]);
+
+        var results = await source.GetDesiredAsync(CancellationToken.None);
+
+        Assert.Equal(legacyEnumerationContainsCandidate, results.Any(request => request.Id == "Busy.Package"));
+    }
+
+    [SupportedUnixFact]
+    [Trait("Platform", "Unix")]
+    public async Task GetDesiredAsync_RefusesPackageSuffixLinksBeforeStabilityCallback()
+    {
+        var target = Path.Combine(_tempDir, "target.bin");
+        var linkedCandidate = Path.Combine(_tempDir, "Linked.Package.1.0.0.nupkg");
+        File.WriteAllBytes(target, [0x50, 0x4B]);
+        File.CreateSymbolicLink(linkedCandidate, target);
+        var callbackCount = 0;
+        var probe = new NupkgFileStabilityProbe(
+            NullLogger<NupkgFileStabilityProbe>.Instance,
+            maxAttempts: 2,
+            retryDelay: TimeSpan.Zero,
+            onBeforeRetryAsync: (_, _) =>
+            {
+                Interlocked.Increment(ref callbackCount);
+                return Task.CompletedTask;
+            });
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], stabilityProbe: probe);
+
+        var refusal = await Assert.ThrowsAsync<PackageStoreAdmissionException>(
+            () => source.GetDesiredAsync(CancellationToken.None));
+
+        Assert.Equal(PackageStoreAdmissionReason.UnknownAuthority, refusal.Reason);
+        Assert.Equal(0, Volatile.Read(ref callbackCount));
+    }
+
+    [Fact]
+    [Trait("Platform", "Native")]
+    public async Task GetDesiredAsync_RefusesAuthorityChangeDuringStabilityRetryBeforeAnotherRetry()
+    {
+        const string candidate = "Changing.Package.1.0.0.nupkg";
+        CreateNupkg(candidate);
+        var filePath = Path.Combine(_tempDir, candidate);
+        var retryAttempts = new List<int>();
+        var probe = new NupkgFileStabilityProbe(
+            NullLogger<NupkgFileStabilityProbe>.Instance,
+            maxAttempts: 3,
+            retryDelay: TimeSpan.Zero,
+            onBeforeRetryAsync: (attempt, _) =>
+            {
+                retryAttempts.Add(attempt);
+                if (attempt == 1)
+                {
+                    // Turn the positively Unenrolled source directory into an ambiguous reserved
+                    // authority namespace while the stability loop is suspended.
+                    System.IO.Directory.CreateDirectory(Path.Combine(_tempDir, ".nuplane-store"));
+                    using var writer = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.Read);
+                    writer.SetLength(8);
+                    writer.Flush();
+                }
+
+                return Task.CompletedTask;
+            });
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], stabilityProbe: probe);
+
+        var refusal = await Assert.ThrowsAsync<PackageStoreAdmissionException>(
+            () => source.GetDesiredAsync(CancellationToken.None));
+
+        Assert.Equal(PackageStoreAdmissionReason.UnknownAuthority, refusal.Reason);
+        // If the retry loop continued through another changed-length attempt, it would invoke the
+        // callback again. Source replay ordering separately ensures refusal happens before sampling.
+        Assert.Equal([1], retryAttempts);
+    }
+
+    [Fact]
+    public async Task GetDesiredAsync_RefusesHardLinkedPackagesBeforeStabilityCallback()
+    {
+        var original = Path.Combine(_tempDir, "Hard.Package.1.0.0.nupkg");
+        var alias = Path.Combine(_tempDir, "Hard.Package.1.0.1.nupkg");
+        File.WriteAllBytes(original, [0x50, 0x4B]);
+        CreateHardLink(original, alias);
+        var callbackCount = 0;
+        var probe = new NupkgFileStabilityProbe(
+            NullLogger<NupkgFileStabilityProbe>.Instance,
+            maxAttempts: 2,
+            retryDelay: TimeSpan.Zero,
+            onBeforeRetryAsync: (_, _) =>
+            {
+                Interlocked.Increment(ref callbackCount);
+                return Task.CompletedTask;
+            });
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], stabilityProbe: probe);
+
+        var refusal = await Assert.ThrowsAsync<PackageStoreAdmissionException>(
+            () => source.GetDesiredAsync(CancellationToken.None));
+
+        Assert.Equal(PackageStoreAdmissionReason.UnknownAuthority, refusal.Reason);
+        Assert.Equal(0, Volatile.Read(ref callbackCount));
+    }
+
+    [Fact]
     public async Task GetDesiredAsync_MultipleVersionsOfSamePackage_ReturnsHighestVersionOnly()
     {
         CreateNupkg("MyPlugin.1.0.0.nupkg");
@@ -217,5 +358,39 @@ public sealed class DirectoryNupkgDesiredSourceTests : IDisposable
     private void CreateNupkg(string fileName)
     {
         File.WriteAllBytes(Path.Combine(_tempDir, fileName), [0x50, 0x4B, 0x03, 0x04]);
+    }
+
+    private static void CreateHardLink(string existingPath, string newPath)
+    {
+        var result = OperatingSystem.IsWindows()
+            ? CreateHardLinkWindows(newPath, existingPath, IntPtr.Zero) ? 0 : Marshal.GetLastPInvokeError()
+            : CreateHardLinkUnix(existingPath, newPath);
+        if (result != 0)
+            throw new IOException($"The native hard-link operation failed with {Marshal.GetLastPInvokeError()}.");
+    }
+
+    [DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CreateHardLinkWindows(string newFileName, string existingFileName, IntPtr securityAttributes);
+
+    [DllImport("libc", EntryPoint = "link", SetLastError = true)]
+    private static extern int CreateHardLinkUnix(string existingPath, string newPath);
+}
+
+public sealed class SupportedWindowsFactAttribute : FactAttribute
+{
+    public SupportedWindowsFactAttribute()
+    {
+        if (!OperatingSystem.IsWindows())
+            Skip = "Requires the Windows native filesystem implementation.";
+    }
+}
+
+public sealed class SupportedUnixFactAttribute : FactAttribute
+{
+    public SupportedUnixFactAttribute()
+    {
+        if (OperatingSystem.IsWindows())
+            Skip = "Requires the Unix native filesystem implementation.";
     }
 }

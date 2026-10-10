@@ -72,6 +72,7 @@ internal static partial class UnixNative
     private const uint LinuxStatxRequired = 0x1 | 0x2 | 0x4 | 0x100 | 0x200;
 
     private const int LockExclusive = 2;
+    private const int LockShared = 1;
     private const int LockNonBlocking = 4;
     private const int LockUnlock = 8;
     private const int DarwinWouldBlock = 35;
@@ -304,10 +305,16 @@ internal static partial class UnixNative
     }
 
     internal static UnixLockResult TryLock(UnixPlatform platform, int fd)
+        => TryLock(platform, fd, LockExclusive);
+
+    internal static UnixLockResult TrySharedReadLock(UnixPlatform platform, int fd)
+        => TryLock(platform, fd, LockShared);
+
+    private static UnixLockResult TryLock(UnixPlatform platform, int fd, int mode)
     {
         var result = platform == UnixPlatform.Darwin
-            ? Darwin.FLock(fd, LockExclusive | LockNonBlocking)
-            : Linux.FLock(fd, LockExclusive | LockNonBlocking);
+            ? Darwin.FLock(fd, mode | LockNonBlocking)
+            : Linux.FLock(fd, mode | LockNonBlocking);
         if (result == 0)
             return new UnixLockResult(UnixLockStatus.Acquired, 0);
 

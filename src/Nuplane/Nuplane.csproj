@@ -22,6 +22,7 @@
          (duplicated there because core Nuplane cannot reference the optional loading module)
          against Nuplane.Loading's own PackageLoadMode/LoadModeScopes. -->
     <InternalsVisibleTo Include="Nuplane.Loading.Tests" />
+    <InternalsVisibleTo Include="Nuplane.Sources.Directory" />
   </ItemGroup>
 
   <ItemGroup>

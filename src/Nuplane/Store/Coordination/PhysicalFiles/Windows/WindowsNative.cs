@@ -43,6 +43,8 @@ internal static partial class WindowsNative
     internal const int StatusObjectNameNotFound = unchecked((int)0xC0000034);
     internal const int StatusObjectPathNotFound = unchecked((int)0xC000003A);
     internal const int StatusObjectNameCollision = unchecked((int)0xC0000035);
+    internal const int StatusSharingViolation = unchecked((int)0xC0000043);
+    internal const int StatusFileIsADirectory = unchecked((int)0xC00000BA);
     internal const int StatusNotSupported = unchecked((int)0xC00000BB);
     internal const int StatusInvalidDeviceRequest = unchecked((int)0xC0000010);
     internal const int StatusEndOfFile = unchecked((int)0xC0000011);

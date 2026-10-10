@@ -14,7 +14,7 @@ namespace Nuplane.Store.Coordination;
 /// relative to an already held directory handle. Separate publication companions handle single control files
 /// and prepared directories; the provider does not delete package trees or reopen remembered absolute paths.
 /// </remarks>
-internal sealed partial class WindowsPhysicalStoreFileSystem : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem
+internal sealed partial class WindowsPhysicalStoreFileSystem : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem, IPhysicalStoreDirectoryCandidateProbeFileSystem
 {
     private static readonly Encoding StrictUnicode = new UnicodeEncoding(bigEndian: false, byteOrderMark: false, throwOnInvalidBytes: true);
     private readonly object _providerToken = new();

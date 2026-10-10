@@ -91,22 +91,23 @@ public sealed class NuplaneRestoreAdmissionTests
     }
 
     [Fact]
-    public async Task DescribeDesiredAsync_RealDirectorySourceIsRefusedBeforeItsFirstReadWhenEnrolled()
+    public async Task DescribeDesiredAsync_RealDirectorySourceReadsUnderCompleteRootOwnerAcrossAwaitedProbe()
     {
         using var root = await CreateCompleteRootAsync();
         var feedDirectory = Path.Combine(root.RootPath, "directory-source-probe");
         Directory.CreateDirectory(feedDirectory);
-        File.WriteAllBytes(Path.Combine(feedDirectory, "Probe.Package.1.0.0.nupkg"), []);
+        File.WriteAllBytes(Path.Combine(feedDirectory, "Probe.Package.1.0.0.nupkg"), [0x50, 0x4B, 0x03, 0x04]);
 
-        var stabilityCallbacks = 0;
+        var probeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseProbe = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var probe = new NupkgFileStabilityProbe(
             NullLogger<NupkgFileStabilityProbe>.Instance,
             maxAttempts: 2,
             retryDelay: TimeSpan.Zero,
-            onBeforeRetryAsync: (_, _) =>
+            onBeforeRetryAsync: async (_, cancellationToken) =>
             {
-                Interlocked.Increment(ref stabilityCallbacks);
-                return Task.CompletedTask;
+                probeStarted.TrySetResult();
+                await releaseProbe.Task.WaitAsync(TimeSpan.FromSeconds(20), cancellationToken);
             });
         var source = new DirectoryNupkgDesiredSource(
             "directory-under-store",
@@ -114,12 +115,27 @@ public sealed class NuplaneRestoreAdmissionTests
             ["*"],
             stabilityProbe: probe);
         var options = Options(root, (builder, _) => builder.Services.AddSingleton<IDesiredPackageSource>(source));
+        var competitor = CreateAdmission(root);
 
-        var exception = await Assert.ThrowsAsync<PackageStoreAdmissionException>(
-            () => NuplaneRestore.DescribeDesiredAsync(Configuration(), options));
+        var describe = NuplaneRestore.DescribeDesiredAsync(Configuration(), options);
+        try
+        {
+            await probeStarted.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            await Assert.ThrowsAsync<PackageStoreAdmissionException>(async () =>
+                await competitor.AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Maintenance));
+        }
+        finally
+        {
+            releaseProbe.TrySetResult();
+        }
 
-        Assert.Equal(PackageStoreAdmissionReason.UnsupportedParticipant, exception.Reason);
-        Assert.Equal(0, Volatile.Read(ref stabilityCallbacks));
+        var description = await describe;
+        var request = Assert.Single(description.Requests);
+        Assert.Equal("Probe.Package", request.PackageId);
+        Assert.Equal("1.0.0", request.PinnedVersion);
+
+        await using var afterDrain = await competitor.AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Maintenance);
+        Assert.Equal(PackageStoreAdmissionStatus.Enrolled, afterDrain.Status);
     }
 
     [Fact]
@@ -142,6 +158,39 @@ public sealed class NuplaneRestoreAdmissionTests
         var request = Assert.Single(description.Requests);
         Assert.Equal("Compat.Package", request.PackageId);
         Assert.Equal("1.2.3", request.PinnedVersion);
+    }
+
+    [Fact]
+    public async Task DescribeDesiredAsync_RealDirectorySourceRefusesForeignCompleteRootBeforeProbe()
+    {
+        using var root = await CreateCompleteRootAsync();
+        using var foreignRoot = await CreateCompleteRootAsync();
+        var feedDirectory = Path.Combine(foreignRoot.RootPath, "foreign-directory-source");
+        Directory.CreateDirectory(feedDirectory);
+        File.WriteAllBytes(Path.Combine(feedDirectory, "Foreign.Package.1.0.0.nupkg"), [0x50, 0x4B, 0x03, 0x04]);
+
+        var callbacks = 0;
+        var probe = new NupkgFileStabilityProbe(
+            NullLogger<NupkgFileStabilityProbe>.Instance,
+            maxAttempts: 2,
+            retryDelay: TimeSpan.Zero,
+            onBeforeRetryAsync: (_, _) =>
+            {
+                Interlocked.Increment(ref callbacks);
+                return Task.CompletedTask;
+            });
+        var source = new DirectoryNupkgDesiredSource(
+            "foreign-directory",
+            feedDirectory,
+            ["*"],
+            stabilityProbe: probe);
+        var options = Options(root, (builder, _) => builder.Services.AddSingleton<IDesiredPackageSource>(source));
+
+        var refusal = await Assert.ThrowsAsync<PackageStoreAdmissionException>(
+            () => NuplaneRestore.DescribeDesiredAsync(Configuration(), options));
+
+        Assert.Equal(PackageStoreAdmissionReason.RootMismatch, refusal.Reason);
+        Assert.Equal(0, Volatile.Read(ref callbacks));
     }
 
     [Fact]

@@ -78,6 +78,23 @@ internal sealed class PackageStoreAuthorityResolver
             allowStableMissingDirectoryRetry: true);
     }
 
+    /// <summary>Resolves a directory-backed desired source under positive Unenrolled or supplied exact root authority.</summary>
+    internal ResolvedPackageStorePath ResolveDesiredSourceDirectory(
+        string exactLocator,
+        RootMembershipRegistry.MemberLocatorReplayScope? scope,
+        string? exactBaseLocator = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(exactLocator);
+        scope?.EnsureActive();
+        if (scope is { Status: not RootMembershipStatus.Complete })
+            throw Refusal(PackageStoreAdmissionReason.IncompleteEnrollment,
+                "A directory desired source requires a Complete root membership snapshot.", scope.RootIdentity);
+
+        var path = ParseRequest(exactLocator, exactBaseLocator);
+        return ResolveParsed(path, PhysicalStorePathTarget.DesiredSourceDirectoryAllowMissingSuffix,
+            requiredRoot: scope?.RootIdentity, memberLocatorScope: scope);
+    }
+
     /// <summary>Replays one persisted absolute member-state locator under an active registry lock scope.</summary>
     /// <remarks>Only the parent path is expanded. The final state entry is observed no-follow as metadata.</remarks>
     internal ResolvedMemberStateLocation ResolveMemberStateLocation(
@@ -257,11 +274,16 @@ internal sealed class PackageStoreAuthorityResolver
                 {
                     if (target is not (PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix or
                             PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix or
-                            PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix) ||
+                            PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix or
+                            PhysicalStorePathTarget.DesiredSourceDirectoryAllowMissingSuffix) ||
                         (state.RootIdentity is not null &&
-                            target != PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix) ||
+                            target is not (PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix or
+                                PhysicalStorePathTarget.DesiredSourceDirectoryAllowMissingSuffix)) ||
                         (state.RootIdentity is null &&
                             target == PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix) ||
+                        (target == PhysicalStorePathTarget.DesiredSourceDirectoryAllowMissingSuffix &&
+                            state.RootIdentity is not null &&
+                            (state.MemberLocatorScope is null || state.RequiredRoot != state.RootIdentity)) ||
                         frames.Any(static candidate => candidate.Alias is not null) ||
                         !TryGetOrdinaryRemainingSuffix(frames, out var remainingSuffix))
                     {
@@ -905,7 +927,9 @@ internal sealed class PackageStoreAuthorityResolver
             bool allowStableMissingDirectoryRetry)
         {
             var admittedOperationTarget = target == PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix;
-            if ((RootIdentity is not null && !admittedOperationTarget) ||
+            var scopedDesiredSourceTarget = target == PhysicalStorePathTarget.DesiredSourceDirectoryAllowMissingSuffix &&
+                MemberLocatorScope is not null && RequiredRoot == RootIdentity;
+            if ((RootIdentity is not null && !admittedOperationTarget && !scopedDesiredSourceTarget) ||
                 (RootIdentity is null && admittedOperationTarget) || ActiveAliases.Count != 0)
                 throw Unknown("A missing target suffix cannot follow observed authority or an unresolved alias.", RootIdentity);
 
@@ -1025,7 +1049,8 @@ internal sealed class PackageStoreAuthorityResolver
             if (_missingSuffixes.Count > 0 && targetKind is not (
                     PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix or
                     PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix or
-                    PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix))
+                    PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix or
+                    PhysicalStorePathTarget.DesiredSourceDirectoryAllowMissingSuffix))
                 throw Unknown("Missing-suffix evidence is valid only for configured-root or package-directory classification.", RootIdentity);
 
             foreach (var anchor in _anchors)
@@ -1144,7 +1169,8 @@ internal sealed class PackageStoreAuthorityResolver
 
             if (targetKind is (PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix or
                     PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix or
-                    PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix) &&
+                    PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix or
+                    PhysicalStorePathTarget.DesiredSourceDirectoryAllowMissingSuffix) &&
                 _missingSuffixes.Count > 1)
             {
                 throw Unknown("A missing-suffix resolution observed multiple missing edges.", RootIdentity);
