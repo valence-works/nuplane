@@ -1,3 +1,0 @@
-Retired in feature 014 clean-break architecture.
-OperationalStateSnapshot remains the supported core operational-state model.
-
