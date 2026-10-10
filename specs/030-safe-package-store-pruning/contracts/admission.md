@@ -64,3 +64,7 @@ For `PackageContent`, a graph-use lease authorizes only the exact extracted inst
 ## Lifetime sweep
 
 Attach a weak context observation to core-owned lease state without storing a context/assembly/delegate strong reference. A passive local observer runs only while collectible associations exist and closes a lease after actual weak death independently of future admission. It owns cancellation/drain, uses a fixed internal observation cadence, and initiates no GC/unload, user callback or file deletion. It is separate from manual pruning and does not become an automatic prune timer. Admission may additionally sweep. Prove an idle live owner process releases a dead context's sentinel without another owner operation. Cross-process maintenance probes the OS sentinel without waiting. A live sentinel with valid immutable record protects every node; uncertain/missing record or failed stale cleanup denies deletion. Persistent active/LKG snapshots survive use reaping.
+
+## Multiroot persistence
+
+[Multiroot ownership and durable protection](multiroot-protection.md) specifies all-root-before-member acquisition, distinct root-local lock obligations, fixed Active/LKG participant coverage, and irreversible group publication/recovery. Its requirements are not achieved merely by the current single-root state record or copied live-use records.
