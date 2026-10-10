@@ -117,7 +117,7 @@ jobs:
               'Nuplane.Store.Tests.State.ProtectionStateSerializationTests': 29,
               'Nuplane.Store.Tests.State.ProtectionStatePayloadSerializerTests': 7,
               'Nuplane.Store.Tests.Coordination.ProtectionDigestTests': 28,
-              'Nuplane.Store.Tests.Coordination.RootMembershipPayloadSerializerTests': 23,
+              'Nuplane.Store.Tests.Coordination.RootMembershipPayloadSerializerTests': 28,
               'Nuplane.Store.Tests.Coordination.PersistedStoreStateGraphVerifierTests': 10,
           }
           legacy_rows = [row for row in rows if row not in codec_rows]
@@ -126,9 +126,20 @@ jobs:
               raise SystemExit('Existing serialization/digest suites must retain their required scenario counts.')
           if len({row.attrib['testName'] for row in rows}) != len(rows):
               raise SystemExit('Serialization/digest scenario names must be unique.')
-          if len(rows) != 123 or any(row.attrib.get('outcome') != 'Passed' for row in rows):
-              raise SystemExit('All 26 graph-use codec and 97 existing serialization/digest cases must pass without skips.')
-          print('Qualified all 26 graph-use codec and 97 existing serialization/digest cases with no skips.')
+          group_models = {
+              'RoundTrip_Schema2MixedLedger_PreservesV1MembersAndV2RootRow',
+              'RoundTrip_GroupIntent_IsImmutableAndRetainsLocalPriorTuple',
+              'GroupPending_BindingAndResolutionCannotMoveBackwards',
+              'GroupDescriptor_RejectsRevisionJumpsMixedPriorFilesAndSkippedInitialGeneration',
+              'GroupDescriptor_RejectsV2PriorHeaderThatDoesNotMatchParticipantSet',
+          }
+          for name in group_models:
+              expected = 'Nuplane.Store.Tests.Coordination.RootMembershipPayloadSerializerTests.' + name
+              if sum(row.attrib['testName'] == expected for row in rows) != 1:
+                  raise SystemExit('Missing required group membership scenario: ' + name)
+          if len(rows) != 128 or any(row.attrib.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('All 26 graph-use codec, 97 existing and five group membership cases must pass without skips.')
+          print('Qualified all 128 serialization/digest cases with no skips.')
           GRAPHUSE
           done
 
@@ -1043,6 +1054,19 @@ jobs:
           if not all(any(n.endswith('.' + expected) for n in names) for expected in required):
               raise SystemExit('The Unix state-slot identity scenarios did not all execute and pass.')
           PY
+
+      - name: Qualify native multiroot publication and fresh-owner recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~RootMembershipNativeGroupPublicationTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=native-multiroot-group.trx" \
+            --results-directory "$RUNNER_TEMP/native-multiroot-group"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/native-multiroot-group/native-multiroot-group.trx" \
+            build/test-cases/native-multiroot-group.json
 
       - name: Qualify native state-slot writer guard and immutable group marker
         shell: bash
