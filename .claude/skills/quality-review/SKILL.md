@@ -19,17 +19,17 @@ A finding that adds a new abstraction needs an unusually strong case.
 - If `dotnet --list-sdks` shows no 10.x SDK, install it:
   `curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --install-dir "$HOME/.dotnet"` and use `$HOME/.dotnet/dotnet`.
   If the SDK cannot be installed, continue the review without build metrics and say so in the ledger.
-- Use `gh` for all GitHub reads and writes, always with `--repo valence-works/nuplane`.
+- GitHub access is **REST only** via `gh api`; GraphQL-backed commands (`gh issue`, `gh pr`, `gh search`, `gh label`) return 403 in cloud sessions. Use the recipes in [github-rest.md](github-rest.md).
 
 ## 1. Load context (every run)
 
 Read, in this order:
 
-1. The ledger: the open issue labeled `quality-ledger` (`gh issue list --label quality-ledger --state open`). Its body holds standing decisions ("Decided — do not re-raise"); its comments are prior run records.
+1. The ledger: the open issue labeled `quality-ledger`. Its body holds standing decisions ("Decided — do not re-raise"); its comments are prior run records.
 2. `AGENTS.md`, `docs/coding-conventions.md`, `README.md`.
 3. `docs/wiki/Concepts-and-Glossary.md` (the ubiquitous language), `docs/wiki/Architecture-Guide.md`.
 4. `docs/adr/*` and `docs/reviews/*` — accepted decisions and earlier review findings, including any remediation plan still in progress.
-5. All issues labeled `quality-review` in every state (`gh issue list --label quality-review --state all --limit 300 --json number,title,state,stateReason,labels,body`), and all open pull requests.
+5. All issues labeled `quality-review` in every state, and all open pull requests with their changed files.
 
 ## 2. Pick the lens
 
@@ -55,7 +55,7 @@ Measure first, every run, and include the numbers in the ledger record:
 | Source LOC / test LOC | `find src -name '*.cs' -not -path '*/obj/*' \| xargs wc -l`, same for `test` |
 | Projects (src / test / samples) | count `*.csproj` |
 | Public types per src project | `grep -rE '^\s*public (sealed |static |abstract |partial )*(class|record|interface|struct|enum|delegate)'` per project |
-| Test count, build warnings | `dotnet build nuplane.sln -c Release` then `dotnet test nuplane.sln -c Release --no-build` (skip if no SDK) |
+| Test count, build warnings, durations | `dotnet build nuplane.sln -c Release` then `dotnet test nuplane.sln -c Release --no-build` (skip if no SDK). The sandbox runs as root, so a test that relies on file permissions may fail here; note it, do not file it as a product defect. |
 | Glossary terms | count of `###` headings in the glossary |
 
 Compare with the previous ledger record and call out meaningful movement.
@@ -102,7 +102,7 @@ File those as proposals (see 4), not as implementation tickets, when they are st
 
 Before filing anything, for each candidate:
 
-- **Duplicate check.** Search issues in all states (`gh search issues --repo valence-works/nuplane "<key terms>"`) and the fingerprints of `quality-review` issues. Skip if already open, delivered, or closed as not planned — unless you have new evidence, which you must state.
+- **Duplicate check.** Search issues in all states by key terms and compare against the fingerprints of `quality-review` issues. Skip if already open, delivered, or closed as not planned — unless you have new evidence, which you must state.
 - **Ledger check.** Skip anything under "Decided — do not re-raise".
 - **In-flight check.** Skip areas touched by an open pull request or covered by an unfinished work unit in `docs/reviews/*`.
 - **Evidence check.** Every claim cites a file and line at the audited SHA (`https://github.com/valence-works/nuplane/blob/<sha>/<path>#L<n>`). Pure style preferences without a concrete cost to readers, consumers, or maintainers are not findings.

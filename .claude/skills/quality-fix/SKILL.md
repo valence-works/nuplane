@@ -15,7 +15,7 @@ stop and hand back to the maintainer rather than merge.
 
 ## 0. Environment
 
-- Repository `valence-works/nuplane`; use `gh ... --repo valence-works/nuplane` throughout.
+- Repository `valence-works/nuplane`. GitHub access is **REST only** via `gh api`; GraphQL-backed commands (`gh issue`, `gh pr`, `gh search`, `gh label`) return 403 in cloud sessions. Use the recipes in [../quality-review/github-rest.md](../quality-review/github-rest.md) for every issue, label, PR, check, and merge operation.
 - If `dotnet --list-sdks` shows no 10.x SDK, install it:
   `curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --install-dir "$HOME/.dotnet"`,
   then `export PATH="$HOME/.dotnet:$PATH"`. If it cannot be installed, stop without claiming an issue.
@@ -52,7 +52,7 @@ dotnet test nuplane.sln --configuration Release --no-restore --no-build
 ./build/validate-secrets.sh
 ```
 
-Record warnings, per-project test counts, and totals. A failing or newly skipped test is a blocker even if it looks unrelated — investigate it; if it is pre-existing on `main`, prove that by running it on `origin/main` and say so.
+Record warnings, per-project test counts, and totals. A failing or newly skipped test is a blocker even if it looks unrelated — investigate it. The one tolerated exception: the sandbox runs as root, so tests that depend on file permissions (for example `StoreLockTests.Acquire_WhenTheLockFileIsNotWritable_*`) can fail here. Such a failure is acceptable only if the same test also fails on `origin/main` in this sandbox **and** passes in the PR's CI `build-test` check; state both facts in the PR body.
 
 ## 5. Self-review, then PR
 
@@ -72,11 +72,11 @@ Record warnings, per-project test counts, and totals. A failing or newly skipped
 
 Check immediately before merging; re-check after any push:
 
-1. `gh pr checks <pr>` — poll every 30 s for at most 30 minutes. No `PENDING`, no `FAILURE`/`CANCELLED`. On failure, read the log (`gh run view <id> --log-failed`), fix if the diff caused it, re-run the gate, push, and poll again (at most two fix attempts).
-2. No unresolved review threads on the PR.
-3. `gh pr view <pr> --json mergeable,mergeStateStatus` is `MERGEABLE` and not `BEHIND`/`DIRTY`. If behind, rebase on `origin/main`, re-run the gate, `git push --force-with-lease`, and go back to 1.
+1. **CI green.** Poll the head SHA's check runs every 30 s for at most 30 minutes: nothing pending, nothing failed. On failure, read the job log, fix if the diff caused it, re-run the gate, push, and poll again (at most two fix attempts). If no check run has appeared after 10 minutes, CI did not trigger: proceed on the local gate alone and say so in the PR evidence comment.
+2. **No outstanding review.** No review in state `CHANGES_REQUESTED`, and every review comment from someone other than you is addressed in the diff or answered.
+3. **Mergeable.** `mergeable == true` and `mergeable_state` is `clean` (or `unstable` only when the failing check is not `build-test` and you record why). If `behind` or `dirty`, rebase on `origin/main`, re-run the gate, `git push --force-with-lease`, and go back to 1.
 
-Then: `gh pr merge <pr> --squash --delete-branch` and confirm `state == MERGED`.
+Then squash-merge with the PR title plus ` (#<pr>)` as the commit title, delete the branch, and confirm `gh api "$R/pulls/<pr>" --jq .merged` is `true`.
 
 ## 7. Close out
 
