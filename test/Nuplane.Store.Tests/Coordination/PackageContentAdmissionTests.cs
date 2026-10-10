@@ -83,6 +83,218 @@ public sealed class PackageContentAdmissionTests
     }
 
     [SupportedPhysicalStoreFact]
+    public async Task FindByExtensionSkipsMatchingDirectoryAndReadsTheNextOrdinaryFile()
+    {
+        using var context = await RootMembershipProtectionVerificationTests.Context.CreateCompleteAsync();
+        var matchingDirectory = Path.Combine(context.SharedInstallPath, "00.nuspec");
+        var matchingFile = Path.Combine(context.SharedInstallPath, "01.nuspec");
+        Directory.CreateDirectory(matchingDirectory);
+        File.WriteAllText(matchingFile, "later ordinary file");
+        var payloadIdentity = GetFileIdentity(context.Files, context.SharedInstallPath, Path.GetFileName(matchingFile));
+        var files = new TrackingFileSystem(context.Files, payloadIdentity)
+        {
+            EnumeratedNames = names =>
+            [
+                "00.nuspec",
+                "01.nuspec",
+                .. names.Where(name => name is not "00.nuspec" and not "01.nuspec")
+            ]
+        };
+        var admission = new PackageStoreAdmission(files,
+            new RootMembershipRegistry(files, new StoreStateSerializer()), context.Fixture.PackageInstallRoot);
+
+        await using var rootAdmission = await admission.AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Loading);
+        var borrow = Assert.IsType<PackageStoreOperationOwner>(rootAdmission.Owner).Borrow();
+
+        try
+        {
+            var found = PackageContent.TryFindByExtension(context.SharedInstallPath, ".nuspec", borrow);
+
+            Assert.Equal("01.nuspec", found?.Name);
+            Assert.Equal("later ordinary file", System.Text.Encoding.UTF8.GetString(Assert.IsType<byte[]>(found?.Content)));
+            Assert.Equal(1, files.PayloadReadCount);
+        }
+        finally
+        {
+            borrow.Dispose();
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task NestedStoreAuthoritiesRefuseDirectAndDescendantContentBeforePayloadReads()
+    {
+        using var context = await RootMembershipProtectionVerificationTests.Context.CreateCompleteAsync();
+        var payloadName = "Shared.Dependency.nuspec";
+        var nestedDirectory = Path.Combine(context.SharedInstallPath, "metadata");
+        Directory.CreateDirectory(nestedDirectory);
+        var nestedPayloadName = "manifest.json";
+        File.WriteAllText(Path.Combine(nestedDirectory, nestedPayloadName), "nested payload");
+        var files = new TrackingFileSystem(context.Files,
+            GetFileIdentity(context.Files, context.SharedInstallPath, payloadName));
+        files.TrackPayload(GetFileIdentity(context.Files, nestedDirectory, nestedPayloadName));
+        var admission = new PackageStoreAdmission(files,
+            new RootMembershipRegistry(files, new StoreStateSerializer()), context.Fixture.PackageInstallRoot);
+        var rootAuthority = Path.Combine(context.SharedInstallPath, RootMembershipRegistry.ControlDirectoryName);
+
+        await using var rootAdmission = await admission.AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Loading);
+        var borrow = Assert.IsType<PackageStoreOperationOwner>(rootAdmission.Owner).Borrow();
+
+        try
+        {
+            Directory.CreateDirectory(rootAuthority);
+            var directRefusal = Assert.Throws<PackageStoreAdmissionException>(() =>
+                PackageContent.TryReadFile(context.SharedInstallPath, payloadName, borrow));
+            Assert.Equal(PackageStoreAdmissionReason.UnknownAuthority, directRefusal.Reason);
+            Assert.Equal(0, files.PayloadReadCount);
+
+            Directory.Delete(rootAuthority);
+            Directory.CreateDirectory(Path.Combine(nestedDirectory, RootMembershipRegistry.ControlDirectoryName));
+            var descendantRefusal = Assert.Throws<PackageStoreAdmissionException>(() =>
+                PackageContent.TryReadFile(context.SharedInstallPath, "metadata/manifest.json", borrow));
+            Assert.Equal(PackageStoreAdmissionReason.UnknownAuthority, descendantRefusal.Reason);
+            Assert.Equal(0, files.PayloadReadCount);
+        }
+        finally
+        {
+            borrow.Dispose();
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
+    public void UnenrolledDirectoryThatGainsNestedAuthorityBeforeReadReturnsNoBytes()
+    {
+        using var fixture = new PackageStoreFixture();
+        var installPath = Path.Combine(fixture.PackageInstallRoot, "feed", "Unenrolled.Content", "1.0.0");
+        var nestedDirectory = Path.Combine(installPath, "metadata");
+        Directory.CreateDirectory(nestedDirectory);
+        File.WriteAllText(Path.Combine(nestedDirectory, "manifest.json"), "payload");
+        var nativeFiles = CreateNativeFileSystem();
+        var payloadIdentity = GetFileIdentity(nativeFiles, nestedDirectory, "manifest.json");
+        var files = new TrackingFileSystem(nativeFiles, payloadIdentity)
+        {
+            OnPayloadOpen = () => Directory.CreateDirectory(
+                Path.Combine(nestedDirectory, RootMembershipRegistry.ControlDirectoryName))
+        };
+
+        var result = PackageContent.TryReadFileUnscoped(installPath, "metadata/manifest.json", files);
+
+        Assert.Null(result);
+        Assert.Equal(0, files.PayloadReadCount);
+        Assert.True(Directory.Exists(Path.Combine(nestedDirectory, RootMembershipRegistry.ControlDirectoryName)));
+    }
+
+    [SupportedUnixFact]
+    public async Task DirectoryEdgeReplacementAfterPayloadReadRefusesDetachedBytes()
+    {
+        using var context = await RootMembershipProtectionVerificationTests.Context.CreateCompleteAsync();
+        var nestedDirectory = Path.Combine(context.SharedInstallPath, "metadata");
+        Directory.CreateDirectory(nestedDirectory);
+        File.WriteAllText(Path.Combine(nestedDirectory, "manifest.json"), "payload");
+        var files = new TrackingFileSystem(context.Files,
+            GetFileIdentity(context.Files, nestedDirectory, "manifest.json"));
+        var admission = new PackageStoreAdmission(files,
+            new RootMembershipRegistry(files, new StoreStateSerializer()), context.Fixture.PackageInstallRoot);
+        var movedDirectory = nestedDirectory + ".replaced";
+        files.AfterPayloadRead = () =>
+        {
+            Directory.Move(nestedDirectory, movedDirectory);
+            Directory.CreateDirectory(nestedDirectory);
+        };
+
+        await using var rootAdmission = await admission.AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Loading);
+        var borrow = Assert.IsType<PackageStoreOperationOwner>(rootAdmission.Owner).Borrow();
+
+        try
+        {
+            var refusal = Assert.Throws<PackageStoreAdmissionException>(() =>
+                PackageContent.TryReadFile(context.SharedInstallPath, "metadata/manifest.json", borrow));
+
+            Assert.Equal(PackageStoreAdmissionReason.UnknownAuthority, refusal.Reason);
+            Assert.Equal(1, files.PayloadReadCount);
+        }
+        finally
+        {
+            borrow.Dispose();
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task ChangedNativeEdgeObservationAfterPayloadReadRefusesDetachedBytes()
+    {
+        using var context = await RootMembershipProtectionVerificationTests.Context.CreateCompleteAsync();
+        var nestedDirectory = Path.Combine(context.SharedInstallPath, "metadata");
+        var replacementDirectoryName = "metadata-replacement";
+        Directory.CreateDirectory(nestedDirectory);
+        Directory.CreateDirectory(Path.Combine(context.SharedInstallPath, replacementDirectoryName));
+        File.WriteAllText(Path.Combine(nestedDirectory, "manifest.json"), "payload");
+        using var packageDirectory = PhysicalStoreTestDirectory.Open(context.Files, context.SharedInstallPath);
+        var replacementEntry = context.Files.InspectChildNoFollow(packageDirectory, replacementDirectoryName)!;
+        var packageDirectoryIdentity = context.Files.InspectHandle(packageDirectory).Identity;
+        var files = new TrackingFileSystem(context.Files,
+            GetFileIdentity(context.Files, nestedDirectory, "manifest.json"));
+        var admission = new PackageStoreAdmission(files,
+            new RootMembershipRegistry(files, new StoreStateSerializer()), context.Fixture.PackageInstallRoot);
+        files.AfterPayloadRead = () =>
+        {
+            files.ReplacementParentIdentity = packageDirectoryIdentity;
+            files.ReplacementChildName = "metadata";
+            files.ReplacementChildObservation = replacementEntry;
+        };
+
+        await using var rootAdmission = await admission.AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Loading);
+        var borrow = Assert.IsType<PackageStoreOperationOwner>(rootAdmission.Owner).Borrow();
+
+        try
+        {
+            var refusal = Assert.Throws<PackageStoreAdmissionException>(() =>
+                PackageContent.TryReadFile(context.SharedInstallPath, "metadata/manifest.json", borrow));
+
+            Assert.Equal(PackageStoreAdmissionReason.UnknownAuthority, refusal.Reason);
+            Assert.Equal(1, files.PayloadReadCount);
+        }
+        finally
+        {
+            borrow.Dispose();
+        }
+    }
+
+    [SupportedUnixFact]
+    public async Task DirectoryEdgeReplacementAfterMissingObservationDoesNotReturnFalseAbsence()
+    {
+        using var context = await RootMembershipProtectionVerificationTests.Context.CreateCompleteAsync();
+        var nestedDirectory = Path.Combine(context.SharedInstallPath, "metadata");
+        Directory.CreateDirectory(nestedDirectory);
+        var files = new TrackingFileSystem(context.Files, new PhysicalFileIdentity("unmatched", "unmatched", "unmatched"))
+        {
+            MissingContentNameToObserve = "missing.json"
+        };
+        var admission = new PackageStoreAdmission(files,
+            new RootMembershipRegistry(files, new StoreStateSerializer()), context.Fixture.PackageInstallRoot);
+        var movedDirectory = nestedDirectory + ".replaced";
+        files.OnSecondMissingContentProbe = () =>
+        {
+            Directory.Move(nestedDirectory, movedDirectory);
+            Directory.CreateDirectory(nestedDirectory);
+        };
+
+        await using var rootAdmission = await admission.AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Loading);
+        var borrow = Assert.IsType<PackageStoreOperationOwner>(rootAdmission.Owner).Borrow();
+
+        try
+        {
+            var refusal = Assert.Throws<PackageStoreAdmissionException>(() =>
+                PackageContent.TryReadFile(context.SharedInstallPath, "metadata/missing.json", borrow));
+
+            Assert.Equal(PackageStoreAdmissionReason.UnknownAuthority, refusal.Reason);
+            Assert.Equal(0, files.PayloadReadCount);
+        }
+        finally
+        {
+            borrow.Dispose();
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
     public async Task PathBorrowAndExpiredBorrowRefuseBeforeDirectoryOrArchivePayloadReads()
     {
         using var context = await RootMembershipProtectionVerificationTests.Context.CreateCompleteAsync();
@@ -213,6 +425,34 @@ public sealed class PackageContentAdmissionTests
     }
 
     [SupportedPhysicalStoreFact]
+    public async Task ExactArchiveBorrowReturnsNullForCorruptArchiveContent()
+    {
+        using var context = await RootMembershipProtectionVerificationTests.Context.CreateCompleteAsync();
+        var archivePath = Path.Combine(context.Fixture.PackageInstallRoot, "broken-content.nupkg");
+        File.WriteAllText(archivePath, "this is not a zip archive");
+        var archiveIdentity = GetFileIdentity(context.Files,
+            Path.GetDirectoryName(archivePath)!, Path.GetFileName(archivePath));
+        var files = new TrackingFileSystem(context.Files, archiveIdentity);
+        var admission = new PackageStoreAdmission(files,
+            new RootMembershipRegistry(files, new StoreStateSerializer()), context.Fixture.PackageInstallRoot);
+
+        await using var pathAdmission = await admission.AcquireForInstallPathsAsync(
+            [archivePath], PackageStoreAdmissionKind.Loading);
+        var borrow = pathAdmission.BorrowFor(archivePath);
+
+        try
+        {
+            Assert.Null(PackageContent.TryReadFile(archivePath, "manifest.json", borrow));
+            Assert.Null(PackageContent.TryFindByExtension(archivePath, ".json", borrow));
+            Assert.Equal(2, files.ArchiveStreamOpenCount);
+        }
+        finally
+        {
+            borrow.Dispose();
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
     public async Task GraphLeaseReadsExactExtractedInstallAndKeepsCountedPinThroughPayloadRead()
     {
         using var context = await RootMembershipProtectionVerificationTests.Context.CreateCompleteAsync();
@@ -288,6 +528,9 @@ public sealed class PackageContentAdmissionTests
         return files.InspectHandle(file).Identity;
     }
 
+    private static IPhysicalStoreFileSystem CreateNativeFileSystem()
+        => OperatingSystem.IsWindows() ? new WindowsPhysicalStoreFileSystem() : new UnixPhysicalStoreFileSystem();
+
     private static void CreateHardLink(string existingPath, string newPath)
     {
         if (OperatingSystem.IsWindows())
@@ -338,28 +581,60 @@ public sealed class PackageContentAdmissionTests
             IPhysicalStorePackageStreamFileSystem, IPhysicalStorePublicationFileSystem,
             IPhysicalStoreDirectoryPublicationFileSystem
     {
+        private readonly HashSet<PhysicalFileIdentity> _payloadIdentities = [payloadIdentity];
+        private int _matchingMissingObservations;
+
         internal int PayloadReadCount { get; private set; }
         internal int ArchiveStreamOpenCount { get; private set; }
         internal Action? OnPayloadRead { get; set; }
+        internal Action? AfterPayloadRead { get; set; }
+        internal Action? OnPayloadOpen { get; set; }
         internal Action? OnArchiveRead { get; set; }
+        internal string? MissingContentNameToObserve { get; set; }
+        internal Action? OnSecondMissingContentProbe { get; set; }
+        internal Func<IReadOnlyList<string>, IReadOnlyList<string>>? EnumeratedNames { get; set; }
+        internal PhysicalFileIdentity? ReplacementParentIdentity { get; set; }
+        internal string? ReplacementChildName { get; set; }
+        internal PhysicalStoreEntryInfo? ReplacementChildObservation { get; set; }
+
+        internal void TrackPayload(PhysicalFileIdentity identity) => _payloadIdentities.Add(identity);
 
         public PhysicalStoreDirectoryHandle OpenNamespaceRoot(string anchor) => inner.OpenNamespaceRoot(anchor);
-        public PhysicalStoreEntryInfo? InspectChildNoFollow(PhysicalStoreDirectoryHandle parent, string singleName) => inner.InspectChildNoFollow(parent, singleName);
+        public PhysicalStoreEntryInfo? InspectChildNoFollow(PhysicalStoreDirectoryHandle parent, string singleName)
+        {
+            if (ReplacementChildObservation is not null && singleName == ReplacementChildName &&
+                inner.InspectHandle(parent).Identity == ReplacementParentIdentity)
+                return ReplacementChildObservation;
+            var result = inner.InspectChildNoFollow(parent, singleName);
+            if (result is null && singleName == MissingContentNameToObserve &&
+                Interlocked.Increment(ref _matchingMissingObservations) == 2)
+                OnSecondMissingContentProbe?.Invoke();
+            return result;
+        }
         public PhysicalStoreDirectoryHandle OpenDirectoryChildNoFollow(PhysicalStoreDirectoryHandle parent, string singleName) => inner.OpenDirectoryChildNoFollow(parent, singleName);
         public PhysicalStoreDirectoryHandle OpenParentDirectory(PhysicalStoreDirectoryHandle directory) => inner.OpenParentDirectory(directory);
-        public PhysicalStoreFileHandle OpenFileChildNoFollow(PhysicalStoreDirectoryHandle parent, string singleName, FileAccess access) => inner.OpenFileChildNoFollow(parent, singleName, access);
+        public PhysicalStoreFileHandle OpenFileChildNoFollow(PhysicalStoreDirectoryHandle parent, string singleName, FileAccess access)
+        {
+            var file = inner.OpenFileChildNoFollow(parent, singleName, access);
+            if (_payloadIdentities.Contains(inner.InspectHandle(file).Identity))
+                OnPayloadOpen?.Invoke();
+            return file;
+        }
         public string ReadLinkTargetNoFollow(PhysicalStoreDirectoryHandle parent, string singleName, PhysicalFileIdentity expectedLinkIdentity) => inner.ReadLinkTargetNoFollow(parent, singleName, expectedLinkIdentity);
         public PhysicalStoreEntryInfo InspectHandle(PhysicalStoreHandle handle) => inner.InspectHandle(handle);
         public PhysicalStoreDirectoryHandle CreateDirectoryExclusiveAt(PhysicalStoreDirectoryHandle parent, string singleName) => inner.CreateDirectoryExclusiveAt(parent, singleName);
         public PhysicalStoreFileHandle CreateFileExclusiveAt(PhysicalStoreDirectoryHandle parent, string singleName) => inner.CreateFileExclusiveAt(parent, singleName);
         public byte[] ReadControlFile(PhysicalStoreFileHandle file, int maximumBytes)
         {
-            if (inner.InspectHandle(file).Identity == payloadIdentity)
+            if (_payloadIdentities.Contains(inner.InspectHandle(file).Identity))
             {
                 PayloadReadCount++;
                 OnPayloadRead?.Invoke();
             }
-            return inner.ReadControlFile(file, maximumBytes);
+            var bytes = inner.ReadControlFile(file, maximumBytes);
+            if (_payloadIdentities.Contains(inner.InspectHandle(file).Identity))
+                AfterPayloadRead?.Invoke();
+            return bytes;
         }
         public void WriteNewControlFile(PhysicalStoreFileHandle file, ReadOnlyMemory<byte> contents) => inner.WriteNewControlFile(file, contents);
         public ValueTask<IAsyncDisposable?> TryAcquireExclusiveLock(PhysicalStoreFileHandle file) => inner.TryAcquireExclusiveLock(file);
@@ -368,7 +643,10 @@ public sealed class PackageContentAdmissionTests
         public PhysicalStoreCanonicalName ObserveCanonicalFileNameNoFollow(PhysicalStoreDirectoryHandle parent, string singleName, PhysicalFileIdentity expectedFileIdentity)
             => ((IPhysicalStoreNameFileSystem)inner).ObserveCanonicalFileNameNoFollow(parent, singleName, expectedFileIdentity);
         public IReadOnlyList<string> EnumerateChildNamesNoFollow(PhysicalStoreDirectoryHandle parent, int maximumEntries)
-            => ((IPhysicalStoreDirectoryEnumerationFileSystem)inner).EnumerateChildNamesNoFollow(parent, maximumEntries);
+        {
+            var names = ((IPhysicalStoreDirectoryEnumerationFileSystem)inner).EnumerateChildNamesNoFollow(parent, maximumEntries);
+            return EnumeratedNames?.Invoke(names) ?? names;
+        }
         public Stream OpenPackageArchiveReadStream(PhysicalStoreDirectoryHandle parent, string singleName, PhysicalStoreFileHandle file,
             PhysicalStoreEntryInfo expectedParent, PhysicalStoreEntryInfo expectedFile, long maximumBytes)
         {

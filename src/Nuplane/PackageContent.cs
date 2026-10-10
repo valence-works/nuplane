@@ -45,11 +45,8 @@ public static class PackageContent
         }
         catch (PackageStoreAdmissionException) when (IsNupkg(installPath))
         {
-            return PackageStoreOperationAccess.WithValidatedPackageArchive(
-                borrow,
-                installPath,
-                (files, parent, name, file) => ReadArchiveFile(files, parent, name, file,
-                    archive => ReadArchiveEntry(archive, components)));
+            return TryReadBorrowedArchive(borrow, installPath,
+                archive => ReadArchiveEntry(archive, components));
         }
         catch (Exception exception) when (IsContentReadFailure(exception))
         {
@@ -106,11 +103,8 @@ public static class PackageContent
         }
         catch (PackageStoreAdmissionException) when (IsNupkg(installPath))
         {
-            return PackageStoreOperationAccess.WithValidatedPackageArchive(
-                borrow,
-                installPath,
-                (files, parent, name, file) => ReadArchiveFile(files, parent, name, file,
-                    archive => FindArchiveFileByExtension(archive, extension)));
+            return TryReadBorrowedArchive(borrow, installPath,
+                archive => FindArchiveFileByExtension(archive, extension));
         }
         catch (Exception exception) when (IsContentReadFailure(exception))
         {
@@ -225,6 +219,24 @@ public static class PackageContent
         }
     }
 
+    private static T? TryReadBorrowedArchive<T>(
+        PackageStoreOperationBorrow borrow,
+        string installPath,
+        Func<ZipArchive, T?> read)
+    {
+        try
+        {
+            return PackageStoreOperationAccess.WithValidatedPackageArchive(
+                borrow,
+                installPath,
+                (files, parent, name, file) => ReadArchiveFile(files, parent, name, file, read));
+        }
+        catch (Exception exception) when (IsContentReadFailure(exception))
+        {
+            return default;
+        }
+    }
+
     private static T WithGraphInstallDirectory<T>(
         string installPath,
         PackageGraphUseLease lease,
@@ -276,17 +288,31 @@ public static class PackageContent
     {
         var names = RequireNames(files);
         var ownedDirectories = new List<PhysicalStoreDirectoryHandle>();
+        var snapshots = new List<DirectoryTraversalSnapshot>();
         var current = packageDirectory;
         try
         {
+            var rootInfo = RequireDirectory(files.InspectHandle(packageDirectory), "A package content root is not a directory.");
+            var rootSemantics = names.ObserveDirectoryNameSemantics(packageDirectory);
+            RequireNoNestedAuthority(files, packageDirectory);
+            snapshots.Add(new DirectoryTraversalSnapshot(packageDirectory, rootInfo, rootSemantics,
+                Parent: null, ParentInfo: null, ParentSemantics: null, Name: null));
+
             for (var index = 0; index < components.Count; index++)
             {
                 var name = components[index];
                 var parentBefore = RequireDirectory(files.InspectHandle(current), "A package content parent is not a directory.");
                 var semanticsBefore = names.ObserveDirectoryNameSemantics(current);
+                RequireNoNestedAuthority(files, current);
+                var currentSnapshot = snapshots[^1];
+                if (parentBefore.Identity != currentSnapshot.DirectoryInfo.Identity ||
+                    semanticsBefore != currentSnapshot.Semantics)
+                    throw Unknown("A package content directory changed during native traversal.");
                 var child = files.InspectChildNoFollow(current, name);
                 if (child is null)
                 {
+                    RequireStableMissingChild(files, names, current, parentBefore, semanticsBefore, name);
+                    ReplayDirectoryTraversal(files, names, snapshots);
                     RequireStableMissingChild(files, names, current, parentBefore, semanticsBefore, name);
                     return null;
                 }
@@ -303,9 +329,12 @@ public static class PackageContent
                     if (opened.Identity != child.Identity)
                         throw Unknown("A package content directory changed between no-follow inspection and open.");
                     var childSemantics = names.ObserveDirectoryNameSemantics(openedDirectory);
+                    RequireNoNestedAuthority(files, openedDirectory);
                     var openedNameAfter = files.InspectChildNoFollow(current, name);
                     RequireStableDirectoryEdge(files, names, current, openedDirectory, parentBefore, semanticsBefore,
                         name, child.Identity, childSemantics, openedNameAfter);
+                    snapshots.Add(new DirectoryTraversalSnapshot(openedDirectory, opened, childSemantics,
+                        current, parentBefore, semanticsBefore, name));
                     current = openedDirectory;
                     continue;
                 }
@@ -323,6 +352,17 @@ public static class PackageContent
                 if (openedFile.Length > Array.MaxLength)
                     throw new InvalidDataException("Package content is larger than a managed byte array can represent.");
 
+                ReplayDirectoryTraversal(files, names, snapshots);
+                var fileBeforeRead = files.InspectHandle(file);
+                var namedBeforeRead = files.InspectChildNoFollow(current, name);
+                var canonicalBeforeRead = names.ObserveCanonicalFileNameNoFollow(current, name, openedFile.Identity);
+                if (fileBeforeRead.Kind != PhysicalStoreEntryKind.RegularFile || fileBeforeRead.LinkCount != 1 ||
+                    fileBeforeRead.Identity != openedFile.Identity || fileBeforeRead.Length != openedFile.Length ||
+                    namedBeforeRead is null || namedBeforeRead.Kind != PhysicalStoreEntryKind.RegularFile ||
+                    namedBeforeRead.LinkCount != 1 || namedBeforeRead.Identity != openedFile.Identity ||
+                    namedBeforeRead.Length != openedFile.Length || canonicalBeforeRead != canonicalBefore)
+                    throw Unknown("Package content changed before its detached bytes were read.");
+
                 var bytes = files.ReadControlFile(file, Array.MaxLength);
                 var heldAfter = files.InspectHandle(file);
                 var namedAfter = files.InspectChildNoFollow(current, name);
@@ -335,6 +375,7 @@ public static class PackageContent
                     canonicalAfter != canonicalBefore)
                     throw Unknown("Package content changed while its detached bytes were read.");
                 RequireStableDirectory(files, names, current, parentBefore, semanticsBefore);
+                ReplayDirectoryTraversal(files, names, snapshots);
                 return bytes;
             }
 
@@ -358,23 +399,42 @@ public static class PackageContent
                 "The filesystem cannot enumerate package content through a held native directory.");
         var before = RequireDirectory(files.InspectHandle(packageDirectory), "The package content root is not a directory.");
         var semantics = names.ObserveDirectoryNameSemantics(packageDirectory);
+        RequireNoNestedAuthority(files, packageDirectory);
         var childNames = enumeration.EnumerateChildNamesNoFollow(packageDirectory, MaximumPackageRootEntries);
+        var skippedMatchingDirectories = new List<(string Name, PhysicalStoreEntryInfo Entry)>();
         foreach (var name in childNames)
         {
             if (!name.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
                 continue;
             if (!TryParseRelativePath(name, out var components) || components.Length != 1)
                 throw Unknown("The native directory enumeration returned an unsupported package file name.");
-            if (files.InspectChildNoFollow(packageDirectory, name) is null)
+            var child = files.InspectChildNoFollow(packageDirectory, name);
+            if (child is null)
                 throw Unknown("A package file disappeared after native directory enumeration.");
+            if (child.Kind == PhysicalStoreEntryKind.Directory)
+            {
+                RequireSameVolume(before.Identity, child.Identity);
+                RequireStableDirectory(files, names, packageDirectory, before, semantics);
+                var namedAfter = files.InspectChildNoFollow(packageDirectory, name);
+                if (namedAfter is null || namedAfter.Kind != PhysicalStoreEntryKind.Directory ||
+                    namedAfter.Identity != child.Identity)
+                    throw Unknown("A matching package directory changed during native enumeration.");
+                skippedMatchingDirectories.Add((name, child));
+                RequireNoNestedAuthority(files, packageDirectory);
+                continue;
+            }
+            if (child.Kind != PhysicalStoreEntryKind.RegularFile || child.LinkCount != 1)
+                throw Unknown("A matching package file is not an ordinary single-link file.");
             var bytes = ReadDirectoryFile(files, packageDirectory, components);
             if (bytes is null)
                 throw Unknown("A matching package file disappeared during native content reading.");
-            RequireStableDirectory(files, names, packageDirectory, before, semantics);
+            ReplayExtensionEnumeration(files, names, enumeration, packageDirectory, before, semantics,
+                childNames, skippedMatchingDirectories);
             return new PackageContentFile(name, bytes);
         }
 
-        RequireStableDirectory(files, names, packageDirectory, before, semantics);
+        ReplayExtensionEnumeration(files, names, enumeration, packageDirectory, before, semantics,
+            childNames, skippedMatchingDirectories);
         return null;
     }
 
@@ -604,6 +664,64 @@ public static class PackageContent
             throw Unknown("A package content directory or native lookup profile changed during the read.");
     }
 
+    private static void ReplayDirectoryTraversal(
+        IPhysicalStoreFileSystem files,
+        IPhysicalStoreNameFileSystem names,
+        IReadOnlyList<DirectoryTraversalSnapshot> snapshots)
+    {
+        foreach (var snapshot in snapshots)
+        {
+            RequireStableDirectory(files, names, snapshot.Directory, snapshot.DirectoryInfo, snapshot.Semantics);
+            RequireNoNestedAuthority(files, snapshot.Directory);
+            if (snapshot.Parent is null)
+                continue;
+
+            var parent = snapshot.Parent;
+            var parentInfo = snapshot.ParentInfo!;
+            var parentSemantics = snapshot.ParentSemantics!;
+            var namedChild = files.InspectChildNoFollow(parent, snapshot.Name!);
+            RequireStableDirectoryEdge(files, names, parent, snapshot.Directory, parentInfo, parentSemantics,
+                snapshot.Name!, snapshot.DirectoryInfo.Identity, snapshot.Semantics, namedChild);
+            RequireNoNestedAuthority(files, parent);
+        }
+    }
+
+    private static void RequireNoNestedAuthority(
+        IPhysicalStoreFileSystem files,
+        PhysicalStoreDirectoryHandle directory)
+    {
+        if (files.InspectChildNoFollow(directory, RootMembershipRegistry.ControlDirectoryName) is not null)
+            throw Unknown("A package content directory contains a nested package-store authority.");
+    }
+
+    private static void ReplayExtensionEnumeration(
+        IPhysicalStoreFileSystem files,
+        IPhysicalStoreNameFileSystem names,
+        IPhysicalStoreDirectoryEnumerationFileSystem enumeration,
+        PhysicalStoreDirectoryHandle directory,
+        PhysicalStoreEntryInfo expectedDirectory,
+        PhysicalStoreNameSemantics expectedSemantics,
+        IReadOnlyList<string> expectedNames,
+        IReadOnlyList<(string Name, PhysicalStoreEntryInfo Entry)> skippedMatchingDirectories)
+    {
+        RequireStableDirectory(files, names, directory, expectedDirectory, expectedSemantics);
+        RequireNoNestedAuthority(files, directory);
+        var currentNames = enumeration.EnumerateChildNamesNoFollow(directory, MaximumPackageRootEntries);
+        if (!expectedNames.SequenceEqual(currentNames, StringComparer.Ordinal))
+            throw Unknown("Package content names changed during extension lookup.");
+
+        foreach (var skipped in skippedMatchingDirectories)
+        {
+            var current = files.InspectChildNoFollow(directory, skipped.Name);
+            if (current is null || current.Kind != PhysicalStoreEntryKind.Directory ||
+                current.Identity != skipped.Entry.Identity)
+                throw Unknown("A matching package directory changed during extension lookup.");
+        }
+
+        RequireStableDirectory(files, names, directory, expectedDirectory, expectedSemantics);
+        RequireNoNestedAuthority(files, directory);
+    }
+
     private static void RequireCanonicalEdge(
         PhysicalStoreCanonicalName canonical,
         PhysicalStoreEntryInfo parent,
@@ -622,6 +740,15 @@ public static class PackageContent
 
     private static PackageStoreAdmissionException Unknown(string message, PhysicalRootIdentity? root = null)
         => new(PackageStoreAdmissionReason.UnknownAuthority, message, root);
+
+    private sealed record DirectoryTraversalSnapshot(
+        PhysicalStoreDirectoryHandle Directory,
+        PhysicalStoreEntryInfo DirectoryInfo,
+        PhysicalStoreNameSemantics Semantics,
+        PhysicalStoreDirectoryHandle? Parent,
+        PhysicalStoreEntryInfo? ParentInfo,
+        PhysicalStoreNameSemantics? ParentSemantics,
+        string? Name);
 }
 
 /// <summary>A file read from a package's content: its name and raw bytes.</summary>
