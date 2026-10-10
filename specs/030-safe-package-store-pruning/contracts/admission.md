@@ -59,6 +59,8 @@ Keep existing two-argument `PackageContent.TryReadFile` / `TryFindByExtension`: 
 
 Keep `NuplanePackageMetadataReadResult`'s four-field constructor/deconstruction. Add an init-only refusal discriminator/factory; do not relabel refusal as Missing. `NuplaneStore` state observation is not a package scan and may run without root ownership. Loading from its result is a separate admitted operation.
 
+For `PackageContent`, a graph-use lease authorizes only the exact extracted install directories represented by its immutable graph identities; it does not identify or protect a `.nupkg` artifact. An enrolled archive read therefore requires a live operation borrow that admitted that exact archive path. Missing package members remain ordinary `null` results, while a missing or changed archive target that was admitted as present is a typed admission refusal.
+
 ## Lifetime sweep
 
 Attach a weak context observation to core-owned lease state without storing a context/assembly/delegate strong reference. A passive local observer runs only while collectible associations exist and closes a lease after actual weak death independently of future admission. It owns cancellation/drain, uses a fixed internal observation cadence, and initiates no GC/unload, user callback or file deletion. It is separate from manual pruning and does not become an automatic prune timer. Admission may additionally sweep. Prove an idle live owner process releases a dead context's sentinel without another owner operation. Cross-process maintenance probes the OS sentinel without waiting. A live sentinel with valid immutable record protects every node; uncertain/missing record or failed stale cleanup denies deletion. Persistent active/LKG snapshots survive use reaping.

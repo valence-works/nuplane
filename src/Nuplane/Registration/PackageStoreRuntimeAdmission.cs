@@ -140,6 +140,59 @@ internal static class PackageStoreRuntimeAdmission
         }
     }
 
+    /// <summary>
+    /// Runs one package-content read against a positively Unenrolled native archive observation. The held parent,
+    /// exact basename and archive handle remain live through the synchronous callback and are replayed afterward.
+    /// The callback must finish native reads and return only detached data.
+    /// </summary>
+    internal static T WithUnenrolledPackageArchive<T>(
+        string exactArchivePath,
+        Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle, string, PhysicalStoreFileHandle, T> read)
+        => WithUnenrolledPackageArchive(exactArchivePath, CreatePhysicalFileSystem(), read);
+
+    /// <summary>Runs the native archive probe with an explicit provider for deterministic owned race tests.</summary>
+    internal static T WithUnenrolledPackageArchive<T>(
+        string exactArchivePath,
+        IPhysicalStoreFileSystem files,
+        Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle, string, PhysicalStoreFileHandle, T> read)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(exactArchivePath);
+        ArgumentNullException.ThrowIfNull(files);
+        ArgumentNullException.ThrowIfNull(read);
+
+        var resolver = CreateLedgerOnlyResolver(files);
+        var exactBaseLocator = Path.IsPathFullyQualified(exactArchivePath) ? null : Directory.GetCurrentDirectory();
+        using var resolved = resolver.Resolve(exactArchivePath, PhysicalStorePathTarget.ArchiveFile,
+            exactBaseLocator: exactBaseLocator);
+        if (resolved.RootIdentity is not null || resolved.MembershipCandidate is not null ||
+            resolved.MembershipLedgerIdentity is not null || resolved.AuthorityRoot is not null)
+        {
+            throw Refuse("An unscoped content read cannot access an archive path with membership authority.",
+                resolved.RootIdentity);
+        }
+
+        var parent = resolved.TargetParent
+            ?? throw Refuse("The positively Unenrolled archive has no held native parent directory.");
+        var name = resolved.TargetName
+            ?? throw Refuse("The positively Unenrolled archive has no exact native basename.");
+        var file = resolved.Target as PhysicalStoreFileHandle
+            ?? throw Refuse("The positively Unenrolled archive is not a held native file.");
+        resolved.Revalidate();
+
+        T result;
+        try
+        {
+            result = read(files, parent, name, file);
+        }
+        catch
+        {
+            resolved.Revalidate();
+            throw;
+        }
+        resolved.Revalidate();
+        return result;
+    }
+
     internal static IPhysicalStoreFileSystem CreatePhysicalFileSystem()
         => OperatingSystem.IsWindows()
             ? new WindowsPhysicalStoreFileSystem()

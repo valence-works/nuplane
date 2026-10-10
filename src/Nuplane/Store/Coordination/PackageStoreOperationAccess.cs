@@ -65,6 +65,26 @@ internal static class PackageStoreOperationAccess
         return state.WithValidatedPackageDirectoryOrMissing(borrow, installPath, callback);
     }
 
+    internal static TResult WithValidatedPackageArchive<TResult>(
+        PackageStoreOperationBorrow borrow,
+        string installPath,
+        Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle, string, PhysicalStoreFileHandle, TResult> callback)
+    {
+        ArgumentNullException.ThrowIfNull(borrow);
+        ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+        ArgumentNullException.ThrowIfNull(callback);
+        _ = GetOwner(borrow);
+        if (borrow.Control is not PackageStoreOperationState state)
+        {
+            throw new PackageStoreAdmissionException(
+                PackageStoreAdmissionReason.UnsupportedParticipant,
+                "The admitted operation cannot expose a held package archive for scoped reads.",
+                borrow.Root);
+        }
+
+        return state.WithValidatedPackageArchive(borrow, installPath, callback);
+    }
+
     internal static PackageStoreOperationOwner GetOwner(PackageStoreOperationBorrow borrow)
     {
         ArgumentNullException.ThrowIfNull(borrow);

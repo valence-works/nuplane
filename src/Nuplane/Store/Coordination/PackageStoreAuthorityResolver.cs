@@ -206,6 +206,7 @@ internal sealed class PackageStoreAuthorityResolver
             var frames = new List<ComponentFrame> { new(path.Components) };
             PhysicalStoreFileHandle? finalFile = null;
             PhysicalStoreDirectoryHandle? finalFileParent = null;
+            string? finalFileName = null;
             var prospectiveMissingSuffix = false;
 
             while (frames.Count > 0)
@@ -326,6 +327,7 @@ internal sealed class PackageStoreAuthorityResolver
                     state.RecordFileEdge(current, component, file, entry.Identity);
                     finalFile = file;
                     finalFileParent = current;
+                    finalFileName = component;
                     continue;
                 }
 
@@ -370,6 +372,8 @@ internal sealed class PackageStoreAuthorityResolver
                 transferredHandles,
                 allowMissingDirectoryRetry => state.Revalidate(finalTarget, target, finalFileParent,
                     allowMissingDirectoryRetry),
+                targetParent: finalFileParent,
+                targetName: finalFileName,
                 isProspectiveConfiguredRoot: prospectiveMissingSuffix &&
                     target == PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix,
                 isProspectiveMissingSuffix: prospectiveMissingSuffix,

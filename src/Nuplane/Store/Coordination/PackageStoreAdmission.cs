@@ -408,7 +408,8 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
     }
 
     private sealed class AdmittedPathValidator : IPackageStoreOperationPathValidator,
-        IPackageStoreOperationPackageDirectoryValidator
+        IPackageStoreOperationPackageDirectoryValidator,
+        IPackageStoreOperationPackageArchiveValidator
     {
         private readonly IPhysicalStoreFileSystem _files;
         private readonly PackageStoreAuthorityResolver _resolver;
@@ -500,6 +501,53 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
             {
                 // Preserve a refused result if the retained authority/path evidence changed while
                 // a callback was failing; otherwise propagate its original read/parse failure.
+                resolved.Revalidate();
+                throw;
+            }
+            resolved.Revalidate();
+            return result;
+        }
+
+        public TResult WithValidatedPackageArchive<TResult>(
+            string installPath,
+            Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle, string, PhysicalStoreFileHandle, TResult> callback)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+            ArgumentNullException.ThrowIfNull(callback);
+            AdmittedPathIdentity? expectedPath = null;
+            if (_pathIdentities is not null)
+            {
+                if (!_pathIdentities.TryGetValue(installPath, out var admittedPath))
+                    throw Refusal("The archive path is absent from this operation's admitted path union.", _root);
+                expectedPath = admittedPath;
+            }
+
+            if (expectedPath is { TargetKind: not PhysicalStorePathTarget.ArchiveFile })
+            {
+                throw new PackageStoreAdmissionException(
+                    PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "Scoped archive reads require the exact admitted archive file.",
+                    _root);
+            }
+
+            var currentLedger = _ledgerObservation();
+            using var resolved = _resolver.Resolve(installPath, PhysicalStorePathTarget.ArchiveFile, _root);
+            ValidateResolvedInstallPath(resolved, PhysicalStorePathTarget.ArchiveFile, expectedPath, currentLedger);
+            resolved.Revalidate();
+
+            var parent = resolved.TargetParent
+                ?? throw Refusal("The admitted archive has no retained native parent directory.", _root);
+            var name = resolved.TargetName
+                ?? throw Refusal("The admitted archive has no retained native basename.", _root);
+            var file = resolved.Target as PhysicalStoreFileHandle
+                ?? throw Refusal("The admitted archive target is not a held file.", _root);
+            TResult result;
+            try
+            {
+                result = callback(_files, parent, name, file);
+            }
+            catch
+            {
                 resolved.Revalidate();
                 throw;
             }

@@ -26,6 +26,8 @@ internal sealed class ResolvedPackageStorePath : IDisposable
         PhysicalFileIdentity? membershipLedgerIdentity,
         IReadOnlyList<PhysicalStoreHandle> ownedHandles,
         Action<bool> revalidate,
+        PhysicalStoreDirectoryHandle? targetParent = null,
+        string? targetName = null,
         bool isProspectiveConfiguredRoot = false,
         bool isProspectiveMissingSuffix = false,
         bool isRetainedGraphUseRoot = false)
@@ -42,8 +44,14 @@ internal sealed class ResolvedPackageStorePath : IDisposable
             throw new ArgumentException("A prospective directory target requires a held existing parent.", nameof(isProspectiveMissingSuffix));
         if (isProspectiveConfiguredRoot && !isProspectiveMissingSuffix)
             throw new ArgumentException("A prospective configured root must retain a missing-suffix observation.", nameof(isProspectiveConfiguredRoot));
+        if ((target is PhysicalStoreFileHandle) != (targetParent is not null && targetName is not null))
+            throw new ArgumentException("A held file target must retain its exact held parent and child name.", nameof(targetParent));
+        if (targetName is not null)
+            PhysicalStoreNames.ValidateSingleComponent(targetName);
 
         Target = target;
+        TargetParent = targetParent;
+        TargetName = targetName;
         AuthorityRoot = authorityRoot;
         RootIdentity = rootIdentity;
         MembershipCandidate = membershipCandidate;
@@ -57,6 +65,12 @@ internal sealed class ResolvedPackageStorePath : IDisposable
 
     /// <summary>Gets the held final target, or the nearest existing parent for a permitted missing suffix.</summary>
     internal PhysicalStoreHandle Target { get; }
+
+    /// <summary>Gets the held parent edge for a final archive-file target.</summary>
+    internal PhysicalStoreDirectoryHandle? TargetParent { get; }
+
+    /// <summary>Gets the exact final child name for a final archive-file target.</summary>
+    internal string? TargetName { get; }
 
     /// <summary>Gets the held authority-root directory, when one was positively observed.</summary>
     internal PhysicalStoreDirectoryHandle? AuthorityRoot { get; }

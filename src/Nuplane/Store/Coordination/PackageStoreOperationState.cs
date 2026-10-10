@@ -197,6 +197,33 @@ internal sealed class PackageStoreOperationState : IPackageStoreOperationOwnerCo
         }
     }
 
+    internal TResult WithValidatedPackageArchive<TResult>(
+        PackageStoreOperationBorrow borrow,
+        string installPath,
+        Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle, string, PhysicalStoreFileHandle, TResult> callback)
+    {
+        ArgumentNullException.ThrowIfNull(borrow);
+        ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+        ArgumentNullException.ThrowIfNull(callback);
+        BeginValidation(borrow, installPath);
+        try
+        {
+            if (_pathValidator is not IPackageStoreOperationPackageArchiveValidator archiveValidator)
+            {
+                throw new PackageStoreAdmissionException(
+                    PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "This admitted operation cannot expose a held package archive for scoped reads.",
+                    _root);
+            }
+
+            return archiveValidator.WithValidatedPackageArchive(installPath, callback);
+        }
+        finally
+        {
+            EndValidation();
+        }
+    }
+
     internal async Task<TResult> WithValidatedRootAsync<TResult>(
         PackageStoreOperationBorrow borrow,
         Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle, CancellationToken, Task<TResult>> callback,
