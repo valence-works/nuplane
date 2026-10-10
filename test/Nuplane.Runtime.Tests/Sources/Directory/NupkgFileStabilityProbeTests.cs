@@ -204,7 +204,7 @@ public sealed class NupkgFileStabilityProbeTests
                         exclusiveWriterFailure = exception;
                     }
 
-                    // The metadata-only pin permits this writer, but the writer's read-only share
+                    // The retained read-access pin permits this writer, but its read-only share
                     // mask denies the next data-read sample until the handle is closed.
                     writer = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.Read);
                     writer.SetLength(96);

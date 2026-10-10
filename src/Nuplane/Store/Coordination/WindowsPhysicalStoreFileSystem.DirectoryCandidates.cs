@@ -219,13 +219,13 @@ internal sealed partial class WindowsPhysicalStoreFileSystem
         SafeFileHandle? opened = null;
         try
         {
-            // The pin holds identity/profile stable across stability-probe awaits without granting
-            // ReadData. Omitting FILE_SHARE_DELETE blocks rename/unlink for the retained window;
-            // ShareRead|ShareWrite still admits cooperating metadata and data writers.
+            // Attribute-only access does not participate in Windows data/delete share checks.
+            // Retain ReadData without reading bytes so omission of FILE_SHARE_DELETE prevents
+            // rename/unlink. ShareRead|ShareWrite still permits writers that share read access.
             opened = WindowsNative.OpenRelative(
                 parentLease.DangerousHandle,
                 singleName,
-                WindowsNative.FileReadAttributes | WindowsNative.Synchronize,
+                WindowsNative.FileReadData | WindowsNative.FileReadAttributes | WindowsNative.Synchronize,
                 WindowsNative.FileOpen,
                 WindowsNative.FileNonDirectoryFile,
                 shareAccess: WindowsNative.ShareRead | WindowsNative.ShareWrite);
