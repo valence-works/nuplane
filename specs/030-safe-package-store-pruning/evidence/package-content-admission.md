@@ -1,6 +1,6 @@
 # Native-admitted PackageContent reads
 
-This bounded increment preserves the two-argument directory/archive API for positively Unenrolled paths and adds explicit operation-borrow and graph-use-lease overloads. It does not complete the all-driver before-read gate or authorize recursive package deletion. Checklist remains 37/128 pending platform and complete acceptance review.
+This bounded increment preserves the two-argument directory/archive API for positively Unenrolled paths and adds explicit operation-borrow and graph-use-lease overloads. T083 is accepted after the exact-head platform qualification below; the checklist is 38/128. This does not complete T101 or the all-driver before-read gate, or authorize recursive package deletion.
 
 Legacy reads classify authority through native metadata before payload access. Enrolled, Incomplete or uncertain paths return null. A live borrow admits the exact directory or archive through the original counted operation owner; an exact graph-use read pin protects an extracted install represented by the immutable graph. Graph leases do not authorize arbitrary `.nupkg` artifacts. Archive reads retain the native parent, canonical basename and exact file handle. Missing content returns null; changed admitted targets and invalid authority raise typed refusal. Recoverable content I/O and invalid ZIP content return null consistently.
 
@@ -23,6 +23,12 @@ All six root gates passed with unchanged 956-input manifests, SHA-256 `dbced2d71
 
 Root checkpoint SHA-256: `2fbce936bca8ae7eef5b9cf32c864ae2bf1a2c38f9b00f81975a3aeeb216eef4`. The changed Bash blocks parse. Exact-case accounting accepts the real 10/15 TRXs and rejects empty, missing, duplicate, extra, skipped and failed controls for each gate. CI requires 10 Runtime cases and 15 Store cases on Unix / 13 on Windows. Only the two explicitly Unix-only physical rename proofs are excluded from Windows; the portable changed-native-edge causal test remains required. Selecting 13 rows from the macOS TRX checks accounting only and is not Windows execution.
 
+## Hosted qualification
+
+[Validate 38031063369](https://github.com/valence-works/nuplane/actions/runs/38031063369) completed successfully at `057915747290af6351b83ffcaf599d37ad64f9ec`. All six jobs passed, including Windows x64, macOS ARM64, Linux x64 and Linux ARM64 native lanes. Each platform executed all 10 compatible content cases and all required admitted content cases (Unix15 / Windows13) with no skips. Root verified 40 exact required platform qualifications, all six full-solution suite identities/counts and both 11-case Linux ext4 lanes from frozen terminal raw logs. Full solution: **2,106 passed / 0 failed / 42 explicit platform skips**. Those skips remain skips; they are not included in the required no-skip content gates.
+
+Qualification SHA-256: `a36c23c1e52702cf4fe3e5e3d9a61f1d4538a3a95073b4f0f32e6c21d9740246`. Terminal log SHA-256: `a6715bd6f37a2cc2079ed16384e46cf2ba6191508a2d9c0c20cf151126baf29a`.
+
 ## Remaining acceptance
 
-Actual Windows/Linux execution for this candidate is pending. T083/T101 and the complete before-delete gate are not accepted by these local results. The independently reviewed recovery coordinator still requires a terminal-marker byte-replay correction, caller integration and process-restart/platform proof. Remaining runtime publication, historical migration, startup-selector and package-access drivers, public manual maintenance, real pruning and recovery, stable upstream releases and final Foundation adoption/e2e/main proof remain required. PR112 is not merge/release ready.
+T101 and the complete before-delete gate remain open. The separate recovery coordinator's terminal-marker byte-replay correction has clean bounded review, but still requires integrated platform qualification, caller integration and process-restart proof. Remaining runtime publication, historical migration, startup-selector and package-access drivers, public manual maintenance, real pruning and recovery, stable upstream releases and final Foundation adoption/e2e/main proof remain required. PR112 is not merge/release ready.

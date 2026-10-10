@@ -554,7 +554,7 @@ jobs:
           set -euo pipefail
           dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
             --configuration Release --framework net10.0 \
-            --filter "FullyQualifiedName~PackageGraphUseRecordStoreTests|FullyQualifiedName~PackageGraphUseInstallBindingTests|FullyQualifiedName~PackageGraphUseLeaseAcquisitionTests" \
+            --filter "(FullyQualifiedName~PackageGraphUseRecordStoreTests&FullyQualifiedName!~RecoverAsync_)|FullyQualifiedName~PackageGraphUseInstallBindingTests|FullyQualifiedName~PackageGraphUseLeaseAcquisitionTests" \
             --logger "trx;LogFileName=graph-use-publication.trx" \
             --results-directory "$RUNNER_TEMP/graph-use-publication"
           python3 - "$RUNNER_TEMP/graph-use-publication/graph-use-publication.trx" <<'PYCODE'
@@ -604,6 +604,19 @@ jobs:
               raise SystemExit('graph-use-publication: every required scenario must pass without skips.')
           print('Qualified all 34 native graph-use publication, inspection, binding and acquisition cases with no skips.')
           PYCODE
+
+      - name: Qualify graph-use control artifact recovery phases
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~PackageGraphUseRecordStoreTests.RecoverAsync_" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=graph-use-recovery.trx" \
+            --results-directory "$RUNNER_TEMP/graph-use-recovery"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/graph-use-recovery/graph-use-recovery.trx" \
+            build/test-cases/graph-use-recovery.json
 
       - name: Qualify retained Loading across a newer committed generation
         shell: bash
