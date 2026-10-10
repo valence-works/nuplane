@@ -78,21 +78,22 @@ when adding fields or touching those files.
 Use file-scoped namespaces (`namespace X;`). The namespace must mirror the folder path:
 
 ```
-Nuplane.Abstractions          — Public contracts, DTOs, enums shared across packages
-Nuplane.Runtime               — Core runtime logic
-Nuplane.Runtime.Configuration — Options classes, validators
-Nuplane.Runtime.Reconciliation        — Reconciliation engine orchestration
-Nuplane.Runtime.Reconciliation.Models — Result/model records (data-only types)
-Nuplane.Runtime.Reconciliation.FeedPolicy — Feed trust/resolution policy evaluators
-Nuplane.Runtime.Reconciliation.Middleware — Pipeline middleware stages
-Nuplane.Runtime.Observability  — Logging, metrics, telemetry
-Nuplane.Runtime.Health         — Health evaluation
-Nuplane.Runtime.Events         — Observer event dispatching
-Nuplane.Runtime.Sources        — Desired-state source abstractions
-Nuplane.Store                  — State persistence, transactions, activation
-Nuplane.Loading                — Assembly loading, unloading, ALCs
-Nuplane.Loading.Abstractions   — Loading contracts
-Nuplane                        — Consumer-facing DI registrations & hosted services
+Nuplane.Abstractions                 — Public contracts, DTOs, enums shared across packages
+Nuplane                              — Consumer-facing DI registrations, restore, and package content APIs
+Nuplane.Reconciliation               — Reconciliation engine orchestration
+Nuplane.Reconciliation.Configuration — Reconciliation options classes, validators
+Nuplane.Reconciliation.Models        — Result/model records (data-only types)
+Nuplane.Reconciliation.Middleware    — Pipeline middleware stages
+Nuplane.Feeds                        — Feed access, configuration, credentials, resolution policy
+Nuplane.Store                        — State persistence, transactions, activation, cleanup
+Nuplane.Sources                      — Desired-state source abstractions
+Nuplane.Hosting                      — Hosted services and startup recovery
+Nuplane.Observability                — Logging, metrics, telemetry
+Nuplane.Health                       — Health evaluation
+Nuplane.Events                       — Observer event dispatching
+Nuplane.Versioning                   — Shared version parsing and comparison
+Nuplane.Loading                      — Assembly loading, unloading, ALCs
+Nuplane.Loading.Abstractions         — Loading contracts
 ```
 
 ### Using Directives Order
@@ -197,9 +198,12 @@ This allows:
 
 ```
 test/
-  Nuplane.Runtime.Tests/       — Unit tests for Runtime
-  Nuplane.Store.Tests/          — Unit tests for Store
-  Nuplane.Integration.Tests/    — Integration / contract tests
+  Nuplane.Runtime.Tests/            — Unit tests for the core Nuplane package
+  Nuplane.Store.Tests/              — Unit tests for Store
+  Nuplane.NuGet.Tests/              — Unit tests for NuGet feed integration
+  Nuplane.Sources.Directory.Tests/  — Unit tests for the directory source
+  Nuplane.Loading.Tests/            — Unit tests for Loading (fixtures in Nuplane.Loading.Tests.Fixtures.*)
+  Nuplane.Integration.Tests/        — Integration / contract tests
 ```
 
 ### Test Naming
@@ -349,25 +353,28 @@ private static partial void CycleStarted(ILogger logger, string correlationId, i
 
 ```
 Nuplane (consumer package)
-  └── Nuplane.Runtime
-        ├── Nuplane.Abstractions
-        ├── Nuplane.Store
-        └── Nuplane.Loading (optional)
-              └── Nuplane.Loading.Abstractions
+  └── Nuplane.Abstractions
 
-Nuplane.Sources.Directory.Hosting (builder integration)
-  ├── Nuplane
-  └── Nuplane.Sources.Directory
-        └── Nuplane.Runtime
+Nuplane.Sources.Directory
+  └── Nuplane
 
-Nuplane.Loading.Hosting (builder integration)
+Nuplane.Loading (optional)
   ├── Nuplane
-  └── Nuplane.Loading
+  └── Nuplane.Loading.Abstractions
+        └── Nuplane.Abstractions
+
+Nuplane.Admin (optional)
+  └── Nuplane
+
+Nuplane.Admin.Api (ASP.NET Core)
+  └── Nuplane.Admin
+
+Nuplane.Loading.Api (ASP.NET Core)
+  └── Nuplane.Loading.Abstractions
 ```
 
-- **Nuplane.Runtime** must not reference `Microsoft.Extensions.Hosting.Abstractions` — keep it dependency-lean.
 - **Nuplane** (consumer package) owns core composition, feed abstractions, and generic runtime registration. It does NOT own module-specific builder conveniences, options, hosted services, or registration helpers.
-- **Module hosting packages** (`*.Hosting`) own module-specific builder extensions and configuration-driven setup translation.
+- **Module packages** own their module-specific builder extensions (`Builder/`) and configuration-driven setup translation (`Configuration/`). There are no separate `*.Hosting` packages.
 
 ### Multi-Targeting
 
@@ -403,24 +410,24 @@ Each optional or source-specific capability (e.g., directory-source, loading) is
 |---------|-------|
 | Options classes | Module implementation package (`Nuplane.Loading`, `Nuplane.Sources.Directory`) |
 | Registration services | Module implementation package |
-| Hosted services | Module implementation or hosting package |
+| Hosted services | Module implementation package (`Hosting/`) |
 | Direct `IServiceCollection` extensions | Module implementation package |
-| Builder extensions (`NuplaneBuilder`) | Module hosting/builder integration package (`*.Hosting`) |
-| Configuration-driven setup translation | Module hosting/builder integration package |
+| Builder extensions (`NuplaneBuilder`) | Module implementation package (`Builder/`) |
+| Configuration-driven setup translation | Module implementation package (`Configuration/`) |
 
 ### Registration Surface Rules
 
 - Every module MUST expose at least one `IServiceCollection.Add{Module}(...)` extension method for direct registration.
-- Module-specific `NuplaneBuilder` extensions (fluent builder APIs) live in the module's hosting package.
+- Module-specific `NuplaneBuilder` extensions (fluent builder APIs) live in the module package's `Builder/` folder.
 - Duplicate registration follows **last-registration-wins** semantics using `TryAdd` / replace patterns.
 - Core `Nuplane` retains only generic runtime composition, feed abstractions, and URI-based feed registration.
 
 ### Builder Integration Pattern
 
-Module hosting packages provide builder extensions that delegate to module-owned registration services:
+Module builder extensions delegate to module-owned registration services:
 
 ```csharp
-// Nuplane.Sources.Directory.Hosting
+// Nuplane.Sources.Directory.Builder
 public static NuplaneBuilder AddDirectoryFeed(
     this NuplaneBuilder builder, string name, string path,
     Action<NuplaneDirectoryFeedConfiguration>? configure = null)
@@ -441,17 +448,16 @@ services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
 
 ### Adding a New Module
 
-1. Create the implementation package with options, registration services, and direct `IServiceCollection` extension.
-2. Create a `*.Hosting` package for builder extensions and configuration-driven setup translation.
-3. Add `InternalsVisibleTo` from relevant packages to the hosting package.
-4. Add tests in the module's test project and integration test project.
-5. Do NOT add module-specific code to the core `Nuplane` package.
+1. Create the module package with options, registration services, and direct `IServiceCollection` extension.
+2. Put builder extensions in its `Builder/` folder and configuration-driven setup translation in its `Configuration/` folder.
+3. Add tests in the module's test project and integration test project.
+4. Do NOT add module-specific code to the core `Nuplane` package.
 
 ---
 
 ## Version Parsing
 
-Use the shared `VersionKey` and `NuGetVersionRangeParser` types from `Nuplane.Runtime.Versioning` for all version comparison and selection logic.
+Use the shared `VersionKey` and `NuGetVersionRangeParser` types from `Nuplane.Versioning` for all version comparison and selection logic.
 
 - **`VersionKey`** — An `internal readonly record struct` that parses a semver string into `(Major, Minor, Patch, Suffix)` components and implements `IComparable<VersionKey>`. Use `VersionKey.Create(string)` to parse, then compare or sort:
 
