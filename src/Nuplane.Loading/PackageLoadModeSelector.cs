@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Loading;
 
@@ -18,6 +19,16 @@ internal sealed class PackageLoadModeSelector
     {
         _advisors = advisors?.ToArray() ?? [];
         _logger = logger ?? NullLogger<PackageLoadModeSelector>.Instance;
+    }
+
+    internal void ValidateScopedParticipants()
+    {
+        if (_advisors.Any(static advisor =>
+                advisor is not IScopedPackageLoadModeAdvisor and not IPackagePathIndependentLoadModeAdvisor))
+        {
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "Enrolled package loading requires explicitly scoped or path-independent load-mode advisors.");
+        }
     }
 
     /// <summary>
@@ -41,7 +52,8 @@ internal sealed class PackageLoadModeSelector
         IReadOnlyList<ResolvedPackage> packages,
         LoadingOptions options,
         string graphKey,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<PackageGraphUseLease>? graphUseLeases = null)
     {
         ArgumentNullException.ThrowIfNull(packages);
         ArgumentNullException.ThrowIfNull(options);
@@ -62,7 +74,10 @@ internal sealed class PackageLoadModeSelector
                     .ToArray(),
                 options.LoadModeSelectionPolicy,
                 options.DefaultLoadMode,
-                packageOverrides);
+                packageOverrides)
+            {
+                GraphUseLeases = graphUseLeases ?? Array.Empty<PackageGraphUseLease>()
+            };
 
             foreach (var advisor in _advisors.OrderBy(static advisor => advisor.Name, StringComparer.OrdinalIgnoreCase))
             {

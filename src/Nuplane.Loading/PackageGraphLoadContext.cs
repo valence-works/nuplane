@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
+using Nuplane.Abstractions.PackageStoreProtection;
 using NuGet.RuntimeModel;
 
 namespace Nuplane.Loading;
@@ -24,13 +25,25 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
     {
     }
 
+    internal PackageGraphLoadContext(
+        string contextName,
+        IReadOnlyList<string> mainAssemblyPaths,
+        IReadOnlyList<string> packageInstallPaths,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        SharedAssemblyPolicyMatcher matcher,
+        PackageGraphUseLeaseOwner? graphLeaseOwner)
+        : this(contextName, mainAssemblyPaths, packageInstallPaths, sharedPolicy, matcher, isCollectible: true, graphLeaseOwner: graphLeaseOwner)
+    {
+    }
+
     protected PackageGraphLoadContext(
         string contextName,
         IReadOnlyList<string> mainAssemblyPaths,
         IReadOnlyList<string> packageInstallPaths,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         SharedAssemblyPolicyMatcher matcher,
-        bool isCollectible)
+        bool isCollectible,
+        PackageGraphUseLeaseOwner? graphLeaseOwner = null)
         : base(contextName, isCollectible)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(contextName);
@@ -39,6 +52,7 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
         _sharedPolicy = sharedPolicy ?? throw new ArgumentNullException(nameof(sharedPolicy));
         _matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
         _packageInstallPaths = packageInstallPaths ?? throw new ArgumentNullException(nameof(packageInstallPaths));
+        graphLeaseOwner?.TransferToLifetime(this, isCollectible);
         _dependencyResolvers = mainAssemblyPaths.Select(static path => new AssemblyDependencyResolver(path)).ToArray();
         assemblyPathsByName = mainAssemblyPaths
             .SelectMany(path => Directory.EnumerateFiles(Path.GetDirectoryName(path)!, "*.dll", SearchOption.AllDirectories))

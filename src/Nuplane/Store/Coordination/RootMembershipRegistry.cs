@@ -28,6 +28,8 @@ internal sealed partial class RootMembershipRegistry
     private readonly RootMembershipPayloadSerializer _ledgerSerializer = new();
     private readonly PhysicalStoreLock _locks;
 
+    internal IPhysicalStoreFileSystem Files => _files;
+
     internal RootMembershipRegistry(IPhysicalStoreFileSystem files, IStoreStateSerializer stateSerializer)
     {
         ArgumentNullException.ThrowIfNull(files);

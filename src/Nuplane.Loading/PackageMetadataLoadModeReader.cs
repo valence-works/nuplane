@@ -22,7 +22,24 @@ internal sealed class PackageMetadataLoadModeReader
 
     public PackageMetadataLoadModeReadResult Read(string packageId, string version, string installPath)
     {
-        var result = _reader.Read(packageId, version, installPath);
+        return Convert(_reader.Read(packageId, version, installPath), packageId, version);
+    }
+
+    public PackageMetadataLoadModeReadResult Read(
+        string packageId,
+        string version,
+        string installPath,
+        PackageGraphUseLease lease)
+    {
+        ArgumentNullException.ThrowIfNull(lease);
+        return Convert(_reader.ReadForGraphUseLease(packageId, version, installPath, lease), packageId, version);
+    }
+
+    private static PackageMetadataLoadModeReadResult Convert(
+        NuplanePackageMetadataReadResult result,
+        string packageId,
+        string version)
+    {
         if (result.AdmissionRefusalReason is { } reason)
         {
             throw new PackageStoreAdmissionException(reason,

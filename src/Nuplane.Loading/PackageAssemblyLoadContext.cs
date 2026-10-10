@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.Loader;
+using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Loading;
 
@@ -24,13 +25,25 @@ public sealed class PackageAssemblyLoadContext : AssemblyLoadContext, ISharedAss
         string packageMainAssemblyPath,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         SharedAssemblyPolicyMatcher matcher)
+        : this(packageMainAssemblyPath, sharedPolicy, matcher, graphLeaseOwner: null)
+    {
+    }
+
+    internal PackageAssemblyLoadContext(
+        string packageMainAssemblyPath,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        SharedAssemblyPolicyMatcher matcher,
+        PackageGraphUseLeaseOwner? graphLeaseOwner)
         : base($"nuplane:{Path.GetFileNameWithoutExtension(packageMainAssemblyPath)}", isCollectible: true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packageMainAssemblyPath);
+        ArgumentNullException.ThrowIfNull(sharedPolicy);
+        ArgumentNullException.ThrowIfNull(matcher);
 
+        graphLeaseOwner?.TransferToLifetime(this, isCollectible: true);
         _dependencyResolver = new(packageMainAssemblyPath);
-        _sharedPolicy = sharedPolicy ?? throw new ArgumentNullException(nameof(sharedPolicy));
-        _matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
+        _sharedPolicy = sharedPolicy;
+        _matcher = matcher;
     }
 
     /// <inheritdoc />

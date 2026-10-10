@@ -6,9 +6,9 @@ namespace Nuplane.Store.Coordination;
 
 /// <summary>Owns a metadata-only configured-path resolution and its retained native evidence.</summary>
 /// <remarks>
-/// A null authority, root identity, and membership candidate means only that resolution positively
-/// observed no reserved authority on the resolved namespace. A permitted missing-suffix result may also retain
-/// a verified absent child edge below its nearest existing parent. This result is not an admission capability.
+/// A null authority and root identity means resolution positively observed no reserved authority on the
+/// resolved namespace. A retained graph-use result may carry a physical root bound by an immutable lease
+/// without carrying a fresh membership candidate. This result is not an admission capability.
 /// </remarks>
 internal sealed class ResolvedPackageStorePath : IDisposable
 {
@@ -26,13 +26,16 @@ internal sealed class ResolvedPackageStorePath : IDisposable
         IReadOnlyList<PhysicalStoreHandle> ownedHandles,
         Action revalidate,
         bool isProspectiveConfiguredRoot = false,
-        bool isProspectiveMissingSuffix = false)
+        bool isProspectiveMissingSuffix = false,
+        bool isRetainedGraphUseRoot = false)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(ownedHandles);
         ArgumentNullException.ThrowIfNull(revalidate);
-        if ((authorityRoot is null) != (rootIdentity is null) || (rootIdentity is null) != (membershipCandidate is null) ||
-            (membershipCandidate is null) != (membershipLedgerIdentity is null))
+        if ((authorityRoot is null) != (rootIdentity is null) ||
+            (membershipCandidate is null) != (membershipLedgerIdentity is null) ||
+            (membershipCandidate is null && rootIdentity is not null && !isRetainedGraphUseRoot) ||
+            (isRetainedGraphUseRoot && (authorityRoot is null || rootIdentity is null || membershipCandidate is not null)))
             throw new ArgumentException("Authority handle, root identity, and membership candidate must be present together.", nameof(authorityRoot));
         if (isProspectiveMissingSuffix && (rootIdentity is not null || target is not PhysicalStoreDirectoryHandle))
             throw new ArgumentException("A prospective directory target requires an absent authority and a held existing parent.", nameof(isProspectiveMissingSuffix));
@@ -46,6 +49,7 @@ internal sealed class ResolvedPackageStorePath : IDisposable
         MembershipLedgerIdentity = membershipLedgerIdentity;
         IsProspectiveConfiguredRoot = isProspectiveConfiguredRoot;
         IsProspectiveMissingSuffix = isProspectiveMissingSuffix;
+        IsRetainedGraphUseRoot = isRetainedGraphUseRoot;
         _ownedHandles = ownedHandles.ToArray();
         _revalidate = revalidate;
     }
@@ -70,6 +74,9 @@ internal sealed class ResolvedPackageStorePath : IDisposable
 
     /// <summary>Whether resolution ended at a verified absent suffix below its held existing parent.</summary>
     internal bool IsProspectiveMissingSuffix { get; }
+
+    /// <summary>Whether the physical root is supplied by an already-live graph-use lease rather than a fresh ledger read.</summary>
+    internal bool IsRetainedGraphUseRoot { get; }
 
     /// <summary>Rechecks the retained namespace, edge, alias, authority, and target observations.</summary>
     internal void Revalidate()

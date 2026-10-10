@@ -8,6 +8,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Store.Coordination;
 
 namespace Nuplane.Loading;
 
@@ -16,7 +18,7 @@ namespace Nuplane.Loading;
 /// and providing context removal for unloading. Resolves the main assembly within
 /// each package's install directory.
 /// </summary>
-internal sealed class PackageLoader : IPackageLoader
+internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
 {
     private readonly SharedAssemblyPolicyMatcher _matcher;
     private readonly HostIntegratedAssemblyResolutionCatalog _hostIntegratedResolutionCatalog;
@@ -174,6 +176,137 @@ internal sealed class PackageLoader : IPackageLoader
         return new(loaded, failed);
     }
 
+    Task<PackageLoadResult> IScopedPackageLoader.EnsureGraphLoadedAsync(
+        IReadOnlyList<ScopedResolvedPackageGraph> packageGraphs,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        CancellationToken cancellationToken)
+        => EnsureGraphLoadedWithLeasesAsync(packageGraphs, sharedPolicy, cancellationToken);
+
+    private async Task<PackageLoadResult> EnsureGraphLoadedWithLeasesAsync(
+        IReadOnlyList<ScopedResolvedPackageGraph> packageGraphs,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(packageGraphs);
+        ArgumentNullException.ThrowIfNull(sharedPolicy);
+
+        // Freeze caller-owned collections before any callback can await or mutate them.
+        var scopedGraphs = packageGraphs.ToArray();
+        var copiedSharedPolicy = sharedPolicy.ToArray();
+        var owners = scopedGraphs.Where(static graph => graph is not null)
+            .Select(static graph => graph.LeaseOwner).Distinct().ToArray();
+
+        var readPins = new List<IDisposable>();
+        var loaded = new List<PackageLoadSession>();
+        var failed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        Exception? operationFailure = null;
+        try
+        {
+            if (owners.Length != scopedGraphs.Length)
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                    "Each scoped resolved graph must have a distinct published lease owner.");
+
+            _loadModeSelector.ValidateScopedParticipants();
+            if (_activationGates.Any(static gate =>
+                    gate is not IScopedPackageActivationGate and not IPackagePathIndependentActivationGate))
+            {
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "Enrolled package loading requires explicitly scoped or path-independent activation gates.");
+            }
+
+            // Validate every immutable envelope before the first package read or user callback.
+            foreach (var packageGraph in scopedGraphs)
+                ScopedResolvedPackageGraphValidator.Validate(packageGraph);
+
+            // Hold counted exact-path pins across metadata, gates, package enumeration, and transfer
+            // into the actual load context. No root operation borrow is retained or reacquired here.
+            foreach (var packageGraph in scopedGraphs)
+            {
+                var lease = packageGraph.LeaseOwner.Lease;
+                foreach (var package in packageGraph.Packages)
+                    readPins.Add(lease.AcquireRead(package.InstallPath));
+            }
+
+            foreach (var packageGraph in scopedGraphs)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var packages = packageGraph.Packages;
+                var owner = packageGraph.LeaseOwner;
+                var graphLease = owner.Lease;
+                var graphKey = BuildGraphKey(packages);
+                var graphLeases = new[] { graphLease };
+                var graphDecision = await _loadModeSelector.SelectGraphAsync(
+                    packages, _options, graphKey, cancellationToken, graphLeases).ConfigureAwait(false);
+                var selections = graphDecision.Selections;
+                var usesPerPackageContexts = UsesPerPackageContexts(packages, selections);
+                var graphLoadMode = ResolveGraphLoadMode(selections);
+
+                var activationBlockMessage = await EvaluateActivationGatesAsync(
+                    packages,
+                    graphKey,
+                    graphLoadMode,
+                    usesPerPackageContexts,
+                    cancellationToken,
+                    graphLeases).ConfigureAwait(false);
+
+                if (activationBlockMessage is not null)
+                {
+                    RecordGraphFailure(
+                        packages,
+                        graphKey,
+                        graphLoadMode,
+                        usesPerPackageContexts,
+                        activationBlockMessage,
+                        failed,
+                        graphDecision.DiagnosticsByPackageKey);
+                    continue;
+                }
+
+                if (usesPerPackageContexts)
+                {
+                    EnsurePackagesLoaded(packages, copiedSharedPolicy, cancellationToken, loaded, failed,
+                        graphDecision.DiagnosticsByPackageKey, owner);
+                    continue;
+                }
+
+                EnsureGraphLoaded(packages, selections, copiedSharedPolicy, loaded, failed,
+                    graphDecision.DiagnosticsByPackageKey, owner);
+            }
+
+            return new(loaded, failed);
+        }
+        catch (Exception exception)
+        {
+            operationFailure = exception;
+            throw;
+        }
+        finally
+        {
+            var cleanupFailures = new List<Exception>();
+            for (var index = readPins.Count - 1; index >= 0; index--)
+            {
+                try { readPins[index].Dispose(); }
+                catch (Exception exception) { cleanupFailures.Add(exception); }
+            }
+
+            // Transferred owners ignore caller disposal; blocked, inert, canceled, and failed-before-context
+            // owners release only after all counted pre-context reads have drained.
+            foreach (var owner in owners)
+            {
+                try { await owner.DisposeAsync().ConfigureAwait(false); }
+                catch (Exception exception) { cleanupFailures.Add(exception); }
+            }
+
+            if (cleanupFailures.Count != 0)
+            {
+                if (operationFailure is not null)
+                    cleanupFailures.Insert(0, operationFailure);
+                throw new AggregateException("Scoped graph loading failed and one or more graph-use owners did not drain cleanly.",
+                    cleanupFailures);
+            }
+        }
+    }
+
     // The single definition of the load-path dispatch rule: a single-package, all-collectible graph is loaded
     // through per-package contexts instead of one shared graph context. Both the dispatch itself and the
     // activation-gate pre-check ask this, so they always agree on which path a graph would take.
@@ -197,7 +330,8 @@ internal sealed class PackageLoader : IPackageLoader
         string graphKey,
         PackageLoadMode graphLoadMode,
         bool usesPerPackageContexts,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<PackageGraphUseLease>? graphUseLeases = null)
     {
         // Without a gate there is nothing to decide; an empty graph activates nothing; and a graph
         // generation that is already loaded is not being activated again, so its gates already ran.
@@ -214,7 +348,10 @@ internal sealed class PackageLoader : IPackageLoader
             packageGraph
                 .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
-                .ToArray());
+                .ToArray())
+        {
+            GraphUseLeases = graphUseLeases ?? Array.Empty<PackageGraphUseLease>()
+        };
         var packageKeys = string.Join(", ", context.Packages.Select(static package => BuildKey(package.Id, package.Version)));
 
         // Every gate is consulted even after one blocks, so an operator sees every blocker at once.
@@ -281,7 +418,8 @@ internal sealed class PackageLoader : IPackageLoader
         CancellationToken cancellationToken,
         List<PackageLoadSession> loaded,
         Dictionary<string, string> failed,
-        IReadOnlyDictionary<string, IReadOnlyList<LoadModeDecisionDiagnostic>>? diagnosticsByPackageKey = null)
+        IReadOnlyDictionary<string, IReadOnlyList<LoadModeDecisionDiagnostic>>? diagnosticsByPackageKey = null,
+        PackageGraphUseLeaseOwner? graphLeaseOwner = null)
     {
         foreach (var package in packages)
         {
@@ -290,6 +428,8 @@ internal sealed class PackageLoader : IPackageLoader
             var key = BuildKey(package.Id, package.Version);
             if (TryGetLoadedSession(key, out var existing))
             {
+                if (graphLeaseOwner is not null && _contexts.TryGetValue(key, out var existingContext))
+                    graphLeaseOwner.TransferToLifetime(existingContext, existingContext.IsCollectible);
                 loaded.Add(existing);
                 continue;
             }
@@ -308,7 +448,7 @@ internal sealed class PackageLoader : IPackageLoader
                     continue;
                 }
 
-                var context = new PackageAssemblyLoadContext(mainAssemblyPath, sharedPolicy, _matcher);
+                var context = new PackageAssemblyLoadContext(mainAssemblyPath, sharedPolicy, _matcher, graphLeaseOwner);
                 var assemblyName = AssemblyName.GetAssemblyName(mainAssemblyPath);
                 context.LoadFromAssemblyName(assemblyName);
 
@@ -351,13 +491,22 @@ internal sealed class PackageLoader : IPackageLoader
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         List<PackageLoadSession> loaded,
         Dictionary<string, string> failed,
-        IReadOnlyDictionary<string, IReadOnlyList<LoadModeDecisionDiagnostic>> diagnosticsByPackageKey)
+        IReadOnlyDictionary<string, IReadOnlyList<LoadModeDecisionDiagnostic>> diagnosticsByPackageKey,
+        PackageGraphUseLeaseOwner? graphLeaseOwner = null)
     {
         var graphKey = BuildGraphKey(packages);
         var graphLoadMode = ResolveGraphLoadMode(selections);
 
         if (TryGetLoadedGraphSessions(graphKey, graphLoadMode, out var existingGraphSessions))
         {
+            if (graphLeaseOwner is not null)
+            {
+                var existingContext = existingGraphSessions
+                    .Select(session => _contexts.TryGetValue(BuildKey(session.PackageId, session.Version), out var context) ? context : null)
+                    .FirstOrDefault(static context => context is not null);
+                if (existingContext is not null)
+                    graphLeaseOwner.TransferToLifetime(existingContext, existingContext.IsCollectible);
+            }
             loaded.AddRange(existingGraphSessions);
             return new(loaded, failed);
         }
@@ -399,8 +548,8 @@ internal sealed class PackageLoader : IPackageLoader
             }
 
             context = graphLoadMode == PackageLoadMode.HostIntegrated
-                ? new HostIntegratedPackageGraphLoadContext(graphKey, mainAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher)
-                : new PackageGraphLoadContext(graphKey, mainAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher);
+                ? new HostIntegratedPackageGraphLoadContext(graphKey, mainAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher, graphLeaseOwner)
+                : new PackageGraphLoadContext(graphKey, mainAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher, graphLeaseOwner);
 
             foreach (var mainAssemblyPath in mainAssemblyPaths)
             {

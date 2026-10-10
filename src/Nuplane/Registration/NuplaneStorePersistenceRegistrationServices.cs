@@ -44,6 +44,19 @@ internal static class NuplaneStorePersistenceRegistrationServices
                 sp.GetRequiredService<IStoreStateSerializer>(),
                 feedOptions.PackageInstallRoot);
         });
+        services.AddSingleton<PackageGraphUseLifetimeObserver>(sp =>
+            new PackageGraphUseLifetimeObserver(sp.GetService<TimeProvider>()));
+        services.AddSingleton<IPackageGraphUseLifetimeObserver>(sp =>
+            sp.GetRequiredService<PackageGraphUseLifetimeObserver>());
+        services.AddSingleton<PackageGraphUseLeaseAcquisition>(sp =>
+        {
+            var admission = sp.GetRequiredService<IPackageStoreAdmission>();
+            var registry = admission is PackageStoreAdmission builtIn ? builtIn.Registry : null;
+            return new PackageGraphUseLeaseAcquisition(registry,
+                sp.GetRequiredService<IPackageGraphUseLifetimeObserver>());
+        });
+        services.AddSingleton<IResolvedPackageGraphUseLeaseAcquisition>(sp =>
+            sp.GetRequiredService<PackageGraphUseLeaseAcquisition>());
         services.AddSingleton<StoreLock>();
         services.AddSingleton<IStoreLock>(sp => sp.GetRequiredService<StoreLock>());
     }

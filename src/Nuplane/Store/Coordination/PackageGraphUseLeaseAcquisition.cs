@@ -10,17 +10,16 @@ namespace Nuplane.Store.Coordination;
 /// It does not acquire a root/member lock, deserialize a capability, or perform package payload I/O.
 /// </remarks>
 internal sealed class PackageGraphUseLeaseAcquisition(
-    RootMembershipRegistry registry,
-    IPackageGraphUseLifetimeObserver lifetimeObserver)
+    RootMembershipRegistry? registry,
+    IPackageGraphUseLifetimeObserver lifetimeObserver) : IResolvedPackageGraphUseLeaseAcquisition
 {
-    internal async ValueTask<PackageGraphUseLeaseOwner> AcquireForRootAsync(
+    public async ValueTask<PackageGraphUseLeaseOwner> AcquireForRootAsync(
         PackageStoreOperationBorrow borrow,
         ResolvedPackageGraph graph,
         IReadOnlyList<PackageRequest> requests,
         PackageGraphUseSnapshotState snapshotState,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(lifetimeObserver);
         ArgumentNullException.ThrowIfNull(borrow);
         ArgumentNullException.ThrowIfNull(graph);
@@ -28,6 +27,9 @@ internal sealed class PackageGraphUseLeaseAcquisition(
         if (!Enum.IsDefined(snapshotState))
             throw new ArgumentOutOfRangeException(nameof(snapshotState));
         cancellationToken.ThrowIfCancellationRequested();
+        if (registry is null)
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "This package-store composition does not provide native graph-use publication.", borrow.Root);
         var copiedGraph = graph with
         {
             Roots = graph.Roots.ToArray(),
@@ -46,6 +48,9 @@ internal sealed class PackageGraphUseLeaseAcquisition(
         {
             var prepared = await PackageStoreOperationAccess.WithValidatedRootAsync(borrow, async (files, root, token) =>
             {
+                if (!ReferenceEquals(files, registry.Files))
+                    throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                        "The graph-use acquisition service does not share the admitted root's native filesystem provider.", borrow.Root);
                 using var binding = PackageGraphUseInstallBinding.Observe(files, registry, root, members.Ledger, copiedGraph.Nodes);
                 var paired = PackageGraphUseInstallBinding.CreateActiveCandidate(copiedGraph, copiedRequests, [binding]);
                 var candidate = paired.Candidate;
@@ -60,7 +65,7 @@ internal sealed class PackageGraphUseLeaseAcquisition(
             // The callback's final full-member replay must succeed before any read capability escapes.
             owner = PackageGraphUseLeaseOwnerControl.Create(borrow.Root, prepared.Snapshot, prepared.Paths,
                 publication ?? throw new InvalidOperationException("Graph-use publication did not return native ownership."),
-                lifetimeObserver);
+                lifetimeObserver, registry.Files);
             publication = null;
             cancellationToken.ThrowIfCancellationRequested();
             return owner;

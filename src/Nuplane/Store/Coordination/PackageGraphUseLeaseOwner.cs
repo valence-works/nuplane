@@ -1,4 +1,5 @@
 using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Store.Coordination.PhysicalFiles;
 
 namespace Nuplane.Store.Coordination;
 
@@ -15,6 +16,7 @@ internal sealed class PackageGraphUseLeaseOwnerControl : IPackageGraphUseLeaseOw
     private readonly Dictionary<string, Guid> _nodeByExactPath;
     private readonly IAsyncDisposable _heldOwnership;
     private readonly IPackageGraphUseLifetimeObserver _lifetimeObserver;
+    private readonly IPhysicalStoreFileSystem? _nativeFileSystem;
     private readonly PackageGraphUseLeaseOwner _owner;
     private readonly PackageGraphUseLease _lease;
 
@@ -31,13 +33,15 @@ internal sealed class PackageGraphUseLeaseOwnerControl : IPackageGraphUseLeaseOw
         PackageGraphUseSnapshot snapshot,
         Dictionary<Guid, string> pathsByNode,
         IAsyncDisposable heldOwnership,
-        IPackageGraphUseLifetimeObserver lifetimeObserver)
+        IPackageGraphUseLifetimeObserver lifetimeObserver,
+        IPhysicalStoreFileSystem? nativeFileSystem)
     {
         _root = root;
         _snapshot = snapshot;
         _nodeByExactPath = pathsByNode.ToDictionary(static pair => pair.Value, static pair => pair.Key, StringComparer.Ordinal);
         _heldOwnership = heldOwnership;
         _lifetimeObserver = lifetimeObserver;
+        _nativeFileSystem = nativeFileSystem;
         _lease = new PackageGraphUseLease(snapshot, this);
         _owner = new PackageGraphUseLeaseOwner(_lease, this);
     }
@@ -47,7 +51,8 @@ internal sealed class PackageGraphUseLeaseOwnerControl : IPackageGraphUseLeaseOw
         PackageGraphUseSnapshot snapshot,
         IReadOnlyDictionary<Guid, string> canonicalInstallPaths,
         IAsyncDisposable heldOwnership,
-        IPackageGraphUseLifetimeObserver lifetimeObserver)
+        IPackageGraphUseLifetimeObserver lifetimeObserver,
+        IPhysicalStoreFileSystem? nativeFileSystem = null)
     {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -56,8 +61,13 @@ internal sealed class PackageGraphUseLeaseOwnerControl : IPackageGraphUseLeaseOw
         ArgumentNullException.ThrowIfNull(lifetimeObserver);
 
         var paths = ValidateAndCopyBindings(root, snapshot, canonicalInstallPaths);
-        return new PackageGraphUseLeaseOwnerControl(root, snapshot, paths, heldOwnership, lifetimeObserver)._owner;
+        return new PackageGraphUseLeaseOwnerControl(root, snapshot, paths, heldOwnership, lifetimeObserver,
+            nativeFileSystem)._owner;
     }
+
+    internal IPhysicalStoreFileSystem NativeFileSystem => _nativeFileSystem
+        ?? throw Refusal(PackageStoreAdmissionReason.UnsupportedParticipant,
+            "This graph-use lease has no retained native filesystem provider.");
 
     internal Exception? ReleaseFailure
     {
@@ -83,6 +93,20 @@ internal sealed class PackageGraphUseLeaseOwnerControl : IPackageGraphUseLeaseOw
 
             _activeReads++;
             return new ReadPin(this);
+        }
+    }
+
+    public PackageInstallIdentity GetInstallIdentity(PackageGraphUseLease lease, string installPath)
+    {
+        ArgumentNullException.ThrowIfNull(lease);
+        ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+
+        lock (_gate)
+        {
+            EnsureLeaseMatches(lease);
+            if (!_nodeByExactPath.TryGetValue(installPath, out var nodeId))
+                throw Refusal(PackageStoreAdmissionReason.RootMismatch, "The exact install path is not part of this root-bound graph-use lease.");
+            return _snapshot.Nodes.Single(node => node.NodeId == nodeId).Install;
         }
     }
 

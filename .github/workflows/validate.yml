@@ -650,6 +650,36 @@ jobs:
           print('Qualified all 34 native graph-use publication, inspection, binding and acquisition cases with no skips.')
           PYCODE
 
+      - name: Qualify retained Loading across a newer committed generation
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~OverlappingPackageGraphProtectionTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=retained-loading.trx" \
+            --results-directory "$RUNNER_TEMP/retained-loading"
+          python3 - "$RUNNER_TEMP/retained-loading/retained-loading.trx" <<'PYCODE'
+          import collections
+          import sys
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          required = [
+              'Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.RetainedGraphLoadSurvivesAnotherCompositionPublishingANewerGeneration',
+              'Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.InvalidExactPackagePath_IsRejectedBeforeMetadataRead_AndClosesOwner',
+              'Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.CallerListMutationDuringActivationGate_DoesNotChangeValidatedGraph',
+              'Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.FailureAfterGraphContextCreation_ReleasesTransferredOwnerAfterUnload',
+              'Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.UnknownActivationGate_IsRefusedBeforeCallbackOrMetadataRead',
+              'Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.UnknownLoadModeAdvisor_IsRefusedBeforeCallbackOrMetadataRead',
+          ]
+          if collections.Counter(row.attrib['testName'] for row in rows) != collections.Counter(required):
+              raise SystemExit('retained-loading: required scenario names or multiplicity differ.')
+          if any(row.attrib.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('retained-loading: every required scenario must pass without skips.')
+          print('Qualified all six retained Loading integration cases with no skips.')
+          PYCODE
+
       - name: Qualify counted native root access across awaits and member replay
         shell: bash
         run: |

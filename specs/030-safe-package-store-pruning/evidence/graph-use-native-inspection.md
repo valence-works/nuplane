@@ -65,7 +65,21 @@ final Store TRX SHA-256 is
 The existing test-only xUnit2031 warning remains. Workflow verification compiles
 all 20 embedded Python blocks, parses affected shell steps, accepts actual
 34-native/17-lifetime results and rejects all 14 malformed-result controls.
-Hosted qualification of this increment remains pending.
+Hosted qualification subsequently passed at exact head
+`edec4204a1b0b1f4b8160f44a5248a67c7ad366a` in
+[run 38003931532](https://github.com/valence-works/nuplane/actions/runs/38003931532).
+The full solution reported **1,951 passed, zero failed, 38 explicit platform skips**.
+Each of the four supported platform jobs separately executed the exact
+34-native/17-lifetime/15-root-access/26-metadata/2-consumer/33-runtime-startup
+cases without skips. The platform-specific enumeration gates executed seven
+Windows or nine Unix cases, and both owned Linux ext4 profiles executed their
+ten cases. Complete hosted log SHA-256 is
+`3816addba83f2c4e1a09f62cc195778c7fcc57d4ddb814a005b7e1c024413c9f`;
+qualification report SHA-256 is
+`ec84c15559948704f7f82549c61d0e44b0392b8b63b19a1e8db783d8148192bd`.
+The [issue checkpoint](https://github.com/valence-works/nuplane/issues/108#issuecomment-6091003007)
+records this qualification. These results cover the inspection increment at that
+head, not later Loading integration or cleanup/deletion.
 
 ## Remaining delivery
 

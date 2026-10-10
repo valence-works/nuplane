@@ -401,6 +401,8 @@ internal sealed class PackageInstallIdentityReader
         /// <summary>Gets the immutable candidate identity observed from native handles.</summary>
         internal PackageInstallIdentity InstallIdentity { get; }
 
+        internal PhysicalStoreDirectoryHandle InstallDirectory => _installDirectory;
+
         /// <summary>Revalidates root-to-install edges, name profiles, directory identities, and the marker.</summary>
         /// <exception cref="ObjectDisposedException">The observation has been disposed.</exception>
         /// <exception cref="PackageStoreAdmissionException">A retained native observation changed or expired.</exception>

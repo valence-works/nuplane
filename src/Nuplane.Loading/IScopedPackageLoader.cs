@@ -1,9 +1,8 @@
 using Nuplane.Abstractions;
-using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Loading;
 
-/// <summary>Consumes pre-published graph leases and an existing operation without taking the root lock again.</summary>
+/// <summary>Consumes pre-published graph leases after root-operation ownership has ended.</summary>
 /// <remarks>
 /// Every package must match the exact immutable graph in its supplied leases before any advisor or
 /// loader reads it. The caller transfers the lease owners into this operation. Any context that may
@@ -12,9 +11,7 @@ namespace Nuplane.Loading;
 internal interface IScopedPackageLoader : IPackageLoader
 {
     Task<PackageLoadResult> EnsureGraphLoadedAsync(
-        IReadOnlyList<IReadOnlyList<ResolvedPackage>> packageGraphs,
+        IReadOnlyList<ScopedResolvedPackageGraph> packageGraphs,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
-        PackageStoreOperationBorrow borrow,
-        IReadOnlyList<PackageGraphUseLeaseOwner> graphLeaseOwners,
         CancellationToken cancellationToken);
 }

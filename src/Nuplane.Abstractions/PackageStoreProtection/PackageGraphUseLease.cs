@@ -4,6 +4,7 @@ namespace Nuplane.Abstractions.PackageStoreProtection;
 public sealed class PackageGraphUseLease
 {
     private readonly IPackageGraphUseLeaseOwnerControl _control;
+    internal IPackageGraphUseLeaseOwnerControl Control => _control;
 
     internal PackageGraphUseLease(
         PackageGraphUseSnapshot snapshot,
@@ -24,5 +25,16 @@ public sealed class PackageGraphUseLease
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
         return _control.AcquireRead(this, installPath);
+    }
+
+    /// <summary>Gets the immutable descriptive install identity bound to an exact original path.</summary>
+    /// <remarks>This does not authorize filesystem access; callers must still hold an <see cref="AcquireRead"/> scope for the entire read.</remarks>
+    /// <param name="installPath">The exact installed package path, compared using ordinal path identity.</param>
+    /// <returns>The immutable identity Core paired with this exact path when the lease was published.</returns>
+    /// <exception cref="PackageStoreAdmissionException">The exact path is outside this lease.</exception>
+    public PackageInstallIdentity GetInstallIdentityForExactPath(string installPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+        return _control.GetInstallIdentity(this, installPath);
     }
 }

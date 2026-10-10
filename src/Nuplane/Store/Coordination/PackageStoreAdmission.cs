@@ -14,6 +14,8 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
     private readonly string _configuredRootLocator;
     private readonly string? _configuredRootBaseLocator;
 
+    internal RootMembershipRegistry Registry => _registry;
+
     internal PackageStoreAdmission(
         IPhysicalStoreFileSystem files,
         RootMembershipRegistry registry,

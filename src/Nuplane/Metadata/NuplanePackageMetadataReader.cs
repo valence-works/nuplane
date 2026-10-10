@@ -7,6 +7,7 @@ using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Registration;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.PhysicalFiles;
+using Nuplane.Store.State;
 
 namespace Nuplane.Metadata;
 
@@ -53,6 +54,11 @@ public sealed class NuplanePackageMetadataReader : IPackageMetadataReader, IScop
         AllowTrailingCommas = true
     };
 
+    /// <summary>Creates a package metadata reader.</summary>
+    public NuplanePackageMetadataReader()
+    {
+    }
+
     /// <summary>
     /// Reads and validates the <c>nuplane.json</c> document at the root of a resolved package's
     /// install path.
@@ -94,6 +100,77 @@ public sealed class NuplanePackageMetadataReader : IPackageMetadataReader, IScop
                 borrow,
                 installPath,
                 (files, directory) => ReadNativeDirectory(packageId, version, borrow.Root, files, directory)));
+    }
+
+    /// <summary>Reads metadata under an already-published exact graph-use lease.</summary>
+    /// <remarks>
+    /// This path does not reacquire root/member locks or require a fresh non-pending membership ledger. It uses
+    /// the filesystem provider captured by the lease, pins the exact original path, and replays the native root,
+    /// install-directory, completion-marker, and metadata-name identities before returning detached metadata.
+    /// </remarks>
+    public NuplanePackageMetadataReadResult ReadForGraphUseLease(
+        string packageId,
+        string version,
+        string installPath,
+        PackageGraphUseLease lease)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+        ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+        ArgumentNullException.ThrowIfNull(lease);
+
+        return ExecuteRead(packageId, version, () =>
+        {
+            using var pin = lease.AcquireRead(installPath);
+            var expectedInstall = lease.GetInstallIdentityForExactPath(installPath);
+            if (!string.Equals(expectedInstall.PackageId, packageId, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(expectedInstall.Version, version, StringComparison.Ordinal))
+            {
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.RootMismatch,
+                    "The requested package identity does not match the exact graph-use path.", expectedInstall.Root);
+            }
+
+            var nativeFileSystem = (lease.Control as PackageGraphUseLeaseOwnerControl)?.NativeFileSystem
+                ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "The graph-use lease does not carry its original native filesystem provider.", expectedInstall.Root);
+            var resolver = new PackageStoreAuthorityResolver(nativeFileSystem,
+                new RootMembershipRegistry(nativeFileSystem, new StoreStateSerializer()));
+            using var resolved = resolver.ResolveRetainedInstallPath(installPath, expectedInstall);
+            var resolvedDirectory = resolved.Target as PhysicalStoreDirectoryHandle
+                ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
+                    "The retained graph-use path did not resolve to a held package directory.", expectedInstall.Root);
+
+            var root = resolved.AuthorityRoot
+                ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
+                    "The retained graph-use path no longer has its admitted physical root.", expectedInstall.Root);
+            if (resolved.RootIdentity != expectedInstall.Root)
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.RootMismatch,
+                    "The retained graph-use path resolved to a different physical root.", expectedInstall.Root);
+
+            using var observation = new PackageInstallIdentityReader(nativeFileSystem).Observe(
+                root,
+                expectedInstall.Root,
+                expectedInstall.RootRelativeInstallPath,
+                expectedInstall.PackageId,
+                expectedInstall.Version,
+                expectedInstall.VerifiedArchiveHash);
+            var resolvedInfo = nativeFileSystem.InspectHandle(resolvedDirectory);
+            if (observation.InstallIdentity != expectedInstall ||
+                resolvedInfo.Kind != PhysicalStoreEntryKind.Directory ||
+                resolvedInfo.Identity != observation.InstallIdentity.DirectoryIdentity)
+            {
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
+                    "The retained graph-use install no longer matches its published native identity.", expectedInstall.Root);
+            }
+
+            resolved.Revalidate();
+            observation.Revalidate();
+            var result = ReadNativeDirectory(packageId, version, expectedInstall.Root,
+                nativeFileSystem, observation.InstallDirectory);
+            observation.Revalidate();
+            resolved.Revalidate();
+            return result;
+        });
     }
 
     private static NuplanePackageMetadataReadResult ExecuteRead(

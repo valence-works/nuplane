@@ -150,16 +150,35 @@ internal sealed class PackageStoreAuthorityResolver
         return ResolveParsed(path, PhysicalStorePathTarget.PackageDirectory, scope.RootIdentity, scope);
     }
 
+    /// <summary>Replays an exact install path for a graph whose immutable use lease is already live.</summary>
+    /// <remarks>
+    /// A retained reader relies on the membership and complete graph verified when its lease was published.
+    /// Another coordinated state publication may temporarily expose a pending ledger, so this native path
+    /// replay verifies the required physical root and every no-follow path edge without requiring a fresh
+    /// Complete/non-pending membership snapshot or acquiring root/member locks.
+    /// </remarks>
+    internal ResolvedPackageStorePath ResolveRetainedInstallPath(
+        string exactLocator,
+        PackageInstallIdentity expectedInstall)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(exactLocator);
+        ArgumentNullException.ThrowIfNull(expectedInstall);
+        var path = ParseRequest(exactLocator, exactBaseLocator: null);
+        return ResolveParsed(path, PhysicalStorePathTarget.PackageDirectory, expectedInstall.Root,
+            memberLocatorScope: null, retainedInstall: expectedInstall);
+    }
+
     private ResolvedPackageStorePath ResolveParsed(
         ParsedPath path,
         PhysicalStorePathTarget target,
         PhysicalRootIdentity? requiredRoot,
-        RootMembershipRegistry.MemberLocatorReplayScope? memberLocatorScope)
+        RootMembershipRegistry.MemberLocatorReplayScope? memberLocatorScope,
+        PackageInstallIdentity? retainedInstall = null)
     {
         if (!Enum.IsDefined(target))
             throw new ArgumentOutOfRangeException(nameof(target));
         memberLocatorScope?.EnsureActive();
-        var state = new ResolutionState(this, requiredRoot, memberLocatorScope);
+        var state = new ResolutionState(this, requiredRoot, memberLocatorScope, retainedInstall);
         try
         {
             var anchor = OpenAnchor(state, path.Anchor
@@ -301,11 +320,17 @@ internal sealed class PackageStoreAuthorityResolver
                 throw Unknown("The configured directory target is a regular file.", state.RootIdentity);
             }
 
+            var finalTarget = (PhysicalStoreHandle?)finalFile ?? current;
+            if (retainedInstall is not null)
+            {
+                if (finalTarget is not PhysicalStoreDirectoryHandle installDirectory)
+                    throw Unknown("The retained graph-use target is not a package directory.", retainedInstall.Root);
+                state.BindRetainedInstallRoot(installDirectory, retainedInstall);
+            }
             if (requiredRoot is not null && state.RootIdentity != requiredRoot)
                 throw Refusal(PackageStoreAdmissionReason.RootMismatch,
                     "The configured path did not resolve to the required physical authority root.", requiredRoot);
 
-            var finalTarget = (PhysicalStoreHandle?)finalFile ?? current;
             if (state.AuthorityRootIdentity is not null)
                 RequireTargetInsideAuthority(state, finalTarget, finalFileParent);
 
@@ -321,7 +346,8 @@ internal sealed class PackageStoreAuthorityResolver
                 () => state.Revalidate(finalTarget, target, finalFileParent),
                 isProspectiveConfiguredRoot: prospectiveMissingSuffix &&
                     target == PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix,
-                isProspectiveMissingSuffix: prospectiveMissingSuffix);
+                isProspectiveMissingSuffix: prospectiveMissingSuffix,
+                isRetainedGraphUseRoot: retainedInstall is not null);
             state.DetachHandles();
             return result;
         }
@@ -643,7 +669,8 @@ internal sealed class PackageStoreAuthorityResolver
     private sealed class ResolutionState(
         PackageStoreAuthorityResolver resolver,
         PhysicalRootIdentity? requiredRoot,
-        RootMembershipRegistry.MemberLocatorReplayScope? memberLocatorScope)
+        RootMembershipRegistry.MemberLocatorReplayScope? memberLocatorScope,
+        PackageInstallIdentity? retainedInstall)
     {
         private readonly List<PhysicalStoreHandle> _handles = [];
         private readonly List<DirectoryEvidence> _directories = [];
@@ -656,6 +683,7 @@ internal sealed class PackageStoreAuthorityResolver
 
         internal PhysicalRootIdentity? RequiredRoot { get; } = requiredRoot;
         internal RootMembershipRegistry.MemberLocatorReplayScope? MemberLocatorScope { get; } = memberLocatorScope;
+        internal PackageInstallIdentity? RetainedInstall { get; } = retainedInstall;
         internal PhysicalStoreDirectoryHandle? AuthorityRoot { get; private set; }
         internal PhysicalRootIdentity? RootIdentity { get; private set; }
         internal PhysicalRootIdentity? AuthorityRootIdentity => RootIdentity;
@@ -663,6 +691,38 @@ internal sealed class PackageStoreAuthorityResolver
         internal PhysicalFileIdentity? MembershipLedgerIdentity { get; private set; }
         internal HashSet<PhysicalFileIdentity> ActiveAliases { get; } = [];
         internal int AliasExpansions { get; set; }
+
+        internal void BindRetainedInstallRoot(
+            PhysicalStoreDirectoryHandle installDirectory,
+            PackageInstallIdentity expectedInstall)
+        {
+            if (RetainedInstall is null || !ReferenceEquals(RetainedInstall, expectedInstall))
+                throw new InvalidOperationException("A retained install can only be bound by its own path replay.");
+
+            var relativeComponents = expectedInstall.RootRelativeInstallPath.Split('/');
+            PhysicalStoreDirectoryHandle cursor = installDirectory;
+            for (var index = 0; index < relativeComponents.Length; index++)
+            {
+                var childInfo = resolver._files.InspectHandle(cursor);
+                if (childInfo.Kind != PhysicalStoreEntryKind.Directory)
+                    throw Unknown("A retained install ancestry component is not a directory.", expectedInstall.Root);
+                var parent = resolver.OpenParent(this, cursor);
+                var parentInfo = resolver._files.InspectHandle(parent);
+                if (parentInfo.Kind != PhysicalStoreEntryKind.Directory || parentInfo.Identity == childInfo.Identity)
+                    throw Refusal(PackageStoreAdmissionReason.RootMismatch,
+                        "The retained install path is shallower than its immutable root-relative identity.", expectedInstall.Root);
+                RecordParentEdge(cursor, childInfo.Identity, parent, parentInfo.Identity);
+                cursor = parent;
+            }
+
+            var rootInfo = resolver._files.InspectHandle(cursor);
+            if (rootInfo.Kind != PhysicalStoreEntryKind.Directory || rootInfo.Identity != expectedInstall.Root.HandleIdentity)
+                throw Refusal(PackageStoreAdmissionReason.RootMismatch,
+                    "The retained install path no longer resolves beneath its admitted physical root.", expectedInstall.Root);
+
+            AuthorityRoot = cursor;
+            RootIdentity = expectedInstall.Root;
+        }
 
         internal void Track(PhysicalStoreHandle handle)
         {
@@ -744,6 +804,12 @@ internal sealed class PackageStoreAuthorityResolver
 
         internal void ObserveReservedAuthority(PhysicalStoreDirectoryHandle directory)
         {
+            // A live graph-use lease already carries the immutable root/install identities. Re-reading
+            // the membership ledger here would turn an unrelated atomic state publication into an
+            // authorization failure for a graph that is still protected by its lease.
+            if (RetainedInstall is not null)
+                return;
+
             var parentInfo = resolver._files.InspectHandle(directory);
             if (parentInfo.Kind != PhysicalStoreEntryKind.Directory)
                 throw Unknown("The configured path authority check requires a held directory.", RootIdentity);
@@ -1050,12 +1116,20 @@ internal sealed class PackageStoreAuthorityResolver
             if (AuthorityRoot is not null && RootIdentity is not null)
             {
                 var root = resolver._files.InspectHandle(AuthorityRoot);
-                if (root.Kind != PhysicalStoreEntryKind.Directory || root.Identity != RootIdentity.HandleIdentity ||
-                    MembershipCandidate is null || MembershipCandidate.RootIdentity != RootIdentity)
+                if (root.Kind != PhysicalStoreEntryKind.Directory || root.Identity != RootIdentity.HandleIdentity)
                 {
                     throw Unknown("The retained authority-root candidate no longer binds its held directory.", RootIdentity);
                 }
-                ValidateCandidate(RootIdentity, MembershipCandidate);
+                if (RetainedInstall is null)
+                {
+                    if (MembershipCandidate is null || MembershipCandidate.RootIdentity != RootIdentity)
+                        throw Unknown("The retained authority-root candidate no longer binds its held membership record.", RootIdentity);
+                    ValidateCandidate(RootIdentity, MembershipCandidate);
+                }
+                else if (MembershipCandidate is not null || RootIdentity != RetainedInstall.Root)
+                {
+                    throw Unknown("The retained graph-use root no longer matches its immutable install identity.", RootIdentity);
+                }
             }
         }
 

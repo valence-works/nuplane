@@ -1,3 +1,5 @@
+using Nuplane.Abstractions.PackageStoreProtection;
+
 namespace Nuplane.Loading;
 
 /// <summary>
@@ -8,5 +10,7 @@ internal sealed class HostIntegratedPackageGraphLoadContext(
     IReadOnlyList<string> mainAssemblyPaths,
     IReadOnlyList<string> packageInstallPaths,
     IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
-    SharedAssemblyPolicyMatcher matcher)
-    : PackageGraphLoadContext(graphKey, mainAssemblyPaths, packageInstallPaths, sharedPolicy, matcher, isCollectible: false);
+    SharedAssemblyPolicyMatcher matcher,
+    PackageGraphUseLeaseOwner? graphLeaseOwner = null)
+    : PackageGraphLoadContext(graphKey, mainAssemblyPaths, packageInstallPaths, sharedPolicy, matcher,
+        isCollectible: false, graphLeaseOwner: graphLeaseOwner);
