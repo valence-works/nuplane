@@ -201,7 +201,7 @@ public sealed class NativePackageInstallSessionTests
     }
 
     [SupportedPhysicalStoreFact]
-    public async Task AcquireAsync_ReplaysParentPathAfterArchiveCallbackBeforePublishing()
+    public async Task AcquireAsync_ParentReplacementIsBlockedOrRefusedBeforePublication()
     {
         using var context = await RootMembershipProtectionVerificationTests.Context.CreateCompleteAsync();
         await using var admission = await CreateAdmission(context)
@@ -211,16 +211,34 @@ public sealed class NativePackageInstallSessionTests
         var detachedParent = originalParent + ".detached";
         var destination = Path.Combine(originalParent, "1.0.0");
         var archiveBytes = CreateArchive(("lib/Moved.dll", "payload"u8.ToArray()));
+        var callbackCount = 0;
 
-        await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => NativePackageInstallSession.AcquireAsync(
+        Task Acquire() => NativePackageInstallSession.AcquireAsync(
             context.Fixture.PackageInstallRoot, destination, borrow,
             async (stream, token) =>
             {
+                callbackCount++;
                 Directory.Move(originalParent, detachedParent);
                 await stream.WriteAsync(archiveBytes, token);
-            }, CancellationToken.None));
+            }, CancellationToken.None);
 
-        Assert.True(Directory.Exists(detachedParent));
+        if (OperatingSystem.IsWindows())
+        {
+            // The held native archive prevents this rename on Windows before path replay runs.
+            var refusal = await Assert.ThrowsAsync<IOException>(Acquire);
+            Assert.Equal(32, refusal.HResult & 0xffff); // ERROR_SHARING_VIOLATION
+            Assert.True(Directory.Exists(originalParent));
+            Assert.False(Directory.Exists(detachedParent));
+        }
+        else
+        {
+            // Unix permits moving the held tree; replay must reject its now-missing original edge.
+            await Assert.ThrowsAsync<PackageStoreAdmissionException>(Acquire);
+            Assert.True(Directory.Exists(detachedParent));
+            Assert.False(Directory.Exists(originalParent));
+        }
+
+        Assert.Equal(1, callbackCount);
         Assert.False(Directory.Exists(destination));
     }
 
