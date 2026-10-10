@@ -507,10 +507,82 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
             return result;
         }
 
-        private PhysicalStoreEntryInfo ValidateResolvedInstallPath(
+        public TResult WithValidatedPackageDirectoryOrMissing<TResult>(
+            string installPath,
+            Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle?, TResult> callback)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+            ArgumentNullException.ThrowIfNull(callback);
+            AdmittedPathIdentity? expectedPath = null;
+            if (_pathIdentities is not null)
+            {
+                if (!_pathIdentities.TryGetValue(installPath, out var admittedPath))
+                    throw Refusal("The install path is absent from this operation's admitted path union.", _root);
+                expectedPath = admittedPath;
+            }
+
+            if (expectedPath is { TargetKind: not PhysicalStorePathTarget.PackageDirectory })
+            {
+                throw new PackageStoreAdmissionException(
+                    PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "Scoped package metadata requires an admitted extracted package directory.",
+                    _root);
+            }
+
+            var currentLedger = _ledgerObservation();
+            using var resolved = _resolver.Resolve(
+                installPath,
+                PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix,
+                _root);
+            ValidateCompleteOperationRoot(resolved, currentLedger);
+            resolved.Revalidate();
+
+            var missing = resolved.IsProspectiveMissingSuffix;
+            var directory = missing
+                ? null
+                : resolved.Target as PhysicalStoreDirectoryHandle
+                    ?? throw Refusal("The admitted package path is not a held directory.", _root);
+            if (missing)
+            {
+                // A path-restricted admission captured a concrete directory identity. Its later absence
+                // is a changed target, not a cache miss. Only a root-scoped operation can classify an
+                // exact missing suffix that was not present when the operation began.
+                if (expectedPath is not null)
+                    throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                        "The package directory admitted for this operation is now absent.", _root);
+                var parent = _files.InspectHandle(resolved.Target);
+                if (parent.Kind != PhysicalStoreEntryKind.Directory ||
+                    !SameVolume(parent.Identity, _root.HandleIdentity))
+                    throw Refusal("The positively absent package path has no same-volume held parent.", _root);
+            }
+            else
+            {
+                var target = ValidateResolvedInstallPath(resolved, PhysicalStorePathTarget.PackageDirectory,
+                    expectedPath, currentLedger);
+                if (directory is null || target.Identity != _files.InspectHandle(directory).Identity)
+                    throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                        "The admitted package directory changed during native resolution.", _root);
+            }
+
+            TResult result;
+            try
+            {
+                result = callback(_files, directory);
+            }
+            catch
+            {
+                resolved.Revalidate();
+                ValidateCompleteOperationRoot(resolved, _ledgerObservation());
+                throw;
+            }
+
+            resolved.Revalidate();
+            ValidateCompleteOperationRoot(resolved, _ledgerObservation());
+            return result;
+        }
+
+        private void ValidateCompleteOperationRoot(
             ResolvedPackageStorePath resolved,
-            PhysicalStorePathTarget targetKind,
-            AdmittedPathIdentity? expectedPath,
             (string Digest, PhysicalFileIdentity Identity) currentLedger)
         {
             if (resolved.RootIdentity != _root || resolved.MembershipCandidate is not { Status: RootMembershipStatus.Complete } candidate ||
@@ -519,8 +591,21 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
                 resolved.MembershipLedgerIdentity != currentLedger.Identity)
             {
                 throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
-                    "The install path no longer matches its live Complete operation owner.", _root);
+                    "The package path no longer matches its live Complete operation owner.", _root);
             }
+        }
+
+        private static bool SameVolume(PhysicalFileIdentity left, PhysicalFileIdentity right)
+            => string.Equals(left.Provider, right.Provider, StringComparison.Ordinal) &&
+                string.Equals(left.VolumeOrDeviceId, right.VolumeOrDeviceId, StringComparison.Ordinal);
+
+        private PhysicalStoreEntryInfo ValidateResolvedInstallPath(
+            ResolvedPackageStorePath resolved,
+            PhysicalStorePathTarget targetKind,
+            AdmittedPathIdentity? expectedPath,
+            (string Digest, PhysicalFileIdentity Identity) currentLedger)
+        {
+            ValidateCompleteOperationRoot(resolved, currentLedger);
 
             var target = _files.InspectHandle(resolved.Target);
             var expectedKind = targetKind == PhysicalStorePathTarget.ArchiveFile

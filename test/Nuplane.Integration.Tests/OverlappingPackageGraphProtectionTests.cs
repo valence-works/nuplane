@@ -346,13 +346,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
 
             var declarations = paths.Select(pair => new RootMemberRecord(pair.Key, pair.Value,
                 new RootMemberRecord.DeclaredBinding())).ToArray();
-            Registry.InitializeIncomplete(Root, RootIdentity, RootMembershipBindingEpoch, declarations,
-                quiescentCutoverConfirmed: true, CancellationToken.None);
-            await Registry.BindDeclaredMembersAsync(Root, RootIdentity, RootMembershipBindingEpoch, declarations,
-                _stateParents.ToDictionary(static pair => pair.Key, pair =>
-                    (pair.Value, Path.GetFileName(paths[pair.Key])), StringComparer.Ordinal),
-                quiescentCutoverConfirmed: true, CancellationToken.None);
-
+            // Resolve migration inputs before enrollment; incomplete roots intentionally refuse package reads.
             var shared = CreateInstall("Shared.Dependency", "2.1.0", dependencyId: null, sourceName: "feed");
             var firstRoot = CreateInstall("Root.First", "1.0.0", "Shared.Dependency", "member-a");
             var secondV1Root = CreateInstall("Root.Second", "1.0.0", "Shared.Dependency", "member-b");
@@ -360,6 +354,13 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             Graphs.Add("member-a", await ResolveGraphAsync("member-a", firstRoot, shared));
             Graphs.Add("member-b", await ResolveGraphAsync("member-b", secondV1Root, shared));
             Graphs.Add("member-b-v2", await ResolveGraphAsync("member-b", secondV2Root, shared));
+
+            Registry.InitializeIncomplete(Root, RootIdentity, RootMembershipBindingEpoch, declarations,
+                quiescentCutoverConfirmed: true, CancellationToken.None);
+            await Registry.BindDeclaredMembersAsync(Root, RootIdentity, RootMembershipBindingEpoch, declarations,
+                _stateParents.ToDictionary(static pair => pair.Key, pair =>
+                    (pair.Value, Path.GetFileName(paths[pair.Key])), StringComparer.Ordinal),
+                quiescentCutoverConfirmed: true, CancellationToken.None);
 
             var stateA = BuildProtectedState("member-a", Graphs["member-a"], StoreStateRecord.Empty(), 1, false);
             var stateB = BuildProtectedState("member-b", Graphs["member-b"], StoreStateRecord.Empty(), 1, false);

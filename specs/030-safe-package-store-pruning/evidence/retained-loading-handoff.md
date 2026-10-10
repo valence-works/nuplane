@@ -31,9 +31,17 @@ dotnet build src/Nuplane.Loading/Nuplane.Loading.csproj --configuration Release
 - Restored focused gate: **six passed, zero failed, zero skipped**; unchanged 871-input manifest SHA-256 `edcaeadb88748200d5d6c58189656a45971df19e421a8275aa5e9c531ca5e949`, log `bf813967da620890fc1067fd984e25eb10efc962013a5d14399377457569fbc8`, TRX `10b3d5aa2c3ff637eee8a9f9b6fafcc060cc67ca42903cc09542d9642da4529f`.
 - Full Loading regression: **259 passed, zero failed, zero skipped**; same unchanged manifest, log `d43e0caf0e5a427137d71e1a494dd7e3f506eb7ffa52a43d016e1233497efda9`.
 - Earlier Core/Store regression: **599 passed, zero failed, 38 explicit platform NotExecuted cases**. This preceded the final observer-DI and participant-preflight fixes and is supporting regression evidence, not final-head qualification.
-- Final Loading/Core/Abstractions Release build passed all three production frameworks (`net8.0`, `net9.0`, `net10.0`) with zero warnings/errors and the same unchanged manifest; log SHA-256 `62a3036b729b9fe9b392a2d8b672a978dc3e1afecf420a91fe77c5cb581e7644`. Exact-head hosted platform execution remains pending.
+- Final Loading/Core/Abstractions Release build passed all three production frameworks (`net8.0`, `net9.0`, `net10.0`) with zero warnings/errors and the same unchanged manifest; log SHA-256 `62a3036b729b9fe9b392a2d8b672a978dc3e1afecf420a91fe77c5cb581e7644`.
 
 The four existing platform jobs now require these exact six named cases with no skips. The actual embedded validator accepts the real passing TRX and rejects missing, empty, duplicate, skipped, failed and substituted result controls. All 20 detected embedded Python blocks compile and the added bash step parses. Validator report SHA-256 `934866c895cb290b6df2d02ec908f7507063153af3832cf15efbcf550e8acb71`; workflow SHA-256 `4e6f4b07d161534e774049809b9d5ae921c7fd15584e36911975e938cc83a696`.
+
+## Exact-head hosted qualification
+
+[Validate 38009664798](https://github.com/valence-works/nuplane/actions/runs/38009664798), head `4040bf1b0382990e3375796ae535e853f6a7ce81`, completed successfully in all six jobs. Complete logs confirm **six passed, zero failed, zero skipped** retained-Loading cases independently on Windows, macOS, Linux x64 and Linux ARM64. Each lane's exact-six-name/no-skips verifier also succeeded; a job-level green summary alone was not used as proof.
+
+The full solution passed **1,958 tests with zero failures and 38 platform-specific skips** (Windows-specific and owned-ext4 cases in the ordinary Linux lane). Existing native graph publication (34), graph lifetime (17), root access (15), metadata (26), consumer refusal (2), and runtime/startup (33) gates passed with no skips on every platform. Serialization passed all 123 cases on each of .NET 8/9/10 in all four lanes, and each owned Linux ext4 lane passed all ten cases. Native enumeration passed seven Windows and nine Unix cases per applicable lane.
+
+Complete-log SHA-256: `6d438d6a228762525f089373c2ccd207bc53e4733abbca8e7082346140d6d146`. Parsed qualification SHA-256: `d40c5740f9b331a9621cb574f3315c2f93eb7bf39cad24ffb78f9d76b3987336`. These qualify this direct-loader increment; automatic production routing and maintenance-command proof remain open.
 
 ## Review, causal control and preserved failures
 

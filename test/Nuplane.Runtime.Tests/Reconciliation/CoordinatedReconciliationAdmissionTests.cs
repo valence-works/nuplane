@@ -686,6 +686,10 @@ public sealed class CoordinatedReconciliationAdmissionTests
                 var registry = new RootMembershipRegistry(fixture.Files, serializer);
                 var declarations = fixture.StatePaths.Select(pair => new RootMemberRecord(pair.Key, pair.Value,
                     new RootMemberRecord.DeclaredBinding())).ToArray();
+                // Migration inputs are read while positively Unenrolled, before declaring authority.
+                fixture.SharedInstallPath = fixture.Install("Shared.Dependency", "2.1.0", dependencyId: null);
+                fixture.States.Add("first", await fixture.BuildProtectedStateAsync("first", "Root.First"));
+                fixture.States.Add("second", await fixture.BuildProtectedStateAsync("second", "Root.Second"));
                 registry.InitializeIncomplete(root, fixture.RootIdentity, 1, declarations, true, CancellationToken.None);
 
                 var parents = fixture.StatePaths.ToDictionary(pair => pair.Key,
@@ -703,9 +707,6 @@ public sealed class CoordinatedReconciliationAdmissionTests
                         parent.Dispose();
                 }
 
-                fixture.SharedInstallPath = fixture.Install("Shared.Dependency", "2.1.0", dependencyId: null);
-                fixture.States.Add("first", await fixture.BuildProtectedStateAsync("first", "Root.First"));
-                fixture.States.Add("second", await fixture.BuildProtectedStateAsync("second", "Root.Second"));
                 await registry.WithQuiescentBoundIncompleteMemberLocationsAsync(root, fixture.RootIdentity, 1, true,
                     async (locked, token) =>
                     {

@@ -60,6 +60,24 @@ internal sealed class PackageStoreAuthorityResolver
         return ResolveParsed(path, target, requiredRoot, memberLocatorScope: null);
     }
 
+    /// <summary>Resolves an unscoped package probe with a precise signal for a concurrently-created missing directory.</summary>
+    /// <remarks>
+    /// The caller may reclassify the entire locator before any callback when a stable ordinary directory appears
+    /// at its first previously-missing edge. All other path, alias, profile, authority, and ledger changes remain
+    /// ordinary typed refusals. The returned result still uses strict replay unless the caller explicitly requests
+    /// the same pre-callback classification replay.
+    /// </remarks>
+    internal ResolvedPackageStorePath ResolveForUnenrolledPackageProbe(
+        string exactLocator,
+        string? exactBaseLocator = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(exactLocator);
+        var path = ParseRequest(exactLocator, exactBaseLocator);
+        return ResolveParsed(path, PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix,
+            requiredRoot: null, memberLocatorScope: null,
+            allowStableMissingDirectoryRetry: true);
+    }
+
     /// <summary>Replays one persisted absolute member-state locator under an active registry lock scope.</summary>
     /// <remarks>Only the parent path is expanded. The final state entry is observed no-follow as metadata.</remarks>
     internal ResolvedMemberStateLocation ResolveMemberStateLocation(
@@ -173,7 +191,8 @@ internal sealed class PackageStoreAuthorityResolver
         PhysicalStorePathTarget target,
         PhysicalRootIdentity? requiredRoot,
         RootMembershipRegistry.MemberLocatorReplayScope? memberLocatorScope,
-        PackageInstallIdentity? retainedInstall = null)
+        PackageInstallIdentity? retainedInstall = null,
+        bool allowStableMissingDirectoryRetry = false)
     {
         if (!Enum.IsDefined(target))
             throw new ArgumentOutOfRangeException(nameof(target));
@@ -236,15 +255,20 @@ internal sealed class PackageStoreAuthorityResolver
                 if (entry is null)
                 {
                     if (target is not (PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix or
-                            PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix) ||
-                        state.RootIdentity is not null ||
+                            PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix or
+                            PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix) ||
+                        (state.RootIdentity is not null &&
+                            target != PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix) ||
+                        (state.RootIdentity is null &&
+                            target == PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix) ||
                         frames.Any(static candidate => candidate.Alias is not null) ||
                         !TryGetOrdinaryRemainingSuffix(frames, out var remainingSuffix))
                     {
                         throw Unknown("The configured path contains a missing component.", state.RootIdentity);
                     }
 
-                    state.RecordMissingSuffix(current, component, remainingSuffix);
+                    state.RecordMissingSuffix(current, component, remainingSuffix, target,
+                        allowStableMissingDirectoryRetry);
                     prospectiveMissingSuffix = true;
                     break;
                 }
@@ -334,7 +358,8 @@ internal sealed class PackageStoreAuthorityResolver
             if (state.AuthorityRootIdentity is not null)
                 RequireTargetInsideAuthority(state, finalTarget, finalFileParent);
 
-            state.Revalidate(finalTarget, target, finalFileParent);
+            state.Revalidate(finalTarget, target, finalFileParent,
+                allowStableMissingDirectoryRetry);
             var transferredHandles = state.SnapshotHandles();
             var result = new ResolvedPackageStorePath(
                 finalTarget,
@@ -343,7 +368,8 @@ internal sealed class PackageStoreAuthorityResolver
                 state.MembershipCandidate,
                 state.MembershipLedgerIdentity,
                 transferredHandles,
-                () => state.Revalidate(finalTarget, target, finalFileParent),
+                allowMissingDirectoryRetry => state.Revalidate(finalTarget, target, finalFileParent,
+                    allowMissingDirectoryRetry),
                 isProspectiveConfiguredRoot: prospectiveMissingSuffix &&
                     target == PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix,
                 isProspectiveMissingSuffix: prospectiveMissingSuffix,
@@ -870,9 +896,13 @@ internal sealed class PackageStoreAuthorityResolver
         internal void RecordMissingSuffix(
             PhysicalStoreDirectoryHandle parent,
             string firstMissingName,
-            IReadOnlyList<string> remainingSuffix)
+            IReadOnlyList<string> remainingSuffix,
+            PhysicalStorePathTarget target,
+            bool allowStableMissingDirectoryRetry)
         {
-            if (RootIdentity is not null || ActiveAliases.Count != 0)
+            var admittedOperationTarget = target == PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix;
+            if ((RootIdentity is not null && !admittedOperationTarget) ||
+                (RootIdentity is null && admittedOperationTarget) || ActiveAliases.Count != 0)
                 throw Unknown("A missing target suffix cannot follow observed authority or an unresolved alias.", RootIdentity);
 
             var before = resolver._files.InspectHandle(parent);
@@ -888,13 +918,39 @@ internal sealed class PackageStoreAuthorityResolver
             var after = resolver._files.InspectHandle(parent);
             var semanticsAfter = resolver._names.ObserveDirectoryNameSemantics(parent);
             var missingAfter = resolver._files.InspectChildNoFollow(parent, firstMissingName);
-            if (before.Kind != PhysicalStoreEntryKind.Directory || after.Kind != PhysicalStoreEntryKind.Directory ||
-                before.Identity != after.Identity || semantics != semanticsAfter || missing is not null || missingAfter is not null)
+            var missingFinal = missingAfter;
+            var afterFinal = after;
+            var semanticsFinal = semanticsAfter;
+            if (allowStableMissingDirectoryRetry && missing is null &&
+                missingAfter is { Kind: PhysicalStoreEntryKind.Directory })
+            {
+                missingFinal = resolver._files.InspectChildNoFollow(parent, firstMissingName);
+                afterFinal = resolver._files.InspectHandle(parent);
+                semanticsFinal = resolver._names.ObserveDirectoryNameSemantics(parent);
+            }
+
+            var parentStable = before.Kind == PhysicalStoreEntryKind.Directory && after.Kind == PhysicalStoreEntryKind.Directory &&
+                before.Identity == after.Identity && semantics == semanticsAfter &&
+                afterFinal.Kind == PhysicalStoreEntryKind.Directory && afterFinal.Identity == before.Identity &&
+                semanticsFinal == semantics;
+            var stillAbsent = missing is null && missingAfter is null && missingFinal is null;
+            var stableDirectoryAppeared = allowStableMissingDirectoryRetry &&
+                target == PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix && RootIdentity is null &&
+                ((missing is { Kind: PhysicalStoreEntryKind.Directory } firstDirectory &&
+                  missingAfter is { Kind: PhysicalStoreEntryKind.Directory } secondDirectory &&
+                  firstDirectory.Identity == secondDirectory.Identity) ||
+                 (missing is null && missingAfter is { Kind: PhysicalStoreEntryKind.Directory } secondDirectoryAfterAbsence &&
+                  missingFinal is { Kind: PhysicalStoreEntryKind.Directory } thirdDirectoryAfterAbsence &&
+                  secondDirectoryAfterAbsence.Identity == thirdDirectoryAfterAbsence.Identity));
+            if (!parentStable || (!stillAbsent && !stableDirectoryAppeared))
             {
                 throw Unknown("The prospective configured-root edge changed during native absence observation.", RootIdentity);
             }
 
-            AddEvidence(_missingSuffixes, new MissingSuffixEvidence(parent, before.Identity, semantics, firstMissingName));
+            AddEvidence(_missingSuffixes, new MissingSuffixEvidence(parent, before.Identity, semantics,
+                firstMissingName, stableDirectoryAppeared
+                    ? (missingAfter ?? missingFinal)!.Identity
+                    : null));
         }
 
         private static bool IsReservedControlName(string name, PhysicalStoreNameSemantics semantics)
@@ -958,11 +1014,14 @@ internal sealed class PackageStoreAuthorityResolver
         internal void Revalidate(
             PhysicalStoreHandle target,
             PhysicalStorePathTarget targetKind,
-            PhysicalStoreDirectoryHandle? targetParent)
+            PhysicalStoreDirectoryHandle? targetParent,
+            bool allowStableMissingDirectoryRetry = false)
         {
+            var missingDirectoryAppeared = false;
             if (_missingSuffixes.Count > 0 && targetKind is not (
                     PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix or
-                    PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix))
+                    PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix or
+                    PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix))
                 throw Unknown("Missing-suffix evidence is valid only for configured-root or package-directory classification.", RootIdentity);
 
             foreach (var anchor in _anchors)
@@ -1038,17 +1097,50 @@ internal sealed class PackageStoreAuthorityResolver
                 var entry = resolver._files.InspectChildNoFollow(missing.Parent, missing.FirstMissingName);
                 var parentAfter = resolver._files.InspectHandle(missing.Parent);
                 var semanticsAfter = resolver._names.ObserveDirectoryNameSemantics(missing.Parent);
-                if (!ReferenceEquals(target, missing.Parent) || parent.Kind != PhysicalStoreEntryKind.Directory ||
-                    parent.Identity != missing.ParentIdentity || semantics != missing.Semantics || entry is not null ||
-                    parentAfter.Kind != PhysicalStoreEntryKind.Directory || parentAfter.Identity != missing.ParentIdentity ||
-                    semanticsAfter != missing.Semantics)
+                var entryAfter = resolver._files.InspectChildNoFollow(missing.Parent, missing.FirstMissingName);
+                var parentFinal = parentAfter;
+                var semanticsFinal = semanticsAfter;
+                var entryFinal = entryAfter;
+                if (allowStableMissingDirectoryRetry && entry is null &&
+                    entryAfter is { Kind: PhysicalStoreEntryKind.Directory })
+                {
+                    entryFinal = resolver._files.InspectChildNoFollow(missing.Parent, missing.FirstMissingName);
+                    parentFinal = resolver._files.InspectHandle(missing.Parent);
+                    semanticsFinal = resolver._names.ObserveDirectoryNameSemantics(missing.Parent);
+                }
+
+                var parentStable = parent.Kind == PhysicalStoreEntryKind.Directory &&
+                    parent.Identity == missing.ParentIdentity && semantics == missing.Semantics &&
+                    parentAfter.Kind == PhysicalStoreEntryKind.Directory &&
+                    parentAfter.Identity == missing.ParentIdentity && semanticsAfter == missing.Semantics &&
+                    parentFinal.Kind == PhysicalStoreEntryKind.Directory &&
+                    parentFinal.Identity == missing.ParentIdentity && semanticsFinal == missing.Semantics;
+                var stillAbsent = entry is null && entryAfter is null && entryFinal is null;
+                var stableDirectoryAppeared = allowStableMissingDirectoryRetry &&
+                    targetKind == PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix && RootIdentity is null &&
+                    ((entry is { Kind: PhysicalStoreEntryKind.Directory } firstDirectory &&
+                      entryAfter is { Kind: PhysicalStoreEntryKind.Directory } secondDirectory &&
+                      firstDirectory.Identity == secondDirectory.Identity) ||
+                     (entry is null && entryAfter is { Kind: PhysicalStoreEntryKind.Directory } secondDirectoryAfterAbsence &&
+                      entryFinal is { Kind: PhysicalStoreEntryKind.Directory } thirdDirectoryAfterAbsence &&
+                      secondDirectoryAfterAbsence.Identity == thirdDirectoryAfterAbsence.Identity));
+                var sameAppearedIdentity = missing.DirectoryAppearanceIdentity is null ||
+                    stillAbsent ||
+                    stableDirectoryAppeared &&
+                    (entryAfter ?? entryFinal)?.Identity == missing.DirectoryAppearanceIdentity;
+                if (!ReferenceEquals(target, missing.Parent) || !parentStable ||
+                    (!stillAbsent && !stableDirectoryAppeared) || !sameAppearedIdentity)
                 {
                     throw Unknown("A prospective target suffix changed after native absence observation.", RootIdentity);
                 }
+
+                missingDirectoryAppeared |= allowStableMissingDirectoryRetry &&
+                    (missing.DirectoryAppearanceIdentity is not null || stableDirectoryAppeared);
             }
 
             if (targetKind is (PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix or
-                    PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix) &&
+                    PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix or
+                    PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix) &&
                 _missingSuffixes.Count > 1)
             {
                 throw Unknown("A missing-suffix resolution observed multiple missing edges.", RootIdentity);
@@ -1131,6 +1223,10 @@ internal sealed class PackageStoreAuthorityResolver
                     throw Unknown("The retained graph-use root no longer matches its immutable install identity.", RootIdentity);
                 }
             }
+
+            if (missingDirectoryAppeared)
+                throw Unknown("A previously absent package-directory edge appeared during native classification.",
+                    RootIdentity, new PackageStoreDirectoryAppearanceRetryException());
         }
 
         private void ValidateCandidate(PhysicalRootIdentity observedRoot, RootMembershipRecord candidate)
@@ -1194,6 +1290,7 @@ internal sealed class PackageStoreAuthorityResolver
             PhysicalStoreDirectoryHandle Parent,
             PhysicalFileIdentity ParentIdentity,
             PhysicalStoreNameSemantics Semantics,
-            string FirstMissingName);
+            string FirstMissingName,
+            PhysicalFileIdentity? DirectoryAppearanceIdentity);
     }
 }

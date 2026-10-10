@@ -14,6 +14,9 @@ internal enum UnenrolledPackageDirectoryStatus
 
 internal static class PackageStoreRuntimeAdmission
 {
+    // Allow the initial classification plus at most two fresh pre-callback classifications; never retry the callback.
+    private const int MaximumUnenrolledDirectoryReclassifications = 2;
+
     internal static IPackageStoreAdmission Create(
         IPhysicalStoreFileSystem files,
         IStoreRegistry selectedRegistry,
@@ -61,43 +64,80 @@ internal static class PackageStoreRuntimeAdmission
     internal static T WithUnenrolledPackageDirectory<T>(
         string exactInstallPath,
         Func<IPhysicalStoreFileSystem, UnenrolledPackageDirectoryStatus, PhysicalStoreDirectoryHandle?, T> read)
+        => WithUnenrolledPackageDirectory(exactInstallPath, CreatePhysicalFileSystem(), read);
+
+    /// <summary>Runs the native probe with an explicit provider, allowing deterministic owned native race tests.</summary>
+    internal static T WithUnenrolledPackageDirectory<T>(
+        string exactInstallPath,
+        IPhysicalStoreFileSystem files,
+        Func<IPhysicalStoreFileSystem, UnenrolledPackageDirectoryStatus, PhysicalStoreDirectoryHandle?, T> read)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(exactInstallPath);
+        ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(read);
 
-        var files = CreatePhysicalFileSystem();
         var resolver = CreateLedgerOnlyResolver(files);
         var exactBaseLocator = Path.IsPathFullyQualified(exactInstallPath) ? null : Directory.GetCurrentDirectory();
-        using var resolved = resolver.Resolve(exactInstallPath,
-            PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix,
-            exactBaseLocator: exactBaseLocator);
-        if (resolved.RootIdentity is not null || resolved.MembershipCandidate is not null ||
-            resolved.MembershipLedgerIdentity is not null || resolved.AuthorityRoot is not null)
+        var reclassifications = 0;
+        while (true)
         {
-            throw Refuse("An unscoped metadata read cannot access a package path with membership authority.",
-                resolved.RootIdentity);
-        }
+            ResolvedPackageStorePath resolved;
+            try
+            {
+                resolved = resolver.ResolveForUnenrolledPackageProbe(exactInstallPath, exactBaseLocator);
+            }
+            catch (PackageStoreAdmissionException exception)
+                when (exception.InnerException is PackageStoreDirectoryAppearanceRetryException cause)
+            {
+                if (reclassifications >= MaximumUnenrolledDirectoryReclassifications)
+                    throw UnstableMissingDirectory(cause);
+                reclassifications++;
+                continue;
+            }
 
-        var missing = resolved.IsProspectiveMissingSuffix;
-        var directory = missing
-            ? null
-            : resolved.Target as PhysicalStoreDirectoryHandle
-                ?? throw Refuse("A positively Unenrolled package path is not a held directory.");
-        resolved.Revalidate();
-        T result;
-        try
-        {
-            result = read(files,
-                missing ? UnenrolledPackageDirectoryStatus.Missing : UnenrolledPackageDirectoryStatus.Present,
-                directory);
+            using (resolved)
+            {
+                if (resolved.RootIdentity is not null || resolved.MembershipCandidate is not null ||
+                    resolved.MembershipLedgerIdentity is not null || resolved.AuthorityRoot is not null)
+                {
+                    throw Refuse("An unscoped metadata read cannot access a package path with membership authority.",
+                        resolved.RootIdentity);
+                }
+
+                var missing = resolved.IsProspectiveMissingSuffix;
+                var directory = missing
+                    ? null
+                    : resolved.Target as PhysicalStoreDirectoryHandle
+                        ?? throw Refuse("A positively Unenrolled package path is not a held directory.");
+                try
+                {
+                    resolved.RevalidateForUnenrolledPackageProbe();
+                }
+                catch (PackageStoreAdmissionException exception)
+                    when (exception.InnerException is PackageStoreDirectoryAppearanceRetryException cause)
+                {
+                    if (reclassifications >= MaximumUnenrolledDirectoryReclassifications)
+                        throw UnstableMissingDirectory(cause);
+                    reclassifications++;
+                    continue;
+                }
+
+                T result;
+                try
+                {
+                    result = read(files,
+                        missing ? UnenrolledPackageDirectoryStatus.Missing : UnenrolledPackageDirectoryStatus.Present,
+                        directory);
+                }
+                catch
+                {
+                    resolved.Revalidate();
+                    throw;
+                }
+                resolved.Revalidate();
+                return result;
+            }
         }
-        catch
-        {
-            resolved.Revalidate();
-            throw;
-        }
-        resolved.Revalidate();
-        return result;
     }
 
     internal static IPhysicalStoreFileSystem CreatePhysicalFileSystem()
@@ -273,5 +313,11 @@ internal static class PackageStoreRuntimeAdmission
 
     private static PackageStoreAdmissionException Refuse(string message, PhysicalRootIdentity? root = null)
         => new(PackageStoreAdmissionReason.UnsupportedParticipant, message, root);
+
+    private static PackageStoreAdmissionException UnstableMissingDirectory(
+        PackageStoreDirectoryAppearanceRetryException exception)
+        => new(PackageStoreAdmissionReason.UnknownAuthority,
+            "A package directory kept changing during bounded native pre-callback classification.",
+            root: null, innerException: exception);
 
 }

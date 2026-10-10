@@ -8,4 +8,9 @@ internal interface IPackageStoreOperationPackageDirectoryValidator
     TResult WithValidatedPackageDirectory<TResult>(
         string installPath,
         Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle, TResult> callback);
+
+    /// <summary>Runs synchronous package-directory work under exact held ancestry, or supplies null only for a replayed absence.</summary>
+    TResult WithValidatedPackageDirectoryOrMissing<TResult>(
+        string installPath,
+        Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle?, TResult> callback);
 }

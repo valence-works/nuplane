@@ -7,13 +7,14 @@ namespace Nuplane.Store.Coordination;
 /// <summary>Owns a metadata-only configured-path resolution and its retained native evidence.</summary>
 /// <remarks>
 /// A null authority and root identity means resolution positively observed no reserved authority on the
-/// resolved namespace. A retained graph-use result may carry a physical root bound by an immutable lease
-/// without carrying a fresh membership candidate. This result is not an admission capability.
+/// resolved namespace. An explicit admitted-operation missing-suffix result may retain a Complete membership
+/// candidate and the nearest existing parent. A retained graph-use result may carry a physical root bound by an
+/// immutable lease without carrying a fresh membership candidate. This result is not an admission capability.
 /// </remarks>
 internal sealed class ResolvedPackageStorePath : IDisposable
 {
     private readonly IReadOnlyList<PhysicalStoreHandle> _ownedHandles;
-    private readonly Action _revalidate;
+    private readonly Action<bool> _revalidate;
     private readonly object _gate = new();
     private bool _disposed;
 
@@ -24,7 +25,7 @@ internal sealed class ResolvedPackageStorePath : IDisposable
         RootMembershipRecord? membershipCandidate,
         PhysicalFileIdentity? membershipLedgerIdentity,
         IReadOnlyList<PhysicalStoreHandle> ownedHandles,
-        Action revalidate,
+        Action<bool> revalidate,
         bool isProspectiveConfiguredRoot = false,
         bool isProspectiveMissingSuffix = false,
         bool isRetainedGraphUseRoot = false)
@@ -37,8 +38,8 @@ internal sealed class ResolvedPackageStorePath : IDisposable
             (membershipCandidate is null && rootIdentity is not null && !isRetainedGraphUseRoot) ||
             (isRetainedGraphUseRoot && (authorityRoot is null || rootIdentity is null || membershipCandidate is not null)))
             throw new ArgumentException("Authority handle, root identity, and membership candidate must be present together.", nameof(authorityRoot));
-        if (isProspectiveMissingSuffix && (rootIdentity is not null || target is not PhysicalStoreDirectoryHandle))
-            throw new ArgumentException("A prospective directory target requires an absent authority and a held existing parent.", nameof(isProspectiveMissingSuffix));
+        if (isProspectiveMissingSuffix && target is not PhysicalStoreDirectoryHandle)
+            throw new ArgumentException("A prospective directory target requires a held existing parent.", nameof(isProspectiveMissingSuffix));
         if (isProspectiveConfiguredRoot && !isProspectiveMissingSuffix)
             throw new ArgumentException("A prospective configured root must retain a missing-suffix observation.", nameof(isProspectiveConfiguredRoot));
 
@@ -80,11 +81,19 @@ internal sealed class ResolvedPackageStorePath : IDisposable
 
     /// <summary>Rechecks the retained namespace, edge, alias, authority, and target observations.</summary>
     internal void Revalidate()
+        => Revalidate(allowStableMissingDirectoryRetry: false);
+
+    /// <summary>Rechecks evidence for the one unscoped pre-callback directory-classification retry.</summary>
+    /// <remarks>Post-callback and all other callers must use strict <see cref="Revalidate()"/>.</remarks>
+    internal void RevalidateForUnenrolledPackageProbe()
+        => Revalidate(allowStableMissingDirectoryRetry: true);
+
+    private void Revalidate(bool allowStableMissingDirectoryRetry)
     {
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            _revalidate();
+            _revalidate(allowStableMissingDirectoryRetry);
         }
     }
 

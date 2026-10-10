@@ -15,6 +15,9 @@ internal enum PhysicalStorePathTarget
     /// <summary>A package directory that may have an absent suffix only when no authority was observed; final aliases remain refused.</summary>
     PackageDirectoryAllowMissingSuffix,
 
+    /// <summary>A package directory that may have a positively absent suffix only inside an existing admitted operation.</summary>
+    AdmittedPackageDirectoryAllowMissingSuffix,
+
     /// <summary>A regular single-link archive file, whose final alias is refused.</summary>
     ArchiveFile
 }

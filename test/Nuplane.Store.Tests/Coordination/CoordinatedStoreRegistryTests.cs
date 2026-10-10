@@ -31,12 +31,17 @@ public sealed class CoordinatedStoreRegistryTests
         var membershipRegistry = new RootMembershipRegistry(storeContext.Files, serializer);
         var admission = new PackageStoreAdmission(storeContext.Files, membershipRegistry,
             storeContext.Fixture.PackageInstallRoot);
+        StoreStateRecord secondCandidate;
+        // Prepare the new installed graph with root-wide authority before taking a path-restricted borrow.
+        await using (var preparation = await admission.AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Reconciliation))
+        using (var preparationBorrow = preparation.Owner!.Borrow())
+            secondCandidate = await storeContext.BuildStateAsync("second", "Root.Second", "1.1.0", preparationBorrow);
         var installPath = GetAdmittedInstallPath(storeContext);
         await using var pathAdmission = await admission.AcquireForInstallPathsAsync([installPath],
             PackageStoreAdmissionKind.Reconciliation);
         using var borrow = pathAdmission.BorrowFor(installPath);
         await ExerciseTwoMemberCoordinatedWritesAsync(storeContext, serializer, borrow, installPath,
-            "multipath-coordinated-1");
+            "multipath-coordinated-1", secondCandidate);
     }
 
     private static string GetAdmittedInstallPath(RootMembershipProtectionVerificationTests.Context context)
@@ -50,7 +55,8 @@ public sealed class CoordinatedStoreRegistryTests
         CountingPayloadSerializer serializer,
         PackageStoreOperationBorrow borrow,
         string installPath,
-        string correlationId)
+        string correlationId,
+        StoreStateRecord? secondCandidate = null)
     {
         var first = new StoreRegistry(serializer, storeContext.Fixture.StateFilePath);
         var second = new StoreRegistry(serializer, storeContext.StatePaths["second"]);
@@ -66,7 +72,7 @@ public sealed class CoordinatedStoreRegistryTests
         borrow.ValidateForInstallPath(installPath);
 
         var secondBefore = await second.ReadCoordinatedStateAsync(borrow, CancellationToken.None);
-        var secondCandidate = await storeContext.BuildStateAsync("second", "Root.Second", "1.1.0");
+        secondCandidate ??= await storeContext.BuildStateAsync("second", "Root.Second", "1.1.0", borrow);
         secondCandidate = storeContext.Reprotect(secondCandidate, legacyUnknown: false,
             revision: checked(secondBefore.ProtectionRecord!.Revision + 1));
         await second.PersistCoordinatedActiveStateAsync(borrow, secondCandidate, CancellationToken.None);
@@ -149,7 +155,7 @@ public sealed class CoordinatedStoreRegistryTests
         using (borrow)
         {
             var prior = await registry.ReadCoordinatedStateAsync(borrow, CancellationToken.None);
-            var candidate = await context.StoreContext.BuildStateAsync("second", "Root.Second", "1.1.0");
+            var candidate = await context.StoreContext.BuildStateAsync("second", "Root.Second", "1.1.0", borrow);
             candidate = context.StoreContext.Reprotect(candidate, legacyUnknown: true,
                 revision: checked(prior.ProtectionRecord!.Revision + 1));
             var priorBytes = await File.ReadAllBytesAsync(path);

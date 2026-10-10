@@ -8,6 +8,7 @@ using Nuplane.Reconciliation.Models;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.MembershipRecords;
 using Nuplane.Store.Coordination.PhysicalFiles;
+using Nuplane.Reconciliation.PackageFiles;
 using Nuplane.Store.Coordination.ProtectionRecords;
 using Nuplane.Store.State;
 using Nuplane.Tests.Shared;
@@ -160,14 +161,14 @@ public sealed class RootMembershipProtectionVerificationTests
                 }
                 var declarations = context.StatePaths.Select(pair => new RootMemberRecord(pair.Key, pair.Value,
                     new RootMemberRecord.DeclaredBinding())).ToArray();
+                // Build the migration input before enrollment reserves package IO for admitted operations.
+                context.SharedInstallPath = context.Install("Shared.Dependency", "2.1.0", null);
+                context.States.Add("first", await context.BuildStateAsync("first", "Root.First"));
+                context.States.Add("second", await context.BuildStateAsync("second", "Root.Second"));
                 context.Registry.InitializeIncomplete(context.Root, context.RootIdentity, 1, declarations, true, CancellationToken.None);
                 await context.Registry.BindDeclaredMembersAsync(context.Root, context.RootIdentity, 1, declarations,
                     parents.ToDictionary(pair => pair.Key, pair => (pair.Value, Path.GetFileName(context.StatePaths[pair.Key]))),
                     true, CancellationToken.None);
-
-                context.SharedInstallPath = context.Install("Shared.Dependency", "2.1.0", null);
-                context.States.Add("first", await context.BuildStateAsync("first", "Root.First"));
-                context.States.Add("second", await context.BuildStateAsync("second", "Root.Second"));
                 return context;
             }
             catch { context.Dispose(); throw; }
@@ -212,7 +213,8 @@ public sealed class RootMembershipProtectionVerificationTests
             return state with { ProtectionRecord = protection };
         }
 
-        internal async Task<StoreStateRecord> BuildStateAsync(string memberId, string rootPackageId, string rootVersion = "1.0.0")
+        internal async Task<StoreStateRecord> BuildStateAsync(string memberId, string rootPackageId,
+            string rootVersion = "1.0.0", PackageStoreOperationBorrow? borrow = null)
         {
             var rootPath = Install(rootPackageId, rootVersion, "Shared.Dependency");
             var requests = new[] { new PackageRequest(rootPackageId, string.Empty, "feed", PackageUpdatePolicy.Range, memberId) };
@@ -221,7 +223,9 @@ public sealed class RootMembershipProtectionVerificationTests
                 new ResolvedPackage(rootPackageId, rootVersion, "feed", rootPath, DateTimeOffset.UnixEpoch, memberId),
                 new ResolvedPackage("Shared.Dependency", "2.1.0", "feed", SharedInstallPath, DateTimeOffset.UnixEpoch, "dependency")
             };
-            var resolver = new PackageDependencyGraphResolver(Substitute.For<IPackageResolver>(), Substitute.For<IReconciliationRetryPolicy>());
+            var resolver = new PackageDependencyGraphResolver(Substitute.For<IPackageResolver>(),
+                Substitute.For<IReconciliationRetryPolicy>(), hostProvidedPackagesOptions: null, hostPackageVersions: null,
+                packageFiles: new NativePackageGraphFileReader(borrow));
             var resolution = await resolver.ResolveAsync(requests, (_, _) => Task.FromResult(packages[0]),
                 (_, _) => Task.FromResult(packages[1]), CancellationToken.None);
             var graph = Assert.Single(resolution.ResolvedGraphs);

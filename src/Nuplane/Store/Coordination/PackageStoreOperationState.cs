@@ -170,6 +170,33 @@ internal sealed class PackageStoreOperationState : IPackageStoreOperationOwnerCo
         }
     }
 
+    internal TResult WithValidatedPackageDirectoryOrMissing<TResult>(
+        PackageStoreOperationBorrow borrow,
+        string installPath,
+        Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle?, TResult> callback)
+    {
+        ArgumentNullException.ThrowIfNull(borrow);
+        ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+        ArgumentNullException.ThrowIfNull(callback);
+        BeginValidation(borrow, installPath);
+        try
+        {
+            if (_pathValidator is not IPackageStoreOperationPackageDirectoryValidator packageDirectoryValidator)
+            {
+                throw new PackageStoreAdmissionException(
+                    PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "This admitted operation cannot expose native package-directory or positive-absence evidence.",
+                    _root);
+            }
+
+            return packageDirectoryValidator.WithValidatedPackageDirectoryOrMissing(installPath, callback);
+        }
+        finally
+        {
+            EndValidation();
+        }
+    }
+
     internal async Task<TResult> WithValidatedRootAsync<TResult>(
         PackageStoreOperationBorrow borrow,
         Func<IPhysicalStoreFileSystem, PhysicalStoreDirectoryHandle, CancellationToken, Task<TResult>> callback,
