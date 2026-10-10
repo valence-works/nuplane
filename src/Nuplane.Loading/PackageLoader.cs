@@ -28,10 +28,13 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
     private readonly ILogger<PackageLoader> _logger;
     private readonly HostIntegratedAssemblyResolver? _hostIntegratedAssemblyResolver;
     private readonly string? _hostTargetFrameworkOverride;
+    private readonly object _loadContextSync = new();
     private readonly ConcurrentDictionary<string, AssemblyLoadContext> _contexts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, PackageLoadSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, LoadedGraphCacheEntry> _loadedGraphs = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, byte> _inertPackages = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, PackageProjection> _loadedPackageProjections = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, PackageProjection> _inertPackageProjections = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Initializes a new instance of <see cref="PackageLoader"/> with an optional shared assembly policy matcher
@@ -74,6 +77,24 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
         && !string.IsNullOrWhiteSpace(version)
         && _inertPackages.ContainsKey(BuildKey(packageId, version));
 
+    bool IScopedPackageLoader.IsInertPackage(ResolvedPackage package, PackageGraphUseLease lease)
+    {
+        ArgumentNullException.ThrowIfNull(package);
+        ArgumentNullException.ThrowIfNull(lease);
+
+        var key = BuildKey(package.Id, package.Version);
+        var selectedProjection = CreatePackageProjection(package, lease);
+        lock (_loadContextSync)
+        {
+            if (!_inertPackageProjections.TryGetValue(key, out var inertProjection)
+                || inertProjection != selectedProjection)
+                return false;
+
+            // A known inert projection must not hide a still-loaded context for another exact install.
+            return !_contexts.ContainsKey(key);
+        }
+    }
+
     /// <summary>
     /// Builds deterministic assembly scan candidates for the specified active package install path.
     /// </summary>
@@ -113,7 +134,12 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
         var loaded = new List<PackageLoadSession>();
         var failed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        EnsurePackagesLoaded(packages, sharedPolicy, cancellationToken, loaded, failed);
+        var projections = CreatePackageProjections(packages);
+        lock (_loadContextSync)
+        {
+            EnsurePackagesLoaded(packages, sharedPolicy, cancellationToken, loaded, failed,
+                packageProjections: projections);
+        }
 
         return Task.FromResult<PackageLoadResult>(new(loaded, failed));
     }
@@ -133,44 +159,8 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
         foreach (var packageGraph in packageGraphs)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            var graphKey = BuildGraphKey(packageGraph);
-            var graphDecision = await _loadModeSelector.SelectGraphAsync(packageGraph, _options, graphKey, cancellationToken).ConfigureAwait(false);
-            var selections = graphDecision.Selections;
-            var usesPerPackageContexts = UsesPerPackageContexts(packageGraph, selections);
-            var graphLoadMode = ResolveGraphLoadMode(selections);
-
-            // Activation gates are consulted after the load mode is decided and before either load path runs,
-            // so nothing of a blocked graph is ever resolved, loaded, or published.
-            var activationBlockMessage = await EvaluateActivationGatesAsync(
-                packageGraph,
-                graphKey,
-                graphLoadMode,
-                usesPerPackageContexts,
-                cancellationToken).ConfigureAwait(false);
-
-            if (activationBlockMessage is not null)
-            {
-                // Recorded through the same bookkeeping a load failure uses, so a block is indistinguishable
-                // from an ordinary load failure for every caller downstream.
-                RecordGraphFailure(
-                    packageGraph,
-                    graphKey,
-                    graphLoadMode,
-                    usesPerPackageContexts,
-                    activationBlockMessage,
-                    failed,
-                    graphDecision.DiagnosticsByPackageKey);
-                continue;
-            }
-
-            if (usesPerPackageContexts)
-            {
-                EnsurePackagesLoaded(packageGraph, sharedPolicy, cancellationToken, loaded, failed, graphDecision.DiagnosticsByPackageKey);
-                continue;
-            }
-
-            EnsureGraphLoaded(packageGraph, selections, sharedPolicy, loaded, failed, graphDecision.DiagnosticsByPackageKey);
+            await ProcessGraphAsync(packageGraph, CreatePackageProjections(packageGraph),
+                sharedPolicy, cancellationToken, graphLeaseOwner: null, loaded, failed).ConfigureAwait(false);
         }
 
         return new(loaded, failed);
@@ -215,8 +205,12 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
             }
 
             // Validate every immutable envelope before the first package read or user callback.
+            var projectionsByGraph = new Dictionary<ScopedResolvedPackageGraph, IReadOnlyDictionary<string, PackageProjection>>();
             foreach (var packageGraph in scopedGraphs)
+            {
                 ScopedResolvedPackageGraphValidator.Validate(packageGraph);
+                projectionsByGraph.Add(packageGraph, CreatePackageProjections(packageGraph));
+            }
 
             // Hold counted exact-path pins across metadata, gates, package enumeration, and transfer
             // into the actual load context. No root operation borrow is retained or reacquired here.
@@ -234,6 +228,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                 var owner = packageGraph.LeaseOwner;
                 var graphLease = owner.Lease;
                 var graphKey = BuildGraphKey(packages);
+                var packageProjections = projectionsByGraph[packageGraph];
                 var graphLeases = new[] { graphLease };
                 var graphDecision = await _loadModeSelector.SelectGraphAsync(
                     packages, _options, graphKey, cancellationToken, graphLeases).ConfigureAwait(false);
@@ -241,36 +236,51 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                 var usesPerPackageContexts = UsesPerPackageContexts(packages, selections);
                 var graphLoadMode = ResolveGraphLoadMode(selections);
 
+                // Consume an exact cache hit under the same monitor as its identity decision. Cache misses
+                // leave the monitor before any activation gate is consulted.
+                if (TryReuseLoadedGraph(packages, selections, copiedSharedPolicy, cancellationToken,
+                        loaded, failed, packageProjections, graphDecision.DiagnosticsByPackageKey, owner,
+                        graphKey, graphLoadMode, usesPerPackageContexts))
+                {
+                    continue;
+                }
+
                 var activationBlockMessage = await EvaluateActivationGatesAsync(
                     packages,
                     graphKey,
                     graphLoadMode,
-                    usesPerPackageContexts,
                     cancellationToken,
                     graphLeases).ConfigureAwait(false);
 
                 if (activationBlockMessage is not null)
                 {
-                    RecordGraphFailure(
-                        packages,
-                        graphKey,
-                        graphLoadMode,
-                        usesPerPackageContexts,
-                        activationBlockMessage,
-                        failed,
-                        graphDecision.DiagnosticsByPackageKey);
+                    lock (_loadContextSync)
+                    {
+                        RecordGraphFailure(
+                            packages,
+                            graphKey,
+                            graphLoadMode,
+                            usesPerPackageContexts,
+                            activationBlockMessage,
+                            failed,
+                            graphDecision.DiagnosticsByPackageKey);
+                    }
                     continue;
                 }
 
-                if (usesPerPackageContexts)
+                lock (_loadContextSync)
                 {
-                    EnsurePackagesLoaded(packages, copiedSharedPolicy, cancellationToken, loaded, failed,
-                        graphDecision.DiagnosticsByPackageKey, owner);
-                    continue;
+                    if (usesPerPackageContexts)
+                    {
+                        EnsurePackagesLoaded(packages, copiedSharedPolicy, cancellationToken, loaded, failed,
+                            packageProjections, graphDecision.DiagnosticsByPackageKey, owner);
+                    }
+                    else
+                    {
+                        EnsureGraphLoaded(packages, selections, copiedSharedPolicy, loaded, failed,
+                            packageProjections, graphDecision.DiagnosticsByPackageKey, owner);
+                    }
                 }
-
-                EnsureGraphLoaded(packages, selections, copiedSharedPolicy, loaded, failed,
-                    graphDecision.DiagnosticsByPackageKey, owner);
             }
 
             return new(loaded, failed);
@@ -307,6 +317,98 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
         }
     }
 
+    private async Task ProcessGraphAsync(
+        IReadOnlyList<ResolvedPackage> packageGraph,
+        IReadOnlyDictionary<string, PackageProjection> packageProjections,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        CancellationToken cancellationToken,
+        PackageGraphUseLeaseOwner? graphLeaseOwner,
+        List<PackageLoadSession> loaded,
+        Dictionary<string, string> failed)
+    {
+        var graphKey = BuildGraphKey(packageGraph);
+        var graphDecision = await _loadModeSelector.SelectGraphAsync(
+            packageGraph, _options, graphKey, cancellationToken).ConfigureAwait(false);
+        var selections = graphDecision.Selections;
+        var usesPerPackageContexts = UsesPerPackageContexts(packageGraph, selections);
+        var graphLoadMode = ResolveGraphLoadMode(selections);
+
+        if (TryReuseLoadedGraph(packageGraph, selections, sharedPolicy, cancellationToken,
+                loaded, failed, packageProjections, graphDecision.DiagnosticsByPackageKey, graphLeaseOwner,
+                graphKey, graphLoadMode, usesPerPackageContexts))
+        {
+            return;
+        }
+
+        var activationBlockMessage = await EvaluateActivationGatesAsync(
+            packageGraph,
+            graphKey,
+            graphLoadMode,
+            cancellationToken).ConfigureAwait(false);
+
+        lock (_loadContextSync)
+        {
+            if (activationBlockMessage is not null)
+            {
+                RecordGraphFailure(
+                    packageGraph,
+                    graphKey,
+                    graphLoadMode,
+                    usesPerPackageContexts,
+                    activationBlockMessage,
+                    failed,
+                    graphDecision.DiagnosticsByPackageKey);
+            }
+            else if (usesPerPackageContexts)
+            {
+                EnsurePackagesLoaded(packageGraph, sharedPolicy, cancellationToken, loaded, failed,
+                    packageProjections, graphDecision.DiagnosticsByPackageKey, graphLeaseOwner);
+            }
+            else
+            {
+                EnsureGraphLoaded(packageGraph, selections, sharedPolicy, loaded, failed,
+                    packageProjections, graphDecision.DiagnosticsByPackageKey, graphLeaseOwner);
+            }
+        }
+    }
+
+    private static IReadOnlyDictionary<string, PackageProjection> CreatePackageProjections(
+        IReadOnlyList<ResolvedPackage> packages,
+        PackageGraphUseLease? lease = null)
+    {
+        var projections = new Dictionary<string, PackageProjection>(StringComparer.OrdinalIgnoreCase);
+        foreach (var package in packages)
+        {
+            ArgumentNullException.ThrowIfNull(package);
+            var key = BuildKey(package.Id, package.Version);
+            var projection = CreatePackageProjection(package, lease);
+            if (!projections.TryAdd(key, projection))
+            {
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                    $"A package graph contains more than one exact install projection for '{key}'.",
+                    lease?.Snapshot.Roots.Count == 1 ? lease.Snapshot.Roots[0] : null);
+            }
+        }
+
+        return projections;
+    }
+
+    private static PackageProjection CreatePackageProjection(
+        ResolvedPackage package,
+        PackageGraphUseLease? lease)
+    {
+        var key = BuildKey(package.Id, package.Version);
+        return new PackageProjection(
+            key,
+            package.InstallPath,
+            package.PackageContentHash,
+            lease?.GetInstallIdentityForExactPath(package.InstallPath));
+    }
+
+    private static IReadOnlyDictionary<string, PackageProjection> CreatePackageProjections(
+        ScopedResolvedPackageGraph packageGraph) =>
+        CreatePackageProjections(packageGraph.Packages, packageGraph.LeaseOwner.Lease);
+
     // The single definition of the load-path dispatch rule: a single-package, all-collectible graph is loaded
     // through per-package contexts instead of one shared graph context. Both the dispatch itself and the
     // activation-gate pre-check ask this, so they always agree on which path a graph would take.
@@ -329,18 +431,11 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
         IReadOnlyList<ResolvedPackage> packageGraph,
         string graphKey,
         PackageLoadMode graphLoadMode,
-        bool usesPerPackageContexts,
         CancellationToken cancellationToken,
         IReadOnlyList<PackageGraphUseLease>? graphUseLeases = null)
     {
-        // Without a gate there is nothing to decide; an empty graph activates nothing; and a graph
-        // generation that is already loaded is not being activated again, so its gates already ran.
-        if (_activationGates.Count == 0
-            || packageGraph.Count == 0
-            || IsGraphAlreadyLoaded(packageGraph, graphKey, graphLoadMode, usesPerPackageContexts))
-        {
+        if (_activationGates.Count == 0 || packageGraph.Count == 0)
             return null;
-        }
 
         var context = new PackageActivationContext(
             graphKey,
@@ -401,16 +496,56 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
             : $"Activation of package graph '{graphKey}' ({packageKeys}) was blocked before loading. {string.Join(" ", blockReasons)}";
     }
 
-    // Asks the very predicates the load paths themselves use, so gate evaluation and the load short-circuits
-    // can never disagree about whether a graph is about to be really loaded.
-    private bool IsGraphAlreadyLoaded(
+    private bool TryReuseLoadedGraph(
+        IReadOnlyList<ResolvedPackage> packageGraph,
+        IReadOnlyList<PackageLoadModeSelection> selections,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        CancellationToken cancellationToken,
+        List<PackageLoadSession> loaded,
+        Dictionary<string, string> failed,
+        IReadOnlyDictionary<string, PackageProjection> packageProjections,
+        IReadOnlyDictionary<string, IReadOnlyList<LoadModeDecisionDiagnostic>> diagnosticsByPackageKey,
+        PackageGraphUseLeaseOwner? graphLeaseOwner,
+        string graphKey,
+        PackageLoadMode graphLoadMode,
+        bool usesPerPackageContexts)
+    {
+        lock (_loadContextSync)
+        {
+            if (!IsGraphAlreadyLoadedUnderLock(packageGraph, graphKey, graphLoadMode,
+                    usesPerPackageContexts, packageProjections))
+                return false;
+
+            if (usesPerPackageContexts)
+                EnsurePackagesLoaded(packageGraph, sharedPolicy, cancellationToken, loaded, failed,
+                    packageProjections, diagnosticsByPackageKey, graphLeaseOwner);
+            else
+                EnsureGraphLoaded(packageGraph, selections, sharedPolicy, loaded, failed,
+                    packageProjections, diagnosticsByPackageKey, graphLeaseOwner);
+            return true;
+        }
+    }
+
+    // The same predicates as the load paths are checked immediately before their cache-hit fast path.
+    private bool IsGraphAlreadyLoadedUnderLock(
         IReadOnlyList<ResolvedPackage> packageGraph,
         string graphKey,
         PackageLoadMode graphLoadMode,
-        bool usesPerPackageContexts) =>
-        usesPerPackageContexts
-            ? packageGraph.All(package => TryGetLoadedSession(BuildKey(package.Id, package.Version), out _))
-            : TryGetLoadedGraphSessions(graphKey, graphLoadMode, out _);
+        bool usesPerPackageContexts,
+        IReadOnlyDictionary<string, PackageProjection> packageProjections)
+    {
+        if (!usesPerPackageContexts)
+            return TryGetLoadedGraphSessions(graphKey, graphLoadMode, packageProjections.Values, out _);
+
+        return packageGraph.All(package =>
+        {
+            var key = BuildKey(package.Id, package.Version);
+            return packageProjections.TryGetValue(key, out var projection)
+                && TryGetLoadedSession(key, out _)
+                && _loadedPackageProjections.TryGetValue(key, out var existingProjection)
+                && existingProjection == projection;
+        });
+    }
 
     private void EnsurePackagesLoaded(
         IReadOnlyList<ResolvedPackage> packages,
@@ -418,6 +553,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
         CancellationToken cancellationToken,
         List<PackageLoadSession> loaded,
         Dictionary<string, string> failed,
+        IReadOnlyDictionary<string, PackageProjection> packageProjections,
         IReadOnlyDictionary<string, IReadOnlyList<LoadModeDecisionDiagnostic>>? diagnosticsByPackageKey = null,
         PackageGraphUseLeaseOwner? graphLeaseOwner = null)
     {
@@ -426,7 +562,12 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
             cancellationToken.ThrowIfCancellationRequested();
 
             var key = BuildKey(package.Id, package.Version);
-            if (TryGetLoadedSession(key, out var existing))
+            if (!packageProjections.TryGetValue(key, out var projection))
+                throw new InvalidOperationException($"Package projection '{key}' was not captured before loading.");
+
+            if (TryGetLoadedSession(key, out var existing)
+                && _loadedPackageProjections.TryGetValue(key, out var existingProjection)
+                && existingProjection == projection)
             {
                 if (graphLeaseOwner is not null && _contexts.TryGetValue(key, out var existingContext))
                     graphLeaseOwner.TransferToLifetime(existingContext, existingContext.IsCollectible);
@@ -434,12 +575,15 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                 continue;
             }
 
+            PackageAssemblyLoadContext? newContext = null;
             try
             {
                 var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath, package.Id, _hostTargetFrameworkOverride);
                 if (HostRuntimeAssemblyCatalog.Contains(mainAssemblyPath))
                 {
-                    MarkInert(key);
+                    var replacedContexts = new List<AssemblyLoadContext>();
+                    ReplaceWithInert(projection, replacedContexts);
+                    UnloadUnreferencedContexts(replacedContexts);
                     _logger.LogInformation(
                         "Skipped package {PackageId}@{Version} because assembly {AssemblyPath} is provided by the host runtime.",
                         package.Id,
@@ -448,11 +592,15 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                     continue;
                 }
 
-                var context = new PackageAssemblyLoadContext(mainAssemblyPath, sharedPolicy, _matcher, graphLeaseOwner);
+                newContext = new PackageAssemblyLoadContext(mainAssemblyPath, sharedPolicy, _matcher, graphLeaseOwner);
                 var assemblyName = AssemblyName.GetAssemblyName(mainAssemblyPath);
-                context.LoadFromAssemblyName(assemblyName);
+                newContext.LoadFromAssemblyName(assemblyName);
 
-                _contexts[key] = context;
+                var replaced = new List<AssemblyLoadContext>();
+                if (_contexts.TryGetValue(key, out var previousContext) && !ReferenceEquals(previousContext, newContext))
+                    replaced.Add(previousContext);
+                _contexts[key] = newContext;
+                _loadedPackageProjections[key] = projection;
                 ClearInert(key);
 
                 var session = new PackageLoadSession(
@@ -469,9 +617,15 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
 
                 _sessions[key] = session;
                 loaded.Add(session);
+                RemoveKeyFromLoadedGraphs(key);
+                UnloadUnreferencedContexts(replaced);
             }
             catch (Exception ex)
             {
+                // A scoped owner is transferred by the context constructor. If materialization fails before
+                // the context is published, request its normal collectible unload so that owner can drain.
+                // The previously published context (if any) remains mapped and retained.
+                newContext?.Unload();
                 RecordPackageFailure(
                     package.Id,
                     package.Version,
@@ -491,13 +645,14 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         List<PackageLoadSession> loaded,
         Dictionary<string, string> failed,
+        IReadOnlyDictionary<string, PackageProjection> packageProjections,
         IReadOnlyDictionary<string, IReadOnlyList<LoadModeDecisionDiagnostic>> diagnosticsByPackageKey,
         PackageGraphUseLeaseOwner? graphLeaseOwner = null)
     {
         var graphKey = BuildGraphKey(packages);
         var graphLoadMode = ResolveGraphLoadMode(selections);
 
-        if (TryGetLoadedGraphSessions(graphKey, graphLoadMode, out var existingGraphSessions))
+        if (TryGetLoadedGraphSessions(graphKey, graphLoadMode, packageProjections.Values, out var existingGraphSessions))
         {
             if (graphLeaseOwner is not null)
             {
@@ -528,7 +683,14 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
             {
                 if (graphPackages.SkippedPackages.Count == 0 && graphPackages.HostRuntimePackages.Count > 0)
                 {
-                    MarkInert(graphPackages.InertPackages);
+                    foreach (var inertPackage in graphPackages.InertPackages)
+                    {
+                        var key = BuildKey(inertPackage.Id, inertPackage.Version);
+                        if (!packageProjections.TryGetValue(key, out var projection))
+                            throw new InvalidOperationException($"Package projection '{key}' was not captured before loading.");
+                        ReplaceWithInert(projection, replacedContexts);
+                    }
+                    UnloadUnreferencedContexts(replacedContexts);
                     return new(loaded, failed);
                 }
 
@@ -576,7 +738,11 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                 }
 
                 _contexts[key] = context;
+                if (!packageProjections.TryGetValue(key, out var projection))
+                    throw new InvalidOperationException($"Package projection '{key}' was not captured before loading.");
+                _loadedPackageProjections[key] = projection;
                 ClearInert(key);
+                RemoveKeyFromLoadedGraphs(key);
 
                 var session = new PackageLoadSession(
                     package.Id,
@@ -601,15 +767,23 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                     graphKey);
             }
 
+            foreach (var inertPackage in graphPackages.InertPackages)
+            {
+                var key = BuildKey(inertPackage.Id, inertPackage.Version);
+                if (!packageProjections.TryGetValue(key, out var projection))
+                    throw new InvalidOperationException($"Package projection '{key}' was not captured before loading.");
+                ReplaceWithInert(projection, replacedContexts);
+            }
+
             _loadedGraphs[graphKey] = new(
                 graphLoadMode,
                 graphPackages.LoadablePackages
                     .Select(static package => BuildKey(package.Id, package.Version))
                     .OrderBy(static key => key, StringComparer.OrdinalIgnoreCase)
-                    .ToArray());
+                    .ToArray(),
+                OrderProjections(packageProjections.Values));
 
             UnloadUnreferencedContexts(replacedContexts);
-            MarkInert(graphPackages.InertPackages);
         }
         catch (Exception ex)
         {
@@ -668,6 +842,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
     private bool TryGetLoadedGraphSessions(
         string graphKey,
         PackageLoadMode graphLoadMode,
+        IEnumerable<PackageProjection> packageProjections,
         out IReadOnlyList<PackageLoadSession> existingGraphSessions)
     {
         existingGraphSessions = [];
@@ -676,6 +851,9 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
         {
             return false;
         }
+
+        if (!cachedGraph.Projections.SequenceEqual(OrderProjections(packageProjections)))
+            return false;
 
         var sessions = new List<PackageLoadSession>(cachedGraph.LoadablePackageKeys.Count);
         foreach (var key in cachedGraph.LoadablePackageKeys)
@@ -804,17 +982,24 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
         return new(loadablePackages, skippedPackages, hostRuntimePackages, failedPackages, resolutionFailure);
     }
 
-    private void MarkInert(IEnumerable<GraphPackage> packages)
+    private void ReplaceWithInert(PackageProjection projection, List<AssemblyLoadContext> replacedContexts)
     {
-        foreach (var package in packages)
-        {
-            MarkInert(BuildKey(package.Id, package.Version));
-        }
+        var key = projection.PackageKey;
+        if (_contexts.TryRemove(key, out var previousContext))
+            replacedContexts.Add(previousContext);
+        _loadedPackageProjections.TryRemove(key, out _);
+        _sessions.TryRemove(key, out _);
+        RemoveKeyFromLoadedGraphs(key);
+        if (TrySplitKey(key, out var packageId, out var version))
+            _hostIntegratedResolutionCatalog.RemovePackage(packageId, version);
+        MarkInert(projection);
     }
 
-    private void MarkInert(string packageKey)
+    private void MarkInert(PackageProjection projection)
     {
+        var packageKey = projection.PackageKey;
         _inertPackages[packageKey] = 0;
+        _inertPackageProjections[packageKey] = projection;
 
         // A package the loader has just evaluated as an inert graph member has no outstanding failure. Drop a
         // failed session left by an earlier attempt — for example a graph an activation gate refused before it
@@ -826,7 +1011,16 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
         }
     }
 
-    private void ClearInert(string packageKey) => _inertPackages.TryRemove(packageKey, out _);
+    private void ClearInert(string packageKey)
+    {
+        _inertPackages.TryRemove(packageKey, out _);
+        _inertPackageProjections.TryRemove(packageKey, out _);
+    }
+
+    private static IReadOnlyList<PackageProjection> OrderProjections(IEnumerable<PackageProjection> projections) =>
+        projections.OrderBy(static projection => projection.PackageKey, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static projection => projection.PackageKey, StringComparer.Ordinal)
+            .ToArray();
 
     private void UnloadUnreferencedContexts(IEnumerable<AssemblyLoadContext> contexts)
     {
@@ -844,49 +1038,54 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
     {
         ArgumentNullException.ThrowIfNull(activeVersionById);
 
-        var activeKeys = new HashSet<string>(
-            activeVersionById.Select(static entry => BuildKey(entry.Key, entry.Value)),
-            StringComparer.OrdinalIgnoreCase);
-
-        // Snapshot the keys before mutating: only currently-loaded contexts whose id@version is no longer
-        // the active identity are eligible. Everything still active is left completely untouched.
-        var inactiveKeys = _contexts.Keys
-            .Where(key => !activeKeys.Contains(key))
-            .ToArray();
-
-        if (inactiveKeys.Length == 0)
+        lock (_loadContextSync)
         {
-            return [];
-        }
 
-        var removedContexts = new List<AssemblyLoadContext>();
-        foreach (var key in inactiveKeys)
-        {
-            _sessions.TryRemove(key, out _);
-            ClearInert(key);
-            RemoveKeyFromLoadedGraphs(key);
+            var activeKeys = new HashSet<string>(
+                activeVersionById.Select(static entry => BuildKey(entry.Key, entry.Value)),
+                StringComparer.OrdinalIgnoreCase);
 
-            if (_contexts.TryRemove(key, out var context))
+            // Snapshot the keys before mutating: only currently-loaded contexts whose id@version is no longer
+            // the active identity are eligible. Everything still active is left completely untouched.
+            var inactiveKeys = _contexts.Keys
+                .Where(key => !activeKeys.Contains(key))
+                .ToArray();
+
+            if (inactiveKeys.Length == 0)
             {
-                removedContexts.Add(context);
+                return [];
             }
 
-            if (TrySplitKey(key, out var packageId, out var version))
+            var removedContexts = new List<AssemblyLoadContext>();
+            foreach (var key in inactiveKeys)
             {
-                _hostIntegratedResolutionCatalog.RemovePackage(packageId, version);
+                _sessions.TryRemove(key, out _);
+                ClearInert(key);
+                _loadedPackageProjections.TryRemove(key, out _);
+                RemoveKeyFromLoadedGraphs(key);
+
+                if (_contexts.TryRemove(key, out var context))
+                {
+                    removedContexts.Add(context);
+                }
+
+                if (TrySplitKey(key, out var packageId, out var version))
+                {
+                    _hostIntegratedResolutionCatalog.RemovePackage(packageId, version);
+                }
             }
+
+            // Only actually unloads a context once no *remaining* (still-active) key references it, so a graph
+            // context shared with a package that is still active is preserved. Non-collectible contexts are skipped.
+            UnloadUnreferencedContexts(removedContexts);
+
+            foreach (var key in inactiveKeys)
+            {
+                _logger.LogInformation("Unloaded package context {ContextKey} because it is no longer active.", key);
+            }
+
+            return inactiveKeys;
         }
-
-        // Only actually unloads a context once no *remaining* (still-active) key references it, so a graph
-        // context shared with a package that is still active is preserved. Non-collectible contexts are skipped.
-        UnloadUnreferencedContexts(removedContexts);
-
-        foreach (var key in inactiveKeys)
-        {
-            _logger.LogInformation("Unloaded package context {ContextKey} because it is no longer active.", key);
-        }
-
-        return inactiveKeys;
     }
 
     // Drops any cached loaded-graph entry that included this package key, so a later reactivation of the
@@ -894,7 +1093,8 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
     private void RemoveKeyFromLoadedGraphs(string key)
     {
         foreach (var graphKey in _loadedGraphs
-            .Where(entry => entry.Value.LoadablePackageKeys.Contains(key, StringComparer.OrdinalIgnoreCase))
+            .Where(entry => entry.Value.Projections.Any(projection =>
+                string.Equals(projection.PackageKey, key, StringComparison.OrdinalIgnoreCase)))
             .Select(static entry => entry.Key)
             .ToArray())
         {
@@ -922,19 +1122,24 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
     /// <inheritdoc />
     public bool TryRemoveContext(string packageId, string version, out PackageLoadContextHandle? context)
     {
-        var key = BuildKey(packageId, version);
-        _sessions.TryRemove(key, out _);
-        ClearInert(key);
-
-        if (_contexts.TryRemove(key, out var removed))
+        lock (_loadContextSync)
         {
-            context = new(key, removed);
-            _hostIntegratedResolutionCatalog.RemovePackage(packageId, version);
-            return true;
-        }
+            var key = BuildKey(packageId, version);
+            _sessions.TryRemove(key, out _);
+            ClearInert(key);
+            _loadedPackageProjections.TryRemove(key, out _);
+            RemoveKeyFromLoadedGraphs(key);
 
-        context = null;
-        return false;
+            if (_contexts.TryRemove(key, out var removed))
+            {
+                context = new(key, removed);
+                _hostIntegratedResolutionCatalog.RemovePackage(packageId, version);
+                return true;
+            }
+
+            context = null;
+            return false;
+        }
     }
 
     /// <inheritdoc />
@@ -1447,7 +1652,14 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
 
     private sealed record LoadedGraphCacheEntry(
         PackageLoadMode LoadMode,
-        IReadOnlyList<string> LoadablePackageKeys);
+        IReadOnlyList<string> LoadablePackageKeys,
+        IReadOnlyList<PackageProjection> Projections);
+
+    private sealed record PackageProjection(
+        string PackageKey,
+        string InstallPath,
+        string? PackageContentHash,
+        PackageInstallIdentity? NativeIdentity);
 
     private static class HostRuntimeAssemblyCatalog
     {

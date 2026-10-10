@@ -3,11 +3,13 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Policy;
 using Nuplane.Feeds.Versioning;
 using Nuplane.Observability;
 using Nuplane.Reconciliation.Models;
+using Nuplane.Store.Coordination;
 using Nuplane.Versioning;
 using NuGet.Versioning;
 
@@ -17,7 +19,7 @@ namespace Nuplane.Feeds;
 /// Resolves packages across multiple feeds using priority ordering and feed availability
 /// tracking, recording resolution decisions for observability.
 /// </summary>
-public sealed class MultiFeedPackageResolver : IPackageResolver
+public sealed class MultiFeedPackageResolver : IScopedPackageResolver
 {
     private readonly FeedResolutionOptions _options;
     private readonly FeedResolutionPolicy _policy;
@@ -59,7 +61,26 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     }
 
     /// <inheritdoc />
-    public async Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)
+    public Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)
+        => ResolveCoreAsync(request, borrow: null, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<ResolvedPackage> ResolveAsync(
+        PackageRequest request,
+        PackageStoreOperationBorrow borrow,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(borrow);
+        _ = PackageStoreOperationAccess.GetOwner(borrow);
+        return ResolveCoreAsync(request, borrow, cancellationToken);
+    }
+
+    private async Task<ResolvedPackage> ResolveCoreAsync(
+        PackageRequest request,
+        PackageStoreOperationBorrow? borrow,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
@@ -99,6 +120,9 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                 continue;
             }
 
+            if (borrow is not null && IsLocalDirectoryFeed(candidate))
+                ThrowScopedLocalFeedRefusal(borrow);
+
             var selectedVersion = await ResolveVersionAsync(candidate, request, cancellationToken);
             if (!selectedVersion.Success)
             {
@@ -130,7 +154,12 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     request.Id,
                     selectedVersion.Version!,
                     selectedVersion.LocalPackageFile,
+                    borrow,
                     cancellationToken);
+            }
+            catch (PackageStoreAdmissionException)
+            {
+                throw;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -153,6 +182,15 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
 
                 continue;
             }
+
+            if (borrow is not null && !PackageInstallStore.IsInstalled(installPath, borrow))
+            {
+                throw new PackageStoreAdmissionException(
+                    PackageStoreAdmissionReason.StateMismatch,
+                    "The scoped package acquirer did not produce a completed install under the admitted root.",
+                    borrow.Root);
+            }
+
             var resolved = new ResolvedPackage(
                 request.Id,
                 selectedVersion.Version!,
@@ -161,7 +199,9 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                 DateTimeOffset.UtcNow,
                 request.SourceName)
             {
-                PackageContentHash = await PackageInstallStore.ReadContentHashAsync(installPath, cancellationToken)
+                PackageContentHash = borrow is null
+                    ? await PackageInstallStore.ReadContentHashAsync(installPath, cancellationToken)
+                    : await PackageInstallStore.ReadContentHashAsync(installPath, borrow, cancellationToken)
             };
 
             _decisions[request.Id] = FeedResolutionDecision.Resolved(
@@ -311,6 +351,12 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
             _metrics?.RecordVersionResolution(feed.Name, "cancelled", cacheHit: false, stopwatch.Elapsed);
             throw;
         }
+        catch (PackageStoreAdmissionException)
+        {
+            stopwatch.Stop();
+            _metrics?.RecordVersionResolution(feed.Name, "error", cacheHit: false, stopwatch.Elapsed);
+            throw;
+        }
         catch (Exception ex)
         {
             stopwatch.Stop();
@@ -360,18 +406,34 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     /// <param name="packageId">The requested package identifier.</param>
     /// <param name="version">The resolved concrete version.</param>
     /// <param name="localPackageFile">The package file already located during version selection, when the feed is a local directory.</param>
+    /// <param name="borrow">The existing enrolled operation borrow, or null for unenrolled resolution.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     private async Task<string> ResolveInstallPathAsync(
         FeedDefinition feed,
         string packageId,
         string version,
         LocalDirectoryPackageFile? localPackageFile,
+        PackageStoreOperationBorrow? borrow,
         CancellationToken cancellationToken)
     {
         if (!IsLocalDirectoryFeed(feed))
         {
-            return await _remotePackageAcquirer.AcquireAsync(feed, packageId, version, cancellationToken);
+            if (borrow is null)
+                return await _remotePackageAcquirer.AcquireAsync(feed, packageId, version, cancellationToken);
+
+            if (_remotePackageAcquirer is not IScopedRemotePackageAcquirer scopedAcquirer)
+            {
+                throw new PackageStoreAdmissionException(
+                    PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "The configured remote acquirer does not support the caller's admitted package-store operation.",
+                    borrow.Root);
+            }
+
+            return await scopedAcquirer.AcquireAsync(feed, packageId, version, borrow, cancellationToken);
         }
+
+        if (borrow is not null)
+            ThrowScopedLocalFeedRefusal(borrow);
 
         var feedDirectoryPath = feed.ServiceIndex.LocalPath;
         var packageFile = localPackageFile
@@ -394,20 +456,23 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
             packageFile.Value.PackageId,
             version);
 
-        if (!PackageInstallStore.IsInstalled(installDirectory))
-        {
-            await PackageInstallStore.InstallAsync(
-                installRoot,
-                installDirectory,
-                packageFile.Value.FilePath,
-                cancellationToken);
-        }
+        await PackageInstallStore.EnsureLocalInstalledAsync(
+            installRoot,
+            installDirectory,
+            packageFile.Value.FilePath,
+            cancellationToken);
 
         return installDirectory;
     }
 
     private static bool IsLocalDirectoryFeed(FeedDefinition feed) =>
         feed.ServiceIndex.Scheme.Equals("file", StringComparison.OrdinalIgnoreCase);
+
+    private static void ThrowScopedLocalFeedRefusal(PackageStoreOperationBorrow borrow)
+        => throw new PackageStoreAdmissionException(
+            PackageStoreAdmissionReason.UnsupportedFilesystem,
+            "Scoped package resolution cannot read or acquire from a local directory feed without a native feed-directory capability.",
+            borrow.Root);
 
     private bool IsRemoteFeedDisabled(
         FeedDefinition feed,

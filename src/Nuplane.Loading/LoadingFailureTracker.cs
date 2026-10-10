@@ -1,8 +1,9 @@
 using System.Collections.Concurrent;
+using Nuplane.Abstractions;
 
 namespace Nuplane.Loading;
 
-internal sealed class LoadingFailureTracker : ILoadingFailureTracker
+internal sealed class LoadingFailureTracker : ILoadingFailureTracker, IPackagePathIndependentCycleFailureContributor
 {
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _failedPackageIdsByCorrelation = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _lastFailureReasonByPackageId = new(StringComparer.OrdinalIgnoreCase);

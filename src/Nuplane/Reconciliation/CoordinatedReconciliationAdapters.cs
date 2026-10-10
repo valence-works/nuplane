@@ -1,7 +1,9 @@
 using Nuplane.Abstractions;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Events;
+using Nuplane.Reconciliation.PackageFiles;
 using Nuplane.Store.Cleanup;
+using Nuplane.Store.Coordination;
 using Nuplane.Store.State;
 
 namespace Nuplane.Reconciliation;
@@ -20,7 +22,9 @@ internal static class CoordinatedReconciliationAdapters
         IDesiredActualDiffEngine desiredActualDiffEngine,
         IDryRunPlanner dryRunPlanner,
         ILockFileCoordinator lockFileCoordinator,
-        IReconciliationRetryPolicy retryPolicy)
+        IReconciliationRetryPolicy retryPolicy,
+        ILeasedPackageGraphLoadingObserver? leasedPackageGraphLoadingObserver,
+        IResolvedPackageGraphUseLeaseAcquisition? graphUseLeaseAcquisition)
     {
         if (storeRegistry is not ICoordinatedStoreRegistry)
             Refuse("The configured store registry has no coordinated member-state operations.");
@@ -39,8 +43,14 @@ internal static class CoordinatedReconciliationAdapters
         scopedDispatcher.ValidateCoordinatedParticipants();
         if (packageCleanupService is not IPackagePathIndependentPackageCleanupService)
             Refuse("The configured cleanup service has no package-path-independent policy contract.");
-        if (cycleFailureContributor is not null)
-            Refuse("The configured cycle-failure contributor has no scoped callback contract.");
+        if (cycleFailureContributor is not null
+            and not IPackagePathIndependentCycleFailureContributor)
+            Refuse("The configured cycle-failure contributor has no package-path-independent contract.");
+        if (leasedPackageGraphLoadingObserver is not null
+            and not ILeaseBoundPackageGraphLoadingObserver)
+            Refuse("The configured deferred loader has no complete graph-lease consumption contract.");
+        if (leasedPackageGraphLoadingObserver is not null && graphUseLeaseAcquisition is null)
+            Refuse("Deferred package loading is configured without native graph-use publication.");
         if (!IsPathIndependentDiffEngine(desiredActualDiffEngine))
             Refuse("The configured desired-actual diff engine has no package-path-independent contract.");
         if (dryRunPlanner is not IPackagePathIndependentDryRunPlanner &&
@@ -109,7 +119,8 @@ internal static class CoordinatedReconciliationAdapters
         }
     }
 
-    private sealed class OwnedPackageResolver(IPackageResolver resolver, PackageStoreOperationOwner owner) : IPackageResolver
+    private sealed class OwnedPackageResolver(IPackageResolver resolver, PackageStoreOperationOwner owner)
+        : IPackageResolver, IPackageGraphFileReader
     {
         private readonly IPackageResolver _resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
         private readonly PackageStoreOperationOwner _owner = owner ?? throw new ArgumentNullException(nameof(owner));
@@ -120,12 +131,13 @@ internal static class CoordinatedReconciliationAdapters
                 throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
                     "The package resolver has no scoped package-store contract.");
             using var borrow = _owner.Borrow();
-            var package = await scoped.ResolveAsync(request, borrow, cancellationToken).ConfigureAwait(false);
-            if (!string.IsNullOrWhiteSpace(package.InstallPath))
-                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
-                    "Enrolled package resolution requires a scoped built-in dependency and runtime-asset reader.",
-                    _owner.Root);
-            return package;
+            return await scoped.ResolveAsync(request, borrow, cancellationToken).ConfigureAwait(false);
+        }
+
+        public InstalledPackageGraphFiles ReadInstallFiles(ResolvedPackage package)
+        {
+            using var borrow = _owner.Borrow();
+            return new NativePackageGraphFileReader(borrow).ReadInstallFiles(package);
         }
     }
 

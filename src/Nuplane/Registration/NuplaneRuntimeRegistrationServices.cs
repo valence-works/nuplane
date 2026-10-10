@@ -12,6 +12,7 @@ using Nuplane.Operational;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Sources;
+using Nuplane.Store.Coordination;
 using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
 using Polly;
@@ -76,7 +77,10 @@ public static class NuplaneRuntimeRegistrationServices
         services.AddSingleton<IActivePackageCatalog>(sp => sp.GetRequiredService<ActivePackageCatalog>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, PackageCatalogOperationalStateContributor>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, StartupRecoveryOperationalStateContributor>());
-        services.AddSingleton(sp => new ReconciliationService(
+        services.AddSingleton(sp =>
+        {
+            var loadingObserver = sp.GetService<ILeasedPackageGraphLoadingObserver>();
+            return new ReconciliationService(
             sp.GetServices<IDesiredPackageSource>(),
             sp.GetRequiredService<IDesiredStateAggregator>(),
             sp.GetRequiredService<IDesiredActualDiffEngine>(),
@@ -100,7 +104,10 @@ public static class NuplaneRuntimeRegistrationServices
             sp.GetService<IStoreLock>(),
             sp.GetServices<IDesiredStateContributor>(),
             sp.GetRequiredService<IOptions<HostProvidedPackagesOptions>>(),
-            sp.GetRequiredService<IPackageStoreAdmission>()));
+            sp.GetRequiredService<IPackageStoreAdmission>(),
+            loadingObserver is null ? null : sp.GetService<IResolvedPackageGraphUseLeaseAcquisition>(),
+            loadingObserver);
+        });
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
     }
 

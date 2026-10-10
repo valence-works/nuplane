@@ -13,6 +13,7 @@ using Nuplane.Reconciliation.LockFile;
 using Nuplane.Sources;
 using Nuplane.Store.Activation;
 using Nuplane.Store.Cleanup;
+using Nuplane.Store.Coordination;
 using Nuplane.Store.State;
 using Nuplane.Store.Transactions;
 using Nuplane.Abstractions.PackageStoreProtection;
@@ -33,6 +34,9 @@ public sealed class ReconciliationService : IReconciliationService
     private readonly IStoreRegistry _storeRegistry;
     private readonly DesiredSourceSnapshotCache _sourceSnapshotCache;
     private readonly IPackageStoreAdmission _packageStoreAdmission;
+    private readonly IResolvedPackageGraphUseLeaseAcquisition? _graphUseLeaseAcquisition;
+    private readonly ILeasedPackageGraphLoadingObserver? _leasedPackageGraphLoadingObserver;
+    private readonly IReconciliationLogger _reconciliationLogger;
     private int _inFlight;
 
     /// <summary>
@@ -123,7 +127,9 @@ public sealed class ReconciliationService : IReconciliationService
             storeLock: null,
             desiredStateContributors,
             hostProvidedPackagesOptions,
-            packageStoreAdmission: null)
+            packageStoreAdmission: null,
+            graphUseLeaseAcquisition: null,
+            leasedPackageGraphLoadingObserver: null)
     {
     }
 
@@ -168,6 +174,8 @@ public sealed class ReconciliationService : IReconciliationService
     /// package ids are treated as host-provided.
     /// </param>
     /// <param name="packageStoreAdmission">The package-store membership admission acquired before state reads.</param>
+    /// <param name="graphUseLeaseAcquisition">Publishes graph-use owners before deferred loading begins.</param>
+    /// <param name="leasedPackageGraphLoadingObserver">Performs lease-bound loading after short admission locks are released.</param>
     internal ReconciliationService(
         IEnumerable<IDesiredPackageSource> sources,
         IDesiredStateAggregator desiredStateAggregator,
@@ -192,7 +200,9 @@ public sealed class ReconciliationService : IReconciliationService
         IStoreLock? storeLock,
         IEnumerable<IDesiredStateContributor>? desiredStateContributors = null,
         IOptions<HostProvidedPackagesOptions>? hostProvidedPackagesOptions = null,
-        IPackageStoreAdmission? packageStoreAdmission = null)
+        IPackageStoreAdmission? packageStoreAdmission = null,
+        IResolvedPackageGraphUseLeaseAcquisition? graphUseLeaseAcquisition = null,
+        ILeasedPackageGraphLoadingObserver? leasedPackageGraphLoadingObserver = null)
     {
         _storeLock = storeLock;
 
@@ -214,6 +224,7 @@ public sealed class ReconciliationService : IReconciliationService
         var eventDispatcher = observerEventDispatcher ?? throw new ArgumentNullException(nameof(observerEventDispatcher));
         var healthEval = healthEvaluator ?? throw new ArgumentNullException(nameof(healthEvaluator));
         var loggerInstance = logger ?? throw new ArgumentNullException(nameof(logger));
+        _reconciliationLogger = loggerInstance;
         var metricsInstance = metrics ?? throw new ArgumentNullException(nameof(metrics));
         var failureRec = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
         var lockCoordinator = lockFileCoordinator ?? throw new ArgumentNullException(nameof(lockFileCoordinator));
@@ -245,10 +256,12 @@ public sealed class ReconciliationService : IReconciliationService
             startupRecoveryState,
             contributors,
             hostProvidedPackagesOptions?.Value);
-        _pipeline = _pipelineDefinition.Create(null, out var legacyCache);
+        _pipeline = _pipelineDefinition.Create(null, out var legacyCache, out _);
         _sourceSnapshotCache = legacyCache;
         _packageStoreAdmission = packageStoreAdmission ?? PackageStoreRuntimeAdmission.CreateManual(
             storeReg, feedResOpts);
+        _graphUseLeaseAcquisition = graphUseLeaseAcquisition;
+        _leasedPackageGraphLoadingObserver = leasedPackageGraphLoadingObserver;
     }
 
     /// <inheritdoc />
@@ -261,76 +274,22 @@ public sealed class ReconciliationService : IReconciliationService
             return Skipped(ReconciliationSkipReason.SingleFlight);
         }
 
-        await _cycleLock.WaitAsync(cancellationToken);
+        var cycleLockHeld = false;
+        var graphUseOwners = new List<PackageGraphUseLeaseOwner>();
+        Exception? operationFailure = null;
+        string? cycleFailureCorrelationId = null;
+        var cycleFailuresDrained = false;
         try
         {
-            // The root and all enrolled member locks come first. The root admission is retained
-            // across the complete cycle, including source callbacks and coordinated state writes.
-            await using var rootAdmission = await _packageStoreAdmission.AcquireConfiguredRootOperationAsync(
-                PackageStoreAdmissionKind.Reconciliation, cancellationToken).ConfigureAwait(false);
-            var owner = rootAdmission.Status == PackageStoreAdmissionStatus.Enrolled
-                ? rootAdmission.Owner ?? throw new PackageStoreAdmissionException(
-                    PackageStoreAdmissionReason.UnknownAuthority, "Enrolled reconciliation has no live operation owner.")
-                : null;
-
-            if (owner is not null)
-            {
-                CoordinatedReconciliationAdapters.ValidateParticipants(
-                    _pipelineDefinition.Sources,
-                    _pipelineDefinition.PackageResolver,
-                    _pipelineDefinition.Contributors,
-                    _pipelineDefinition.StoreRegistry,
-                    _pipelineDefinition.FailureRecorder,
-                    _pipelineDefinition.ObserverEventDispatcher,
-                    _pipelineDefinition.PackageCleanupService,
-                    _pipelineDefinition.CycleFailureContributor,
-                    _pipelineDefinition.DesiredActualDiffEngine,
-                    _pipelineDefinition.DryRunPlanner,
-                    _pipelineDefinition.LockFileCoordinator,
-                    _pipelineDefinition.RetryPolicy);
-            }
-
-            // The store lock spans the remaining read-modify-write cycle. Membership ownership is
-            // acquired first so competing runtimes cannot read a member state before this root wins.
-            using var storeLock = _storeLock?.Acquire() ?? StoreLockHandle.NotRequired();
-            if (!storeLock.CanProceed)
-            {
-                return Skipped(ReconciliationSkipReason.StoreLockUnavailable);
-            }
-
-            ReconciliationPipeline pipeline;
-            if (owner is not null)
-            {
-                if (_pipelineDefinition.StoreRegistry is not ICoordinatedStoreRegistry coordinated)
-                    throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
-                        "The enrolled store registry has no coordinated member-state operations.", owner.Root);
-                using (var borrow = owner.Borrow())
-                    await coordinated.ReadCoordinatedStateAsync(borrow, cancellationToken).ConfigureAwait(false);
-                pipeline = _pipelineDefinition.Create(owner, out _);
-            }
-            else
-            {
-                if (storeLock.Outcome == StoreLockOutcome.Acquired && _storeRegistry is IStoreStateCycleRefresher stateRefresher)
-                {
-                    var refreshedFromDisk = await stateRefresher.RefreshFromDiskAsync(cancellationToken).ConfigureAwait(false);
-                    if (refreshedFromDisk)
-                        _sourceSnapshotCache.ClearMemoryCache();
-                }
-                pipeline = _pipeline;
-            }
+            await _cycleLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            cycleLockHeld = true;
 
             var cycleStartedAt = DateTimeOffset.UtcNow;
             var correlationId = trigger.CorrelationId ?? CorrelationContext.CreateNew();
             using var scope = CorrelationContext.BeginScope(correlationId);
-
-            // Feed credentials resolved during this cycle are cached for its duration and dropped
-            // with it: every package acquired from one feed resolves its secret once, and no secret
-            // outlives the cycle that needed it. `using` ends the scope on every exit path,
-            // including a pipeline exception and cancellation.
             using var feedCredentials = FeedCredentials.BeginCycle();
-
             var effectiveCorrelationId = System.Diagnostics.Activity.Current?.Id ?? correlationId;
-
+            cycleFailureCorrelationId = effectiveCorrelationId;
             var context = new ReconciliationCycleContext
             {
                 CorrelationId = effectiveCorrelationId,
@@ -338,16 +297,284 @@ public sealed class ReconciliationService : IReconciliationService
                 CancellationToken = cancellationToken,
                 Trigger = trigger
             };
+            HealthAndMetricsMiddleware? completionMiddleware = null;
+            LeasedPackageGraphLoadingHandoff? loadingHandoff = null;
 
-            context.PackageStoreOwner = owner;
-            await pipeline.ExecuteAsync(context).ConfigureAwait(false);
+            // Phase A owns root admission and StoreLock only while reading, resolving, applying,
+            // publishing state and publishing graph-use owners. Both scopes end before phase B.
+            await using (var rootAdmission = await _packageStoreAdmission.AcquireConfiguredRootOperationAsync(
+                             PackageStoreAdmissionKind.Reconciliation, cancellationToken).ConfigureAwait(false))
+            {
+                var owner = rootAdmission.Status == PackageStoreAdmissionStatus.Enrolled
+                    ? rootAdmission.Owner ?? throw new PackageStoreAdmissionException(
+                        PackageStoreAdmissionReason.UnknownAuthority, "Enrolled reconciliation has no live operation owner.")
+                    : null;
+
+                if (owner is not null)
+                {
+                    CoordinatedReconciliationAdapters.ValidateParticipants(
+                        _pipelineDefinition.Sources,
+                        _pipelineDefinition.PackageResolver,
+                        _pipelineDefinition.Contributors,
+                        _pipelineDefinition.StoreRegistry,
+                        _pipelineDefinition.FailureRecorder,
+                        _pipelineDefinition.ObserverEventDispatcher,
+                        _pipelineDefinition.PackageCleanupService,
+                        _pipelineDefinition.CycleFailureContributor,
+                        _pipelineDefinition.DesiredActualDiffEngine,
+                        _pipelineDefinition.DryRunPlanner,
+                        _pipelineDefinition.LockFileCoordinator,
+                        _pipelineDefinition.RetryPolicy,
+                        _leasedPackageGraphLoadingObserver,
+                        _graphUseLeaseAcquisition);
+                }
+
+                using var storeLock = _storeLock?.Acquire() ?? StoreLockHandle.NotRequired();
+                if (!storeLock.CanProceed)
+                    return Skipped(ReconciliationSkipReason.StoreLockUnavailable);
+
+                ReconciliationPipeline pipeline;
+                if (owner is not null)
+                {
+                    if (_pipelineDefinition.StoreRegistry is not ICoordinatedStoreRegistry coordinated)
+                        throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                            "The enrolled store registry has no coordinated member-state operations.", owner.Root);
+                    using (var borrow = owner.Borrow())
+                        await coordinated.ReadCoordinatedStateAsync(borrow, cancellationToken).ConfigureAwait(false);
+                    pipeline = _pipelineDefinition.Create(owner, out _, out completionMiddleware);
+                }
+                else
+                {
+                    if (storeLock.Outcome == StoreLockOutcome.Acquired && _storeRegistry is IStoreStateCycleRefresher stateRefresher)
+                    {
+                        var refreshedFromDisk = await stateRefresher.RefreshFromDiskAsync(cancellationToken).ConfigureAwait(false);
+                        if (refreshedFromDisk)
+                            _sourceSnapshotCache.ClearMemoryCache();
+                    }
+                    pipeline = _pipeline;
+                }
+
+                context.PackageStoreOwner = owner;
+                context.DeferCycleCompletion = owner is not null && _leasedPackageGraphLoadingObserver is not null;
+                await pipeline.ExecuteAsync(context).ConfigureAwait(false);
+                cycleFailuresDrained = context.Result is not null;
+
+                if (context.DeferCycleCompletion && HasDeferredLoadingWork(context))
+                {
+                    IReadOnlyList<ResolvedPackageGraphSelection> successfulSelections = context.ApplyResult!.AppliedPackages.Count > 0
+                        ? context.ApplyResult!.SuccessfulGraphSelections
+                        : Array.Empty<ResolvedPackageGraphSelection>();
+                    if (successfulSelections.Count > 0)
+                    {
+                        var acquisition = _graphUseLeaseAcquisition
+                            ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                                "Enrolled deferred loading has no native graph-use acquisition service.", owner!.Root);
+                        var leasedSelections = new List<LeasedPackageGraphSelection>(successfulSelections.Count);
+                        using var borrow = owner!.Borrow();
+                        foreach (var selection in successfulSelections)
+                        {
+                            if (selection.Packages.Count == 0)
+                                continue;
+
+                            var graphOwner = await acquisition.AcquireForRootAsync(
+                                borrow,
+                                selection.Graph,
+                                selection.RootRequests,
+                                PackageGraphUseSnapshotState.Committed,
+                                cancellationToken).ConfigureAwait(false);
+                            graphUseOwners.Add(graphOwner);
+                            leasedSelections.Add(new(selection, graphOwner));
+                        }
+
+                        loadingHandoff = new LeasedPackageGraphLoadingHandoff(
+                            context.ChangeSet!,
+                            context.DesiredRequests,
+                            leasedSelections);
+                    }
+                    else
+                    {
+                        loadingHandoff = new LeasedPackageGraphLoadingHandoff(
+                            context.ChangeSet!,
+                            context.DesiredRequests,
+                            []);
+                    }
+                }
+            }
+
+            if (context.DeferCycleCompletion)
+            {
+                if (loadingHandoff is not null)
+                {
+                    var currentActiveVersions = loadingHandoff.ChangeSet.Removed.Count + loadingHandoff.ChangeSet.Updated.Count > 0
+                        ? await ReadCurrentActiveVersionsForLoadingAsync(cancellationToken).ConfigureAwait(false)
+                        : null;
+                    LeasedPackageGraphLoadingResult? loadingResult = null;
+                    try
+                    {
+                        loadingResult = await _leasedPackageGraphLoadingObserver!.LoadAsync(
+                            loadingHandoff,
+                            currentActiveVersions,
+                            cancellationToken).ConfigureAwait(false);
+                        if (loadingResult is null)
+                            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                                "The deferred loader returned no result.");
+                    }
+                    catch (PackageStoreAdmissionException)
+                    {
+                        throw;
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception exception)
+                    {
+                        _reconciliationLogger.LogObserverError(
+                            context.CorrelationId,
+                            "DeferredPackageGraphLoading",
+                            exception.Message);
+                        loadingResult = DescribeDeferredLoadingFailure(loadingHandoff, exception);
+                    }
+
+                    if (loadingResult is not null)
+                    {
+                        context.DeferredLoadingFailedPackageIds = loadingResult.Failures
+                            .Select(static failure => failure.PackageId)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToArray();
+                        await PersistDeferredLoadingFailuresAsync(
+                            loadingResult.Failures,
+                            context.CorrelationId,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+                }
+
+                (completionMiddleware ?? throw new InvalidOperationException(
+                    "The enrolled reconciliation pipeline did not provide cycle completion.")).CompleteCycle(context);
+                cycleFailuresDrained = true;
+            }
 
             return context.Result!;
         }
+        catch (Exception exception)
+        {
+            operationFailure = exception;
+            throw;
+        }
         finally
         {
-            _cycleLock.Release();
-            Interlocked.Exchange(ref _inFlight, 0);
+            var cleanupFailures = new List<Exception>();
+
+            if (cycleFailureCorrelationId is not null && !cycleFailuresDrained)
+            {
+                try
+                {
+                    _pipelineDefinition.CycleFailureContributor?.TakeFailedPackageIds(cycleFailureCorrelationId);
+                }
+                catch (Exception exception)
+                {
+                    cleanupFailures.Add(exception);
+                }
+            }
+
+            for (var index = graphUseOwners.Count - 1; index >= 0; index--)
+            {
+                try { await graphUseOwners[index].DisposeAsync().ConfigureAwait(false); }
+                catch (Exception exception) { cleanupFailures.Add(exception); }
+            }
+
+            if (cycleLockHeld)
+            {
+                try { _cycleLock.Release(); }
+                catch (Exception exception) { cleanupFailures.Add(exception); }
+            }
+
+            try { Interlocked.Exchange(ref _inFlight, 0); }
+            catch (Exception exception) { cleanupFailures.Add(exception); }
+
+            if (cleanupFailures.Count > 0)
+            {
+                if (operationFailure is not null)
+                    cleanupFailures.Insert(0, operationFailure);
+                throw new AggregateException(
+                    "Reconciliation completed or failed and one or more cycle cleanup operations did not complete cleanly.",
+                    cleanupFailures);
+            }
+        }
+    }
+
+    private static bool HasDeferredLoadingWork(ReconciliationCycleContext context) =>
+        context.ApplyResult!.AppliedPackages.Count > 0 || context.ChangeSet!.Removed.Count > 0;
+
+    private static LeasedPackageGraphLoadingResult DescribeDeferredLoadingFailure(
+        LeasedPackageGraphLoadingHandoff handoff,
+        Exception exception)
+    {
+        var reason = $"Deferred package loading failed unexpectedly ({exception.GetType().Name}): {exception.Message}";
+        var affectedPackageIds = handoff.GraphSelections
+            .SelectMany(static selection => selection.Packages)
+            .Select(static package => package.Id)
+            .Concat(handoff.ChangeSet.Added.Select(static package => package.Id))
+            .Concat(handoff.ChangeSet.Updated.Select(static package => package.Id))
+            .Concat(handoff.ChangeSet.Removed)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        return new(affectedPackageIds
+            .Select(packageId => new LeasedPackageGraphLoadingFailure(packageId, reason))
+            .ToArray());
+    }
+
+    private async Task<IReadOnlyDictionary<string, string>?> ReadCurrentActiveVersionsForLoadingAsync(
+        CancellationToken cancellationToken)
+    {
+        await using var admission = await _packageStoreAdmission.AcquireConfiguredRootOperationAsync(
+            PackageStoreAdmissionKind.Reconciliation, cancellationToken).ConfigureAwait(false);
+        if (admission.Status != PackageStoreAdmissionStatus.Enrolled || admission.Owner is null)
+            return null;
+
+        using var storeLock = _storeLock?.Acquire() ?? StoreLockHandle.NotRequired();
+        if (!storeLock.CanProceed || _pipelineDefinition.StoreRegistry is not ICoordinatedStoreRegistry coordinated)
+            return null;
+
+        using var borrow = admission.Owner.Borrow();
+        var state = await coordinated.ReadCoordinatedStateAsync(borrow, cancellationToken).ConfigureAwait(false);
+        return new Dictionary<string, string>(state.ActiveVersionById, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task PersistDeferredLoadingFailuresAsync(
+        IReadOnlyList<LeasedPackageGraphLoadingFailure> failures,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        if (failures.Count == 0)
+            return;
+
+        await using var admission = await _packageStoreAdmission.AcquireConfiguredRootOperationAsync(
+            PackageStoreAdmissionKind.Reconciliation, cancellationToken).ConfigureAwait(false);
+        if (admission.Status != PackageStoreAdmissionStatus.Enrolled || admission.Owner is null)
+        {
+            _reconciliationLogger.LogObserverError(correlationId, "PersistDeferredLoadingFailures",
+                "The root no longer has coordinated admission; loading failures were retained for cycle health only.");
+            return;
+        }
+
+        using var storeLock = _storeLock?.Acquire() ?? StoreLockHandle.NotRequired();
+        if (!storeLock.CanProceed || _pipelineDefinition.StoreRegistry is not ICoordinatedStoreRegistry coordinated)
+        {
+            _reconciliationLogger.LogObserverError(correlationId, "PersistDeferredLoadingFailures",
+                "The current store lock or coordinated state writer is unavailable; loading failures were retained for cycle health only.");
+            return;
+        }
+
+        using var borrow = admission.Owner.Borrow();
+        foreach (var failure in failures)
+        {
+            await coordinated.PersistCoordinatedFailureAsync(
+                borrow,
+                failure.PackageId,
+                "load",
+                failure.Reason,
+                correlationId,
+                cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -432,7 +659,8 @@ internal sealed class ReconciliationPipelineDefinition
 
     internal ReconciliationPipeline Create(
         PackageStoreOperationOwner? owner,
-        out DesiredSourceSnapshotCache snapshotCache)
+        out DesiredSourceSnapshotCache snapshotCache,
+        out HealthAndMetricsMiddleware healthAndMetricsMiddleware)
     {
         var registry = owner is null ? StoreRegistry : CoordinatedReconciliationAdapters.BindStoreRegistry(StoreRegistry, owner);
         var recorder = owner is null ? FailureRecorder : CoordinatedReconciliationAdapters.BindFailureRecorder(FailureRecorder, owner);
@@ -468,8 +696,9 @@ internal sealed class ReconciliationPipelineDefinition
         pipeline.Use(new TransactionExecutionMiddleware(applyExecutor, _desiredActualDiffEngine, dispatcher));
         pipeline.Use(new CleanupMiddleware(_desiredActualDiffEngine, registry, PackageCleanupService,
             _cleanupPolicyOptions, _metrics));
-        pipeline.Use(new HealthAndMetricsMiddleware(_healthEvaluator, dispatcher, _logger, _metrics,
-            _feedResolutionOptions, _observationDegradationTracker, CycleFailureContributor, _startupRecoveryState));
+        healthAndMetricsMiddleware = new HealthAndMetricsMiddleware(_healthEvaluator, dispatcher, _logger, _metrics,
+            _feedResolutionOptions, _observationDegradationTracker, CycleFailureContributor, _startupRecoveryState);
+        pipeline.Use(healthAndMetricsMiddleware);
         return pipeline;
     }
 }

@@ -225,6 +225,59 @@ internal static partial class UnixNative
         }
     }
 
+    internal static int ReadPackageFileAt(UnixPlatform platform, int fd, byte[] buffer, int bufferOffset, int count, long fileOffset)
+    {
+        if (bufferOffset < 0 || count < 0 || bufferOffset > buffer.Length - count || fileOffset < 0)
+            throw new ArgumentOutOfRangeException(nameof(bufferOffset));
+        if (count == 0)
+            return 0;
+
+        var chunk = new byte[count];
+        while (true)
+        {
+            var result = platform == UnixPlatform.Darwin
+                ? Darwin.PRead(fd, chunk, (nuint)chunk.Length, fileOffset)
+                : Linux.PRead(fd, chunk, (nuint)chunk.Length, fileOffset);
+            if (result < 0)
+            {
+                var error = Marshal.GetLastPInvokeError();
+                if (IsInterrupted(error))
+                    continue;
+                throw new UnixNativeCallException(error, "read bounded package archive");
+            }
+
+            var read = checked((int)result);
+            if (read > 0)
+                chunk.AsSpan(0, read).CopyTo(buffer.AsSpan(bufferOffset, read));
+            return read;
+        }
+    }
+
+    internal static int WritePackageFileAt(UnixPlatform platform, int fd, byte[] buffer, int bufferOffset, int count, long fileOffset)
+    {
+        if (bufferOffset < 0 || count < 0 || bufferOffset > buffer.Length - count || fileOffset < 0)
+            throw new ArgumentOutOfRangeException(nameof(bufferOffset));
+        if (count == 0)
+            return 0;
+
+        var chunk = buffer.AsSpan(bufferOffset, count).ToArray();
+        while (true)
+        {
+            var result = platform == UnixPlatform.Darwin
+                ? Darwin.PWrite(fd, chunk, (nuint)chunk.Length, fileOffset)
+                : Linux.PWrite(fd, chunk, (nuint)chunk.Length, fileOffset);
+            if (result < 0)
+            {
+                var error = Marshal.GetLastPInvokeError();
+                if (IsInterrupted(error))
+                    continue;
+                throw new UnixNativeCallException(error, "write bounded package file");
+            }
+
+            return checked((int)result);
+        }
+    }
+
     internal static int Write(UnixPlatform platform, int fd, byte[] buffer, int offset)
     {
         var remaining = buffer.AsSpan(offset).ToArray();
@@ -349,6 +402,9 @@ internal static partial class UnixNative
         [DllImport("libSystem.B.dylib", EntryPoint = "pread", SetLastError = true)]
         internal static extern nint PRead(int fd, [Out] byte[] buffer, nuint count, long offset);
 
+        [DllImport("libSystem.B.dylib", EntryPoint = "pwrite", SetLastError = true)]
+        internal static extern nint PWrite(int fd, [In] byte[] buffer, nuint count, long offset);
+
         [DllImport("libSystem.B.dylib", EntryPoint = "write", SetLastError = true)]
         internal static extern nint Write(int fd, [In] byte[] buffer, nuint count);
 
@@ -388,6 +444,9 @@ internal static partial class UnixNative
 
         [DllImport("libc", EntryPoint = "pread", SetLastError = true)]
         internal static extern nint PRead(int fd, [Out] byte[] buffer, nuint count, long offset);
+
+        [DllImport("libc", EntryPoint = "pwrite", SetLastError = true)]
+        internal static extern nint PWrite(int fd, [In] byte[] buffer, nuint count, long offset);
 
         [DllImport("libc", EntryPoint = "write", SetLastError = true)]
         internal static extern nint Write(int fd, [In] byte[] buffer, nuint count);

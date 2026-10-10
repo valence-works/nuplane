@@ -142,7 +142,7 @@ public sealed class RootMembershipProtectionVerificationTests
         internal Dictionary<string, PackageRequest[]> Requests { get; } = new(StringComparer.Ordinal);
         internal string SharedInstallPath { get; private set; } = null!;
 
-        internal static async Task<Context> CreateAsync()
+        internal static async Task<Context> CreateAsync(Action<Context>? prepareInstallTreeBeforeInitialStateBuild = null)
         {
             var context = new Context();
             var parents = new Dictionary<string, PhysicalStoreDirectoryHandle>(StringComparer.Ordinal);
@@ -163,6 +163,7 @@ public sealed class RootMembershipProtectionVerificationTests
                     new RootMemberRecord.DeclaredBinding())).ToArray();
                 // Build the migration input before enrollment reserves package IO for admitted operations.
                 context.SharedInstallPath = context.Install("Shared.Dependency", "2.1.0", null);
+                prepareInstallTreeBeforeInitialStateBuild?.Invoke(context);
                 context.States.Add("first", await context.BuildStateAsync("first", "Root.First"));
                 context.States.Add("second", await context.BuildStateAsync("second", "Root.Second"));
                 context.Registry.InitializeIncomplete(context.Root, context.RootIdentity, 1, declarations, true, CancellationToken.None);

@@ -1,4 +1,5 @@
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Loading;
 
@@ -10,6 +11,9 @@ namespace Nuplane.Loading;
 /// </remarks>
 internal interface IScopedPackageLoader : IPackageLoader
 {
+    /// <summary>Checks inert-package knowledge against the exact selected package and its native lease identity.</summary>
+    bool IsInertPackage(ResolvedPackage package, PackageGraphUseLease lease);
+
     Task<PackageLoadResult> EnsureGraphLoadedAsync(
         IReadOnlyList<ScopedResolvedPackageGraph> packageGraphs,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,

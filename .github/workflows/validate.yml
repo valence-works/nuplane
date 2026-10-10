@@ -486,7 +486,7 @@ jobs:
               'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.EnrolledNonemptyTransition_IsRefusedBeforeChangingObserversOrTransactionArtifacts',
               'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.ManualCustomStoreComposition_PreservesOnlyPositivelyUnenrolledRootBehavior',
               'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.PublicManualLkg_RefusesProtectedInstallPathBeforeValidationOrObservers',
-              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.ScopedResolverReturningInstall_IsRefusedBeforeBuiltInDependencyExpansion',
+              'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.ScopedResolverReturningInstall_GraphReadFailureIsRecordedWithoutActiveTransition',
               'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.ThirdUnlistedStateSlot_IsRefusedBeforeSourceCallback',
               'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.TwoAddNuplaneProviders_SerializeScopedSourceReadsAndPublishFailureAndStateUnderTheirMembers',
               'Nuplane.Runtime.Tests.Reconciliation.CoordinatedReconciliationAdmissionTests.UnknownPathConsumingParticipant_IsRefusedBeforeSourceCallback(participant: DiffEngine)',
@@ -669,12 +669,44 @@ jobs:
           set -euo pipefail
           dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
             --configuration Release --framework net10.0 \
-            --filter "FullyQualifiedName~NativePackageGraphFileReaderTests|FullyQualifiedName~PackageInstallStoreAdmissionTests" \
+            --filter "FullyQualifiedName~NativePackageGraphFileReaderTests|FullyQualifiedName~PackageInstallStoreAdmissionTests|FullyQualifiedName~OwnedPackageResolverGraphReadTests|FullyQualifiedName~MultiFeedPackageResolverScopedTests" \
             --blame-hang-timeout 3m \
             --logger "trx;LogFileName=native-resolution-readers.trx" \
             --results-directory "$RUNNER_TEMP/native-resolution-readers"
           python3 build/verify-required-trx.py "$RUNNER_TEMP/native-resolution-readers/native-resolution-readers.trx" \
             build/test-cases/native-resolution-readers.json
+
+      - name: Qualify complete native protected active-state candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~CoordinatedActiveStateTransitionProducerTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=protected-active-transitions.trx" \
+            --results-directory "$RUNNER_TEMP/protected-active-transitions"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/protected-active-transitions/protected-active-transitions.trx" \
+            build/test-cases/protected-active-transitions.json
+
+      - name: Qualify bounded native package archive and creation-only file streams
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            excluded="Unix"
+            manifest="build/test-cases/package-streams-windows.json"
+          else
+            excluded="Windows"
+            manifest="build/test-cases/package-streams-unix.json"
+          fi
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~PhysicalStorePackageStreamTests&FullyQualifiedName!~$excluded" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=package-streams.trx" \
+            --results-directory "$RUNNER_TEMP/package-streams"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/package-streams/package-streams.trx" "$manifest"
 
       - name: Qualify counted native root access across awaits and member replay
         shell: bash

@@ -200,24 +200,29 @@ public sealed class CoordinatedReconciliationAdmissionTests
     }
 
     [Fact]
-    public async Task ScopedResolverReturningInstall_IsRefusedBeforeBuiltInDependencyExpansion()
+    public async Task ScopedResolverReturningInstall_GraphReadFailureIsRecordedWithoutActiveTransition()
     {
         using var fixture = await CompletedMembershipFixture.CreateAsync();
         var source = new SinglePackageSource("Root.First", fixture.SharedInstallPath);
         var resolver = new ControlledScopedResolver(fixture.SharedInstallPath);
         await File.WriteAllTextAsync(Path.Combine(fixture.SharedInstallPath, "Shared.Dependency.nuspec"),
-            """<package><metadata><dependencies><dependency id="Unadmitted.Child" version="1.0.0" /></dependencies></metadata></package>""");
+            "<package><metadata>");
         using var provider = CreateProvider(fixture.PackageInstallRoot, fixture.StatePaths["first"], source,
             resolverOverride: resolver);
 
-        var error = await Assert.ThrowsAsync<PackageStoreAdmissionException>(() =>
-            provider.GetRequiredService<IReconciliationService>().TriggerAsync(
-                ReconciliationTrigger.Manual("unscoped-graph-reader"), CancellationToken.None));
+        var result = await provider.GetRequiredService<IReconciliationService>().TriggerAsync(
+            ReconciliationTrigger.Manual("invalid-graph-metadata"), CancellationToken.None);
 
-        Assert.Equal(PackageStoreAdmissionReason.UnsupportedParticipant, error.Reason);
+        Assert.False(result.Skipped);
+        Assert.True(result.IsDegraded);
+        Assert.Equal("Root.First", Assert.Single(result.FailedPackages));
         Assert.Equal(1, resolver.CallbackCount);
         var after = await fixture.ReadFreshStateAsync("first");
-        Assert.Empty(after.LastFailureById);
+        var failure = Assert.Single(after.LastFailureById);
+        Assert.Equal("Root.First", failure.Key);
+        Assert.Equal("resolve", failure.Value.Stage);
+        Assert.Equal("invalid-graph-metadata", failure.Value.CorrelationId);
+        Assert.False(string.IsNullOrWhiteSpace(failure.Value.Message));
         Assert.Equal(fixture.States["first"].ActiveVersionById, after.ActiveVersionById);
     }
 

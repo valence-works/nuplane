@@ -312,6 +312,48 @@ internal static partial class WindowsNative
         }
     }
 
+    internal static int ReadPackageFileAt(IntPtr handle, long offset, byte[] buffer, int bufferOffset, int count)
+    {
+        if (offset < 0 || bufferOffset < 0 || count < 0 || bufferOffset > buffer.Length - count)
+            throw new ArgumentOutOfRangeException(nameof(offset));
+        if (count == 0)
+            return 0;
+
+        var pin = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        try
+        {
+            var byteOffset = offset;
+            var status = NtReadFile(
+                handle,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                out var ioStatus,
+                IntPtr.Add(pin.AddrOfPinnedObject(), bufferOffset),
+                checked((uint)count),
+                ref byteOffset,
+                IntPtr.Zero);
+            if (status == StatusPending || unchecked((int)ioStatus.Status.ToInt64()) == StatusPending)
+                throw new WindowsNativeCallException("A synchronous package archive read unexpectedly returned STATUS_PENDING.", unsupported: true);
+            var ioStatusCode = unchecked((int)ioStatus.Status.ToInt64());
+            if (status == StatusEndOfFile || ioStatusCode == StatusEndOfFile)
+                return 0;
+            if (ioStatusCode < 0)
+                throw new WindowsNativeCallException("NtReadFile returned a failed package archive read.", ntStatus: ioStatusCode);
+            if (status < 0)
+                throw new WindowsNativeCallException("NtReadFile could not read the bounded package archive.", ntStatus: status);
+
+            var bytesRead = ioStatus.Information.ToInt64();
+            if (bytesRead < 0 || bytesRead > count)
+                throw new WindowsNativeCallException("NtReadFile returned an invalid package archive byte count.", unsupported: true);
+            return checked((int)bytesRead);
+        }
+        finally
+        {
+            pin.Free();
+        }
+    }
+
     internal static int WriteAt(IntPtr handle, ReadOnlyMemory<byte> contents, int offset)
     {
         if (contents.IsEmpty)
@@ -343,6 +385,46 @@ internal static partial class WindowsNative
             var bytesWritten = ioStatus.Information.ToInt64();
             if (bytesWritten < 0 || bytesWritten > data.Length)
                 throw new WindowsNativeCallException("NtWriteFile returned an invalid byte count.", unsupported: true);
+            return checked((int)bytesWritten);
+        }
+        finally
+        {
+            pin.Free();
+        }
+    }
+
+    internal static int WritePackageFileAt(IntPtr handle, long offset, byte[] buffer, int bufferOffset, int count)
+    {
+        if (offset < 0 || bufferOffset < 0 || count < 0 || bufferOffset > buffer.Length - count)
+            throw new ArgumentOutOfRangeException(nameof(offset));
+        if (count == 0)
+            return 0;
+
+        var pin = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        try
+        {
+            var byteOffset = offset;
+            var status = NtWriteFile(
+                handle,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                out var ioStatus,
+                IntPtr.Add(pin.AddrOfPinnedObject(), bufferOffset),
+                checked((uint)count),
+                ref byteOffset,
+                IntPtr.Zero);
+            if (status == StatusPending || unchecked((int)ioStatus.Status.ToInt64()) == StatusPending)
+                throw new WindowsNativeCallException("A synchronous package file write unexpectedly returned STATUS_PENDING.", unsupported: true);
+            var ioStatusCode = unchecked((int)ioStatus.Status.ToInt64());
+            if (ioStatusCode < 0)
+                throw new WindowsNativeCallException("NtWriteFile returned a failed package file write.", ntStatus: ioStatusCode);
+            if (status < 0)
+                throw new WindowsNativeCallException("NtWriteFile could not write the bounded package file.", ntStatus: status);
+
+            var bytesWritten = ioStatus.Information.ToInt64();
+            if (bytesWritten < 0 || bytesWritten > count)
+                throw new WindowsNativeCallException("NtWriteFile returned an invalid package file byte count.", unsupported: true);
             return checked((int)bytesWritten);
         }
         finally

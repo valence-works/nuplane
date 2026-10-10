@@ -19,6 +19,10 @@ namespace Nuplane.Feeds;
 /// </summary>
 internal static class PackageInstallStore
 {
+    // A bounded set avoids retaining a semaphore for every package ever seen. Collisions only
+    // serialize independent local publications; the native probe remains the authority check.
+    private static readonly SemaphoreSlim[] LocalInstallGates = Enumerable.Range(0, 64)
+        .Select(static _ => new SemaphoreSlim(1, 1)).ToArray();
     private const int ContentHashFileByteCount = 95;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
@@ -96,6 +100,28 @@ internal static class PackageInstallStore
         var stagingRoot = Path.Combine(installRoot, ".tmp");
         Directory.CreateDirectory(stagingRoot);
         return Path.Combine(stagingRoot, $"{Guid.NewGuid():N}{extension}");
+    }
+
+    /// <summary>Serializes a local completion probe and publication for the same install path.</summary>
+    /// <remarks>This process-local gate does not replace native authority or cross-process admission.</remarks>
+    internal static async Task EnsureLocalInstalledAsync(
+        string installRoot,
+        string installDirectory,
+        string nupkgPath,
+        CancellationToken cancellationToken)
+    {
+        var key = Path.GetFullPath(installDirectory);
+        var gate = LocalInstallGates[(uint)StringComparer.OrdinalIgnoreCase.GetHashCode(key) % (uint)LocalInstallGates.Length];
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!IsInstalled(installDirectory))
+                await InstallAsync(installRoot, installDirectory, nupkgPath, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     /// <summary>
