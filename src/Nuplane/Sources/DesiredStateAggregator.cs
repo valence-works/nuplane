@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Sources.Configuration;
 
 namespace Nuplane.Sources;
@@ -9,10 +10,10 @@ namespace Nuplane.Sources;
 /// resolves duplicate package IDs via configured source precedence and deterministic tie-breaks,
 /// and produces a deterministically ordered result. The selected request is preserved verbatim;
 /// source admission and package resolution remain downstream responsibilities.
-/// Per-source exceptions are captured in <see cref="DesiredAggregateResult.SourceErrors"/> rather
-/// than propagated, allowing healthy sources to continue contributing their requests.
+/// In the unscoped mode, per-source exceptions are captured in <see cref="DesiredAggregateResult.SourceErrors"/>
+/// rather than propagated. The scoped mode propagates cancellation and typed package-store admission refusals.
 /// </summary>
-public sealed class DesiredStateAggregator : IDesiredStateAggregator
+public sealed class DesiredStateAggregator : IScopedDesiredStateAggregator
 {
     private readonly DesiredStateOptions _options;
 
@@ -41,6 +42,43 @@ public sealed class DesiredStateAggregator : IDesiredStateAggregator
     {
         ArgumentNullException.ThrowIfNull(sources);
 
+        return await AggregateCoreAsync(
+            sources,
+            static (source, ct) => source.GetDesiredAsync(ct),
+            propagateAdmissionRefusals: false,
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<DesiredAggregateResult> AggregateAsync(
+        IEnumerable<IDesiredPackageSource> sources,
+        PackageStoreOperationOwner owner,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(owner);
+
+        // Materialize and validate the complete participant set before the first source callback.
+        // This also ensures the scoped path keeps the original source instances and identities.
+        var sourceSnapshot = sources.ToArray();
+        DesiredPackageSourceAccess.Validate(sourceSnapshot);
+
+        return await AggregateCoreAsync(
+            sourceSnapshot,
+            (source, ct) => DesiredPackageSourceAccess.ReadAsync(source, owner, ct),
+            propagateAdmissionRefusals: true,
+            cancellationToken);
+    }
+
+    private async Task<DesiredAggregateResult> AggregateCoreAsync(
+        IEnumerable<IDesiredPackageSource> sources,
+        Func<IDesiredPackageSource, CancellationToken, Task<IReadOnlyList<PackageRequest>>> readSourceAsync,
+        bool propagateAdmissionRefusals,
+        CancellationToken cancellationToken)
+    {
+        if (propagateAdmissionRefusals)
+            cancellationToken.ThrowIfCancellationRequested();
+
         var collected = new List<PackageRequest>();
         var sourceErrors = new Dictionary<string, Exception>(StringComparer.Ordinal);
 
@@ -52,13 +90,22 @@ public sealed class DesiredStateAggregator : IDesiredStateAggregator
 
         foreach (var source in orderedSources)
         {
+            if (propagateAdmissionRefusals)
+                cancellationToken.ThrowIfCancellationRequested();
+
             var sourceName = GetSourceTypeName(source);
             IReadOnlyList<PackageRequest> sourceRequests;
             try
             {
-                sourceRequests = await source.GetDesiredAsync(cancellationToken);
+                sourceRequests = await readSourceAsync(source, cancellationToken);
+                if (propagateAdmissionRefusals)
+                    cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (PackageStoreAdmissionException) when (propagateAdmissionRefusals)
             {
                 throw;
             }

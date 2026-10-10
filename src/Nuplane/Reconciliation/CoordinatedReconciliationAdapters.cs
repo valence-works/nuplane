@@ -5,6 +5,7 @@ using Nuplane.Reconciliation.PackageFiles;
 using Nuplane.Store.Cleanup;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.State;
+using Nuplane.Sources;
 
 namespace Nuplane.Reconciliation;
 
@@ -32,8 +33,7 @@ internal static class CoordinatedReconciliationAdapters
             Refuse("The configured failure recorder has no scoped state-publication contract.");
         if (packageResolver is not IScopedPackageResolver)
             Refuse("The configured package resolver has no scoped package-store contract.");
-        if (sources.Any(static source => source is not IScopedDesiredPackageSource and not IPackagePathIndependentDesiredPackageSource))
-            Refuse("Every enrolled desired source must declare scoped access or package-path independence.");
+        ValidateDesiredPackageSources(sources);
         if (contributors.Any(static contributor => contributor is not IScopedDesiredStateContributor and not IPackagePathIndependentDesiredStateContributor))
             Refuse("Every enrolled desired-state contributor must declare scoped access or package-path independence.");
         var scopedDispatcher = observerEventDispatcher as IScopedObserverEventDispatcher
@@ -62,6 +62,9 @@ internal static class CoordinatedReconciliationAdapters
         if (retryPolicy is not IPackageStoreRefusalPreservingRetryPolicy)
             Refuse("The configured retry policy does not preserve package-store admission refusals.");
     }
+
+    internal static void ValidateDesiredPackageSources(IReadOnlyList<IDesiredPackageSource> sources)
+        => DesiredPackageSourceAccess.Validate(sources);
 
     internal static IReadOnlyList<IDesiredPackageSource> BindSources(
         IReadOnlyList<IDesiredPackageSource> sources,
@@ -102,21 +105,7 @@ internal static class CoordinatedReconciliationAdapters
         private readonly PackageStoreOperationOwner _owner = owner ?? throw new ArgumentNullException(nameof(owner));
 
         public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
-        {
-            if (_source is IScopedDesiredPackageSource scoped)
-                return ReadScopedAsync(scoped, ct);
-            if (_source is not IPackagePathIndependentDesiredPackageSource)
-                return Task.FromException<IReadOnlyList<PackageRequest>>(new PackageStoreAdmissionException(
-                    PackageStoreAdmissionReason.UnsupportedParticipant,
-                    "The desired source has no scoped package-store contract."));
-            return _source.GetDesiredAsync(ct);
-        }
-
-        private async Task<IReadOnlyList<PackageRequest>> ReadScopedAsync(IScopedDesiredPackageSource source, CancellationToken ct)
-        {
-            using var borrow = _owner.Borrow();
-            return await source.GetDesiredAsync(borrow, ct).ConfigureAwait(false);
-        }
+            => DesiredPackageSourceAccess.ReadAsync(_source, _owner, ct);
     }
 
     private sealed class OwnedPackageResolver(IPackageResolver resolver, PackageStoreOperationOwner owner)
