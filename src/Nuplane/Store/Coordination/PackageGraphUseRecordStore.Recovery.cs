@@ -614,8 +614,33 @@ internal sealed partial class PackageGraphUseRecordStore
             var lockedArtifact = recovery.InspectLockedControlFile(removal);
             RequireControlFile(lockedArtifact, artifact.Identity, expectedRoot.HandleIdentity, artifact.Length,
                 "The terminal journal removal token no longer identifies the exact regular file.");
+
             if (plan.Record is not null)
                 ReplayInstallIdentities(heldRoot, expectedRoot, plan.Record.GraphSnapshot);
+            VerifyRootAndControl(heldRoot, expectedRoot, rootSemantics,
+                control, controlIdentity, controlSemantics);
+            VerifyExpectedNamespace(control, controlIdentity, controlSemantics, expectedRoot,
+                expectedFiles, tokenProtectedSentinelName: name, tokenFileSystem: recovery, token: removal);
+
+            // Re-read the same locked native handle immediately before terminal mutation. On Windows an
+            // ordinary reopen of this exact DELETE-capable token file is incompatible with share mode.
+            var lockedPayload = recovery.ReadLockedControlFile(removal, GraphUsePayloadSerializer.MaximumPayloadBytes);
+            if (plan.Record is not null)
+            {
+                if (!lockedPayload.AsSpan().SequenceEqual(plan.RecordPayload))
+                    throw Refused("The terminal published record changed from its fully validated recovery payload.");
+                var record = DeserializeAndValidateRecord(lockedPayload, plan.UseId, expectedRoot, enrollmentEpoch);
+                if (record.SentinelIdentity != plan.Record.SentinelIdentity)
+                    throw Refused("The terminal published record changed its bound sentinel identity.");
+                ReplayInstallIdentities(heldRoot, expectedRoot, record.GraphSnapshot);
+            }
+            else if (!lockedPayload.AsSpan().SequenceEqual(plan.StagePayload))
+            {
+                throw Refused("The terminal unpublished stage changed from its exact bounded recovery bytes.");
+            }
+
+            // Keep the positive absence fact adjacent to the removal syscall; earlier absence is not authority.
+            RequireAbsent(control, SentinelName(plan.UseId));
             await recovery.RemoveLockedControlFileAsync(removal).ConfigureAwait(false);
         }
 

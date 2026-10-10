@@ -1,5 +1,7 @@
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Store.Coordination;
+using Nuplane.Store.Coordination.GraphUseRecords;
+using Nuplane.Store.Coordination.GraphUseSerialization;
 using Nuplane.Store.Coordination.PhysicalFiles;
 
 namespace Nuplane.Store.Tests.Coordination;
@@ -241,6 +243,86 @@ public sealed partial class PackageGraphUseRecordStoreTests
     }
 
     [SupportedPhysicalStoreFact]
+    public async Task RecoverAsync_TerminalPublishedMarkerReplaysExactPayloadAfterTokenAcquisition()
+    {
+        using var fixture = NativeFixture.Create();
+        await using var callerRootLock = await fixture.HoldRootLockAsync();
+        var store = new PackageGraphUseRecordStore(fixture.Files);
+        var owner = await store.PublishAsync(fixture.Root, fixture.RootIdentity, 4, fixture.CreateCandidate(),
+            PackageGraphUseSnapshotState.Committed, CancellationToken.None);
+        await owner.DisposeAsync();
+        var terminalName = $"use-{owner.Record.UseId:N}.deleting";
+        MoveArtifact(fixture, owner.RecordName, terminalName);
+        await RemoveArtifactAsync(fixture, owner.SentinelName);
+        var terminalPath = Path.Combine(fixture.ControlPath, terminalName);
+        var original = File.ReadAllBytes(terminalPath);
+        var identity = fixture.Files.InspectChildNoFollow(fixture.Control, terminalName)!.Identity;
+        var serializer = new GraphUsePayloadSerializer();
+        var record = serializer.Deserialize(original);
+        var mutatedState = record.SnapshotState == PackageGraphUseSnapshotState.Pending
+            ? PackageGraphUseSnapshotState.Committed
+            : PackageGraphUseSnapshotState.Pending;
+        var mutated = serializer.Serialize(GraphUseRecord.Create(
+            record.RootIdentity,
+            record.EnrollmentEpoch,
+            record.UseId,
+            record.GraphSnapshot,
+            mutatedState,
+            record.SentinelIdentity,
+            record.LifetimeKind,
+            record.DiagnosticProcessId));
+        Assert.Equal(original.Length, mutated.Length);
+        var hooks = new PublicationHooks(fixture.Files)
+        {
+            BeforeRemovalToken = name =>
+            {
+                if (string.Equals(name, terminalName, StringComparison.Ordinal))
+                    OverwriteSameLength(terminalPath, mutated);
+            }
+        };
+
+        await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => new PackageGraphUseRecordStore(hooks).RecoverAsync(
+            fixture.Root, fixture.RootIdentity, fixture.CreateCompleteBoundary(), CancellationToken.None));
+
+        var after = fixture.Files.InspectChildNoFollow(fixture.Control, terminalName)!;
+        Assert.Equal(identity, after.Identity);
+        Assert.Equal(original.Length, after.Length);
+        Assert.Equal(mutated, File.ReadAllBytes(terminalPath));
+        Assert.Null(fixture.Files.InspectChildNoFollow(fixture.Control, owner.SentinelName));
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task RecoverAsync_TerminalStageMarkerReplaysExactPayloadAfterTokenAcquisition()
+    {
+        using var fixture = NativeFixture.Create();
+        await using var callerRootLock = await fixture.HoldRootLockAsync();
+        var useId = Guid.NewGuid();
+        var terminalName = $"use-{useId:N}.stage-deleting";
+        var original = new byte[] { 0x7b, 0x22, 0x76 };
+        var mutated = new byte[] { 0x7b, 0x22, 0x78 };
+        CreateFile(fixture, terminalName, original);
+        var terminalPath = Path.Combine(fixture.ControlPath, terminalName);
+        var identity = fixture.Files.InspectChildNoFollow(fixture.Control, terminalName)!.Identity;
+        var hooks = new PublicationHooks(fixture.Files)
+        {
+            BeforeRemovalToken = name =>
+            {
+                if (string.Equals(name, terminalName, StringComparison.Ordinal))
+                    OverwriteSameLength(terminalPath, mutated);
+            }
+        };
+
+        await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => new PackageGraphUseRecordStore(hooks).RecoverAsync(
+            fixture.Root, fixture.RootIdentity, fixture.CreateCompleteBoundary(), CancellationToken.None));
+
+        var after = fixture.Files.InspectChildNoFollow(fixture.Control, terminalName)!;
+        Assert.Equal(identity, after.Identity);
+        Assert.Equal(original.Length, after.Length);
+        Assert.Equal(mutated, File.ReadAllBytes(terminalPath));
+        Assert.Equal(new[] { terminalName }, fixture.UseArtifactNames());
+    }
+
+    [SupportedPhysicalStoreFact]
     public async Task RecoverAsync_UnknownArtifactRefusesBeforeChangingAnyValidStalePair()
     {
         using var fixture = NativeFixture.Create();
@@ -474,6 +556,13 @@ public sealed partial class PackageGraphUseRecordStoreTests
     {
         using var file = fixture.Files.CreateFileExclusiveAt(fixture.Control, name);
         fixture.Files.WriteNewControlFile(file, contents);
+    }
+
+    private static void OverwriteSameLength(string path, byte[] contents)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+        stream.Write(contents);
+        stream.Flush(flushToDisk: true);
     }
 
     private static PhysicalStoreEntryInfo MoveArtifact(NativeFixture fixture, string sourceName, string destinationName)

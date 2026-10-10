@@ -907,6 +907,7 @@ public sealed partial class PackageGraphUseRecordStoreTests
         internal string? SentinelName { get; set; }
         internal PhysicalFileIdentity? SentinelIdentity { get; set; }
         internal int RemovalTokenAttempts { get; private set; }
+        internal Action<string>? BeforeRemovalToken { get; set; }
         internal Action<string>? AfterRemovalToken { get; set; }
         internal Action<string, string>? AfterRecoveryMove { get; set; }
         internal Action<string>? AfterRecoveryRemoval { get; set; }
@@ -979,6 +980,7 @@ public sealed partial class PackageGraphUseRecordStoreTests
             string singleName,
             PhysicalFileIdentity expectedIdentity)
         {
+            BeforeRemovalToken?.Invoke(singleName);
             RemovalTokenAttempts++;
             var token = await _recovery.TryOpenAndLockControlFileForRemovalAt(parent, singleName, expectedIdentity)
                 .ConfigureAwait(false);
@@ -996,6 +998,9 @@ public sealed partial class PackageGraphUseRecordStoreTests
 
         public PhysicalStoreEntryInfo InspectLockedControlFile(PhysicalStoreLockedControlFile file)
             => _recovery.InspectLockedControlFile(file);
+
+        public byte[] ReadLockedControlFile(PhysicalStoreLockedControlFile file, int maximumBytes)
+            => _recovery.ReadLockedControlFile(file, maximumBytes);
 
         public PhysicalStoreEntryInfo MoveControlFileNoReplaceAt(
             PhysicalStoreDirectoryHandle parent,

@@ -293,7 +293,7 @@ internal sealed partial class UnixPhysicalStoreFileSystem : IPhysicalStoreFileSy
         if (before.Length > maximumBytes || before.Length > int.MaxValue)
             throw Unknown("The control file exceeds the requested read bound.");
 
-        var bytes = new byte[checked((int)before.Length)];
+        byte[] bytes;
         using (var scopedHandle = file.AcquireScopedSafeHandle(_providerToken))
         {
             var fd = GetFileDescriptor(scopedHandle);
@@ -302,16 +302,7 @@ internal sealed partial class UnixPhysicalStoreFileSystem : IPhysicalStoreFileSy
             if (current.Identity != before.Identity || current.Length != before.Length)
                 throw Unknown("The control file changed before its bounded contents were read.");
 
-            var offset = 0;
-            while (offset < bytes.Length)
-            {
-                var read = InvokeNative(
-                    "read bounded control file",
-                    () => UnixNative.ReadAt(platform, fd, bytes, offset));
-                if (read == 0)
-                    throw Unknown("The control file ended before its observed length.");
-                offset += read;
-            }
+            bytes = ReadBoundedControlFileBytes(platform, fd, checked((int)before.Length));
         }
 
         var after = InspectHandle(file);

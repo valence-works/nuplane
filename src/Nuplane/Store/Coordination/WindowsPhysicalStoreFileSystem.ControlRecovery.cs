@@ -167,6 +167,41 @@ internal sealed partial class WindowsPhysicalStoreFileSystem : IPhysicalStoreCon
     }
 
     /// <inheritdoc />
+    public byte[] ReadLockedControlFile(PhysicalStoreLockedControlFile file, int maximumBytes)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        if (maximumBytes < 0)
+            throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+        RequireSupportedPlatform();
+        var prepared = file.CanonicalName;
+        return file.WithInspection(_providerToken, (parentRaw, fileRaw) =>
+        {
+            RequireRecoveryFileHandle(parentRaw, fileRaw, prepared.Basename, prepared);
+            var before = QueryEntry(fileRaw, "inspect the locked control file before reading its bounded contents");
+            RequireControlFile(before, "The locked read handle is linked or not a regular single-link file.");
+            if (before.Identity != prepared.FileIdentity || before.Length > maximumBytes || before.Length > int.MaxValue)
+                throw Unknown("The locked control file identity or length is outside the requested read bound.");
+
+            byte[] bytes;
+            try
+            {
+                bytes = ReadExact(fileRaw, checked((int)before.Length));
+            }
+            catch (WindowsNativeCallException exception)
+            {
+                throw NativeFailure("read bounded contents from the locked control file", exception);
+            }
+
+            RequireRecoveryFileHandle(parentRaw, fileRaw, prepared.Basename, prepared);
+            var after = QueryEntry(fileRaw, "reinspect the locked control file after reading its bounded contents");
+            RequireControlFile(after, "The locked control file changed while its bounded contents were read.");
+            if (after.Identity != before.Identity || after.Length != before.Length || bytes.Length != before.Length)
+                throw Unknown("The locked control file changed while its bounded contents were read.");
+            return bytes;
+        });
+    }
+
+    /// <inheritdoc />
     public PhysicalStoreEntryInfo MoveControlFileNoReplaceAt(
         PhysicalStoreDirectoryHandle parent,
         string sourceName,

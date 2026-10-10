@@ -24,6 +24,9 @@ internal interface IPhysicalStoreControlRecoveryFileSystem
     /// <summary>Replays current native entry metadata through the exact active removal token without consuming it.</summary>
     PhysicalStoreEntryInfo InspectLockedControlFile(PhysicalStoreLockedControlFile file);
 
+    /// <summary>Reads a bounded detached byte copy through the exact active removal token without consuming it.</summary>
+    byte[] ReadLockedControlFile(PhysicalStoreLockedControlFile file, int maximumBytes);
+
     /// <summary>Moves one verified regular single-link control file to an absent same-parent name without replacement.</summary>
     PhysicalStoreEntryInfo MoveControlFileNoReplaceAt(
         PhysicalStoreDirectoryHandle parent,

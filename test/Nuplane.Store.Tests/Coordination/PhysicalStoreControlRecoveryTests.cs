@@ -29,6 +29,9 @@ public sealed class PhysicalStoreControlRecoveryTests
             var inspectConsumed = Assert.Throws<PackageStoreAdmissionException>(
                 () => context.Recovery.InspectLockedControlFile(locked));
             Assert.Equal(PackageStoreAdmissionReason.ExpiredScope, inspectConsumed.Reason);
+            var readConsumed = Assert.Throws<PackageStoreAdmissionException>(
+                () => context.Recovery.ReadLockedControlFile(locked, 32));
+            Assert.Equal(PackageStoreAdmissionReason.ExpiredScope, readConsumed.Reason);
         }
     }
 
@@ -49,6 +52,7 @@ public sealed class PhysicalStoreControlRecoveryTests
             Assert.Equal(1UL, first.LinkCount);
             Assert.Equal(0L, first.Length);
             Assert.Equal(first, second);
+            Assert.Empty(context.Recovery.ReadLockedControlFile(token, maximumBytes: 0));
 
             var busy = await context.Recovery.TryOpenAndLockControlFileForRemovalAt(
                 context.Parent, "inspect-sentinel.control", expected);
@@ -63,7 +67,49 @@ public sealed class PhysicalStoreControlRecoveryTests
         var disposedError = Assert.Throws<PackageStoreAdmissionException>(
             () => context.Recovery.InspectLockedControlFile(token));
         Assert.Equal(PackageStoreAdmissionReason.ExpiredScope, disposedError.Reason);
+        var readDisposed = Assert.Throws<PackageStoreAdmissionException>(
+            () => context.Recovery.ReadLockedControlFile(token, 0));
+        Assert.Equal(PackageStoreAdmissionReason.ExpiredScope, readDisposed.Reason);
         Assert.Equal(expected, RequireEntry(context, "inspect-sentinel.control").Identity);
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task ReadLockedControlFile_IsBoundedDetachedAndRetainsNativeOwnership()
+    {
+        using var context = CreateContext();
+        var contents = "token-bound bytes"u8.ToArray();
+        var expected = CreateFile(context, "read-locked.control", contents);
+        var token = await context.Recovery.TryOpenAndLockControlFileForRemovalAt(
+            context.Parent, "read-locked.control", expected);
+        Assert.NotNull(token);
+        await using (token.ConfigureAwait(false))
+        {
+            var first = context.Recovery.ReadLockedControlFile(token, contents.Length);
+            var second = context.Recovery.ReadLockedControlFile(token, contents.Length);
+            Assert.Equal(contents, first);
+            Assert.Equal(contents, second);
+            Assert.NotSame(first, second);
+
+            var tooSmall = Assert.Throws<PackageStoreAdmissionException>(
+                () => context.Recovery.ReadLockedControlFile(token, contents.Length - 1));
+            Assert.Equal(PackageStoreAdmissionReason.UnknownAuthority, tooSmall.Reason);
+
+            var busy = await context.Recovery.TryOpenAndLockControlFileForRemovalAt(
+                context.Parent, "read-locked.control", expected);
+            Assert.Null(busy);
+
+            var foreign = CreateRecoveryFileSystem();
+            var foreignError = Assert.Throws<PackageStoreAdmissionException>(
+                () => foreign.ReadLockedControlFile(token, contents.Length));
+            Assert.Equal(PackageStoreAdmissionReason.RootMismatch, foreignError.Reason);
+
+            await context.Recovery.RemoveLockedControlFileAsync(token);
+            var consumed = Assert.Throws<PackageStoreAdmissionException>(
+                () => context.Recovery.ReadLockedControlFile(token, contents.Length));
+            Assert.Equal(PackageStoreAdmissionReason.ExpiredScope, consumed.Reason);
+        }
+
+        Assert.Null(context.Files.InspectChildNoFollow(context.Parent, "read-locked.control"));
     }
 
     [SupportedPhysicalStoreFact]

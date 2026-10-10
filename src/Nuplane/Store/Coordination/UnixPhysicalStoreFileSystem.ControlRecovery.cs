@@ -111,6 +111,38 @@ internal sealed partial class UnixPhysicalStoreFileSystem : IPhysicalStoreContro
     }
 
     /// <inheritdoc />
+    public byte[] ReadLockedControlFile(PhysicalStoreLockedControlFile file, int maximumBytes)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        if (maximumBytes < 0)
+            throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+        var platform = RequireSupportedPlatform();
+        var prepared = file.CanonicalName;
+        return file.WithInspection(_providerToken, (parentHandle, fileHandle) =>
+        {
+            var parentFd = checked((int)parentHandle.ToInt64());
+            var fd = checked((int)fileHandle.ToInt64());
+            RequireRecoveryFileHandle(platform, parentFd, fd, prepared.Basename, prepared);
+            var before = ToEntryInfo(InvokeNative(
+                "inspect the locked control file before reading its bounded contents",
+                () => UnixNative.StatHandle(platform, fd)));
+            RequireControlFile(before, "The locked read handle is linked or not a regular single-link file.");
+            if (before.Identity != prepared.FileIdentity || before.Length > maximumBytes || before.Length > int.MaxValue)
+                throw Unknown("The locked control file identity or length is outside the requested read bound.");
+
+            var bytes = ReadBoundedControlFileBytes(platform, fd, checked((int)before.Length));
+            RequireRecoveryFileHandle(platform, parentFd, fd, prepared.Basename, prepared);
+            var after = ToEntryInfo(InvokeNative(
+                "reinspect the locked control file after reading its bounded contents",
+                () => UnixNative.StatHandle(platform, fd)));
+            RequireControlFile(after, "The locked control file changed while its bounded contents were read.");
+            if (after.Identity != before.Identity || after.Length != before.Length || bytes.Length != before.Length)
+                throw Unknown("The locked control file changed while its bounded contents were read.");
+            return bytes;
+        });
+    }
+
+    /// <inheritdoc />
     public PhysicalStoreEntryInfo MoveControlFileNoReplaceAt(
         PhysicalStoreDirectoryHandle parent,
         string sourceName,
@@ -204,6 +236,23 @@ internal sealed partial class UnixPhysicalStoreFileSystem : IPhysicalStoreContro
             throw NativeFailure("positively verify locked control-file removal", result.Error);
         if (result.Status != UnixStatResultStatus.Absent)
             throw Unknown("The locked control-file entry remains present after removal.");
+    }
+
+    private byte[] ReadBoundedControlFileBytes(UnixPlatform platform, int fd, int length)
+    {
+        var bytes = new byte[length];
+        var offset = 0;
+        while (offset < bytes.Length)
+        {
+            var read = InvokeNative(
+                "read bounded control file",
+                () => UnixNative.ReadAt(platform, fd, bytes, offset));
+            if (read == 0)
+                throw Unknown("The control file ended before its observed length.");
+            offset += read;
+        }
+
+        return bytes;
     }
 
     private const int MaximumRecoveryNameBytes = 4096;
