@@ -1,6 +1,6 @@
 ---
 name: quality-fix
-description: Recurring fixer for Nuplane. Takes the oldest open issue labeled agent:ready, implements it on a branch, verifies the full build and test gate, self-reviews, opens a PR, waits for CI, squash-merges, and closes the issue with evidence. One issue per run. Use when running the scheduled quality fixer or when asked to "run the quality fixer".
+description: Recurring fixer for Nuplane. Takes the oldest open issue labeled agent:ready, implements it on a branch, verifies the full build and test gate, self-reviews, opens a PR, waits for CI, and marks it agent:merge-ready for the maintainer; closes issues out after the maintainer merges. One new issue per run. Use when running the scheduled quality fixer or when asked to "run the quality fixer".
 ---
 
 # Nuplane quality fixer
@@ -9,9 +9,10 @@ You are the fixer half of a two-loop system. The reviewer (`.claude/skills/quali
 issues as `review:proposed`; the maintainer promotes the ones they want to `agent:ready`. Any issue
 the maintainer labels `agent:ready` is in scope, whoever filed it.
 
-You deliver **one issue per run**, end to end, and merge it yourself when — and only when — the gate
-below passes. Every push to `main` publishes a preview package, so a bad merge ships. When in doubt,
-stop and hand back to the maintainer rather than merge.
+You take **one new issue per run** to a green, mergeable PR. You do **not** merge: cloud sessions may
+not merge without human review, so the maintainer merges PRs you label `agent:merge-ready`. Every push
+to `main` publishes a preview package, so only mark a PR ready when the gate below passes. When in
+doubt, hand back to the maintainer instead.
 
 ## 0. Environment
 
@@ -23,10 +24,12 @@ stop and hand back to the maintainer rather than merge.
 
 ## 1. Resume or pick
 
-1. **Resume first.** If an open PR exists with label `agent:fix`, finish that one (go to step 5 or 6 as appropriate) instead of starting new work.
-2. Otherwise list candidates: open issues labeled `agent:ready` and not `agent:in-progress`, `agent:blocked`, or `needs-decision`, oldest first.
-3. None → end the run with "No agent:ready issues."
-4. Claim the oldest: add `agent:in-progress`, remove `agent:ready`, comment `Picked up by the quality fixer.`
+1. **Close out merged work.** For every closed PR labeled `agent:fix` that is merged and whose referenced issue is still open, do step 7.
+2. **Resume.** If an open `agent:fix` PR lacks `agent:merge-ready` (an earlier run stopped mid-way), finish it from step 5 or 6 instead of starting new work. If an `agent:merge-ready` PR is now `behind` or `dirty`, rebase it, re-run the gate, push, and re-check step 6.
+3. **Capacity.** If three or more open PRs carry `agent:merge-ready`, end the run: "Waiting for the maintainer to merge #a, #b, #c."
+4. Otherwise list candidates: open issues labeled `agent:ready` and not `agent:in-progress`, `agent:blocked`, or `needs-decision`, oldest first.
+5. None → end the run with "No agent:ready issues."
+6. Claim the oldest: add `agent:in-progress`, remove `agent:ready`, comment `Picked up by the quality fixer.`
 
 ## 2. Understand
 
@@ -68,26 +71,25 @@ Record warnings, per-project test counts, and totals. A failing or newly skipped
   - **Verification** — gate commands with warnings and test counts
   - last line: `🤖 Generated with [Claude Code](https://claude.com/claude-code)`
 
-## 6. Merge gate
+## 6. Ready gate
 
-Check immediately before merging; re-check after any push:
+Check after the PR is open; re-check after any push:
 
 1. **CI green.** Poll the head SHA's check runs every 30 s for at most 30 minutes: nothing pending, nothing failed. On failure, read the job log, fix if the diff caused it, re-run the gate, push, and poll again (at most two fix attempts). If no check run has appeared after 10 minutes, CI did not trigger: proceed on the local gate alone and say so in the PR evidence comment.
 2. **No outstanding review.** No review in state `CHANGES_REQUESTED`, and every review comment from someone other than you is addressed in the diff or answered.
 3. **Mergeable.** `mergeable == true` and `mergeable_state` is `clean` (or `unstable` only when the failing check is not `build-test` and you record why). If `behind` or `dirty`, rebase on `origin/main`, re-run the gate, `git push --force-with-lease`, and go back to 1.
 
-Then squash-merge with the PR title plus ` (#<pr>)` as the commit title, delete the branch, and confirm `gh api "$R/pulls/<pr>" --jq .merged` is `true`.
+When all three hold: add `agent:merge-ready` to the PR, comment on it with the gate evidence (head SHA, warnings, per-project test counts, CI result), and end with: issue, PR, and "ready for the maintainer to merge". Do not merge.
 
-## 7. Close out
+## 7. Close out (after the maintainer merges)
 
-- Comment on the PR with the gate evidence (merge SHA, warnings, per-project test counts).
 - Close the issue as completed with a comment naming the PR and merge SHA; remove `agent:in-progress`.
 - If the change is `risk:api-break`, add to the issue comment: "Downstream consumers pinning Nuplane may need a pin bump."
-- End with a short summary: issue, PR, merge SHA.
+- If the head branch still exists, delete it.
 
 ## Hand back
 
-When you stop without merging: push the branch if it has useful work, open or keep a **draft** PR if
+When you stop before the ready gate: push the branch if it has useful work, open or keep a **draft** PR if
 so, comment on the issue with what you did, what blocked you, and the specific question for the
-maintainer; swap `agent:in-progress` for `agent:blocked`. Never merge to get past a blocker, never
+maintainer; swap `agent:in-progress` for `agent:blocked`. Never merge, never
 weaken or delete a test to make the gate pass, and never resolve a review thread you did not address.
