@@ -122,6 +122,52 @@ internal static class ProtectionDigest
             writer.Field(6, EncodeSequence(ledger.TargetMemberIds, EncodeString));
             writer.Field(7, EncodeSequence(ledger.RetiredMembers, EncodeRetiredMember));
             writer.Field(8, EncodeNullableRecord(ledger.PendingStateCommit, EncodePendingCommit));
+            // Schema 1's canonical ledger recipe is frozen. Schema 2 adds its group-pending slot
+            // under a new tag, leaving every schema-1 digest byte-for-byte unchanged.
+            if (ledger.SchemaVersion >= RootMembershipRecord.BundleSchemaVersion)
+                writer.Field(9, EncodeNullableRecord(ledger.PendingGroupPublicationV2, EncodePendingGroupPublicationV2));
+        });
+    }
+
+    internal static string GroupPublicationIntentV2(GroupPublicationDescriptorV2 descriptor)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        return Digest("NuplaneGroupPublicationIntentV2", writer =>
+            writer.Field(1, EncodeGroupPublicationDescriptorV2(descriptor)));
+    }
+
+    internal static string GroupPublicationBoundV2(
+        GroupPublicationDescriptorV2 descriptor,
+        PhysicalFileIdentity stagedStateFileIdentity,
+        PhysicalFileIdentity? backupStateFileIdentity)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        ArgumentNullException.ThrowIfNull(stagedStateFileIdentity);
+        return Digest("NuplaneGroupPublicationBoundV2", writer =>
+        {
+            writer.Field(1, DecodeDigest(descriptor.IntentDigest));
+            writer.Field(2, EncodePhysicalFile(stagedStateFileIdentity));
+            writer.Field(3, EncodeNullableRecord(backupStateFileIdentity, EncodePhysicalFile));
+        });
+    }
+
+    internal static string GroupPublicationDecisionV2(
+        GroupPublicationDescriptorV2 descriptor,
+        string? boundCommitDigest,
+        GroupPublicationResolutionV2 resolution)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        if (resolution == GroupPublicationResolutionV2.Unresolved || !Enum.IsDefined(resolution))
+            throw new ArgumentOutOfRangeException(nameof(resolution));
+        if (resolution == GroupPublicationResolutionV2.Next && boundCommitDigest is null)
+            throw new ArgumentException("Next requires the bound-commit digest.", nameof(boundCommitDigest));
+        if (boundCommitDigest is not null)
+            ValidateCanonicalDigest(boundCommitDigest);
+        return Digest("NuplaneGroupPublicationResolutionV2", writer =>
+        {
+            writer.Field(1, DecodeDigest(descriptor.IntentDigest));
+            writer.Field(2, EncodeNullableString(boundCommitDigest));
+            writer.Field(3, EncodeEnum(resolution));
         });
     }
 
@@ -612,6 +658,7 @@ internal static class ProtectionDigest
             RootMemberRecord.ProspectiveBinding prospective => (1, EncodeProspectiveBinding(prospective)),
             RootMemberRecord.ExistingUnprotectedBinding unprotected => (2, EncodeExistingUnprotectedBinding(unprotected)),
             RootMemberRecord.AcknowledgedBinding acknowledged => (3, EncodeAcknowledgedBinding(acknowledged)),
+            RootMemberRecord.BundleAcknowledgedBinding bundle => (4, EncodeBundleAcknowledgedBinding(bundle)),
             _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown membership binding variant.")
         };
 
@@ -638,6 +685,86 @@ internal static class ProtectionDigest
             writer.Field(1, EncodeStateSlot(value.StateSlot));
             writer.Field(2, EncodePhysicalFile(value.ObservedStateFileIdentity));
             writer.Field(3, EncodeProtectionRecord(value.ProtectionRecord));
+        });
+
+    private static byte[] EncodeBundleAcknowledgedBinding(RootMemberRecord.BundleAcknowledgedBinding value)
+        => Record(writer =>
+        {
+            writer.Field(1, EncodeStateSlot(value.StateSlot));
+            writer.Field(2, EncodePhysicalFile(value.ObservedStateFileIdentity));
+            writer.Field(3, GuidBytes(value.LogicalMemberId));
+            writer.Field(4, DecodeDigest(value.ParticipantSetDigest));
+            writer.Field(5, GuidBytes(value.PublicationId));
+            writer.Field(6, EncodeInt64(value.StateGeneration));
+            writer.Field(7, DecodeDigest(value.StateBodyDigest));
+            writer.Field(8, DecodeDigest(value.BundleDigest));
+            writer.Field(9, EncodeProtectionBundleRootRow(value.RootRow));
+        });
+
+    private static byte[] EncodeProtectionBundleRootRow(PackageProtectionBundleRootRow row)
+        => Record(writer =>
+        {
+            writer.Field(1, EncodePhysicalRoot(row.RootIdentity));
+            writer.Field(2, EncodeInt64(row.EnrollmentEpoch));
+            writer.Field(3, EncodeString(row.MemberId));
+            writer.Field(4, EncodeInt64(row.Revision));
+            writer.Field(5, EncodeInt64(row.StateGeneration));
+            writer.Field(6, DecodeDigest(row.StateBodyDigest));
+            writer.Field(7, EncodeProtectionClosureV2(row.ActiveClosure));
+            writer.Field(8, EncodeProtectionClosureV2(row.RecoverableClosure));
+            writer.Field(9, EncodeSequence(row.RetiredGraphs
+                .OrderBy(static item => GuidBytes(item.SnapshotId), ByteArrayComparer.Instance), EncodeRetiredGraph));
+            writer.Field(10, EncodeBoolean(row.LegacyUnknownRecovery));
+            writer.Field(11, DecodeDigest(row.ProtectionDigest));
+        });
+
+    private static byte[] EncodeGroupPublicationDescriptorV2(GroupPublicationDescriptorV2 descriptor)
+        => Record(writer =>
+        {
+            writer.Field(1, GuidBytes(descriptor.TransactionId));
+            writer.Field(2, GuidBytes(descriptor.LogicalMemberId));
+            writer.Field(3, EncodeStateSlot(descriptor.SharedStateSlot));
+            writer.Field(4, EncodeInt64(descriptor.PriorStateGeneration));
+            writer.Field(5, DecodeDigest(descriptor.PriorStateBodyDigest));
+            writer.Field(6, DecodeDigest(descriptor.PriorBundleDigest));
+            writer.Field(7, EncodeInt64(descriptor.NextStateGeneration));
+            writer.Field(8, DecodeDigest(descriptor.NextStateBodyDigest));
+            writer.Field(9, DecodeDigest(descriptor.NextBundleDigest));
+            writer.Field(10, DecodeDigest(descriptor.ParticipantSetDigest));
+            writer.Field(11, EncodeSequence(descriptor.Participants, EncodeGroupPublicationParticipantV2));
+        });
+
+    private static byte[] EncodeGroupPublicationParticipantV2(GroupPublicationParticipantV2 participant)
+        => Record(writer =>
+        {
+            writer.Field(1, EncodePhysicalRoot(participant.RootIdentity));
+            writer.Field(2, EncodeInt64(participant.EnrollmentEpoch));
+            writer.Field(3, EncodeString(participant.PriorMember.MemberId));
+            writer.Field(4, EncodeString(participant.PriorMember.ConfiguredLocator));
+            writer.Field(5, EncodeBindingRecord(participant.PriorMember.Binding));
+            writer.Field(6, EncodeEnum(participant.PriorMembershipStatus));
+            writer.Field(7, EncodeInt32(participant.PriorSchemaVersion));
+            writer.Field(8, DecodeDigest(participant.PriorLedgerDigest));
+            writer.Field(9, EncodeInt64(participant.PriorRevision));
+            writer.Field(10, EncodeNullableRecord(participant.PriorRow, EncodeProtectionBundleRootRow));
+            writer.Field(11, EncodeNullableRecord(participant.PriorStateFileIdentity, EncodePhysicalFile));
+            writer.Field(12, EncodeInt64(participant.NextRevision));
+            writer.Field(13, DecodeDigest(participant.NextRowDigest));
+            writer.Field(14, EncodeString(participant.StagedName));
+            writer.Field(15, EncodeNullableString(participant.BackupName));
+        });
+
+    private static byte[] EncodePendingGroupPublicationV2(PendingGroupPublicationV2 pending)
+        => Record(writer =>
+        {
+            writer.Field(1, EncodePhysicalRoot(pending.RootIdentity));
+            writer.Field(2, EncodeGroupPublicationDescriptorV2(pending.Descriptor));
+            writer.Field(3, EncodeEnum(pending.Phase));
+            writer.Field(4, EncodeNullableRecord(pending.StagedStateFileIdentity, EncodePhysicalFile));
+            writer.Field(5, EncodeNullableRecord(pending.BackupStateFileIdentity, EncodePhysicalFile));
+            writer.Field(6, EncodeNullableString(pending.BoundCommitDigest));
+            writer.Field(7, EncodeEnum(pending.Resolution));
+            writer.Field(8, EncodeNullableString(pending.ResolutionDigest));
         });
 
     private static byte[] EncodeRetiredMember(RootMemberRetirementEvidence value)

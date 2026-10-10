@@ -14,6 +14,7 @@ internal sealed class RootMembershipRecord
 {
     /// <summary>The current root-membership record schema.</summary>
     internal const int CurrentSchemaVersion = 1;
+    internal const int BundleSchemaVersion = 2;
 
     internal RootMembershipRecord(
         int schemaVersion,
@@ -24,9 +25,10 @@ internal sealed class RootMembershipRecord
         IEnumerable<string> targetMemberIds,
         IEnumerable<RootMemberRetirementEvidence> retiredMembers,
         PendingStateCommit? pendingStateCommit,
-        string ledgerDigest)
+        string ledgerDigest,
+        PendingGroupPublicationV2? pendingGroupPublicationV2 = null)
     {
-        if (schemaVersion != CurrentSchemaVersion)
+        if (schemaVersion is not (CurrentSchemaVersion or BundleSchemaVersion))
             throw new ArgumentOutOfRangeException(nameof(schemaVersion), "The root-membership schema version is unsupported.");
         ArgumentNullException.ThrowIfNull(rootIdentity);
         if (enrollmentEpoch <= 0)
@@ -48,6 +50,7 @@ internal sealed class RootMembershipRecord
         var knownSlots = copiedMembers.Select(static member => member.Binding switch
         {
             RootMemberRecord.AcknowledgedBinding acknowledged => acknowledged.StateSlot,
+            RootMemberRecord.BundleAcknowledgedBinding bundle => bundle.StateSlot,
             RootMemberRecord.ExistingUnprotectedBinding unprotected => unprotected.StateSlot,
             _ => null
         }).OfType<StateSlotIdentity>().ToArray();
@@ -72,10 +75,26 @@ internal sealed class RootMembershipRecord
 
         foreach (var member in copiedMembers)
         {
-            if (member.Binding is not RootMemberRecord.AcknowledgedBinding acknowledged)
-                continue;
-
-            ValidateProtectionRecord(acknowledged.ProtectionRecord, copiedRoot, member.MemberId, enrollmentEpoch, requireCurrentEpoch: status == RootMembershipStatus.Complete);
+            switch (member.Binding)
+            {
+                case RootMemberRecord.AcknowledgedBinding acknowledged:
+                    ValidateProtectionRecord(acknowledged.ProtectionRecord, copiedRoot, member.MemberId, enrollmentEpoch,
+                        requireCurrentEpoch: status == RootMembershipStatus.Complete);
+                    break;
+                case RootMemberRecord.BundleAcknowledgedBinding bundle:
+                    if (schemaVersion != BundleSchemaVersion)
+                        throw new ArgumentException("A v2 bundle binding requires a schema-2 membership ledger.", nameof(members));
+                    var row = bundle.RootRow;
+                    if (row.RootIdentity != copiedRoot || row.EnrollmentEpoch > enrollmentEpoch ||
+                        !string.Equals(row.MemberId, member.MemberId, StringComparison.Ordinal) ||
+                        (status == RootMembershipStatus.Complete && row.EnrollmentEpoch != enrollmentEpoch))
+                        throw new ArgumentException("A bundle row must match this root, member and valid enrollment epoch.", nameof(members));
+                    if (status == RootMembershipStatus.Complete &&
+                        (row.ActiveClosure.Knowledge != PackageProtectionClosureKnowledge.Known ||
+                         row.RecoverableClosure.Knowledge != PackageProtectionClosureKnowledge.Known || row.LegacyUnknownRecovery))
+                        throw new ArgumentException("A complete v2 membership requires known active and recoverable closures.", nameof(members));
+                    break;
+            }
         }
 
         foreach (var evidence in copiedRetired)
@@ -104,21 +123,48 @@ internal sealed class RootMembershipRecord
                 throw new ArgumentException("A pending commit prior must match its member's current binding.", nameof(pendingStateCommit));
         }
 
+        if (pendingGroupPublicationV2 is not null)
+        {
+            if (schemaVersion != BundleSchemaVersion)
+                throw new ArgumentException("A pending group publication requires a schema-2 membership ledger.", nameof(pendingGroupPublicationV2));
+            if (pendingStateCommit is not null)
+                throw new ArgumentException("A ledger cannot contain both legacy and group pending publications.", nameof(pendingGroupPublicationV2));
+            if (status != RootMembershipStatus.Incomplete || pendingGroupPublicationV2.RootIdentity != copiedRoot)
+                throw new ArgumentException("A pending group publication requires this root's Incomplete ledger.", nameof(pendingGroupPublicationV2));
+            var local = pendingGroupPublicationV2.LocalParticipant;
+            if (local.RootIdentity != copiedRoot || local.EnrollmentEpoch != enrollmentEpoch)
+                throw new ArgumentException("A pending group tuple must match the membership root and epoch.", nameof(pendingGroupPublicationV2));
+            var pendingMember = copiedMembers.SingleOrDefault(member =>
+                string.Equals(member.MemberId, local.PriorMember.MemberId, StringComparison.Ordinal));
+            if (pendingMember is null || !BindingsEqual(pendingMember.Binding, local.PriorMember.Binding))
+                throw new ArgumentException("A pending group tuple must preserve the exact local prior member binding.", nameof(pendingGroupPublicationV2));
+        }
+
         if (status == RootMembershipStatus.Complete)
         {
             if (pendingStateCommit is not null)
                 throw new ArgumentException("A complete membership cannot contain a pending state commit.", nameof(pendingStateCommit));
+            if (pendingGroupPublicationV2 is not null)
+                throw new ArgumentException("A complete membership cannot contain a pending group publication.", nameof(pendingGroupPublicationV2));
             if (!memberIds.SetEquals(copiedTargets))
                 throw new ArgumentException("A complete membership must contain exactly its target members.", nameof(targetMemberIds));
             if (retiredIds.Overlaps(memberIds))
                 throw new ArgumentException("A completed member cannot also have retirement evidence.", nameof(retiredMembers));
-            if (copiedMembers.Any(static member => member.Binding is not RootMemberRecord.AcknowledgedBinding))
+            if (copiedMembers.Any(static member => member.Binding is not (RootMemberRecord.AcknowledgedBinding or RootMemberRecord.BundleAcknowledgedBinding)))
                 throw new ArgumentException("Every complete target member requires an acknowledged binding.", nameof(members));
             if (copiedMembers.Any(static member =>
-                    member.Binding is RootMemberRecord.AcknowledgedBinding acknowledged &&
-                    (acknowledged.ProtectionRecord.ActiveClosure.Knowledge != PackageProtectionClosureKnowledge.Known ||
-                     acknowledged.ProtectionRecord.RecoverableClosure.Knowledge != PackageProtectionClosureKnowledge.Known ||
-                     acknowledged.ProtectionRecord.LegacyUnknownRecovery)))
+                    member.Binding switch
+                    {
+                        RootMemberRecord.AcknowledgedBinding acknowledged =>
+                            acknowledged.ProtectionRecord.ActiveClosure.Knowledge != PackageProtectionClosureKnowledge.Known ||
+                            acknowledged.ProtectionRecord.RecoverableClosure.Knowledge != PackageProtectionClosureKnowledge.Known ||
+                            acknowledged.ProtectionRecord.LegacyUnknownRecovery,
+                        RootMemberRecord.BundleAcknowledgedBinding bundle =>
+                            bundle.RootRow.ActiveClosure.Knowledge != PackageProtectionClosureKnowledge.Known ||
+                            bundle.RootRow.RecoverableClosure.Knowledge != PackageProtectionClosureKnowledge.Known ||
+                            bundle.RootRow.LegacyUnknownRecovery,
+                        _ => true
+                    }))
             {
                 throw new ArgumentException("A complete membership candidate requires known active and recoverable closures without unresolved legacy recovery.", nameof(members));
             }
@@ -132,6 +178,7 @@ internal sealed class RootMembershipRecord
         TargetMemberIds = new ReadOnlyCollection<string>(copiedTargets);
         RetiredMembers = new ReadOnlyCollection<RootMemberRetirementEvidence>(copiedRetired);
         PendingStateCommit = pendingStateCommit;
+        PendingGroupPublicationV2 = pendingGroupPublicationV2?.Copy();
         LedgerDigest = ledgerDigest;
     }
 
@@ -150,6 +197,8 @@ internal sealed class RootMembershipRecord
     internal IReadOnlyList<RootMemberRetirementEvidence> RetiredMembers { get; }
 
     internal PendingStateCommit? PendingStateCommit { get; }
+
+    internal PendingGroupPublicationV2? PendingGroupPublicationV2 { get; }
 
     internal string LedgerDigest { get; }
 
@@ -191,7 +240,16 @@ internal sealed class RootMembershipRecord
                 first.ProtectionMetadataAbsent == second.ProtectionMetadataAbsent,
             (RootMemberRecord.AcknowledgedBinding first, RootMemberRecord.AcknowledgedBinding second) =>
                 AcknowledgedBindingsEqual(first, second),
+            (RootMemberRecord.BundleAcknowledgedBinding first, RootMemberRecord.BundleAcknowledgedBinding second) =>
+                first.StateSlot == second.StateSlot && first.ObservedStateFileIdentity == second.ObservedStateFileIdentity &&
+                first.LogicalMemberId == second.LogicalMemberId && first.ParticipantSetDigest == second.ParticipantSetDigest &&
+                first.PublicationId == second.PublicationId && first.StateGeneration == second.StateGeneration &&
+                first.StateBodyDigest == second.StateBodyDigest && first.BundleDigest == second.BundleDigest &&
+                first.RootRow.HasSamePayloadAs(second.RootRow),
             _ => false
         };
+
+    internal static bool BindingsEqualForGroup(RootMemberRecord.MemberBinding left, RootMemberRecord.MemberBinding right)
+        => BindingsEqual(left, right);
 
 }

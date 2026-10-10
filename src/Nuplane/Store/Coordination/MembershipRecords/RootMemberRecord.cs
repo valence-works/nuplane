@@ -1,4 +1,5 @@
 using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.PhysicalFiles;
 using Nuplane.Store.Coordination.ProtectionRecords;
 
@@ -126,5 +127,60 @@ internal sealed class RootMemberRecord
         internal PackageProtectionRecord ProtectionRecord { get; }
 
         internal override MemberBinding Copy() => new AcknowledgedBinding(StateSlot, ObservedStateFileIdentity, ProtectionRecord);
+    }
+
+    /// <summary>An acknowledged root-local row in a shared multiroot protection bundle.</summary>
+    internal sealed record BundleAcknowledgedBinding : MemberBinding
+    {
+        internal BundleAcknowledgedBinding(
+            StateSlotIdentity stateSlot,
+            PhysicalFileIdentity observedStateFileIdentity,
+            Guid logicalMemberId,
+            string participantSetDigest,
+            Guid publicationId,
+            long stateGeneration,
+            string stateBodyDigest,
+            string bundleDigest,
+            PackageProtectionBundleRootRow rootRow)
+        {
+            ArgumentNullException.ThrowIfNull(stateSlot);
+            ArgumentNullException.ThrowIfNull(observedStateFileIdentity);
+            if (logicalMemberId == Guid.Empty)
+                throw new ArgumentException("A logical member identity cannot be empty.", nameof(logicalMemberId));
+            ProtectionDigest.ValidateCanonicalDigest(participantSetDigest);
+            if (publicationId == Guid.Empty)
+                throw new ArgumentException("A bundle acknowledgement requires a publication identity.", nameof(publicationId));
+            if (stateGeneration <= 0)
+                throw new ArgumentOutOfRangeException(nameof(stateGeneration));
+            ProtectionDigest.ValidateCanonicalDigest(stateBodyDigest);
+            ProtectionDigest.ValidateCanonicalDigest(bundleDigest);
+            ArgumentNullException.ThrowIfNull(rootRow);
+            if (rootRow.StateGeneration != stateGeneration ||
+                !string.Equals(rootRow.StateBodyDigest, stateBodyDigest, StringComparison.Ordinal))
+                throw new ArgumentException("The root row must match the common state generation and body digest.", nameof(rootRow));
+
+            StateSlot = MembershipRecordValueCopies.CopySlot(stateSlot);
+            ObservedStateFileIdentity = MembershipRecordValueCopies.CopyIdentity(observedStateFileIdentity);
+            LogicalMemberId = logicalMemberId;
+            ParticipantSetDigest = participantSetDigest;
+            PublicationId = publicationId;
+            StateGeneration = stateGeneration;
+            StateBodyDigest = stateBodyDigest;
+            BundleDigest = bundleDigest;
+            RootRow = rootRow.Copy();
+        }
+
+        internal StateSlotIdentity StateSlot { get; }
+        internal PhysicalFileIdentity ObservedStateFileIdentity { get; }
+        internal Guid LogicalMemberId { get; }
+        internal string ParticipantSetDigest { get; }
+        internal Guid PublicationId { get; }
+        internal long StateGeneration { get; }
+        internal string StateBodyDigest { get; }
+        internal string BundleDigest { get; }
+        internal PackageProtectionBundleRootRow RootRow { get; }
+
+        internal override MemberBinding Copy() => new BundleAcknowledgedBinding(StateSlot, ObservedStateFileIdentity,
+            LogicalMemberId, ParticipantSetDigest, PublicationId, StateGeneration, StateBodyDigest, BundleDigest, RootRow);
     }
 }

@@ -79,6 +79,17 @@ internal sealed class RootMembershipPayloadSerializer
                 ? new[] { pending.NextProtectionRecord }
                 : Array.Empty<PackageProtectionRecord>()));
 
+        foreach (var row in record.Members.Select(static member => member.Binding)
+                     .OfType<RootMemberRecord.BundleAcknowledgedBinding>().Select(static binding => binding.RootRow)
+                     .Concat(record.PendingGroupPublicationV2?.Descriptor.Participants
+                         .Where(static participant => participant.PriorRow is not null)
+                         .Select(static participant => participant.PriorRow!) ?? []))
+        {
+            ProtectionDigest.ValidateCanonicalDigest(row.ProtectionDigest);
+            if (!string.Equals(ProtectionDigest.PackageProtectionBundleRow(row), row.ProtectionDigest, StringComparison.Ordinal))
+                throw new JsonException("A nested package-protection bundle row digest does not match its payload.");
+        }
+
         foreach (var evidence in record.RetiredMembers)
             ProtectionDigest.ValidateCanonicalDigest(evidence.ProofDigest);
 
@@ -116,6 +127,7 @@ internal sealed class RootMembershipPayloadSerializer
                         1 => new[] { "tag", "verifiedParentIdentity", "nameSemantics", "requestedBasename" },
                         2 => new[] { "tag", "stateSlot", "observedStateFileIdentity", "stateBodyDigest", "protectionMetadataAbsent" },
                         3 => new[] { "tag", "stateSlot", "observedStateFileIdentity", "protectionRecord" },
+                        4 => new[] { "tag", "stateSlot", "observedStateFileIdentity", "logicalMemberId", "participantSetDigest", "publicationId", "stateGeneration", "stateBodyDigest", "bundleDigest", "rootRow" },
                         _ => throw new JsonException("A member binding tag is unsupported.")
                     };
                     var actual = element.EnumerateObject().Select(static property => property.Name).ToHashSet(StringComparer.Ordinal);
@@ -181,6 +193,7 @@ internal sealed class RootMembershipPayloadSerializer
         public List<string?>? TargetMemberIds { get; set; }
         public List<RetiredMemberDto?>? RetiredMembers { get; set; }
         public PendingCommitDto? PendingStateCommit { get; set; }
+        public PendingGroupPublicationDto? PendingGroupPublicationV2 { get; set; }
         public string? LedgerDigest { get; set; }
 
         internal RootMembershipRecord ToRecord()
@@ -194,6 +207,7 @@ internal sealed class RootMembershipPayloadSerializer
             var root = Required(RootIdentity, nameof(RootIdentity)).ToRecord();
             var status = ReadEnum<RootMembershipStatus>(Status, nameof(Status));
             var pending = PendingStateCommit?.ToRecord(members);
+            var groupPending = PendingGroupPublicationV2?.ToRecord();
             return new RootMembershipRecord(
                 Required(SchemaVersion, nameof(SchemaVersion)),
                 root,
@@ -203,7 +217,8 @@ internal sealed class RootMembershipPayloadSerializer
                 targets.Select(static value => value!).ToArray(),
                 retired,
                 pending,
-                Required(LedgerDigest, nameof(LedgerDigest)));
+                Required(LedgerDigest, nameof(LedgerDigest)),
+                groupPending);
         }
 
         internal static MembershipDto FromRecord(RootMembershipRecord record)
@@ -217,6 +232,7 @@ internal sealed class RootMembershipPayloadSerializer
                 TargetMemberIds = record.TargetMemberIds.Cast<string?>().ToList(),
                 RetiredMembers = record.RetiredMembers.Select(static retired => (RetiredMemberDto?)RetiredMemberDto.FromRecord(retired)).ToList(),
                 PendingStateCommit = record.PendingStateCommit is null ? null : PendingCommitDto.FromRecord(record.PendingStateCommit),
+                PendingGroupPublicationV2 = record.PendingGroupPublicationV2 is null ? null : PendingGroupPublicationDto.FromRecord(record.PendingGroupPublicationV2),
                 LedgerDigest = record.LedgerDigest
             };
     }
@@ -250,6 +266,12 @@ internal sealed class RootMembershipPayloadSerializer
         public string? StateBodyDigest { get; set; }
         public bool? ProtectionMetadataAbsent { get; set; }
         public PackageProtectionRecord? ProtectionRecord { get; set; }
+        public Guid? LogicalMemberId { get; set; }
+        public string? ParticipantSetDigest { get; set; }
+        public Guid? PublicationId { get; set; }
+        public long? StateGeneration { get; set; }
+        public string? BundleDigest { get; set; }
+        public PackageProtectionBundleRootRowDto? RootRow { get; set; }
 
         internal RootMemberRecord.MemberBinding ToRecord()
             => Required(Tag, nameof(Tag)) switch
@@ -268,6 +290,16 @@ internal sealed class RootMembershipPayloadSerializer
                     Required(StateSlot, nameof(StateSlot)).ToRecord(),
                     Required(ObservedStateFileIdentity, nameof(ObservedStateFileIdentity)).ToRecord(),
                     Required(ProtectionRecord, nameof(ProtectionRecord))),
+                4 => new RootMemberRecord.BundleAcknowledgedBinding(
+                    Required(StateSlot, nameof(StateSlot)).ToRecord(),
+                    Required(ObservedStateFileIdentity, nameof(ObservedStateFileIdentity)).ToRecord(),
+                    Required(LogicalMemberId, nameof(LogicalMemberId)),
+                    Required(ParticipantSetDigest, nameof(ParticipantSetDigest)),
+                    Required(PublicationId, nameof(PublicationId)),
+                    Required(StateGeneration, nameof(StateGeneration)),
+                    Required(StateBodyDigest, nameof(StateBodyDigest)),
+                    Required(BundleDigest, nameof(BundleDigest)),
+                    Required(RootRow, nameof(RootRow)).ToRow()),
                 _ => throw new JsonException("A member binding tag is unsupported.")
             };
 
@@ -296,6 +328,19 @@ internal sealed class RootMembershipPayloadSerializer
                     StateSlot = StateSlotDto.FromRecord(acknowledged.StateSlot),
                     ObservedStateFileIdentity = PhysicalFileDto.FromRecord(acknowledged.ObservedStateFileIdentity),
                     ProtectionRecord = acknowledged.ProtectionRecord
+                },
+                RootMemberRecord.BundleAcknowledgedBinding bundle => new()
+                {
+                    Tag = 4,
+                    StateSlot = StateSlotDto.FromRecord(bundle.StateSlot),
+                    ObservedStateFileIdentity = PhysicalFileDto.FromRecord(bundle.ObservedStateFileIdentity),
+                    LogicalMemberId = bundle.LogicalMemberId,
+                    ParticipantSetDigest = bundle.ParticipantSetDigest,
+                    PublicationId = bundle.PublicationId,
+                    StateGeneration = bundle.StateGeneration,
+                    StateBodyDigest = bundle.StateBodyDigest,
+                    BundleDigest = bundle.BundleDigest,
+                    RootRow = PackageProtectionBundleRootRowDto.FromRow(bundle.RootRow)
                 },
                 _ => throw new InvalidOperationException("The membership candidate has an unsupported binding type.")
             };
@@ -351,6 +396,151 @@ internal sealed class RootMembershipPayloadSerializer
                 StagedStateFileIdentity = value.StagedStateFileIdentity is null ? null : PhysicalFileDto.FromRecord(value.StagedStateFileIdentity),
                 BackupStateFileIdentity = value.BackupStateFileIdentity is null ? null : PhysicalFileDto.FromRecord(value.BackupStateFileIdentity),
                 Resolution = (int)value.Resolution
+        };
+    }
+
+    private sealed class PendingGroupPublicationDto
+    {
+        public PhysicalRootDto? RootIdentity { get; set; }
+        public GroupPublicationDescriptorDto? Descriptor { get; set; }
+        public int? Phase { get; set; }
+        public PhysicalFileDto? StagedStateFileIdentity { get; set; }
+        public PhysicalFileDto? BackupStateFileIdentity { get; set; }
+        public string? BoundCommitDigest { get; set; }
+        public int? Resolution { get; set; }
+        public string? ResolutionDigest { get; set; }
+
+        internal PendingGroupPublicationV2 ToRecord()
+            => new(
+                Required(Descriptor, nameof(Descriptor)).ToRecord(),
+                Required(RootIdentity, nameof(RootIdentity)).ToRecord(),
+                ReadEnum<GroupPublicationPhaseV2>(Phase, nameof(Phase)),
+                StagedStateFileIdentity?.ToRecord(),
+                BackupStateFileIdentity?.ToRecord(),
+                ReadEnum<GroupPublicationResolutionV2>(Resolution, nameof(Resolution)),
+                BoundCommitDigest,
+                ResolutionDigest);
+
+        internal static PendingGroupPublicationDto FromRecord(PendingGroupPublicationV2 value)
+            => new()
+            {
+                RootIdentity = PhysicalRootDto.FromRecord(value.RootIdentity),
+                Descriptor = GroupPublicationDescriptorDto.FromRecord(value.Descriptor),
+                Phase = (int)value.Phase,
+                StagedStateFileIdentity = value.StagedStateFileIdentity is null ? null : PhysicalFileDto.FromRecord(value.StagedStateFileIdentity),
+                BackupStateFileIdentity = value.BackupStateFileIdentity is null ? null : PhysicalFileDto.FromRecord(value.BackupStateFileIdentity),
+                BoundCommitDigest = value.BoundCommitDigest,
+                Resolution = (int)value.Resolution,
+                ResolutionDigest = value.ResolutionDigest
+            };
+    }
+
+    private sealed class GroupPublicationDescriptorDto
+    {
+        public Guid? TransactionId { get; set; }
+        public Guid? LogicalMemberId { get; set; }
+        public StateSlotDto? SharedStateSlot { get; set; }
+        public long? PriorStateGeneration { get; set; }
+        public string? PriorStateBodyDigest { get; set; }
+        public string? PriorBundleDigest { get; set; }
+        public long? NextStateGeneration { get; set; }
+        public string? NextStateBodyDigest { get; set; }
+        public string? NextBundleDigest { get; set; }
+        public string? ParticipantSetDigest { get; set; }
+        public List<GroupPublicationParticipantDto?>? Participants { get; set; }
+        public string? IntentDigest { get; set; }
+
+        internal GroupPublicationDescriptorV2 ToRecord()
+            => new(
+                Required(TransactionId, nameof(TransactionId)),
+                Required(LogicalMemberId, nameof(LogicalMemberId)),
+                Required(SharedStateSlot, nameof(SharedStateSlot)).ToRecord(),
+                Required(PriorStateGeneration, nameof(PriorStateGeneration)),
+                Required(PriorStateBodyDigest, nameof(PriorStateBodyDigest)),
+                Required(PriorBundleDigest, nameof(PriorBundleDigest)),
+                Required(NextStateGeneration, nameof(NextStateGeneration)),
+                Required(NextStateBodyDigest, nameof(NextStateBodyDigest)),
+                Required(NextBundleDigest, nameof(NextBundleDigest)),
+                RequiredItems(Participants, nameof(Participants)).Select(static participant => participant.ToRecord()).ToArray(),
+                Required(ParticipantSetDigest, nameof(ParticipantSetDigest)),
+                Required(IntentDigest, nameof(IntentDigest)));
+
+        internal static GroupPublicationDescriptorDto FromRecord(GroupPublicationDescriptorV2 value)
+            => new()
+            {
+                TransactionId = value.TransactionId,
+                LogicalMemberId = value.LogicalMemberId,
+                SharedStateSlot = StateSlotDto.FromRecord(value.SharedStateSlot),
+                PriorStateGeneration = value.PriorStateGeneration,
+                PriorStateBodyDigest = value.PriorStateBodyDigest,
+                PriorBundleDigest = value.PriorBundleDigest,
+                NextStateGeneration = value.NextStateGeneration,
+                NextStateBodyDigest = value.NextStateBodyDigest,
+                NextBundleDigest = value.NextBundleDigest,
+                ParticipantSetDigest = value.ParticipantSetDigest,
+                Participants = value.Participants.Select(static participant => (GroupPublicationParticipantDto?)GroupPublicationParticipantDto.FromRecord(participant)).ToList(),
+                IntentDigest = value.IntentDigest
+            };
+    }
+
+    private sealed class GroupPublicationParticipantDto
+    {
+        public PhysicalRootDto? RootIdentity { get; set; }
+        public long? EnrollmentEpoch { get; set; }
+        public string? PriorMemberId { get; set; }
+        public string? PriorConfiguredLocator { get; set; }
+        public BindingDto? PriorBinding { get; set; }
+        public int? PriorMembershipStatus { get; set; }
+        public int? PriorSchemaVersion { get; set; }
+        public string? PriorLedgerDigest { get; set; }
+        public long? PriorRevision { get; set; }
+        public PackageProtectionBundleRootRowDto? PriorRow { get; set; }
+        public PhysicalFileDto? PriorStateFileIdentity { get; set; }
+        public long? NextRevision { get; set; }
+        public string? NextRowDigest { get; set; }
+        public string? StagedName { get; set; }
+        public string? BackupName { get; set; }
+
+        internal GroupPublicationParticipantV2 ToRecord()
+        {
+            var priorMember = new RootMemberRecord(
+                Required(PriorMemberId, nameof(PriorMemberId)),
+                Required(PriorConfiguredLocator, nameof(PriorConfiguredLocator)),
+                Required(PriorBinding, nameof(PriorBinding)).ToRecord());
+            return new GroupPublicationParticipantV2(
+                Required(RootIdentity, nameof(RootIdentity)).ToRecord(),
+                Required(EnrollmentEpoch, nameof(EnrollmentEpoch)),
+                priorMember,
+                ReadEnum<RootMembershipStatus>(PriorMembershipStatus, nameof(PriorMembershipStatus)),
+                Required(PriorSchemaVersion, nameof(PriorSchemaVersion)),
+                Required(PriorLedgerDigest, nameof(PriorLedgerDigest)),
+                Required(PriorRevision, nameof(PriorRevision)),
+                PriorRow?.ToRow(),
+                PriorStateFileIdentity?.ToRecord(),
+                Required(NextRevision, nameof(NextRevision)),
+                Required(NextRowDigest, nameof(NextRowDigest)),
+                Required(StagedName, nameof(StagedName)),
+                BackupName);
+        }
+
+        internal static GroupPublicationParticipantDto FromRecord(GroupPublicationParticipantV2 value)
+            => new()
+            {
+                RootIdentity = PhysicalRootDto.FromRecord(value.RootIdentity),
+                EnrollmentEpoch = value.EnrollmentEpoch,
+                PriorMemberId = value.PriorMember.MemberId,
+                PriorConfiguredLocator = value.PriorMember.ConfiguredLocator,
+                PriorBinding = BindingDto.FromRecord(value.PriorMember.Binding),
+                PriorMembershipStatus = (int)value.PriorMembershipStatus,
+                PriorSchemaVersion = value.PriorSchemaVersion,
+                PriorLedgerDigest = value.PriorLedgerDigest,
+                PriorRevision = value.PriorRevision,
+                PriorRow = value.PriorRow is null ? null : PackageProtectionBundleRootRowDto.FromRow(value.PriorRow),
+                PriorStateFileIdentity = value.PriorStateFileIdentity is null ? null : PhysicalFileDto.FromRecord(value.PriorStateFileIdentity),
+                NextRevision = value.NextRevision,
+                NextRowDigest = value.NextRowDigest,
+                StagedName = value.StagedName,
+                BackupName = value.BackupName
             };
     }
 

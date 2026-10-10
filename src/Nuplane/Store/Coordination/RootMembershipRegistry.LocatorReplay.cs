@@ -11,6 +11,7 @@ internal sealed partial class RootMembershipRegistry
     internal enum LocatorReplayBindingPolicy
     {
         Acknowledged,
+        GroupAcknowledged,
         Declared,
         BoundIncomplete
     }
@@ -396,7 +397,7 @@ internal sealed partial class RootMembershipRegistry
                     throw Refused("A member locator was resolved more than once.");
                 }
 
-                RequireLocationMatchesBinding(member, location, policy);
+                RequireLocationMatchesBinding(ledger, member, location, policy);
             }
 
             if (!locations.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(memberIds))
@@ -426,11 +427,11 @@ internal sealed partial class RootMembershipRegistry
             if (!locations.TryGetValue(member.MemberId, out var location) || !slots.Add(location.Slot))
                 throw Refused("The retained locator map contains a missing or duplicate native state slot.");
             location.Revalidate();
-            RequireLocationMatchesBinding(member, location, policy);
+            RequireLocationMatchesBinding(ledger, member, location, policy);
         }
     }
 
-    private static void RequireLocationMatchesBinding(RootMemberRecord member,
+    private static void RequireLocationMatchesBinding(RootMembershipRecord ledger, RootMemberRecord member,
         ResolvedMemberStateLocation location, LocatorReplayBindingPolicy policy)
     {
         switch (policy)
@@ -442,6 +443,35 @@ internal sealed partial class RootMembershipRegistry
                 if (location.Slot != acknowledged.StateSlot ||
                     location.ExistingFileIdentity != acknowledged.ObservedStateFileIdentity)
                     throw Refused("A configured member locator no longer resolves to its acknowledged native state slot.");
+                return;
+            }
+            case LocatorReplayBindingPolicy.GroupAcknowledged:
+            {
+                var expectedSlot = GetSlot(member.Binding);
+                var expectedIdentity = member.Binding switch
+                {
+                    RootMemberRecord.ProspectiveBinding => null,
+                    RootMemberRecord.AcknowledgedBinding acknowledged => acknowledged.ObservedStateFileIdentity,
+                    RootMemberRecord.BundleAcknowledgedBinding bundle => bundle.ObservedStateFileIdentity,
+                    RootMemberRecord.ExistingUnprotectedBinding unprotected => unprotected.ObservedStateFileIdentity,
+                    _ => throw Refused("Native group locator replay requires a bound member with a known state slot.")
+                };
+                if (location.Slot != expectedSlot)
+                    throw Refused("A configured member locator no longer resolves to its exact acknowledged native state slot.");
+                if (location.ExistingFileIdentity == expectedIdentity)
+                    return;
+
+                var pending = ledger.PendingGroupPublicationV2;
+                var selectedPendingMember = pending is not null &&
+                    pending.LocalParticipant.RootIdentity == ledger.RootIdentity &&
+                    string.Equals(pending.LocalParticipant.PriorMember.MemberId, member.MemberId, StringComparison.Ordinal) &&
+                    RootMembershipRecord.BindingsEqualForGroup(member.Binding, pending.LocalParticipant.PriorMember.Binding) &&
+                    pending.Descriptor.SharedStateSlot == location.Slot &&
+                    (pending.Phase is GroupPublicationPhaseV2.ArtifactsBound or GroupPublicationPhaseV2.Resolved) &&
+                    pending.StagedStateFileIdentity is { } stagedIdentity &&
+                    location.ExistingFileIdentity == stagedIdentity;
+                if (!selectedPendingMember)
+                    throw Refused("A configured member locator no longer resolves to its exact acknowledged native state slot.");
                 return;
             }
             case LocatorReplayBindingPolicy.Declared:
@@ -765,6 +795,13 @@ internal sealed partial class RootMembershipRegistry
         {
             case LocatorReplayBindingPolicy.Acknowledged:
                 RequireCompleteLocatorLedger(ledger, expectedRoot, expectedEnrollmentEpoch);
+                break;
+            case LocatorReplayBindingPolicy.GroupAcknowledged:
+                if (ledger.RootIdentity != expectedRoot || ledger.EnrollmentEpoch != expectedEnrollmentEpoch ||
+                    ledger.PendingStateCommit is not null ||
+                    ledger.Members.Any(static member => member.Binding is not (RootMemberRecord.ProspectiveBinding or RootMemberRecord.AcknowledgedBinding or
+                        RootMemberRecord.BundleAcknowledgedBinding or RootMemberRecord.ExistingUnprotectedBinding)))
+                    throw Refused("Native group locator replay requires an exact bound membership without a legacy pending commit.");
                 break;
             case LocatorReplayBindingPolicy.Declared:
                 RequireAllDeclaredLocatorLedger(ledger, expectedRoot, expectedEnrollmentEpoch);

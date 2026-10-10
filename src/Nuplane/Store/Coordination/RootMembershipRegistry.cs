@@ -540,6 +540,7 @@ internal sealed partial class RootMembershipRegistry
         RootMemberRecord.ProspectiveBinding prospective => new StateSlotIdentity(prospective.VerifiedParentIdentity, prospective.NameSemantics, prospective.RequestedBasename),
         RootMemberRecord.ExistingUnprotectedBinding prior => prior.StateSlot,
         RootMemberRecord.AcknowledgedBinding prior => prior.StateSlot,
+        RootMemberRecord.BundleAcknowledgedBinding prior => prior.StateSlot,
         _ => throw Refused("Publication requires every member to have a known existing or prospective state slot.")
     };
 
