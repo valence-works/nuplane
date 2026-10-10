@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.Loader;
@@ -209,6 +210,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         internal PhysicalRootIdentity RootIdentity { get; private set; } = null!;
         internal RootMembershipRegistry Registry { get; private set; } = null!;
         internal string RootPath => _fixture.PackageInstallRoot;
+        internal ResolvedPackage UnrelatedInstall { get; private set; } = null!;
         internal Dictionary<string, ResolvedGraphFixture> Graphs { get; } = new(StringComparer.Ordinal);
 
         internal static async Task<GraphUseFixture> CreateAsync()
@@ -378,6 +380,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             Graphs.Add("member-a", await ResolveGraphAsync("member-a", firstRoot, shared));
             Graphs.Add("member-b", await ResolveGraphAsync("member-b", secondV1Root, shared));
             Graphs.Add("member-b-v2", await ResolveGraphAsync("member-b", secondV2Root, shared));
+            UnrelatedInstall = CreateInstall("Unrelated.Package", "0.1.0", dependencyId: null, sourceName: "unrelated");
 
             Registry.InitializeIncomplete(Root, RootIdentity, RootMembershipBindingEpoch, declarations,
                 quiescentCutoverConfirmed: true, CancellationToken.None);
@@ -475,10 +478,27 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         IPhysicalStorePackageStreamFileSystem
     {
         private MetadataReadBarrier? _barrier;
+        private readonly ConcurrentDictionary<PhysicalFileIdentity, byte> _rootLockFiles = new();
+        private readonly ConcurrentDictionary<PhysicalFileIdentity, byte> _memberLockFiles = new();
+        private int _activeRootLocks;
+        private int _activeMemberLocks;
+        private int _successfulRootLockAcquisitions;
+        private int _successfulMemberLockAcquisitions;
+
+        internal int SuccessfulRootLockAcquisitions => Volatile.Read(ref _successfulRootLockAcquisitions);
+        internal int SuccessfulMemberLockAcquisitions => Volatile.Read(ref _successfulMemberLockAcquisitions);
 
         internal MetadataReadBarrier BlockNextMetadataRead()
         {
-            var barrier = new MetadataReadBarrier();
+            var barrier = new MetadataReadBarrier(onlyAfterRootUnlock: false);
+            if (Interlocked.CompareExchange(ref _barrier, barrier, null) is not null)
+                throw new InvalidOperationException("A metadata read is already armed.");
+            return barrier;
+        }
+
+        internal MetadataReadBarrier BlockNextMetadataReadAfterRootUnlock()
+        {
+            var barrier = new MetadataReadBarrier(onlyAfterRootUnlock: true);
             if (Interlocked.CompareExchange(ref _barrier, barrier, null) is not null)
                 throw new InvalidOperationException("A metadata read is already armed.");
             return barrier;
@@ -498,9 +518,11 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             FileAccess access)
         {
             var file = inner.OpenFileChildNoFollow(parent, singleName, access);
+            RememberOperationLockFile(singleName, file);
             if (string.Equals(singleName, Nuplane.Metadata.NuplanePackageMetadataReader.MetadataFileName,
                     StringComparison.Ordinal))
-                Volatile.Read(ref _barrier)?.Observe(file);
+                Volatile.Read(ref _barrier)?.Observe(file,
+                    Volatile.Read(ref _activeRootLocks), Volatile.Read(ref _activeMemberLocks));
             return file;
         }
 
@@ -513,18 +535,42 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         public PhysicalStoreDirectoryHandle CreateDirectoryExclusiveAt(PhysicalStoreDirectoryHandle parent, string singleName)
             => inner.CreateDirectoryExclusiveAt(parent, singleName);
         public PhysicalStoreFileHandle CreateFileExclusiveAt(PhysicalStoreDirectoryHandle parent, string singleName)
-            => inner.CreateFileExclusiveAt(parent, singleName);
+        {
+            var file = inner.CreateFileExclusiveAt(parent, singleName);
+            RememberOperationLockFile(singleName, file);
+            return file;
+        }
 
         public byte[] ReadControlFile(PhysicalStoreFileHandle file, int maximumBytes)
         {
-            Volatile.Read(ref _barrier)?.PauseIfObserved(file);
+            Volatile.Read(ref _barrier)?.PauseIfObserved(file,
+                Volatile.Read(ref _activeRootLocks), Volatile.Read(ref _activeMemberLocks));
             return inner.ReadControlFile(file, maximumBytes);
         }
 
         public void WriteNewControlFile(PhysicalStoreFileHandle file, ReadOnlyMemory<byte> contents)
             => inner.WriteNewControlFile(file, contents);
-        public ValueTask<IAsyncDisposable?> TryAcquireExclusiveLock(PhysicalStoreFileHandle file)
-            => inner.TryAcquireExclusiveLock(file);
+        public async ValueTask<IAsyncDisposable?> TryAcquireExclusiveLock(PhysicalStoreFileHandle file)
+        {
+            var fileIdentity = inner.InspectHandle(file).Identity;
+            var isRootLock = _rootLockFiles.ContainsKey(fileIdentity);
+            var isMemberLock = _memberLockFiles.ContainsKey(fileIdentity);
+            var acquired = await inner.TryAcquireExclusiveLock(file).ConfigureAwait(false);
+            if (acquired is null || (!isRootLock && !isMemberLock))
+                return acquired;
+
+            if (isRootLock)
+            {
+                Interlocked.Increment(ref _activeRootLocks);
+                Interlocked.Increment(ref _successfulRootLockAcquisitions);
+            }
+            if (isMemberLock)
+            {
+                Interlocked.Increment(ref _activeMemberLocks);
+                Interlocked.Increment(ref _successfulMemberLockAcquisitions);
+            }
+            return new OperationLockTrackingLease(acquired, this, isRootLock, isMemberLock);
+        }
         public PhysicalStoreNameSemantics ObserveDirectoryNameSemantics(PhysicalStoreDirectoryHandle parent)
             => ((IPhysicalStoreNameFileSystem)inner).ObserveDirectoryNameSemantics(parent);
         public PhysicalStoreCanonicalName ObserveCanonicalFileNameNoFollow(
@@ -577,17 +623,62 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             long maximumBytes)
             => ((IPhysicalStorePackageStreamFileSystem)inner).CreatePackageFileWriteStream(
                 parent, singleName, file, expectedParent, maximumBytes);
+
+        private void RememberOperationLockFile(string singleName, PhysicalStoreFileHandle file)
+        {
+            var fileIdentity = inner.InspectHandle(file).Identity;
+            if (string.Equals(singleName, "root.lock", StringComparison.Ordinal))
+                _rootLockFiles.TryAdd(fileIdentity, 0);
+            else if (singleName.StartsWith("member-", StringComparison.Ordinal) &&
+                     singleName.EndsWith(".lock", StringComparison.Ordinal))
+                _memberLockFiles.TryAdd(fileIdentity, 0);
+        }
+
+        private sealed class OperationLockTrackingLease(
+            IAsyncDisposable innerLock,
+            MetadataReadBlockingFileSystem owner,
+            bool tracksRootLock,
+            bool tracksMemberLock)
+            : IAsyncDisposable
+        {
+            private int _disposed;
+
+            public async ValueTask DisposeAsync()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                    return;
+
+                await innerLock.DisposeAsync().ConfigureAwait(false);
+                if (tracksRootLock)
+                    Interlocked.Decrement(ref owner._activeRootLocks);
+                if (tracksMemberLock)
+                    Interlocked.Decrement(ref owner._activeMemberLocks);
+            }
+        }
     }
 
     private sealed class MetadataReadBarrier
     {
         private readonly TaskCompletionSource<bool> _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource<bool> _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly bool _onlyAfterRootUnlock;
         private PhysicalStoreFileHandle? _file;
         private int _blocked;
+        private int _rootLockCountAtPause = -1;
+        private int _memberLockCountAtPause = -1;
 
-        internal void Observe(PhysicalStoreFileHandle file)
-            => Interlocked.CompareExchange(ref _file, file, null);
+        internal MetadataReadBarrier(bool onlyAfterRootUnlock) => _onlyAfterRootUnlock = onlyAfterRootUnlock;
+
+        internal int RootLockCountAtPause => Volatile.Read(ref _rootLockCountAtPause);
+        internal int MemberLockCountAtPause => Volatile.Read(ref _memberLockCountAtPause);
+
+        internal void Observe(PhysicalStoreFileHandle file, int activeRootLocks, int activeMemberLocks)
+        {
+            if (_onlyAfterRootUnlock && (activeRootLocks != 0 || activeMemberLocks != 0))
+                return;
+
+            Interlocked.CompareExchange(ref _file, file, null);
+        }
 
         internal async Task WaitUntilBlockedAsync()
             => await _started.Task.WaitAsync(TimeSpan.FromSeconds(15));
@@ -596,13 +687,16 @@ public sealed partial class OverlappingPackageGraphProtectionTests
 
         internal bool HasStarted => _started.Task.IsCompleted;
 
-        internal void PauseIfObserved(PhysicalStoreFileHandle file)
+        internal void PauseIfObserved(PhysicalStoreFileHandle file, int activeRootLocks, int activeMemberLocks)
         {
-            if (ReferenceEquals(Volatile.Read(ref _file), file) && Interlocked.Exchange(ref _blocked, 1) == 0)
-            {
-                _started.TrySetResult(true);
-                _release.Task.GetAwaiter().GetResult();
-            }
+            if ((_onlyAfterRootUnlock && (activeRootLocks != 0 || activeMemberLocks != 0)) ||
+                !ReferenceEquals(Volatile.Read(ref _file), file) || Interlocked.Exchange(ref _blocked, 1) != 0)
+                return;
+
+            Volatile.Write(ref _rootLockCountAtPause, activeRootLocks);
+            Volatile.Write(ref _memberLockCountAtPause, activeMemberLocks);
+            _started.TrySetResult(true);
+            _release.Task.GetAwaiter().GetResult();
         }
     }
 

@@ -694,6 +694,24 @@ jobs:
             --results-directory "$RUNNER_TEMP/package-store-preview"
           python3 build/verify-required-trx.py "$RUNNER_TEMP/package-store-preview/package-store-preview.trx" "$manifest"
 
+      - name: Qualify native same-handle control recovery and disposal serialization
+        shell: bash
+        run: |
+          set -euo pipefail
+          excluded="Windows"
+          manifest="build/test-cases/control-recovery-unix.json"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            excluded="RemoveLockedControlFile_RefusesNameReplacedAfterTokenAcquisition"
+            manifest="build/test-cases/control-recovery-windows.json"
+          fi
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~PhysicalStoreControlRecoveryTests&FullyQualifiedName!~$excluded" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=control-recovery.trx" \
+            --results-directory "$RUNNER_TEMP/control-recovery"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/control-recovery/control-recovery.trx" "$manifest"
+
       - name: Qualify scoped HTTP acquisition and capability metadata
         shell: bash
         run: |

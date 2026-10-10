@@ -47,3 +47,5 @@ For the internal locked two-state producer-to-Complete boundary and its exact li
 For the native inventory and accepted pure retention mechanisms, see [inventory and retention evidence](evidence/inventory-and-retention.md). Inventory is qualified on all four hosted platforms; public preview/execution remains pending.
 
 For the internal fresh all-member/live-use inspection kernel and its causal protection control, see [fresh inspection evidence](evidence/fresh-inspection.md). Public operations, stale-use recovery and the actual maintenance/before-read gate remain pending.
+
+For the native same-handle control-recovery primitives and actual maintenance/retained-Loading overlap proof, see [the bounded increment evidence](evidence/native-control-recovery-and-maintenance-overlap.md). Whole driver/before-delete acceptance, stale-use recovery, public operations and physical execution remain pending.
