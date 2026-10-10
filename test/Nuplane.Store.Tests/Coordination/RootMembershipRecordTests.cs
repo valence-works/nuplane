@@ -227,7 +227,8 @@ public sealed class RootMembershipRecordTests
         Assert.Throws<ArgumentException>(() => Ledger([member], ["missing"]));
         Assert.Throws<ArgumentException>(() => Ledger([null!], []));
         Assert.Throws<ArgumentException>(() => Ledger([member], [" "]));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Ledger([member], ["member"], schema: 2));
+        Assert.Single(Ledger([member], ["member"], schema: 2).Members);
+        Assert.Throws<ArgumentOutOfRangeException>(() => Ledger([member], ["member"], schema: 3));
         Assert.Throws<ArgumentOutOfRangeException>(() => Ledger([member], ["member"], status: (RootMembershipStatus)99));
         Assert.Throws<ArgumentException>(() => new RootMembershipRecord(1, Root(), 1, RootMembershipStatus.Incomplete, [member], ["member"], [], null, " "));
         Assert.Throws<ArgumentException>(() => new RootMemberRecord.ExistingUnprotectedBinding(Slot(), Identity("file"), "body", false));
