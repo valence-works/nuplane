@@ -814,6 +814,16 @@ Only `PackageInstallRoot` (and the store state file path) has to be writable. Ea
 extracted into a `.installed/` subdirectory of the feed directory; hosts upgrading from those
 versions can delete that directory, and packages are re-extracted once under the install root.
 
+### Named package-store root locators
+
+Hosts can add a named package-store root locator with `NuplaneBuilder.AddPackageStoreRoot`, supplying
+a label and a root locator. The `default` label is reserved for the root selected by the final
+`Nuplane:FeedResolution:PackageInstallRoot` option (or Nuplane's existing application-base
+fallback). Other labels are unique without regard to case. A relative locator is anchored to the
+callback's final `BasePath`, or to the current directory when no base is supplied; an absolute
+locator stays absolute. This records configured locations for store coordination. Registration does
+not inspect or create a directory, enroll it, or by itself authorize a maintenance operation.
+
 ### Feed credentials
 
 - **Applicability:** `Core`
