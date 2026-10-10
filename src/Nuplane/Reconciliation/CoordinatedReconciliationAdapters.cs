@@ -99,10 +99,12 @@ internal static class CoordinatedReconciliationAdapters
         => engine is IPackagePathIndependentDesiredActualDiffEngine;
 
     private sealed class OwnedDesiredPackageSource(IDesiredPackageSource source, PackageStoreOperationOwner owner)
-        : IDesiredPackageSource
+        : IDesiredPackageSource, IDesiredPackageSourceIdentity
     {
         private readonly IDesiredPackageSource _source = source ?? throw new ArgumentNullException(nameof(source));
         private readonly PackageStoreOperationOwner _owner = owner ?? throw new ArgumentNullException(nameof(owner));
+
+        public string SourceName => DesiredPackageSourceAccess.GetSourceName(_source);
 
         public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
             => DesiredPackageSourceAccess.ReadAsync(_source, _owner, ct);

@@ -708,6 +708,37 @@ jobs:
             --results-directory "$RUNNER_TEMP/directory-source"
           python3 build/verify-required-trx.py "$RUNNER_TEMP/directory-source/directory-source.trx" "$manifest"
 
+      - name: Qualify native Manifest desired-source reads and authority replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          filter="FullyQualifiedName~DesiredManifestNativeReadTests"
+          manifest="build/test-cases/manifest-source-unix.json"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            filter="$filter&FullyQualifiedName!~ReadAsync_RefusesSameLengthReplacementDuringAwaitedNativeRead&FullyQualifiedName!~ReadAsync_SpecialFileIsTypedAuthorityRefusal"
+            manifest="build/test-cases/manifest-source-windows.json"
+          fi
+          dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "$filter" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=manifest-source.trx" \
+            --results-directory "$RUNNER_TEMP/manifest-source"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/manifest-source/manifest-source.trx" "$manifest"
+
+      - name: Qualify AddNuplane Manifest admission and held source ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~NuplaneRestoreManifestAdmissionTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=manifest-admission.trx" \
+            --results-directory "$RUNNER_TEMP/manifest-admission"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/manifest-admission/manifest-admission.trx" \
+            build/test-cases/manifest-source-admission.json
+
       - name: Qualify native installed-package probes and dependency graph inputs
         shell: bash
         run: |

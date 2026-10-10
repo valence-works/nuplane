@@ -139,7 +139,7 @@ public sealed class CoordinatedReconciliationAdmissionTests
     }
 
     [Fact]
-    public async Task EnabledManifestInsideEnrolledInstall_IsRefusedBeforeManifestRead()
+    public async Task EnabledManifestInsideEnrolledInstall_ReadsUnderOriginalOwnerAndPublishesSnapshot()
     {
         using var fixture = await CompletedMembershipFixture.CreateAsync();
         var options = new ConvergenceOptions();
@@ -147,21 +147,50 @@ public sealed class CoordinatedReconciliationAdmissionTests
         options.Manifest.Path = Path.Combine(fixture.SharedInstallPath, "desired.json");
         await File.WriteAllTextAsync(options.Manifest.Path,
             """{"schemaVersion":"1.0","packages":[]}""");
-        var source = new DesiredManifestPackageSource(new DesiredManifestReader(), options);
-        using var provider = CreateProvider(fixture.PackageInstallRoot, fixture.StatePaths["first"], source);
+        var nativeReadStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseNativeRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var source = new DesiredManifestPackageSource(new DesiredManifestReader(async token =>
+        {
+            nativeReadStarted.TrySetResult();
+            await releaseNativeRead.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
+        }), options);
+        var companion = new ScopedFileSource(fixture.SharedInstallPath, entered: null, release: null, failAfterRead: false);
+        using var provider = CreateProvider(fixture.PackageInstallRoot, fixture.StatePaths["first"], source,
+            additionalSource: companion);
         var service = provider.GetRequiredService<IReconciliationService>();
+        var admission = provider.GetRequiredService<IPackageStoreAdmission>();
+        var cycle = service.TriggerAsync(ReconciliationTrigger.Manual("enrolled-manifest"), CancellationToken.None);
 
-        var error = await Assert.ThrowsAsync<PackageStoreAdmissionException>(() =>
-            service.TriggerAsync(ReconciliationTrigger.Manual("enrolled-manifest"), CancellationToken.None));
+        try
+        {
+            await nativeReadStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Assert.ThrowsAsync<PackageStoreAdmissionException>(async () =>
+                await admission.AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Maintenance));
+            Assert.Null(source.LastReadResult);
+        }
+        finally
+        {
+            releaseNativeRead.TrySetResult();
+            await cycle;
+        }
 
-        Assert.Equal(PackageStoreAdmissionReason.UnsupportedParticipant, error.Reason);
-        Assert.Null(source.LastReadResult);
-        var after = await fixture.ReadFreshStateAsync("first");
-        Assert.Equal(fixture.States["first"].ProtectionRecord!.Revision, after.ProtectionRecord!.Revision);
-
-        // The manifest is valid and the real source can read it; refusal came from preflight.
-        Assert.Empty(await source.GetDesiredAsync(CancellationToken.None));
         Assert.Equal(ManifestReadStatus.Succeeded, source.LastReadResult!.Status);
+        Assert.Empty(source.LastReadResult.Manifest!.Packages);
+        var after = await fixture.ReadFreshStateAsync("first");
+        Assert.Equal(fixture.States["first"].ActiveVersionById, after.ActiveVersionById);
+        Assert.Equal(fixture.States["first"].ProtectionRecord!.Revision + 3, after.ProtectionRecord!.Revision);
+        Assert.Equal(
+            new[] { typeof(ScopedFileSource).FullName!, typeof(DesiredManifestPackageSource).FullName! }.Order(StringComparer.Ordinal),
+            after.LastSuccessfulSourceSnapshots.Keys.Order(StringComparer.Ordinal));
+        Assert.All(after.LastSuccessfulSourceSnapshots.Values, snapshot =>
+            Assert.Empty(Assert.IsAssignableFrom<IReadOnlyList<PackageRequest>>(snapshot.Requests)));
+        Assert.Equal(1, companion.CallbackCount);
+        Assert.Equal(1, companion.SentinelReadCount);
+
+        // Enrolled callers still need the original counted borrow; a path-only call cannot reuse it.
+        await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => source.GetDesiredAsync(CancellationToken.None));
+        await using var afterDrain = await admission.AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Maintenance);
+        Assert.Equal(PackageStoreAdmissionStatus.Enrolled, afterDrain.Status);
     }
 
     [Fact]
@@ -836,7 +865,8 @@ public sealed class CoordinatedReconciliationAdmissionTests
         IDryRunPlanner? dryRunPlannerOverride = null,
         ILockFileCoordinator? lockFileCoordinatorOverride = null,
         IReconciliationRetryPolicy? retryPolicyOverride = null,
-        LockFileMode? lockFileMode = null)
+        LockFileMode? lockFileMode = null,
+        IDesiredPackageSource? additionalSource = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -849,6 +879,8 @@ public sealed class CoordinatedReconciliationAdmissionTests
 
         services.RemoveAll<IDesiredPackageSource>();
         services.AddSingleton<IDesiredPackageSource>(source);
+        if (additionalSource is not null)
+            services.AddSingleton<IDesiredPackageSource>(additionalSource);
         services.RemoveAll<IDesiredStateContributor>();
         services.RemoveAll<IPackageResolver>();
         services.AddSingleton<IPackageResolver>(resolverOverride ?? (IPackageResolver)new NeverCalledScopedResolver());

@@ -55,7 +55,7 @@ internal sealed class DesiredStateReadMiddleware(
             .Select(source => new
             {
                 Source = source,
-                SourceName = source.GetType().FullName ?? source.GetType().Name
+                SourceName = DesiredPackageSourceAccess.GetSourceName(source)
             })
             .OrderBy(x => x.SourceName, StringComparer.Ordinal)
             .ToArray();

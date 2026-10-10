@@ -6,6 +6,11 @@ namespace Nuplane.Sources;
 /// <summary>Shared admission checks and scoped reads for desired package sources.</summary>
 internal static class DesiredPackageSourceAccess
 {
+    internal static string GetSourceName(IDesiredPackageSource source)
+        => source is IDesiredPackageSourceIdentity identified
+            ? identified.SourceName
+            : source.GetType().FullName ?? source.GetType().Name;
+
     internal static void Validate(
         IReadOnlyList<IDesiredPackageSource> sources,
         string message = "Every enrolled desired source must declare scoped access or package-path independence.")
@@ -39,4 +44,10 @@ internal static class DesiredPackageSourceAccess
             PackageStoreAdmissionReason.UnsupportedParticipant,
             "The desired source has no scoped package-store contract.");
     }
+}
+
+/// <summary>Preserves the original source's legacy identity through an internal scoped adapter.</summary>
+internal interface IDesiredPackageSourceIdentity
+{
+    string SourceName { get; }
 }

@@ -149,5 +149,5 @@ public sealed class DesiredStateAggregator : IScopedDesiredStateAggregator
     private int GetPriority(string sourceName) =>
         string.IsNullOrWhiteSpace(sourceName) ? int.MaxValue : _options.GetPriority(sourceName);
 
-    private static string GetSourceTypeName(IDesiredPackageSource source) => source.GetType().FullName ?? source.GetType().Name;
+    private static string GetSourceTypeName(IDesiredPackageSource source) => DesiredPackageSourceAccess.GetSourceName(source);
 }
