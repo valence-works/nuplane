@@ -2,7 +2,7 @@
 
 **Branch**: `108-safe-package-store-pruning` | **Date**: 2026-10-09 | **Spec**: [spec.md](spec.md)
 
-**Status**: Design accepted after independent review and root verification on 2026-10-09. The 128-artifact implementation checklist is independently reviewed and root-accepted in [tasks.md](tasks.md). Foundational implementation is in progress, with 33 bounded tasks accepted (including the T124 package/host acceptance plan) and further native admission/graph-projection qualification underway; per-increment evidence is linked from the checklist. Full runtime admission, graph lifetimes and package-deletion acceptance remain outstanding.
+**Status**: Design accepted after independent review and root verification on 2026-10-09. The 128-artifact implementation checklist is independently reviewed and root-accepted in [tasks.md](tasks.md). Foundational implementation is in progress, with 37 of 128 task rows checked as accepted (including bounded prerequisites and the T124 package/host acceptance plan) and further native admission/graph-projection qualification underway; per-increment evidence is linked from the checklist. Full runtime admission, graph lifetimes and package-deletion acceptance remain outstanding.
 
 ## Summary
 
