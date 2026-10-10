@@ -15,6 +15,14 @@ Startup validation rejects null/blank/padded labels and collisions with final ad
 - First focused attempt: 11 passed/one failed because the blank-feed-root test assumed one exception; existing feed/capability startup validation aggregates two errors. The test now checks every underlying exact feed-options validation error. Production code did not change for that correction.
 - Root self-review stopped clean after two iterations; independent read-only review found no actionable issue. Copilot/Greptile were not requested. Workflow YAML and the added Bash step parse successfully.
 
-Local logs, original TRXs and SHA-256 pins are retained under the program artifact directory `extraction-scope-recovery-v1/configured-root-label-v1`. CI adds a separate mandatory 12-case gate to the existing four native lanes without changing earlier manifests or verifiers. Exact-head hosted qualification is pending; task checkboxes remain open until that qualification is recorded.
+Local logs, original TRXs and SHA-256 pins are retained under the program artifact directory `extraction-scope-recovery-v1/configured-root-label-v1`. CI adds a separate mandatory 12-case gate to the existing four native lanes without changing earlier manifests or verifiers.
+
+## Hosted qualification
+
+Exact source head `5586a3afa4418bbaa1428277286250c73d642f42` passed all six jobs in [Validate38086130466](https://github.com/valence-works/nuplane/actions/runs/38086130466). Root inspected each completed raw native job log: Windows x64, macOS, Linux x64 and Linux ARM64 each passed all 12 new cases with zero failures/skips and the unchanged strict exact-case verifier. Source/test/workflow hashes still match local qualification. No hosted TRX was uploaded/downloaded; acceptance uses actual successful verifier output and job logs.
+
+The full build/test job passed six assemblies: **2,301 passed / zero failed / 50 explicit platform skips / 2,351 total**. Runtime contributed 917 passed/two Windows-only skips; Store contributed 847 passed/48 platform skips; Directory 21, Loading 259, NuGet 25 and Integration 232 passed without skips. Root verified all six summaries and 50 unique skipped identities. The full-suite log SHA-256 is `5d1e9d8fec7e75e45b145f1b7876f2140718c6b9ba732e640a99e23947920466`.
+
+Final hosted qualification SHA-256 `612976439b0dd7a11a66a16753ccef89a0d0ee6576cfd90bf5d15b026c7f1ab0` records the four platform log hashes, exact source, terminal metadata and full-suite accounting. T027/T038–T040/T048 are accepted; the checklist is now **43/128**. This does not accept other partial tasks or make PR112 merge/release ready.
 
 Current inspection/admission is still default-root-only. This slice does not prove additional-root operations, complete enrollment, public maintenance APIs or physical deletion. The full goal, stable releases and Foundation adoption remain open; the proposed extraction/pruning release split is unchanged.
