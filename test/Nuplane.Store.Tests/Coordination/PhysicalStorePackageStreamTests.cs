@@ -136,7 +136,13 @@ public sealed class PhysicalStorePackageStreamTests
             await writer.FlushAsync();
         }
 
-        Assert.Equal(payload, File.ReadAllBytes(Path.Combine(fixture.PackageInstallRoot, name)));
+        var writtenFile = files.InspectHandle(file);
+        using (var verificationReader = streams.OpenPackageArchiveReadStream(parent, name, file, parentInfo, writtenFile, payload.Length))
+        {
+            using var writtenBytes = new MemoryStream();
+            await verificationReader.CopyToAsync(writtenBytes);
+            Assert.Equal(payload, writtenBytes.ToArray());
+        }
 
         using var limitedFile = files.CreateFileExclusiveAt(parent, "limited.nupkg");
         await using (var limitedWriter = streams.CreatePackageFileWriteStream(parent, "limited.nupkg", limitedFile, parentInfo, 3))
@@ -150,7 +156,7 @@ public sealed class PhysicalStorePackageStreamTests
             Assert.Equal(0, limitedWriter.Position);
         }
 
-        Assert.Empty(File.ReadAllBytes(Path.Combine(fixture.PackageInstallRoot, "limited.nupkg")));
+        Assert.Equal(0L, files.InspectHandle(limitedFile).Length);
         Assert.Throws<InvalidOperationException>(
             () => streams.CreatePackageFileWriteStream(parent, "limited.nupkg", limitedFile, parentInfo, 3));
 

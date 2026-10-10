@@ -34,6 +34,63 @@ internal static class ActivePackageCatalogMapper
         ArgumentNullException.ThrowIfNull(incomingResolvedGraphs);
         ArgumentNullException.ThrowIfNull(incomingInstallIdentities);
 
+        var plan = CreateHistoricalGraphRetentionPlan(
+            currentState, desiredRootPackageIds, explicitlyFailedRootPackageIds);
+        var root = currentState.ProtectionRecord!.RootIdentity;
+        var normalizedNextActiveVersions = NormalizeNextActiveVersions(nextActiveVersions, root);
+        ValidateIncomingOverlap(normalizedNextActiveVersions, incomingResolvedGraphs, incomingInstallIdentities,
+            plan.RequiredRetainedInstalls, root);
+
+        return plan;
+    }
+
+    /// <summary>
+    /// Restores only missing exact installs from the verified prior recovery subclosures for roots
+    /// that failed during apply. The returned map remains subject to final candidate construction,
+    /// including native install observation and incoming graph overlap validation.
+    /// </summary>
+    /// <remarks>This prepares a state map; it does not grant native authority or publish state.</remarks>
+    internal static IReadOnlyDictionary<string, string> RestoreFailedRootSubclosureVersions(
+        StoreStateRecord currentState,
+        IReadOnlyDictionary<string, string> nextActiveVersions,
+        IReadOnlySet<string> desiredRootPackageIds,
+        IReadOnlySet<string> explicitlyFailedRootPackageIds)
+    {
+        ArgumentNullException.ThrowIfNull(nextActiveVersions);
+        var plan = CreateHistoricalGraphRetentionPlan(
+            currentState, desiredRootPackageIds, explicitlyFailedRootPackageIds);
+        var root = currentState.ProtectionRecord!.RootIdentity;
+        var restored = new Dictionary<string, string>(
+            NormalizeNextActiveVersions(nextActiveVersions, root), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var install in plan.RequiredRetainedInstalls)
+        {
+            if (restored.TryGetValue(install.PackageId, out var activeVersion))
+            {
+                if (!VersionsEqual(activeVersion, install.Version))
+                {
+                    throw RetentionRefusal(
+                        $"The next active selection conflicts with required retained package '{install.PackageId}@{install.Version}'.",
+                        root);
+                }
+                continue;
+            }
+
+            restored.Add(install.PackageId, install.Version);
+        }
+
+        return new ReadOnlyDictionary<string, string>(restored);
+    }
+
+    private static HistoricalGraphRetentionPlan CreateHistoricalGraphRetentionPlan(
+        StoreStateRecord currentState,
+        IReadOnlySet<string> desiredRootPackageIds,
+        IReadOnlySet<string> explicitlyFailedRootPackageIds)
+    {
+        ArgumentNullException.ThrowIfNull(currentState);
+        ArgumentNullException.ThrowIfNull(desiredRootPackageIds);
+        ArgumentNullException.ThrowIfNull(explicitlyFailedRootPackageIds);
+
         var protection = currentState.ProtectionRecord ??
             throw RetentionRefusal("Historical graph retention requires a verified prior protection record.");
         var desiredRoots = NormalizeRootIds(desiredRootPackageIds, "desired");
@@ -44,7 +101,6 @@ internal static class ActivePackageCatalogMapper
                 ? PersistedStoreStateGraphVerifier.Verify(currentState)
                 : PersistedStoreStateGraphVerifier.SelectUseLastKnownGood(currentState))
             .RecoverableGraphs;
-        var normalizedNextActiveVersions = NormalizeNextActiveVersions(nextActiveVersions, protection.RootIdentity);
 
         var selectedRootIdsBySnapshot = new Dictionary<ProtectedGraphSnapshot, HashSet<string>>();
         foreach (var rootPackageId in failedDesiredRoots)
@@ -76,8 +132,6 @@ internal static class ActivePackageCatalogMapper
             .ThenBy(static graph => graph.GenerationId, StringComparer.Ordinal)
             .ToArray();
         var requiredInstalls = BuildRequiredRetainedInstalls(retainedSnapshots, protection.RootIdentity);
-        ValidateIncomingOverlap(normalizedNextActiveVersions, incomingResolvedGraphs, incomingInstallIdentities,
-            requiredInstalls, protection.RootIdentity);
 
         return new HistoricalGraphRetentionPlan(
             protection.Revision,
@@ -320,7 +374,8 @@ internal static class ActivePackageCatalogMapper
 
         foreach (var removedPackageId in changeSet.Removed)
         {
-            descriptors.Remove(removedPackageId);
+            if (!nextActiveVersions.ContainsKey(removedPackageId))
+                descriptors.Remove(removedPackageId);
         }
 
         var changedPackageIds = changeSet.Added

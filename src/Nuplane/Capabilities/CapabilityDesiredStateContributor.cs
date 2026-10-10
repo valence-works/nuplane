@@ -4,6 +4,7 @@ using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Metadata;
 using Nuplane.Observability;
 using Nuplane.Reconciliation.Configuration;
+using Nuplane.Store.Coordination;
 
 namespace Nuplane.Capabilities;
 
@@ -42,7 +43,7 @@ internal sealed class CapabilityDesiredStateContributor(
     IOptions<ReconciliationOptions> reconciliationOptions,
     CapabilityContributionLedger ledger,
     IReconciliationLogger logger,
-    IPackageMetadataReader metadataReader) : IDesiredStateContributor
+    IPackageMetadataReader metadataReader) : IScopedDesiredStateContributor
 {
     private readonly IOptions<CapabilityOptions> _capabilityOptions = capabilityOptions ?? throw new ArgumentNullException(nameof(capabilityOptions));
     private readonly IOptions<ReconciliationOptions> _reconciliationOptions = reconciliationOptions ?? throw new ArgumentNullException(nameof(reconciliationOptions));
@@ -53,12 +54,30 @@ internal sealed class CapabilityDesiredStateContributor(
 
     /// <inheritdoc />
     public Task<DesiredStateContribution> ContributeAsync(DesiredStateContributionContext context, CancellationToken ct)
+        => ContributeCore(context, borrow: null, ct);
+
+    /// <inheritdoc />
+    public Task<DesiredStateContribution> ContributeAsync(DesiredStateContributionContext context,
+        PackageStoreOperationBorrow borrow, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(borrow);
+        ct.ThrowIfCancellationRequested();
+        _ = PackageStoreOperationAccess.GetOwner(borrow);
+        if (_metadataReader is not IScopedPackageMetadataReader)
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "The capability metadata reader has no scoped native access contract.", borrow.Root);
+        return ContributeCore(context, borrow, ct);
+    }
+
+    private Task<DesiredStateContribution> ContributeCore(DesiredStateContributionContext context,
+        PackageStoreOperationBorrow? borrow, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
         ct.ThrowIfCancellationRequested();
 
         var refusals = new List<ContributionRefusal>();
-        var (declaringPackages, packageIdByIdentity) = ReadDeclarations(context, refusals);
+        var (declaringPackages, packageIdByIdentity) = ReadDeclarations(context, refusals, borrow, ct);
         var selections = new Dictionary<string, CapabilitySelection>(
             _capabilityOptions.Value.Selections,
             StringComparer.OrdinalIgnoreCase);
@@ -125,7 +144,9 @@ internal sealed class CapabilityDesiredStateContributor(
     /// </remarks>
     private (List<CapabilityDeclaringPackage> DeclaringPackages, Dictionary<string, string> PackageIdByIdentity) ReadDeclarations(
         DesiredStateContributionContext context,
-        List<ContributionRefusal> refusals)
+        List<ContributionRefusal> refusals,
+        PackageStoreOperationBorrow? borrow,
+        CancellationToken cancellationToken)
     {
         var declaringPackages = new List<CapabilityDeclaringPackage>();
         var packageIdByIdentity = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -139,10 +160,14 @@ internal sealed class CapabilityDesiredStateContributor(
 
         foreach (var package in packages)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var read = _cycle.ReadOnce(
                 context.CorrelationId,
                 $"{package.Id}@{package.Version}|{package.InstallPath}",
-                () => _metadataReader.Read(package.Id, package.Version, package.InstallPath));
+                () => borrow is null
+                    ? _metadataReader.Read(package.Id, package.Version, package.InstallPath)
+                    : ((IScopedPackageMetadataReader)_metadataReader).Read(package.Id, package.Version, package.InstallPath, borrow),
+                borrow?.Owner);
             if (!read.MetadataFound)
             {
                 continue;
@@ -274,6 +299,7 @@ internal sealed class CapabilityDesiredStateContributor(
         private readonly Dictionary<string, NuplanePackageMetadataReadResult> _reads = new(StringComparer.Ordinal);
         private readonly HashSet<string> _logged = new(StringComparer.Ordinal);
         private string? _correlationId;
+        private PackageStoreOperationOwner? _readOwner;
 
         /// <summary>
         /// The metadata read for <paramref name="key"/> in this cycle, performing
@@ -282,11 +308,17 @@ internal sealed class CapabilityDesiredStateContributor(
         internal NuplanePackageMetadataReadResult ReadOnce(
             string correlationId,
             string key,
-            Func<NuplanePackageMetadataReadResult> read)
+            Func<NuplanePackageMetadataReadResult> read,
+            PackageStoreOperationOwner? owner)
         {
             lock (_gate)
             {
                 Enter(correlationId);
+                if (!ReferenceEquals(_readOwner, owner))
+                {
+                    _reads.Clear();
+                    _readOwner = owner;
+                }
                 if (_reads.TryGetValue(key, out var cached))
                 {
                     return cached;
@@ -322,6 +354,7 @@ internal sealed class CapabilityDesiredStateContributor(
 
             _correlationId = correlationId;
             _reads.Clear();
+            _readOwner = null;
             _logged.Clear();
         }
     }

@@ -1,6 +1,8 @@
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Events;
 using Nuplane.Observability;
+using Nuplane.Reconciliation.Models;
 using Nuplane.Store.State;
 
 namespace Nuplane.Reconciliation.Middleware;
@@ -11,7 +13,8 @@ internal sealed class DiffAndChangeEventMiddleware(
     IReconciliationRetryPolicy retryPolicy,
     IStoreRegistry storeRegistry,
     IObserverEventDispatcher observerEventDispatcher,
-    ReconciliationMetrics metrics) : IReconciliationMiddleware
+    ReconciliationMetrics metrics,
+    ICoordinatedActiveStateTransitionDriver? transitionDriver = null) : IReconciliationMiddleware
 {
     public async Task InvokeAsync(ReconciliationCycleContext context, Func<Task> next)
     {
@@ -38,7 +41,40 @@ internal sealed class DiffAndChangeEventMiddleware(
         context.ChangeSet = changeSet;
 
         if (context.PackageStoreOwner is { } owner)
-            EnrolledReconciliationTransitionGuard.RefuseNonemptyTransition(context.ResolutionResult, changeSet, owner);
+        {
+            if (transitionDriver is null)
+            {
+                EnrolledReconciliationTransitionGuard.RefuseNonemptyTransition(context.ResolutionResult, changeSet, owner);
+            }
+            else
+            {
+                var resolution = context.ResolutionResult!;
+                if (resolution.ResolvedGraphs.Count != resolution.GraphSelections.Count)
+                {
+                    throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                        "The enrolled cycle has no complete exact graph/request/package selection for every resolved graph.", owner.Root);
+                }
+
+                var nextActive = new Dictionary<string, string>(activeVersions, StringComparer.OrdinalIgnoreCase);
+                foreach (var removedPackageId in changeSet.Removed)
+                    nextActive.Remove(removedPackageId);
+                foreach (var package in resolution.ResolvedPackages)
+                    nextActive[package.Id] = package.Version;
+
+                await transitionDriver.PreflightAsync(
+                    owner,
+                    nextActive,
+                    resolution.ResolvedPackages,
+                    changeSet,
+                    resolution.GraphSelections,
+                    CoordinatedActiveStateTransitionDriver.BuildDesiredRootIds(
+                        context.DesiredRequests, resolution.ResolvedGraphs, resolution.GraphSelections),
+                    CoordinatedActiveStateTransitionDriver.BuildFailedPackageIds(resolution.FailedPackageIds, []),
+                    context.CorrelationId,
+                    context.CancellationToken).ConfigureAwait(false);
+                context.CoordinatedTransitionPreflightPassed = true;
+            }
+        }
 
         // Emit Changing before transactions begin (observer contract)
         if (changeSet.Added.Count + changeSet.Updated.Count + changeSet.Removed.Count > 0)

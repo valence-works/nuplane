@@ -18,6 +18,9 @@ internal sealed class ReconciliationCycleContext
     /// <summary>Present only while this cycle retains its enrolled package-store owner.</summary>
     public PackageStoreOperationOwner? PackageStoreOwner { get; set; }
 
+    /// <summary>Whether complete graph/history preflight passed before enrolled transaction execution.</summary>
+    public bool CoordinatedTransitionPreflightPassed { get; set; }
+
     /// <summary>Whether final health/metrics construction is deferred until post-admission loading finishes.</summary>
     public bool DeferCycleCompletion { get; set; }
 

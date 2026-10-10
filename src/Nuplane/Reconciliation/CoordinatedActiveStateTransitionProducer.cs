@@ -645,9 +645,16 @@ internal static class CoordinatedActiveStateTransitionProducer
         foreach (var selection in selections)
         {
             if (selection is null || selection.Graph is null || selection.RootRequests.Count == 0 ||
-                selection.Packages.Count != selection.Graph.Nodes.Count || !graphIds.Add(selection.Graph.GraphId))
+                selection.Packages.Count != selection.Graph.Nodes.Count ||
+                string.IsNullOrWhiteSpace(selection.Graph.GraphId) ||
+                string.IsNullOrWhiteSpace(selection.Graph.GenerationId) ||
+                string.IsNullOrWhiteSpace(selection.Graph.TargetFramework) ||
+                !string.Equals(selection.Graph.GraphId, ResolvedPackageGraph.CreateGraphId(
+                    selection.Graph.TargetFramework, selection.Graph.Roots, selection.Graph.Nodes,
+                    selection.Graph.Edges, selection.Graph.SourceDecisions), StringComparison.Ordinal) ||
+                !graphIds.Add(selection.Graph.GraphId))
             {
-                throw Refused("Resolved graph selections must be complete and have unique graph identities.", root);
+                throw Refused("Resolved graph selections must have complete canonical graph and generation identities and unique graph IDs.", root);
             }
             var packages = new Dictionary<PackageVersionKey, ResolvedPackage>(PackageVersionKeyComparer.Instance);
             foreach (var package in selection.Packages)

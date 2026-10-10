@@ -231,6 +231,12 @@ public sealed class ReconciliationService : IReconciliationService
         var retry = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
         var dryRun = dryRunPlanner ?? throw new ArgumentNullException(nameof(dryRunPlanner));
         var cleanupService = packageCleanupService ?? throw new ArgumentNullException(nameof(packageCleanupService));
+        _packageStoreAdmission = packageStoreAdmission ?? PackageStoreRuntimeAdmission.CreateManual(storeReg, feedResOpts);
+        var transitionDriver = _packageStoreAdmission is PackageStoreAdmission builtInAdmission &&
+                               storeReg is ICoordinatedStoreRegistry coordinatedStore
+            ? new CoordinatedActiveStateTransitionDriver(
+                builtInAdmission.Registry.Files, builtInAdmission.Registry, coordinatedStore)
+            : null;
 
         var resolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver));
         var contributors = desiredStateContributors?.ToArray() ?? [];
@@ -255,11 +261,10 @@ public sealed class ReconciliationService : IReconciliationService
             cycleFailureContributor,
             startupRecoveryState,
             contributors,
-            hostProvidedPackagesOptions?.Value);
+            hostProvidedPackagesOptions?.Value,
+            transitionDriver);
         _pipeline = _pipelineDefinition.Create(null, out var legacyCache, out _);
         _sourceSnapshotCache = legacyCache;
-        _packageStoreAdmission = packageStoreAdmission ?? PackageStoreRuntimeAdmission.CreateManual(
-            storeReg, feedResOpts);
         _graphUseLeaseAcquisition = graphUseLeaseAcquisition;
         _leasedPackageGraphLoadingObserver = leasedPackageGraphLoadingObserver;
     }
@@ -597,6 +602,7 @@ internal sealed class ReconciliationPipelineDefinition
     private readonly ObservationDegradationTracker _observationDegradationTracker;
     private readonly StartupRecoveryState? _startupRecoveryState;
     private readonly HostProvidedPackagesOptions? _hostProvidedPackagesOptions;
+    private readonly ICoordinatedActiveStateTransitionDriver? _transitionDriver;
 
     internal ReconciliationPipelineDefinition(
         IReadOnlyList<IDesiredPackageSource> sources,
@@ -619,7 +625,8 @@ internal sealed class ReconciliationPipelineDefinition
         ICycleFailureContributor? cycleFailureContributor,
         StartupRecoveryState? startupRecoveryState,
         IReadOnlyList<IDesiredStateContributor> contributors,
-        HostProvidedPackagesOptions? hostProvidedPackagesOptions)
+        HostProvidedPackagesOptions? hostProvidedPackagesOptions,
+        ICoordinatedActiveStateTransitionDriver? transitionDriver)
     {
         Sources = sources;
         PackageResolver = packageResolver;
@@ -642,6 +649,7 @@ internal sealed class ReconciliationPipelineDefinition
         _observationDegradationTracker = observationDegradationTracker;
         _startupRecoveryState = startupRecoveryState;
         _hostProvidedPackagesOptions = hostProvidedPackagesOptions;
+        _transitionDriver = transitionDriver;
     }
 
     internal IReadOnlyList<IDesiredPackageSource> Sources { get; }
@@ -692,10 +700,11 @@ internal sealed class ReconciliationPipelineDefinition
         pipeline.Use(new TrustAndLockGateMiddleware(_lockFileCoordinator, _retryPolicy, recorder,
             _logger, lockFileCycleCoordinator));
         pipeline.Use(new DiffAndChangeEventMiddleware(_desiredActualDiffEngine, _dryRunPlanner, _retryPolicy,
-            registry, dispatcher, _metrics));
-        pipeline.Use(new TransactionExecutionMiddleware(applyExecutor, _desiredActualDiffEngine, dispatcher));
+            registry, dispatcher, _metrics, _transitionDriver));
+        pipeline.Use(new TransactionExecutionMiddleware(applyExecutor, _desiredActualDiffEngine, dispatcher,
+            _transitionDriver));
         pipeline.Use(new CleanupMiddleware(_desiredActualDiffEngine, registry, PackageCleanupService,
-            _cleanupPolicyOptions, _metrics));
+            _cleanupPolicyOptions, _metrics, _transitionDriver));
         healthAndMetricsMiddleware = new HealthAndMetricsMiddleware(_healthEvaluator, dispatcher, _logger, _metrics,
             _feedResolutionOptions, _observationDegradationTracker, CycleFailureContributor, _startupRecoveryState);
         pipeline.Use(healthAndMetricsMiddleware);

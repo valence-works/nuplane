@@ -13,6 +13,8 @@ using Nuplane.Loading;
 using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Models;
+using Nuplane.Reconciliation.LockFile;
+using Nuplane.Sources;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.GraphUseRecords;
 using Nuplane.Store.Coordination.MembershipRecords;
@@ -224,7 +226,9 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             }
         }
 
-        internal ServiceProvider CreateProvider(string memberId, IPackageActivationGate? activationGate = null)
+        internal ServiceProvider CreateProvider(string memberId, IPackageActivationGate? activationGate = null,
+            IReadOnlyList<PackageRequest>? desiredRequests = null,
+            FeedDefinition? remoteFeed = null)
         {
             var services = new ServiceCollection();
             services.AddLogging();
@@ -234,6 +238,26 @@ public sealed partial class OverlappingPackageGraphProtectionTests
                 nuplane.AutoloadPackages(loading => loading.WithDefaultLoadMode(PackageLoadMode.Collectible));
             });
             services.Configure<FeedResolutionOptions>(options => options.PackageInstallRoot = RootPath);
+            if (desiredRequests is not null)
+            {
+                services.AddSingleton<IDesiredPackageSource>(new StaticDesiredSource(desiredRequests));
+                services.Configure<FeedResolutionOptions>(options =>
+                    options.Feeds.Add(remoteFeed ?? new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json"))));
+                if (remoteFeed?.ServiceIndex.Scheme == Uri.UriSchemeHttp)
+                {
+                    services.Remove(services.Single(descriptor =>
+                        descriptor.ServiceType == typeof(IValidateOptions<FeedResolutionOptions>) &&
+                        descriptor.ImplementationType == typeof(FeedCredentialCompositeValidator)));
+                }
+                // Keep these reconciliation requests exact so feed version enumeration is not
+                // confused with package acquisition. A supplied lock entry authenticates the
+                // selected archive hash; legacy cached dependencies remain hashless.
+                services.Configure<LockFileOptions>(options =>
+                {
+                    options.Mode = LockFileMode.Enforce;
+                    options.Path = Path.Combine(Path.GetDirectoryName(StatePaths[memberId])!, "nuplane.lock.json");
+                });
+            }
             if (activationGate is not null)
                 services.AddSingleton(activationGate);
             services.RemoveAll<IPhysicalStoreFileSystem>();
@@ -447,7 +471,8 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         IPhysicalStoreNameFileSystem,
         IPhysicalStorePublicationFileSystem,
         IPhysicalStoreDirectoryPublicationFileSystem,
-        IPhysicalStoreDirectoryEnumerationFileSystem
+        IPhysicalStoreDirectoryEnumerationFileSystem,
+        IPhysicalStorePackageStreamFileSystem
     {
         private MetadataReadBarrier? _barrier;
 
@@ -535,6 +560,23 @@ public sealed partial class OverlappingPackageGraphProtectionTests
                 parent, stagedName, expectedStagedIdentity, destinationName);
         public IReadOnlyList<string> EnumerateChildNamesNoFollow(PhysicalStoreDirectoryHandle parent, int maximumEntries)
             => ((IPhysicalStoreDirectoryEnumerationFileSystem)inner).EnumerateChildNamesNoFollow(parent, maximumEntries);
+        public Stream OpenPackageArchiveReadStream(
+            PhysicalStoreDirectoryHandle parent,
+            string singleName,
+            PhysicalStoreFileHandle file,
+            PhysicalStoreEntryInfo expectedParent,
+            PhysicalStoreEntryInfo expectedFile,
+            long maximumBytes)
+            => ((IPhysicalStorePackageStreamFileSystem)inner).OpenPackageArchiveReadStream(
+                parent, singleName, file, expectedParent, expectedFile, maximumBytes);
+        public Stream CreatePackageFileWriteStream(
+            PhysicalStoreDirectoryHandle parent,
+            string singleName,
+            PhysicalStoreFileHandle file,
+            PhysicalStoreEntryInfo expectedParent,
+            long maximumBytes)
+            => ((IPhysicalStorePackageStreamFileSystem)inner).CreatePackageFileWriteStream(
+                parent, singleName, file, expectedParent, maximumBytes);
     }
 
     private sealed class MetadataReadBarrier

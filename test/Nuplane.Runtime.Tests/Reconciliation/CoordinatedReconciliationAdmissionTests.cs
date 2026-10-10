@@ -13,14 +13,19 @@ using Nuplane.Operational;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Convergence;
+using Nuplane.Reconciliation.LockFile;
+using Nuplane.Reconciliation.Middleware;
 using Nuplane.Reconciliation.Models;
+using Nuplane.Observability;
 using Nuplane.Registration;
 using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.MembershipRecords;
 using Nuplane.Store.Coordination.PhysicalFiles;
 using Nuplane.Store.Coordination.ProtectionRecords;
+using Nuplane.Store.Activation;
 using Nuplane.Store.State;
+using Nuplane.Store.Transactions;
 using Nuplane.Sources;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
@@ -159,6 +164,416 @@ public sealed class CoordinatedReconciliationAdmissionTests
         Assert.Equal(ManifestReadStatus.Succeeded, source.LastReadResult!.Status);
     }
 
+    [Fact]
+    public async Task AddNuplane_ProtectedTransitionPublishesExactSuccessfulGraph()
+    {
+        using var fixture = await CompletedMembershipFixture.CreateAsync();
+        var freshRootPath = fixture.Install("Fresh.Root", "1.0.0", "Shared.Dependency");
+        var request = new PackageRequest("Fresh.Root", "[1.0.0]", "test-feed",
+            PackageUpdatePolicy.Exact, "fresh-root");
+        var packages = new[]
+        {
+            new ResolvedPackage("Fresh.Root", "1.0.0", "test-feed", freshRootPath,
+                DateTimeOffset.UnixEpoch, "fresh-root"),
+            new ResolvedPackage("Shared.Dependency", "2.1.0", "test-feed", fixture.SharedInstallPath,
+                DateTimeOffset.UnixEpoch, "dependency")
+        };
+        var source = new RootRequestSource(request, freshRootPath);
+        var dispatcher = new CountingScopedDispatcher();
+        using var provider = CreateProvider(fixture.PackageInstallRoot, fixture.StatePaths["first"], source,
+            preserveActiveDiff: false, dispatcherOverride: dispatcher,
+            resolverOverride: new MapScopedResolver(packages), lockFileMode: LockFileMode.Enforce);
+
+        await provider.GetRequiredService<IReconciliationService>()
+            .TriggerAsync(ReconciliationTrigger.Manual("protected-transition"), CancellationToken.None);
+
+        var state = await fixture.ReadFreshStateAsync("first");
+        Assert.Equal("1.0.0", state.ActiveVersionById["Fresh.Root"]);
+        Assert.False(state.ActiveVersionById.ContainsKey("Root.First"));
+        Assert.True(state.ProtectionRecord!.Revision > fixture.States["first"].ProtectionRecord!.Revision);
+        var activeGraph = Assert.Single(PersistedStoreStateGraphVerifier.Verify(state).ActiveGraphs);
+        Assert.Equal("Fresh.Root", Assert.Single(activeGraph.RequestedRoots).Request.Id);
+        Assert.Equal(new[] { "Fresh.Root", "Shared.Dependency" }, activeGraph.Nodes
+            .Select(static node => node.Install.PackageId).Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(1, dispatcher.ChangingCount);
+    }
+
+    [Fact]
+    public async Task CoordinatedDiffPreflight_RefusesOmittedGenerationBeforeChanging()
+    {
+        using var fixture = await CompletedMembershipFixture.CreateAsync();
+        var rootPath = fixture.Install("Fresh.Root", "1.0.0", dependencyId: null);
+        var request = new PackageRequest("Fresh.Root", "[1.0.0]", "test-feed",
+            PackageUpdatePolicy.Exact, "fresh-root");
+        var package = new ResolvedPackage("Fresh.Root", "1.0.0", "test-feed", rootPath,
+            DateTimeOffset.UnixEpoch, "fresh-root");
+        var node = new ResolvedPackageNode("Fresh.Root", "1.0.0", PackageNodeRole.Root,
+            rootPath, PackageSourceKind.RemoteFeed, "fresh-root", null, [], [], []);
+        var graph = new ResolvedPackageGraph(
+            ResolvedPackageGraph.CreateGraphId("net10.0", [node], [node], [], []),
+            string.Empty,
+            "net10.0",
+            [node], [node], [], [], DateTimeOffset.UnixEpoch);
+        var selection = new ResolvedPackageGraphSelection(graph, [request], [package]);
+        var dispatcher = new CountingScopedDispatcher();
+        using var provider = CreateProvider(fixture.PackageInstallRoot, fixture.StatePaths["first"],
+            new RootRequestSource(request, rootPath), preserveActiveDiff: false,
+            dispatcherOverride: dispatcher, lockFileMode: LockFileMode.Enforce);
+
+        var admission = provider.GetRequiredService<IPackageStoreAdmission>();
+        await using var rootAdmission = await admission.AcquireConfiguredRootOperationAsync(
+            PackageStoreAdmissionKind.Reconciliation, CancellationToken.None);
+        var owner = Assert.IsType<PackageStoreOperationOwner>(rootAdmission.Owner);
+        var packageAdmission = Assert.IsType<PackageStoreAdmission>(admission);
+        var registry = Assert.IsAssignableFrom<ICoordinatedStoreRegistry>(provider.GetRequiredService<IStoreRegistry>());
+        var driver = new CoordinatedActiveStateTransitionDriver(
+            provider.GetRequiredService<IPhysicalStoreFileSystem>(), packageAdmission.Registry, registry);
+        var middleware = new DiffAndChangeEventMiddleware(
+            provider.GetRequiredService<IDesiredActualDiffEngine>(),
+            provider.GetRequiredService<IDryRunPlanner>(),
+            provider.GetRequiredService<IReconciliationRetryPolicy>(),
+            provider.GetRequiredService<IStoreRegistry>(),
+            dispatcher,
+            provider.GetRequiredService<ReconciliationMetrics>(),
+            driver);
+        var context = new ReconciliationCycleContext
+        {
+            CorrelationId = "omitted-generation",
+            CycleStartedAt = DateTimeOffset.UnixEpoch,
+            CancellationToken = CancellationToken.None,
+            PackageStoreOwner = owner,
+            DesiredRequests = [request],
+            ResolutionResult = new([package], [], [], [graph])
+            {
+                GraphSelections = [selection]
+            }
+        };
+        var downstreamReached = false;
+
+        var refusal = await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => middleware.InvokeAsync(
+            context,
+            () =>
+            {
+                downstreamReached = true;
+                return Task.CompletedTask;
+            }));
+
+        Assert.Equal(PackageStoreAdmissionReason.StateMismatch, refusal.Reason);
+        Assert.Equal(0, dispatcher.ChangingCount);
+        Assert.False(downstreamReached);
+        var after = await fixture.ReadFreshStateAsync("first");
+        Assert.True(fixture.States["first"].ProtectionRecord!.ActiveClosure
+            .HasSamePayloadAs(after.ProtectionRecord!.ActiveClosure));
+    }
+
+    [Fact]
+    public async Task AddNuplane_LockFailedDesiredRootRetainsItsExactPriorSubclosure()
+    {
+        using var fixture = await CompletedMembershipFixture.CreateAsync();
+        var priorState = fixture.States["first"];
+        var priorSnapshot = Assert.Single(priorState.ProtectionRecord!.ActiveClosure.Graphs!);
+        var updatedRootPath = fixture.Install("Root.First", "2.0.0", "Shared.Dependency");
+        var request = new PackageRequest("Root.First", "[2.0.0]", "test-feed",
+            PackageUpdatePolicy.Exact, "first");
+        var packages = new[]
+        {
+            new ResolvedPackage("Root.First", "2.0.0", "test-feed", updatedRootPath,
+                DateTimeOffset.UnixEpoch, "first"),
+            new ResolvedPackage("Shared.Dependency", "2.1.0", "test-feed", fixture.SharedInstallPath,
+                DateTimeOffset.UnixEpoch, "dependency")
+        };
+        var dispatcher = new CountingScopedDispatcher();
+        using var provider = CreateProvider(fixture.PackageInstallRoot, fixture.StatePaths["first"],
+            new RootRequestSource(request, updatedRootPath), preserveActiveDiff: false,
+            dispatcherOverride: dispatcher, resolverOverride: new MapScopedResolver(packages),
+            lockFileCoordinatorOverride: new RejectRootLockFileCoordinator("Root.First"));
+
+        await provider.GetRequiredService<IReconciliationService>()
+            .TriggerAsync(ReconciliationTrigger.Manual("failed-root-retention"), CancellationToken.None);
+
+        var state = await fixture.ReadFreshStateAsync("first");
+        Assert.Equal(priorState.ActiveVersionById, state.ActiveVersionById);
+        Assert.True(state.ProtectionRecord!.Revision > priorState.ProtectionRecord!.Revision);
+        var retained = Assert.Single(state.ProtectionRecord.ActiveClosure.Graphs!);
+        Assert.True(priorSnapshot.HasSamePayloadAs(retained));
+        Assert.Equal(0, dispatcher.ChangingCount);
+    }
+
+    [Fact]
+    public async Task CoordinatedApplyFailure_RestoresExactPriorSubclosureAndPublishesIndependentGraph()
+    {
+        using var fixture = await CompletedMembershipFixture.CreateAsync();
+        var priorState = fixture.States["first"];
+        var priorSnapshot = Assert.Single(priorState.ProtectionRecord!.ActiveClosure.Graphs!);
+        var changedRootPath = fixture.Install("Root.First", "2.0.0", "New.Dependency");
+        var newDependencyPath = fixture.Install("New.Dependency", "1.0.0", dependencyId: null);
+        var independentRootPath = fixture.Install("Independent.Root", "1.0.0", dependencyId: null);
+        var changedRootRequest = new PackageRequest("Root.First", "[2.0.0]", "test-feed",
+            PackageUpdatePolicy.Exact, "changed-root");
+        var independentRootRequest = new PackageRequest("Independent.Root", "[1.0.0]", "test-feed",
+            PackageUpdatePolicy.Exact, "independent-root");
+        var actualHash = "sha512:" + Convert.ToBase64String(new byte[64]);
+        var mismatchedExpectedHash = "sha512:" + Convert.ToBase64String(Enumerable.Repeat((byte)1, 64).ToArray());
+        var changedRoot = new ResolvedPackage("Root.First", "2.0.0", "test-feed", changedRootPath,
+            DateTimeOffset.UnixEpoch, "changed-root") { PackageContentHash = actualHash };
+        var newDependency = new ResolvedPackage("New.Dependency", "1.0.0", "test-feed", newDependencyPath,
+            DateTimeOffset.UnixEpoch, "dependency-of:Root.First") { PackageContentHash = actualHash };
+        var independentRoot = new ResolvedPackage("Independent.Root", "1.0.0", "test-feed", independentRootPath,
+            DateTimeOffset.UnixEpoch, "independent-root") { PackageContentHash = actualHash };
+        var changedRootSelection = CreateSelection(changedRootRequest, changedRoot, newDependency);
+        var independentSelection = CreateSelection(independentRootRequest, independentRoot);
+        var resolution = new PackageResolutionResult(
+            [changedRoot, newDependency, independentRoot], [], [],
+            [changedRootSelection.Graph, independentSelection.Graph])
+        {
+            GraphSelections = [changedRootSelection, independentSelection],
+            ExpectedArtifactHashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["New.Dependency"] = mismatchedExpectedHash
+            }
+        };
+
+        var conflictingActiveMap = new Dictionary<string, string>(priorState.ActiveVersionById,
+            StringComparer.OrdinalIgnoreCase)
+        {
+            ["Shared.Dependency"] = "99.0.0"
+        };
+        var conflict = Assert.Throws<PackageStoreAdmissionException>(() =>
+            ActivePackageCatalogMapper.RestoreFailedRootSubclosureVersions(
+                priorState, conflictingActiveMap, new HashSet<string>(["Root.First"], StringComparer.OrdinalIgnoreCase),
+                new HashSet<string>(["Root.First"], StringComparer.OrdinalIgnoreCase)));
+        Assert.Equal(PackageStoreAdmissionReason.StateMismatch, conflict.Reason);
+
+        var dispatcher = new CountingScopedDispatcher();
+        using var provider = CreateProvider(fixture.PackageInstallRoot, fixture.StatePaths["first"],
+            new MutableRootRequestSource(fixture.SharedInstallPath), preserveActiveDiff: false,
+            dispatcherOverride: dispatcher);
+        var admission = provider.GetRequiredService<IPackageStoreAdmission>();
+        await using var rootAdmission = await admission.AcquireConfiguredRootOperationAsync(
+            PackageStoreAdmissionKind.Reconciliation, CancellationToken.None);
+        var owner = Assert.IsType<PackageStoreOperationOwner>(rootAdmission.Owner);
+        var packageAdmission = Assert.IsType<PackageStoreAdmission>(admission);
+        var stateRegistry = Assert.IsAssignableFrom<ICoordinatedStoreRegistry>(
+            provider.GetRequiredService<IStoreRegistry>());
+        var boundStoreRegistry = CoordinatedReconciliationAdapters.BindStoreRegistry(stateRegistry, owner);
+        var transitionDriver = new CoordinatedActiveStateTransitionDriver(
+            provider.GetRequiredService<IPhysicalStoreFileSystem>(), packageAdmission.Registry, stateRegistry);
+        var diffEngine = provider.GetRequiredService<IDesiredActualDiffEngine>();
+        var failureRecorder = CoordinatedReconciliationAdapters.BindFailureRecorder(
+            provider.GetRequiredService<IFailureRecorder>(), owner);
+        var applyExecutor = new PackageApplyExecutor(
+            provider.GetRequiredService<IPackageResolver>(),
+            new PackageTransactionCoordinator(new AtomicPointerSwitcher(), failureRecorder),
+            provider.GetRequiredService<IReconciliationRetryPolicy>(),
+            failureRecorder);
+        var cleanupService = new CapturingPackageCleanupService();
+        var context = new ReconciliationCycleContext
+        {
+            CorrelationId = "apply-failure-retention",
+            CycleStartedAt = DateTimeOffset.UnixEpoch,
+            CancellationToken = CancellationToken.None,
+            PackageStoreOwner = owner,
+            DesiredRequests = [changedRootRequest, independentRootRequest],
+            ResolutionResult = resolution
+        };
+        var diffMiddleware = new DiffAndChangeEventMiddleware(
+            diffEngine,
+            provider.GetRequiredService<IDryRunPlanner>(),
+            provider.GetRequiredService<IReconciliationRetryPolicy>(),
+            boundStoreRegistry,
+            dispatcher,
+            provider.GetRequiredService<ReconciliationMetrics>(),
+            transitionDriver);
+        var transactionMiddleware = new TransactionExecutionMiddleware(
+            applyExecutor, diffEngine, dispatcher, transitionDriver);
+        var cleanupMiddleware = new CleanupMiddleware(
+            diffEngine,
+            boundStoreRegistry,
+            cleanupService,
+            new Nuplane.Store.Cleanup.CleanupPolicyOptions(),
+            provider.GetRequiredService<ReconciliationMetrics>(),
+            transitionDriver);
+
+        await diffMiddleware.InvokeAsync(context, () => transactionMiddleware.InvokeAsync(context,
+            () => cleanupMiddleware.InvokeAsync(context, () => Task.CompletedTask)));
+
+        Assert.Contains("Shared.Dependency", context.ChangeSet!.Removed);
+        Assert.True(context.CoordinatedTransitionPreflightPassed);
+        Assert.Equal(1, dispatcher.ChangingCount);
+        Assert.Equal("2.0.0", changedRoot.Version);
+        Assert.Equal(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Root.First"] = "1.0.0",
+            ["Shared.Dependency"] = "2.1.0",
+            ["Independent.Root"] = "1.0.0"
+        }, context.MergedActive);
+
+        var state = await fixture.ReadFreshStateAsync("first");
+        Assert.Equal(context.MergedActive, state.ActiveVersionById);
+        Assert.Equal("LockFileGate", state.LastFailureById["New.Dependency"].Stage);
+        Assert.Contains("Root.First", context.ApplyResult!.FailedPackageIds);
+        Assert.Contains("New.Dependency", context.ApplyResult.FailedPackageIds);
+        Assert.Equal(independentSelection.Graph.GraphId,
+            Assert.Single(context.ApplyResult.SuccessfulGraphSelections).Graph.GraphId);
+        Assert.Equal("2.1.0", state.ActivePackageDescriptorsByIdNormalized["Shared.Dependency"].Version);
+        var retainedGraphs = state.ProtectionRecord!.ActiveClosure.Graphs!;
+        var retainedPrior = Assert.Single(retainedGraphs, graph =>
+            graph.Nodes.Any(node => node.Install.PackageId == "Root.First"));
+        Assert.True(priorSnapshot.HasSamePayloadAs(retainedPrior));
+        Assert.Contains(retainedPrior.Nodes, node =>
+            node.Install.PackageId == "Shared.Dependency" && node.Install.Version == "2.1.0");
+        var activatedIndependent = Assert.Single(retainedGraphs, graph =>
+            graph.Nodes.Any(node => node.Install.PackageId == "Independent.Root"));
+        Assert.Equal(independentSelection.Graph.GraphId, activatedIndependent.GraphId);
+        Assert.Equal(independentSelection.Graph.GenerationId, activatedIndependent.GenerationId);
+        Assert.Equal(context.MergedActive!.Count, cleanupService.LastPackageVersions.Count);
+        Assert.Equal(context.MergedActive.OrderBy(static item => item.Key), cleanupService.LastPackageVersions
+            .Select(static item => new KeyValuePair<string, string>(item.PackageId, item.Version))
+            .OrderBy(static item => item.Key));
+
+        static ResolvedPackageGraphSelection CreateSelection(
+            PackageRequest rootRequest,
+            params ResolvedPackage[] packages)
+        {
+            var nodes = packages.Select(package => new ResolvedPackageNode(
+                package.Id,
+                package.Version,
+                string.Equals(package.Id, rootRequest.Id, StringComparison.OrdinalIgnoreCase)
+                    ? PackageNodeRole.Root
+                    : PackageNodeRole.Dependency,
+                package.InstallPath,
+                PackageSourceKind.RemoteFeed,
+                package.SourceName,
+                package.PackageContentHash,
+                [], [], [])).ToArray();
+            var rootNode = nodes.Single(node =>
+                string.Equals(node.PackageId, rootRequest.Id, StringComparison.OrdinalIgnoreCase));
+            var edges = nodes.Where(node => !ReferenceEquals(node, rootNode)).Select(node => new DependencyEdge(
+                rootNode.PackageId,
+                rootNode.Version,
+                node.PackageId,
+                "[1.0.0]",
+                node.Version,
+                string.Empty,
+                Optional: false)).ToArray();
+            var roots = new[] { rootNode };
+            var graphId = ResolvedPackageGraph.CreateGraphId("net10.0", roots, nodes, edges, []);
+            var graph = new ResolvedPackageGraph(graphId, Guid.NewGuid().ToString("N"), "net10.0",
+                roots, nodes, edges, [], DateTimeOffset.UnixEpoch);
+            return new ResolvedPackageGraphSelection(graph, [rootRequest], packages);
+        }
+    }
+
+    [Fact]
+    public async Task AddNuplane_ApplyFailedChangedDependencyClosureRetainsExactPriorGraph()
+    {
+        using var fixture = await CompletedMembershipFixture.CreateAsync();
+        var priorState = fixture.States["first"];
+        var priorActiveClosure = priorState.ProtectionRecord!.ActiveClosure;
+        var priorRecoverableClosure = priorState.ProtectionRecord.RecoverableClosure;
+        var priorSnapshot = Assert.Single(priorActiveClosure.Graphs!);
+        var updatedRootPath = fixture.Install("Root.First", "2.0.0", "New.Dependency");
+        var changedDependencyPath = fixture.Install("New.Dependency", "2.0.0", dependencyId: null);
+        var actualHash = "sha512:" + Convert.ToBase64String(new byte[64]);
+        var request = new PackageRequest("Root.First", "[2.0.0]", "test-feed",
+            PackageUpdatePolicy.Exact, "apply-failed-root");
+        var packages = new[]
+        {
+            new ResolvedPackage("Root.First", "2.0.0", "test-feed", updatedRootPath,
+                DateTimeOffset.UnixEpoch, "apply-failed-root") { PackageContentHash = actualHash },
+            new ResolvedPackage("New.Dependency", "2.0.0", "test-feed", changedDependencyPath,
+                DateTimeOffset.UnixEpoch, "dependency-of:Root.First") { PackageContentHash = actualHash }
+        };
+        var dispatcher = new CountingScopedDispatcher();
+        using var provider = CreateProvider(fixture.PackageInstallRoot, fixture.StatePaths["first"],
+            new RootRequestSource(request, updatedRootPath), preserveActiveDiff: false,
+            dispatcherOverride: dispatcher,
+            resolverOverride: new MapScopedResolver(packages),
+            lockFileCoordinatorOverride: new HashMismatchLockFileCoordinator("New.Dependency", actualHash));
+
+        await provider.GetRequiredService<IReconciliationService>()
+            .TriggerAsync(ReconciliationTrigger.Manual("apply-failed-retention"), CancellationToken.None);
+
+        var state = await fixture.ReadFreshStateAsync("first");
+        Assert.Equal(priorState.ActiveVersionById, state.ActiveVersionById);
+        Assert.True(priorActiveClosure.HasSamePayloadAs(state.ProtectionRecord!.ActiveClosure));
+        Assert.True(priorRecoverableClosure.HasSamePayloadAs(state.ProtectionRecord.RecoverableClosure));
+        Assert.Equal(priorSnapshot.GraphId,
+            Assert.Single(state.ProtectionRecord.ActiveClosure.Graphs!).GraphId);
+        Assert.Equal(priorState.ActivePackageDescriptorsByIdNormalized.Keys.Order(StringComparer.OrdinalIgnoreCase),
+            state.ActivePackageDescriptorsByIdNormalized.Keys.Order(StringComparer.OrdinalIgnoreCase));
+        foreach (var (packageId, priorDescriptor) in priorState.ActivePackageDescriptorsByIdNormalized)
+        {
+            var descriptor = state.ActivePackageDescriptorsByIdNormalized[packageId];
+            Assert.Equal(priorDescriptor.Version, descriptor.Version);
+            Assert.Equal(priorDescriptor.InstallPath, descriptor.InstallPath);
+            Assert.Equal(priorDescriptor.GraphId, descriptor.GraphId);
+            Assert.Equal(priorDescriptor.GraphGenerationId, descriptor.GraphGenerationId);
+        }
+        Assert.Equal("LockFileGate", state.LastFailureById["New.Dependency"].Stage);
+        Assert.Equal("apply-failed-retention", state.LastFailureById["New.Dependency"].CorrelationId);
+        Assert.Equal(1, dispatcher.ChangingCount);
+    }
+
+    [Theory]
+    [InlineData("source")]
+    [InlineData("path")]
+    public async Task AddNuplane_MismatchedResolvedProvenanceIsRefusedBeforeChanging(string mismatch)
+    {
+        using var fixture = await CompletedMembershipFixture.CreateAsync();
+        var freshRootPath = fixture.Install("Fresh.Root", "1.0.0", dependencyId: null);
+        var request = new PackageRequest("Fresh.Root", "[1.0.0]", "test-feed",
+            PackageUpdatePolicy.Exact, "fresh-root");
+        var package = new ResolvedPackage("Fresh.Root", "1.0.0", "test-feed", freshRootPath,
+            DateTimeOffset.UnixEpoch, "fresh-root");
+        var transformed = mismatch switch
+        {
+            "source" => package with { SourceName = "unselected-source" },
+            "path" => package with { InstallPath = Path.Combine(freshRootPath, "unobserved") },
+            _ => throw new ArgumentOutOfRangeException(nameof(mismatch))
+        };
+        var dispatcher = new CountingScopedDispatcher();
+        using var provider = CreateProvider(fixture.PackageInstallRoot, fixture.StatePaths["first"],
+            new RootRequestSource(request, freshRootPath), preserveActiveDiff: false,
+            dispatcherOverride: dispatcher, resolverOverride: new MapScopedResolver([package]),
+            lockFileCoordinatorOverride: new TransformingLockFileCoordinator(transformed));
+
+        var refusal = await Assert.ThrowsAsync<PackageStoreAdmissionException>(() =>
+            provider.GetRequiredService<IReconciliationService>()
+                .TriggerAsync(ReconciliationTrigger.Manual("invalid-" + mismatch), CancellationToken.None));
+
+        Assert.Equal(PackageStoreAdmissionReason.StateMismatch, refusal.Reason);
+        Assert.Equal(0, dispatcher.ChangingCount);
+        var after = await fixture.ReadFreshStateAsync("first");
+        Assert.Equal(fixture.States["first"].ActiveVersionById, after.ActiveVersionById);
+        Assert.True(fixture.States["first"].ProtectionRecord!.ActiveClosure
+            .HasSamePayloadAs(after.ProtectionRecord!.ActiveClosure));
+    }
+
+    [Fact]
+    public async Task AddNuplane_RemovalPublishesEmptyStateAndFollowingQuietCycleStaysQuiet()
+    {
+        using var fixture = await CompletedMembershipFixture.CreateAsync();
+        var dispatcher = new CountingScopedDispatcher();
+        using var provider = CreateProvider(fixture.PackageInstallRoot, fixture.StatePaths["first"],
+            new MutableRootRequestSource(fixture.SharedInstallPath), preserveActiveDiff: false,
+            dispatcherOverride: dispatcher);
+        var service = provider.GetRequiredService<IReconciliationService>();
+
+        await service.TriggerAsync(ReconciliationTrigger.Manual("remove-all"), CancellationToken.None);
+        var removed = await fixture.ReadFreshStateAsync("first");
+        Assert.Empty(removed.ActiveVersionById);
+        Assert.Empty(removed.ProtectionRecord!.ActiveClosure.Graphs!);
+        Assert.Equal(1, dispatcher.ChangingCount);
+
+        await service.TriggerAsync(ReconciliationTrigger.Manual("quiet-after-removal"), CancellationToken.None);
+        var quiet = await fixture.ReadFreshStateAsync("first");
+        Assert.Empty(quiet.ActiveVersionById);
+        Assert.True(quiet.ProtectionRecord!.Revision >= removed.ProtectionRecord.Revision);
+        Assert.True(removed.ProtectionRecord.ActiveClosure.HasSamePayloadAs(quiet.ProtectionRecord.ActiveClosure));
+        Assert.Equal(1, dispatcher.ChangingCount);
+    }
+
     [Theory]
     [InlineData(UnknownParticipant.DiffEngine)]
     [InlineData(UnknownParticipant.DryRunPlanner)]
@@ -233,8 +648,8 @@ public sealed class CoordinatedReconciliationAdmissionTests
         var candidatePath = Path.Combine(fixture.PackageInstallRoot, "Candidate.Root", "1.0.0");
         Directory.CreateDirectory(candidatePath);
         var source = new SinglePackageSource("Candidate.Root", candidatePath);
-        // A path-free synthetic result reaches the transition guard without invoking a package
-        // reader. The separate real-nuspec test covers the earlier production graph boundary.
+        // A path-free synthetic result reaches preflight without invoking a package reader. The
+        // separate real-nuspec test covers the earlier production graph boundary.
         var resolver = new ControlledScopedResolver(candidatePath, returnInstallPath: false);
         var dispatcher = new CountingScopedDispatcher();
         using var provider = CreateProvider(fixture.PackageInstallRoot, fixture.StatePaths["first"], source,
@@ -246,7 +661,7 @@ public sealed class CoordinatedReconciliationAdmissionTests
             provider.GetRequiredService<IReconciliationService>().TriggerAsync(
                 ReconciliationTrigger.Manual("nonempty-enrolled"), CancellationToken.None));
 
-        Assert.Equal(PackageStoreAdmissionReason.UnsupportedParticipant, error.Reason);
+        Assert.Equal(PackageStoreAdmissionReason.StateMismatch, error.Reason);
         Assert.Equal(1, source.CallbackCount);
         Assert.Equal(1, resolver.CallbackCount);
         Assert.Equal(0, dispatcher.ChangingCount);
@@ -420,7 +835,8 @@ public sealed class CoordinatedReconciliationAdmissionTests
         IDesiredActualDiffEngine? diffEngineOverride = null,
         IDryRunPlanner? dryRunPlannerOverride = null,
         ILockFileCoordinator? lockFileCoordinatorOverride = null,
-        IReconciliationRetryPolicy? retryPolicyOverride = null)
+        IReconciliationRetryPolicy? retryPolicyOverride = null,
+        LockFileMode? lockFileMode = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -428,6 +844,8 @@ public sealed class CoordinatedReconciliationAdmissionTests
         services.Configure<FeedResolutionOptions>(options => options.PackageInstallRoot = packageInstallRoot);
         services.Configure<StoreRegistryOptions>(options => options.StateFilePath = stateFilePath);
         services.Configure<ReconciliationOptions>(options => options.MaxRetryAttempts = 0);
+        if (lockFileMode is { } selectedLockFileMode)
+            services.Configure<LockFileOptions>(options => options.Mode = selectedLockFileMode);
 
         services.RemoveAll<IDesiredPackageSource>();
         services.AddSingleton<IDesiredPackageSource>(source);
@@ -613,6 +1031,110 @@ public sealed class CoordinatedReconciliationAdmissionTests
         }
     }
 
+    private sealed class RootRequestSource(PackageRequest request, string installPath) : IScopedDesiredPackageSource
+    {
+        public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken cancellationToken)
+            => Task.FromException<IReadOnlyList<PackageRequest>>(new InvalidOperationException(
+                "An enrolled source must be invoked through its scoped overload."));
+
+        public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(PackageStoreOperationBorrow borrow,
+            CancellationToken cancellationToken)
+        {
+            borrow.ValidateForInstallPath(installPath);
+            return Task.FromResult<IReadOnlyList<PackageRequest>>([request]);
+        }
+    }
+
+    private sealed class MutableRootRequestSource(string installPath) : IScopedDesiredPackageSource
+    {
+        public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken cancellationToken)
+            => Task.FromException<IReadOnlyList<PackageRequest>>(new InvalidOperationException(
+                "An enrolled source must be invoked through its scoped overload."));
+
+        public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(PackageStoreOperationBorrow borrow,
+            CancellationToken cancellationToken)
+        {
+            borrow.ValidateForInstallPath(installPath);
+            return Task.FromResult<IReadOnlyList<PackageRequest>>([]);
+        }
+    }
+
+    private sealed class MapScopedResolver(IEnumerable<ResolvedPackage> packages) : IScopedPackageResolver
+    {
+        private readonly IReadOnlyDictionary<string, ResolvedPackage> _packages = packages
+            .ToDictionary(static package => package.Id, StringComparer.OrdinalIgnoreCase);
+
+        public Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)
+            => Task.FromException<ResolvedPackage>(new InvalidOperationException(
+                "An enrolled resolver must be invoked through its scoped overload."));
+
+        public Task<ResolvedPackage> ResolveAsync(PackageRequest request, PackageStoreOperationBorrow borrow,
+            CancellationToken cancellationToken)
+        {
+            if (!_packages.TryGetValue(request.Id, out var package))
+                return Task.FromException<ResolvedPackage>(new InvalidOperationException(
+                    $"No owned fixture package was registered for '{request.Id}'."));
+            borrow.ValidateForInstallPath(package.InstallPath);
+            return Task.FromResult(package);
+        }
+    }
+
+    private sealed class RejectRootLockFileCoordinator(string rejectedPackageId)
+        : IPackagePathIndependentLockFileCoordinator
+    {
+        public Task<LockFileEvaluationResult> EvaluateAsync(ResolvedPackage resolved,
+            CancellationToken cancellationToken)
+            => Task.FromResult(StringComparer.OrdinalIgnoreCase.Equals(resolved.Id, rejectedPackageId)
+                ? new LockFileEvaluationResult(false, "fixture-rejected", null, null)
+                : new LockFileEvaluationResult(true, "fixture-allowed", resolved, null));
+    }
+
+    private sealed class TransformingLockFileCoordinator(ResolvedPackage transformedPackage)
+        : IPackagePathIndependentLockFileCoordinator
+    {
+        public Task<LockFileEvaluationResult> EvaluateAsync(ResolvedPackage resolved,
+            CancellationToken cancellationToken)
+            => Task.FromResult(new LockFileEvaluationResult(true, "fixture-transformed",
+                StringComparer.OrdinalIgnoreCase.Equals(resolved.Id, transformedPackage.Id)
+                    ? transformedPackage
+                    : resolved,
+                null));
+    }
+
+    private sealed class HashMismatchLockFileCoordinator(string failedPackageId, string actualHash)
+        : IPackagePathIndependentLockFileCoordinator, ILockFileCycleCoordinator
+    {
+        private readonly string _mismatchedHash = "sha512:" + Convert.ToBase64String(
+            Enumerable.Repeat((byte)1, 64).ToArray());
+
+        public Task<LockFileEvaluationResult> EvaluateAsync(
+            ResolvedPackage resolved,
+            CancellationToken cancellationToken)
+            => Task.FromResult(EvaluatePackage(resolved));
+
+        public Task<LockFileSnapshot> CaptureAsync(CancellationToken cancellationToken)
+            => Task.FromResult(new LockFileSnapshot(LockFileMode.Enforce, null,
+                new Dictionary<string, PackageLockEntry>(StringComparer.OrdinalIgnoreCase), null));
+
+        public PackageRequest ConstrainRequest(LockFileSnapshot snapshot, PackageRequest request) => request;
+
+        public LockFileEvaluationResult Evaluate(LockFileSnapshot snapshot, ResolvedPackage resolved)
+            => EvaluatePackage(resolved);
+
+        public Task GenerateAsync(
+            LockFileSnapshot snapshot,
+            IReadOnlyList<ResolvedPackage> resolvedPackages,
+            DateTimeOffset generatedAt,
+            CancellationToken cancellationToken)
+            => Task.CompletedTask;
+
+        private LockFileEvaluationResult EvaluatePackage(ResolvedPackage resolved)
+            => new(true, "controlled-apply-hash", resolved,
+                string.Equals(resolved.Id, failedPackageId, StringComparison.OrdinalIgnoreCase)
+                    ? _mismatchedHash
+                    : actualHash);
+    }
+
     private sealed class CountingScopedDispatcher : IScopedObserverEventDispatcher
     {
         private int _changingCount;
@@ -662,6 +1184,22 @@ public sealed class CoordinatedReconciliationAdmissionTests
         public Task PublishReconciledAsync(PackageChangeSet changeSet,
             IReadOnlyList<ResolvedPackage> appliedPackages, PackageStoreOperationOwner owner,
             CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class CapturingPackageCleanupService : Nuplane.Store.Cleanup.IPackageCleanupService
+    {
+        internal IReadOnlyList<Nuplane.Store.Cleanup.PackageVersionEntry> LastPackageVersions { get; private set; } = [];
+
+        public Task<IReadOnlyList<CleanupDecision>> ExecuteAutomaticAsync(
+            IReadOnlyList<Nuplane.Store.Cleanup.PackageVersionEntry> packageVersions,
+            Nuplane.Store.Cleanup.CleanupPolicyOptions options,
+            string correlationId,
+            bool triggerOnSuccessfulReconciliation,
+            CancellationToken cancellationToken)
+        {
+            LastPackageVersions = packageVersions.ToArray();
+            return Task.FromResult<IReadOnlyList<CleanupDecision>>([]);
+        }
     }
 
     private sealed class CompletedMembershipFixture : IDisposable
@@ -787,7 +1325,7 @@ public sealed class CoordinatedReconciliationAdmissionTests
             return state with { ProtectionRecord = protection };
         }
 
-        private string Install(string packageId, string version, string? dependencyId)
+        internal string Install(string packageId, string version, string? dependencyId)
         {
             var path = Path.Combine(PackageInstallRoot, "test-feed", packageId, version);
             Directory.CreateDirectory(path);

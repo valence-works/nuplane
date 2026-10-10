@@ -291,7 +291,9 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             // Fixture-only removal of freshly verified stale control artifacts precedes replacement.
             // This is not the production maintenance/reaping API, which remains separate delivery.
             await RemoveStaleFixtureUseArtifactsAsync(provider);
-            Directory.Delete(exactInstallPath, recursive: true);
+            // Keep the old directory alive so filesystems cannot recycle its native identity for
+            // the replacement. The fixture owns both directories and removes them at teardown.
+            Directory.Move(exactInstallPath, exactInstallPath + "-retired-" + Guid.NewGuid().ToString("N"));
             WriteInstall(exactInstallPath, inertPackage.Id, inertPackage.Version,
                 "ReplacementInert", dependencyId: null, includeAssembly: false);
             replacementOwner = await AcquireGraphUseAsync(provider, graph);

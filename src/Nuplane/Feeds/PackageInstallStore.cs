@@ -224,7 +224,7 @@ internal static class PackageInstallStore
         return await Task.FromResult(contentHash).ConfigureAwait(false);
     }
 
-    private static bool IsInstalledNative(
+    internal static bool IsInstalledNative(
         IPhysicalStoreFileSystem files,
         PhysicalStoreDirectoryHandle installDirectory,
         PhysicalRootIdentity? expectedRoot)
@@ -256,7 +256,7 @@ internal static class PackageInstallStore
         return true;
     }
 
-    private static string? ReadContentHashNative(
+    internal static string? ReadContentHashNative(
         IPhysicalStoreFileSystem files,
         PhysicalStoreDirectoryHandle installDirectory,
         PhysicalRootIdentity? expectedRoot,
@@ -479,7 +479,7 @@ internal static class PackageInstallStore
         PhysicalStoreEntryInfo Entry,
         PhysicalStoreNameSemantics Semantics);
 
-    private static PhysicalStoreNameSemantics RequireSupportedNameProfile(
+    internal static PhysicalStoreNameSemantics RequireSupportedNameProfile(
         PhysicalStoreNameSemantics actual,
         PhysicalRootIdentity? expectedRoot,
         PhysicalStoreNameSemantics? expectedSemantics = null)
