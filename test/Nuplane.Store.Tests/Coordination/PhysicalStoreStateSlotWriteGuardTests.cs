@@ -355,6 +355,23 @@ public sealed class PhysicalStoreStateSlotWriteGuardTests
     public async Task ProspectiveNativeAliases_ContendForOneGuardAndRejectMarkerBoundToOtherExactSpelling()
     {
         using var context = CreateContext();
+        await AssertProspectiveNativeAliasesContendAsync(context);
+    }
+
+    [LinuxExt4CasefoldFact]
+    public async Task ProspectiveNativeAliases_Ext4CasefoldContendForOneGuardAndRejectMarkerBoundToOtherExactSpelling()
+    {
+        using var context = CreateContext(enableExt4Casefold: true);
+        var semantics = ((IPhysicalStoreNameFileSystem)context.FileSystem).ObserveDirectoryNameSemantics(context.Parent);
+        Assert.Equal("linux-ext4-casefold-v1", semantics.ProfileId);
+        Assert.False(semantics.CaseSensitive);
+        Assert.True(semantics.NormalizationInsensitive);
+
+        await AssertProspectiveNativeAliasesContendAsync(context);
+    }
+
+    private async Task AssertProspectiveNativeAliasesContendAsync(StoreContext context)
+    {
         var semantics = ((IPhysicalStoreNameFileSystem)context.FileSystem).ObserveDirectoryNameSemantics(context.Parent);
         var aliases = new List<(string First, string Second)>();
         if (!semantics.CaseSensitive)
@@ -640,7 +657,7 @@ public sealed class PhysicalStoreStateSlotWriteGuardTests
             contextSlot, Guid.NewGuid(), new string('0', 64)));
     }
 
-    private static StoreContext CreateContext()
+    private static StoreContext CreateContext(bool enableExt4Casefold = false)
     {
         var fixture = new PackageStoreFixture();
         IPhysicalStoreFileSystem files = OperatingSystem.IsWindows()
@@ -649,6 +666,9 @@ public sealed class PhysicalStoreStateSlotWriteGuardTests
         PhysicalStoreDirectoryHandle? parent = null;
         try
         {
+            if (enableExt4Casefold)
+                UnixPhysicalStoreIdentityTests.EnableExt4Casefold(fixture.GetPath("state"));
+
             using var root = PhysicalStoreTestDirectory.Open(files, fixture.RootPath);
             parent = files.OpenDirectoryChildNoFollow(root, "state");
             using (var state = files.CreateFileExclusiveAt(parent, "store-state.json"))
