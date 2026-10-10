@@ -65,7 +65,8 @@ internal static class DesiredSourceDirectoryAccess
         if (files is not (UnixPhysicalStoreFileSystem or WindowsPhysicalStoreFileSystem) ||
             files is not IPhysicalStoreDirectoryEnumerationFileSystem enumeration ||
             files is not IPhysicalStoreDirectoryCandidateProbeFileSystem candidateProbe ||
-            files is not IPhysicalStoreNameFileSystem names)
+            files is not IPhysicalStoreNameFileSystem names ||
+            files is not IPhysicalStoreDesiredSourceTextReadFileSystem textReads)
         {
             throw Refuse(PackageStoreAdmissionReason.UnsupportedFilesystem,
                 "The filesystem provider cannot perform a native desired-source directory read.");
@@ -103,10 +104,14 @@ internal static class DesiredSourceDirectoryAccess
                 ?? throw Refuse(PackageStoreAdmissionReason.UnknownAuthority,
                     "The desired-source locator is not a held directory.", resolved.RootIdentity);
         var profile = directory is null ? null : names.ObserveDirectoryNameSemantics(directory);
+        var directoryInfo = directory is null ? null : files.InspectHandle(directory);
+        if (directoryInfo is not null && directoryInfo.Kind != PhysicalStoreEntryKind.Directory)
+            throw Refuse(PackageStoreAdmissionReason.UnknownAuthority,
+                "The desired-source parent is not a positively verified directory.", resolved.RootIdentity);
         resolved.Revalidate();
 
         using var session = new DesiredSourceDirectorySession(
-            enumeration, candidateProbe, resolved, directory, profile, missing);
+            enumeration, candidateProbe, textReads, resolved, directory, directoryInfo, profile, missing);
         try
         {
             var result = await callback(session).ConfigureAwait(false);
@@ -133,23 +138,29 @@ internal sealed class DesiredSourceDirectorySession : IDisposable
 {
     private readonly IPhysicalStoreDirectoryEnumerationFileSystem _enumeration;
     private readonly IPhysicalStoreDirectoryCandidateProbeFileSystem _candidateProbe;
+    private readonly IPhysicalStoreDesiredSourceTextReadFileSystem _textReads;
     private readonly ResolvedPackageStorePath _resolved;
     private readonly PhysicalStoreDirectoryHandle? _directory;
+    private readonly PhysicalStoreEntryInfo? _directoryInfo;
     private readonly Dictionary<string, (PhysicalFileIdentity Identity, IDisposable? Pin)> _sampledCandidates = new(StringComparer.Ordinal);
     private bool _disposed;
 
     internal DesiredSourceDirectorySession(
         IPhysicalStoreDirectoryEnumerationFileSystem enumeration,
         IPhysicalStoreDirectoryCandidateProbeFileSystem candidateProbe,
+        IPhysicalStoreDesiredSourceTextReadFileSystem textReads,
         ResolvedPackageStorePath resolved,
         PhysicalStoreDirectoryHandle? directory,
+        PhysicalStoreEntryInfo? directoryInfo,
         PhysicalStoreNameSemantics? profile,
         bool isMissing)
     {
         _enumeration = enumeration;
         _candidateProbe = candidateProbe;
+        _textReads = textReads;
         _resolved = resolved;
         _directory = directory;
+        _directoryInfo = directoryInfo;
         Profile = profile;
         IsMissing = isMissing;
     }
@@ -157,6 +168,44 @@ internal sealed class DesiredSourceDirectorySession : IDisposable
     internal bool IsMissing { get; }
 
     internal PhysicalStoreNameSemantics? Profile { get; }
+
+    internal async ValueTask<PhysicalStoreDesiredSourceTextReadResult> ReadDesiredSourceTextAsync(
+        string singleName,
+        CancellationToken cancellationToken,
+        Func<CancellationToken, Task>? afterNativeReadAsync = null)
+    {
+        EnsureActive();
+        cancellationToken.ThrowIfCancellationRequested();
+        if (IsMissing)
+        {
+            _resolved.Revalidate();
+            return PhysicalStoreDesiredSourceTextReadResult.Missing;
+        }
+
+        PhysicalStoreNames.ValidateSingleComponent(singleName);
+        var directory = _directory ?? throw new InvalidOperationException("A present source directory has no retained native directory.");
+        var directoryInfo = _directoryInfo ?? throw new InvalidOperationException("A present source directory has no retained native identity.");
+        var profile = Profile ?? throw new InvalidOperationException("A present source directory has no retained native name profile.");
+        try
+        {
+            _resolved.Revalidate();
+            var result = await _textReads.ReadDesiredSourceTextAsync(
+                directory,
+                singleName,
+                directoryInfo,
+                profile,
+                cancellationToken,
+                afterNativeReadAsync).ConfigureAwait(false);
+            _resolved.Revalidate();
+            cancellationToken.ThrowIfCancellationRequested();
+            return result;
+        }
+        catch
+        {
+            _resolved.Revalidate();
+            throw;
+        }
+    }
 
     internal IReadOnlyList<string> EnumeratePackageCandidates()
     {
