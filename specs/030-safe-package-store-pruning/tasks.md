@@ -78,6 +78,8 @@ The Nuplane Constitution requires automated coverage for changed logic and bound
 - [ ] T039 Implement `IValidateOptions<PackageStoreMaintenanceOptions>` in `src/Nuplane/Store/Maintenance/PackageStoreMaintenanceOptionsValidator.cs`; validate label/root compatibility and duplicate/blank labels.
 - [ ] T040 Register root resolver and validated maintenance options in `src/Nuplane/Registration/NuplaneStorePersistenceRegistrationServices.cs`; use `ValidateOnStart()` and concrete-first aliases without changing existing cleanup defaults.
 
+  - T027/T038–T040/T048 are implemented and locally verified; [configured-label evidence](evidence/configured-maintenance-root-labels.md) records 12 focused cases, the full Runtime suite, all-target compilation and the startup-validation omission control. Exact-head four-platform qualification is pending, so these checkboxes remain open. No maintenance/native operation is activated by label lookup.
+
 ### Foundational tests
 
 - [ ] T041 Add physical identity/state-slot tests in `test/Nuplane.Store.Tests/PhysicalStoreIdentityTests.cs`; include ordinary atomic replacement at one stable slot and refusal for changed parent/basename/link ambiguity.

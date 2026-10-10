@@ -1,0 +1,14 @@
+[
+  "Nuplane.Runtime.Tests.PackageStoreMaintenanceOptionsTests.Validate_WhenRootLabelIsNullBlankOrPadded_FailsStartup(rootLabel: null)",
+  "Nuplane.Runtime.Tests.PackageStoreMaintenanceOptionsTests.Validate_WhenRootLabelIsNullBlankOrPadded_FailsStartup(rootLabel: \"\")",
+  "Nuplane.Runtime.Tests.PackageStoreMaintenanceOptionsTests.Validate_WhenRootLabelIsNullBlankOrPadded_FailsStartup(rootLabel: \" \")",
+  "Nuplane.Runtime.Tests.PackageStoreMaintenanceOptionsTests.Validate_WhenRootLabelIsNullBlankOrPadded_FailsStartup(rootLabel: \" padded \")",
+  "Nuplane.Runtime.Tests.PackageStoreMaintenanceOptionsTests.Validate_WhenRootLabelCollidesWithLaterExtraRoot_FailsStartup",
+  "Nuplane.Runtime.Tests.PackageStoreMaintenanceOptionsTests.Validate_WhenBlankPackageInstallRoot_StillFailsStartup",
+  "Nuplane.Runtime.Tests.PackageStoreMaintenanceOptionsTests.AddNuplane_WhenConfigurationBindsAndLaterOptionsOverride_UsesFinalRootLabel",
+  "Nuplane.Runtime.Tests.PackageStoreMaintenanceOptionsTests.Resolve_WhenConfiguredRootLabelRenamesDefault_RefusesOldAliasAndReturnsCatalogDescriptor",
+  "Nuplane.Runtime.Tests.PackageStoreMaintenanceOptionsTests.Resolve_WhenOnlyConfiguredAliasesAndExtrasAreRequested_RejectsUnknownAndPathLabels",
+  "Nuplane.Runtime.Tests.PackageStoreMaintenanceOptionsTests.Resolve_WhenOptionsChangeAfterSingletonResolution_KeepsFrozenAliasMap",
+  "Nuplane.Runtime.Tests.PackageStoreMaintenanceOptionsTests.AddNuplane_WhenRepeated_RegistersResolverOnceAndIncludesFinalRootDefinition",
+  "Nuplane.Runtime.Tests.PackageStoreMaintenanceOptionsTests.AddNuplane_WhenOptionsAreOmitted_UsesDefaultRootWithoutNativeAdmission"
+]

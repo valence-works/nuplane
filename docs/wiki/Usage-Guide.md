@@ -827,6 +827,12 @@ using an ambient per-drive current directory. A fully qualified locator stays ab
 This records configured locations for store coordination. Registration does
 not inspect or create a directory, enroll it, or by itself authorize a maintenance operation.
 
+`Nuplane:PackageStoreMaintenance:RootLabel` names the default root for maintenance lookup and
+defaults to `default`. A custom label replaces that maintenance alias; it does not change the
+install path or the catalog's reserved `default` entry. Additional configured roots retain their
+labels. Blank or padded labels and collisions with additional labels fail options validation at
+startup. This lookup configuration does not enroll roots or enable inspection/pruning APIs.
+
 ### Feed credentials
 
 - **Applicability:** `Core`

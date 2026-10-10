@@ -171,6 +171,19 @@ jobs:
           python3 build/verify-required-trx.py "$RUNNER_TEMP/trusted-root-catalog/trusted-root-catalog.trx" \
             build/test-cases/trusted-root-catalog.json
 
+      - name: Qualify configured maintenance root labels and startup validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~PackageStoreMaintenanceOptionsTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=maintenance-root-labels.trx" \
+            --results-directory "$RUNNER_TEMP/maintenance-root-labels"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/maintenance-root-labels/maintenance-root-labels.trx" \
+            build/test-cases/maintenance-root-labels.json
+
       - name: Run coordinated native ledger publication and recovery tests
         shell: bash
         run: |

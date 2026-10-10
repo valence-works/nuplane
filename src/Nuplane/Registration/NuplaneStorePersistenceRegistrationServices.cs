@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Reconciliation;
@@ -7,6 +8,7 @@ using Nuplane.Feeds.Configuration;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.PhysicalFiles;
 using Nuplane.Store.Cleanup;
+using Nuplane.Store.Maintenance;
 using Nuplane.Store.State;
 
 namespace Nuplane.Registration;
@@ -25,6 +27,16 @@ internal static class NuplaneStorePersistenceRegistrationServices
 
     internal static void RegisterStorePersistence(this IServiceCollection services)
     {
+        if (!services.Any(static descriptor => descriptor.ServiceType == typeof(PackageStoreMaintenanceOptionsValidator)))
+        {
+            services.AddSingleton<PackageStoreMaintenanceOptionsValidator>();
+            services.AddSingleton<IValidateOptions<PackageStoreMaintenanceOptions>>(sp =>
+                sp.GetRequiredService<PackageStoreMaintenanceOptionsValidator>());
+            services.AddOptions<PackageStoreMaintenanceOptions>().ValidateOnStart();
+        }
+
+        services.TryAddSingleton<PackageStoreRootResolver>();
+        services.TryAddSingleton<IPackageStoreRootResolver>(sp => sp.GetRequiredService<PackageStoreRootResolver>());
         services.AddSingleton<StoreStateSerializer>();
         services.AddSingleton<IStoreStateSerializer>(sp => sp.GetRequiredService<StoreStateSerializer>());
         services.AddSingleton<EffectiveStorePersistenceSettings>(sp => EffectiveStorePersistenceSettings.Resolve(sp.GetRequiredService<IOptions<StoreRegistryOptions>>().Value));
