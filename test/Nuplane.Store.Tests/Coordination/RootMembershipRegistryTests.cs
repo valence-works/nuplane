@@ -622,10 +622,10 @@ public sealed class RootMembershipRegistryTests
         Assert.Equal(new byte[] { 1, 2 }, payload.ToArray());
     }
 
-    private enum PriorBranch { Prospective, Legacy, Acknowledged }
+    internal enum PriorBranch { Prospective, Legacy, Acknowledged }
     private sealed class InterruptedException : Exception { }
 
-    private sealed class Context : IDisposable
+    internal sealed class Context : IDisposable
     {
         internal PackageStoreFixture Fixture { get; } = new();
         internal IPhysicalStoreFileSystem Files { get; } = OperatingSystem.IsWindows()

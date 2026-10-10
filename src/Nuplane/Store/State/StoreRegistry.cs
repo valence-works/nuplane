@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using Microsoft.Extensions.Logging;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Store.Coordination.ProtectionRecords;
 
 namespace Nuplane.Store.State;
 
@@ -97,7 +99,8 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
                 new(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase),
                 new(_currentState.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase))
             {
-                ProtectionRecord = _currentState.ProtectionRecord
+                ProtectionRecord = _currentState.ProtectionRecord,
+                ProtectionBundle = _currentState.ProtectionBundle?.Copy()
             };
         }
         finally
@@ -217,7 +220,7 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
                 ActiveGraphsById = nextGraphs
             };
 
-            await CommitStateUnderLockAsync(nextState, cancellationToken);
+            await CommitStateUnderLockAsync(nextState, currentState, cancellationToken);
         }
         finally
         {
@@ -254,7 +257,7 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
                 UpdatedAt = DateTimeOffset.UtcNow
             };
 
-            await CommitStateUnderLockAsync(nextState, cancellationToken);
+            await CommitStateUnderLockAsync(nextState, currentState, cancellationToken);
         }
         finally
         {
@@ -287,7 +290,7 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
                 UpdatedAt = DateTimeOffset.UtcNow
             };
 
-            await CommitStateUnderLockAsync(nextState, cancellationToken);
+            await CommitStateUnderLockAsync(nextState, currentState, cancellationToken);
         }
         finally
         {
@@ -316,8 +319,12 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
             : await _serializer.LoadAsync(_stateFilePath, cancellationToken);
     }
 
-    private async Task CommitStateUnderLockAsync(StoreStateRecord nextState, CancellationToken cancellationToken)
+    private async Task CommitStateUnderLockAsync(
+        StoreStateRecord nextState,
+        StoreStateRecord priorState,
+        CancellationToken cancellationToken)
     {
+        RefuseLegacyMutationOfBundle(priorState, nextState);
         if (!string.IsNullOrWhiteSpace(_stateFilePath))
         {
             await _serializer.SaveAsync(_stateFilePath, nextState, cancellationToken);
@@ -325,6 +332,13 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
 
         _currentState = nextState;
         _loaded = true;
+    }
+
+    private static void RefuseLegacyMutationOfBundle(StoreStateRecord priorState, StoreStateRecord nextState)
+    {
+        if (priorState.ProtectionBundle is not null || nextState.ProtectionBundle is not null)
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "The direct store registry cannot mutate or replace a v2 protection bundle without its group owner.");
     }
 
     private void LogPersistenceActivationOnce()

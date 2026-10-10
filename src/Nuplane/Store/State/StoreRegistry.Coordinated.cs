@@ -95,6 +95,7 @@ public sealed partial class StoreRegistry
         ArgumentNullException.ThrowIfNull(borrow);
         ArgumentNullException.ThrowIfNull(completeNextState);
         var candidate = CopyState(completeNextState);
+        RefuseLegacyBundleMutation(candidate);
         await MutateCoordinatedStateAsync(borrow, _ => candidate, cancellationToken).ConfigureAwait(false);
     }
 
@@ -113,7 +114,15 @@ public sealed partial class StoreRegistry
             var context = PackageStoreOperationAccess.GetLockedMemberLocations(borrow);
             context.RequirePayloadSerializer(_serializer);
             var nextState = await context.MutateConfiguredStateAsync(
-                _coordinatedStateFileLocator!, createNextState, cancellationToken).ConfigureAwait(false);
+                _coordinatedStateFileLocator!, state =>
+                {
+                    RefuseLegacyBundleMutation(state);
+                    var candidate = createNextState(state)
+                        ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
+                            "A coordinated state mutation did not provide a candidate.");
+                    RefuseLegacyBundleMutation(candidate);
+                    return candidate;
+                }, cancellationToken).ConfigureAwait(false);
             _currentState = CopyState(nextState);
             _loaded = true;
         }
@@ -140,6 +149,7 @@ public sealed partial class StoreRegistry
 
     internal static StoreStateRecord ProtectRegistryMutation(StoreStateRecord state)
     {
+        RefuseLegacyBundleMutation(state);
         var prior = state.ProtectionRecord
             ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
                 "A coordinated state mutation requires an acknowledged protection record.");
@@ -192,7 +202,15 @@ public sealed partial class StoreRegistry
                 StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, GraphActivationRecord>(state.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase))
         {
-            ProtectionRecord = state.ProtectionRecord
+            ProtectionRecord = state.ProtectionRecord,
+            ProtectionBundle = state.ProtectionBundle?.Copy()
         };
+    }
+
+    private static void RefuseLegacyBundleMutation(StoreStateRecord state)
+    {
+        if (state.ProtectionBundle is not null)
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "The single-root coordinated registry cannot mutate a v2 protection bundle without its group owner.");
     }
 }

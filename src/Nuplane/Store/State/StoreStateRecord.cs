@@ -32,6 +32,12 @@ public sealed record StoreStateRecord(
     [JsonPropertyName("protection")]
     public PackageProtectionRecord? ProtectionRecord { get; init; }
 
+    /// <summary>Gets or initializes the optional descriptive multiroot protection bundle.</summary>
+    /// <remarks>A bundle is persisted evidence only; it is not a multiroot admission or publication capability.</remarks>
+    [JsonPropertyName("protectionBundle")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PackageProtectionBundle? ProtectionBundle { get; init; }
+
     /// <summary>
     /// Creates an empty store state record with the current timestamp.
     /// </summary>

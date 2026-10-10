@@ -127,7 +127,7 @@ internal sealed partial class RootMembershipRegistry
 
                 var observed = await ReadStateAsync(captured.Parent, captured.Slot, existingFileIdentity,
                     cancellationToken).ConfigureAwait(false);
-                if (observed.State.ProtectionRecord is not null)
+                if (observed.State.ProtectionRecord is not null || observed.State.ProtectionBundle is not null)
                     throw Refused("An existing protected payload cannot be adopted by declared-member binding.");
 
                 bindings.Add(member.MemberId, new RootMemberRecord.ExistingUnprotectedBinding(

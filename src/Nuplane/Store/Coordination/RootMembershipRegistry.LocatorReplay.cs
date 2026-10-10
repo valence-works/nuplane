@@ -1059,9 +1059,11 @@ internal sealed partial class RootMembershipRegistry
                 binding.Revalidate();
                 if (!states.TryGetValue(binding.MemberId, out var priorState))
                     throw Refused("The configured state-file binding is absent from the fully verified member union.");
+                RequireLegacyProtectionPayload(priorState);
 
                 var nextState = createNextState(priorState)
                     ?? throw Refused("A coordinated state mutation did not provide a complete next state.");
+                RequireLegacyProtectionPayload(nextState);
                 await _verifyCandidate(_scope, _locations, binding.MemberId, priorState, nextState, cancellationToken)
                     .ConfigureAwait(false);
                 EnsureValidMap();

@@ -1,5 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Store.Coordination;
+using Nuplane.Store.Coordination.ProtectionRecords;
 using Nuplane.Store.State.ProtectionSerialization;
 
 namespace Nuplane.Store.State;
@@ -7,7 +10,7 @@ namespace Nuplane.Store.State;
 /// <summary>
 /// Serializes and deserializes <see cref="StoreStateRecord"/> to/from JSON files.
 /// </summary>
-public sealed class StoreStateSerializer : IPackageProtectionStatePayloadSerializer
+public sealed class StoreStateSerializer : IPackageProtectionBundleStatePayloadSerializer
 {
     private readonly AtomicFileWriter _fileWriter;
 
@@ -16,7 +19,7 @@ public sealed class StoreStateSerializer : IPackageProtectionStatePayloadSeriali
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new PackageProtectionRecordJsonConverter() }
+        Converters = { new PackageProtectionRecordJsonConverter(), new PackageProtectionBundleJsonConverter() }
     };
 
     /// <summary>Initializes a serializer that writes state through atomic file replacement.</summary>
@@ -76,6 +79,15 @@ public sealed class StoreStateSerializer : IPackageProtectionStatePayloadSeriali
     /// <inheritdoc />
     public async Task SaveAsync(string stateFilePath, StoreStateRecord state, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(state);
+        cancellationToken.ThrowIfCancellationRequested();
+        RefuseLegacyPathWriteForBundle(state, "A path-based state write cannot publish a v2 protection bundle.");
+        if (File.Exists(stateFilePath))
+        {
+            var current = await LoadAsync(stateFilePath, cancellationToken).ConfigureAwait(false);
+            RefuseLegacyPathWriteForBundle(current, "A path-based state write cannot replace an existing v2 protection bundle.");
+        }
+
         await _fileWriter.WriteAsync(
             stateFilePath,
             (stream, token) => WritePayloadAsync(stream, state, token),
@@ -87,9 +99,10 @@ public sealed class StoreStateSerializer : IPackageProtectionStatePayloadSeriali
     {
         ArgumentNullException.ThrowIfNull(payload);
         ArgumentNullException.ThrowIfNull(state);
+        var stateDto = StoreStateFileDto.FromState(Normalize(state));
         await JsonSerializer.SerializeAsync(
             payload,
-            StoreStateFileDto.FromState(Normalize(state)),
+            stateDto,
             JsonOptions,
             cancellationToken).ConfigureAwait(false);
     }
@@ -98,6 +111,14 @@ public sealed class StoreStateSerializer : IPackageProtectionStatePayloadSeriali
         state with
         {
             ActivePackageDescriptorsById = new(state.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase),
-            ActiveGraphsById = new(state.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase)
+            ActiveGraphsById = new(state.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase),
+            ProtectionRecord = state.ProtectionRecord,
+            ProtectionBundle = state.ProtectionBundle?.Copy()
         };
+
+    private static void RefuseLegacyPathWriteForBundle(StoreStateRecord state, string message)
+    {
+        if (state.ProtectionBundle is not null)
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant, message);
+    }
 }

@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Nuplane.Abstractions;
 using Nuplane.Store.Coordination.ProtectionRecords;
+using Nuplane.Store.Coordination;
 
 namespace Nuplane.Store.State.ProtectionSerialization;
 
@@ -14,6 +15,8 @@ internal sealed class StoreStateFileDto
 {
     private bool _protectionAssigned;
     private PackageProtectionRecord? _protectionRecord;
+    private bool _protectionBundleAssigned;
+    private PackageProtectionBundle? _protectionBundle;
     public Dictionary<string, string>? ActiveVersionById { get; set; }
 
     public Dictionary<string, string>? LastKnownGoodById { get; set; }
@@ -41,6 +44,19 @@ internal sealed class StoreStateFileDto
         }
     }
 
+    [JsonPropertyName("protectionBundle")]
+    public PackageProtectionBundle? ProtectionBundle
+    {
+        get => _protectionBundle;
+        set
+        {
+            if (_protectionBundleAssigned)
+                throw new JsonException("The store state contains duplicate 'protectionBundle' fields.");
+            _protectionBundleAssigned = true;
+            _protectionBundle = value;
+        }
+    }
+
     internal StoreStateRecord ToStoreStateRecord()
     {
         if (ActiveVersionById is null ||
@@ -52,7 +68,12 @@ internal sealed class StoreStateFileDto
             throw new JsonException("The store state is missing a required legacy state field.");
         }
 
-        return new StoreStateRecord(
+        if (_protectionBundleAssigned && _protectionBundle is null)
+            throw new JsonException("The protectionBundle field cannot be null when present.");
+        if (_protectionBundleAssigned && _protectionAssigned)
+            throw new JsonException("A v2 protection bundle cannot share a state file with the legacy protection field.");
+
+        var state = new StoreStateRecord(
             ActiveVersionById,
             LastKnownGoodById,
             LastFailureById,
@@ -61,13 +82,23 @@ internal sealed class StoreStateFileDto
             ActivePackageDescriptorsById,
             ActiveGraphsById)
         {
-            ProtectionRecord = ProtectionRecord
+            ProtectionRecord = ProtectionRecord,
+            ProtectionBundle = ProtectionBundle
         };
+        if (state.ProtectionBundle is { } bundle &&
+            !string.Equals(ProtectionDigest.StateBody(state), bundle.StateBodyDigest, StringComparison.Ordinal))
+            throw new JsonException("The v2 protection bundle does not bind this exact state body.");
+        return state;
     }
 
     internal static StoreStateFileDto FromState(StoreStateRecord state)
     {
         ArgumentNullException.ThrowIfNull(state);
+        if (state.ProtectionRecord is not null && state.ProtectionBundle is not null)
+            throw new JsonException("A state file cannot contain both legacy protection and a v2 protection bundle.");
+        if (state.ProtectionBundle is { } bundle &&
+            !string.Equals(ProtectionDigest.StateBody(state), bundle.StateBodyDigest, StringComparison.Ordinal))
+            throw new JsonException("The v2 protection bundle does not bind this exact state body.");
 
         return new StoreStateFileDto
         {
@@ -78,7 +109,8 @@ internal sealed class StoreStateFileDto
             UpdatedAt = state.UpdatedAt,
             ActivePackageDescriptorsById = state.ActivePackageDescriptorsByIdNormalized,
             ActiveGraphsById = state.ActiveGraphsByIdNormalized,
-            ProtectionRecord = state.ProtectionRecord
+            ProtectionRecord = state.ProtectionRecord,
+            ProtectionBundle = state.ProtectionBundle?.Copy()
         };
     }
 }

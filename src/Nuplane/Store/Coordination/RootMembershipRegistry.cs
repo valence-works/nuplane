@@ -68,6 +68,7 @@ internal sealed partial class RootMembershipRegistry
     {
         ArgumentNullException.ThrowIfNull(transaction);
         ArgumentNullException.ThrowIfNull(nextState);
+        RequireLegacyProtectionPayload(nextState);
         var ledger = transaction.ReadCurrent();
         if (ledger.PendingStateCommit is not null)
             throw Refused("Pending membership requires recovery before another state publication.");
@@ -434,6 +435,7 @@ internal sealed partial class RootMembershipRegistry
 
     private static void RequirePriorPayload(StoreStateRecord state, RootMemberRecord.MemberBinding prior)
     {
+        RequireLegacyProtectionPayload(state);
         if (prior is RootMemberRecord.ExistingUnprotectedBinding legacy)
         {
             if (state.ProtectionRecord is not null || !string.Equals(ProtectionDigest.StateBody(state), legacy.StateBodyDigest, StringComparison.Ordinal))
@@ -447,6 +449,7 @@ internal sealed partial class RootMembershipRegistry
 
     private static void RequireExactProtection(StoreStateRecord state, PackageProtectionRecord expected)
     {
+        RequireLegacyProtectionPayload(state);
         var protection = state.ProtectionRecord ?? throw Refused("The saved/reopened payload lost its protection metadata.");
         RequireProtection(state, protection);
         if (!protection.HasSamePayloadAs(expected))
@@ -455,13 +458,22 @@ internal sealed partial class RootMembershipRegistry
 
     private static void RequireProtection(StoreStateRecord state, PackageProtectionRecord protection)
     {
+        RequireLegacyProtectionPayload(state);
         if (!string.Equals(ProtectionDigest.StateBody(state), protection.StateBodyDigest, StringComparison.Ordinal) ||
             !string.Equals(ProtectionDigest.Protection(protection), protection.ProtectionDigest, StringComparison.Ordinal))
             throw Refused("Actual state or protection content disagrees with its canonical digest.");
     }
 
+    private static void RequireLegacyProtectionPayload(StoreStateRecord state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        if (state.ProtectionBundle is not null)
+            throw Refused("The root-local membership protocol cannot read, replace, or acknowledge a v2 bundle without its group owner.");
+    }
+
     private async Task<byte[]> EncodeStateAsync(StoreStateRecord state, CancellationToken cancellationToken)
     {
+        RequireLegacyProtectionPayload(state);
         using var buffer = new BoundedControlPayloadStream(MaximumStateBytes);
         await _stateSerializer.WritePayloadAsync(buffer, state, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();

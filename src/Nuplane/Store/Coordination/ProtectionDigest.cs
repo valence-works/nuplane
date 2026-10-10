@@ -24,7 +24,7 @@ internal static class ProtectionDigest
     private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
     private static readonly byte[] Prefix = Encoding.ASCII.GetBytes("NUPLANE-CANONICAL\0");
 
-    /// <summary>Hashes every legacy state-body field, excluding the optional protection property.</summary>
+    /// <summary>Hashes every legacy state-body field, excluding both optional protection properties.</summary>
     internal static string StateBody(StoreStateRecord state)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -51,6 +51,61 @@ internal static class ProtectionDigest
     {
         ArgumentNullException.ThrowIfNull(protection);
         return Digest("PackageProtection", writer => EncodeProtectionFields(writer, protection, includeStoredDigest: false));
+    }
+
+    /// <summary>Hashes the fixed v2 participant set independently of root-local epochs and revisions.</summary>
+    internal static string PackageProtectionParticipantSet(Guid logicalMemberId, IEnumerable<PhysicalRootIdentity> roots)
+    {
+        if (logicalMemberId == Guid.Empty)
+            throw new ArgumentException("A logical member identity cannot be empty.", nameof(logicalMemberId));
+        ArgumentNullException.ThrowIfNull(roots);
+        var copiedRoots = roots.Select(ProtectionRecordValueCopies.CopyRoot)
+            .OrderBy(static root => root, PhysicalRootIdentityComparer.Instance).ToArray();
+        if (copiedRoots.Length == 0 || copiedRoots.Distinct().Count() != copiedRoots.Length)
+            throw new ArgumentException("A participant set requires unique physical roots.", nameof(roots));
+
+        return Digest("NuplaneParticipantSetV2", writer =>
+        {
+            writer.Field(1, GuidBytes(logicalMemberId));
+            writer.Field(2, EncodeSequence(copiedRoots, EncodePhysicalRoot));
+        });
+    }
+
+    /// <summary>Hashes a v2 root row while omitting only its stored row digest.</summary>
+    internal static string PackageProtectionBundleRow(PackageProtectionBundleRootRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return Digest("PackageProtectionBundleRootRowV2", writer =>
+        {
+            writer.Field(1, EncodeInt32(Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle.CurrentSchemaVersion));
+            writer.Field(2, EncodePhysicalRoot(row.RootIdentity));
+            writer.Field(3, EncodeInt64(row.EnrollmentEpoch));
+            writer.Field(4, EncodeString(row.MemberId));
+            writer.Field(5, EncodeInt64(row.Revision));
+            writer.Field(6, EncodeInt64(row.StateGeneration));
+            writer.Field(7, DecodeDigest(row.StateBodyDigest));
+            writer.Field(8, EncodeProtectionClosureV2(row.ActiveClosure));
+            writer.Field(9, EncodeProtectionClosureV2(row.RecoverableClosure));
+            writer.Field(10, EncodeSequence(row.RetiredGraphs
+                .OrderBy(static item => GuidBytes(item.SnapshotId), ByteArrayComparer.Instance), EncodeRetiredGraph));
+            writer.Field(11, EncodeBoolean(row.LegacyUnknownRecovery));
+        });
+    }
+
+    /// <summary>Hashes the common v2 envelope and ordered root-row digest references.</summary>
+    internal static string PackageProtectionBundle(PackageProtectionBundle bundle)
+    {
+        ArgumentNullException.ThrowIfNull(bundle);
+        return Digest("NuplaneProtectionBundleV2", writer =>
+        {
+            writer.Field(1, EncodeInt32(bundle.SchemaVersion));
+            writer.Field(2, GuidBytes(bundle.LogicalMemberId));
+            writer.Field(3, GuidBytes(bundle.PublicationId));
+            writer.Field(4, EncodeInt64(bundle.StateGeneration));
+            writer.Field(5, DecodeDigest(bundle.StateBodyDigest));
+            writer.Field(6, DecodeDigest(bundle.ParticipantSetDigest));
+            writer.Field(7, EncodeSequence(bundle.Rows, EncodeProtectionBundleRootRowReference));
+        });
     }
 
     /// <summary>Hashes a root-membership ledger while omitting only its stored ledger digest.</summary>
@@ -371,6 +426,72 @@ internal static class ProtectionDigest
                 ? [0]
                 : [1, .. EncodeSequence(value.Graphs
                     .OrderBy(static graph => GuidBytes(graph.SnapshotId), ByteArrayComparer.Instance), EncodeProtectedGraph)]);
+        });
+    }
+
+    private static byte[] EncodeProtectionClosureV2(PackageProtectionClosureV2 value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return Record(writer =>
+        {
+            writer.Field(1, EncodeInt32(Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle.CurrentSchemaVersion));
+            writer.Field(2, EncodeEnum(value.Knowledge));
+            writer.Field(3, value.UnknownReason is null ? [0] : [1, .. EncodeEnum(value.UnknownReason.Value)]);
+            writer.Field(4, value.Graphs is null
+                ? [0]
+                : [1, .. EncodeSequence(value.Graphs
+                    .OrderBy(static graph => GuidBytes(graph.SnapshotId), ByteArrayComparer.Instance), EncodeProtectedGraphV2)]);
+        });
+    }
+
+    private static byte[] EncodeProtectedGraphV2(ProtectedGraphSnapshotV2 value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return Record(writer =>
+        {
+            writer.Field(1, EncodeInt32(Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle.CurrentSchemaVersion));
+            writer.Field(2, GuidBytes(value.SnapshotId));
+            writer.Field(3, EncodeString(value.GraphId));
+            writer.Field(4, EncodeString(value.GenerationId));
+            writer.Field(5, EncodeEnum(value.Disposition));
+            writer.Field(6, EncodeSequence(value.Roots
+                .OrderBy(static root => EncodePhysicalRoot(root), ByteArrayComparer.Instance), EncodePhysicalRoot));
+            writer.Field(7, EncodeSequence(value.RequestedRoots
+                .Select(EncodeRootSelection)
+                .OrderBy(static selection => selection, ByteArrayComparer.Instance), static selection => selection));
+            writer.Field(8, EncodeSequence(value.Nodes
+                .Select(EncodeProtectedNode)
+                .OrderBy(static node => node, ByteArrayComparer.Instance), static node => node));
+            writer.Field(9, EncodeSequence(value.Edges
+                .Select(EncodeProtectedEdge)
+                .OrderBy(static edge => edge, ByteArrayComparer.Instance), static edge => edge));
+            writer.Field(10, EncodeNullableRecord(value.RecoverySelectionEvidence, EncodeRecoveryEvidenceV2));
+        });
+    }
+
+    private static byte[] EncodeRecoveryEvidenceV2(ProtectedGraphRecoverySelectionEvidenceV2 value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return Record(writer =>
+        {
+            writer.Field(1, EncodeInt32(Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle.CurrentSchemaVersion));
+            writer.Field(2, EncodeString(value.RecoveryPolicyId));
+            writer.Field(3, EncodeInt64(value.SourceGeneration));
+            writer.Field(4, EncodeSequence(value.SelectedRootNodeIds
+                .OrderBy(GuidBytes, ByteArrayComparer.Instance), GuidBytes));
+        });
+    }
+
+    private static byte[] EncodeProtectionBundleRootRowReference(PackageProtectionBundleRootRow value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return Record(writer =>
+        {
+            writer.Field(1, EncodePhysicalRoot(value.RootIdentity));
+            writer.Field(2, EncodeInt64(value.EnrollmentEpoch));
+            writer.Field(3, EncodeString(value.MemberId));
+            writer.Field(4, EncodeInt64(value.Revision));
+            writer.Field(5, DecodeDigest(value.ProtectionDigest));
         });
     }
 
