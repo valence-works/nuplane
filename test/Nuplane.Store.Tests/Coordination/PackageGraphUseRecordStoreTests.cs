@@ -14,7 +14,7 @@ using Nuplane.Tests.Shared;
 
 namespace Nuplane.Store.Tests.Coordination;
 
-public sealed class PackageGraphUseRecordStoreTests
+public sealed partial class PackageGraphUseRecordStoreTests
 {
     [SupportedPhysicalStoreFact]
     public async Task PublishAsync_RefusesMismatchedHeldRootBeforeCreatingArtifacts()
@@ -876,13 +876,14 @@ public sealed class PackageGraphUseRecordStoreTests
 
     internal sealed class PublicationHooks : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem,
         IPhysicalStorePublicationFileSystem, IPhysicalStoreDirectoryPublicationFileSystem,
-        IPhysicalStoreDirectoryEnumerationFileSystem
+        IPhysicalStoreDirectoryEnumerationFileSystem, IPhysicalStoreControlRecoveryFileSystem
     {
         private readonly IPhysicalStoreFileSystem _files;
         private readonly IPhysicalStoreNameFileSystem _names;
         private readonly IPhysicalStorePublicationFileSystem _publication;
         private readonly IPhysicalStoreDirectoryPublicationFileSystem _directoryPublication;
         private readonly IPhysicalStoreDirectoryEnumerationFileSystem _enumeration;
+        private readonly IPhysicalStoreControlRecoveryFileSystem _recovery;
         private readonly Dictionary<PhysicalFileIdentity, string> _createdNames = [];
 
         internal PublicationHooks(IPhysicalStoreFileSystem files)
@@ -892,6 +893,7 @@ public sealed class PackageGraphUseRecordStoreTests
             _publication = files as IPhysicalStorePublicationFileSystem ?? throw new InvalidOperationException();
             _directoryPublication = files as IPhysicalStoreDirectoryPublicationFileSystem ?? throw new InvalidOperationException();
             _enumeration = files as IPhysicalStoreDirectoryEnumerationFileSystem ?? throw new InvalidOperationException();
+            _recovery = files as IPhysicalStoreControlRecoveryFileSystem ?? throw new InvalidOperationException();
         }
 
         internal Action<PhysicalStoreDirectoryHandle, string>? AfterExclusiveCreate { get; set; }
@@ -904,6 +906,10 @@ public sealed class PackageGraphUseRecordStoreTests
         internal Action<PhysicalStoreFileHandle, IAsyncDisposable?>? AfterLockAttempt { get; set; }
         internal string? SentinelName { get; set; }
         internal PhysicalFileIdentity? SentinelIdentity { get; set; }
+        internal int RemovalTokenAttempts { get; private set; }
+        internal Action<string>? AfterRemovalToken { get; set; }
+        internal Action<string, string>? AfterRecoveryMove { get; set; }
+        internal Action<string>? AfterRecoveryRemoval { get; set; }
 
         public PhysicalStoreDirectoryHandle OpenNamespaceRoot(string anchor) => _files.OpenNamespaceRoot(anchor);
         public PhysicalStoreEntryInfo? InspectChildNoFollow(PhysicalStoreDirectoryHandle parent, string singleName)
@@ -967,6 +973,40 @@ public sealed class PackageGraphUseRecordStoreTests
 
         public IReadOnlyList<string> EnumerateChildNamesNoFollow(PhysicalStoreDirectoryHandle parent, int maximumEntries)
             => _enumeration.EnumerateChildNamesNoFollow(parent, maximumEntries);
+
+        public async ValueTask<PhysicalStoreLockedControlFile?> TryOpenAndLockControlFileForRemovalAt(
+            PhysicalStoreDirectoryHandle parent,
+            string singleName,
+            PhysicalFileIdentity expectedIdentity)
+        {
+            RemovalTokenAttempts++;
+            var token = await _recovery.TryOpenAndLockControlFileForRemovalAt(parent, singleName, expectedIdentity)
+                .ConfigureAwait(false);
+            if (token is not null)
+                AfterRemovalToken?.Invoke(singleName);
+            return token;
+        }
+
+        public async ValueTask RemoveLockedControlFileAsync(PhysicalStoreLockedControlFile file)
+        {
+            var name = file.CanonicalName.Basename;
+            await _recovery.RemoveLockedControlFileAsync(file).ConfigureAwait(false);
+            AfterRecoveryRemoval?.Invoke(name);
+        }
+
+        public PhysicalStoreEntryInfo InspectLockedControlFile(PhysicalStoreLockedControlFile file)
+            => _recovery.InspectLockedControlFile(file);
+
+        public PhysicalStoreEntryInfo MoveControlFileNoReplaceAt(
+            PhysicalStoreDirectoryHandle parent,
+            string sourceName,
+            PhysicalFileIdentity expectedSourceIdentity,
+            string destinationName)
+        {
+            var result = _recovery.MoveControlFileNoReplaceAt(parent, sourceName, expectedSourceIdentity, destinationName);
+            AfterRecoveryMove?.Invoke(sourceName, destinationName);
+            return result;
+        }
     }
 
     private static void CreateHardLink(string existingPath, string newPath)

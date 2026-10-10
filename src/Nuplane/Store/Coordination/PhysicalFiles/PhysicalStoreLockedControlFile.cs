@@ -115,6 +115,18 @@ internal sealed class PhysicalStoreLockedControlFile : IAsyncDisposable
         }
     }
 
+    /// <summary>Runs a bounded native metadata replay while this exact unconsumed token remains active.</summary>
+    internal TResult WithInspection<TResult>(object creatorToken, Func<IntPtr, IntPtr, TResult> operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        lock (_gate)
+        {
+            ValidateOwner(creatorToken);
+            ValidateActive();
+            return operation(_parentLease.DangerousHandle, _fileLease.DangerousHandle);
+        }
+    }
+
     /// <inheritdoc />
     public ValueTask DisposeAsync()
     {

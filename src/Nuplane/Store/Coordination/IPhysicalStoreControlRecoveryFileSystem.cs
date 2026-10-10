@@ -21,6 +21,9 @@ internal interface IPhysicalStoreControlRecoveryFileSystem
     /// <remarks>An error can occur after a native namespace mutation; reopen current evidence before retrying.</remarks>
     ValueTask RemoveLockedControlFileAsync(PhysicalStoreLockedControlFile file);
 
+    /// <summary>Replays current native entry metadata through the exact active removal token without consuming it.</summary>
+    PhysicalStoreEntryInfo InspectLockedControlFile(PhysicalStoreLockedControlFile file);
+
     /// <summary>Moves one verified regular single-link control file to an absent same-parent name without replacement.</summary>
     PhysicalStoreEntryInfo MoveControlFileNoReplaceAt(
         PhysicalStoreDirectoryHandle parent,

@@ -154,6 +154,19 @@ internal sealed partial class WindowsPhysicalStoreFileSystem : IPhysicalStoreCon
     }
 
     /// <inheritdoc />
+    public PhysicalStoreEntryInfo InspectLockedControlFile(PhysicalStoreLockedControlFile file)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        RequireSupportedPlatform();
+        var prepared = file.CanonicalName;
+        return file.WithInspection(_providerToken, (parentRaw, fileRaw) =>
+        {
+            RequireRecoveryFileHandle(parentRaw, fileRaw, prepared.Basename, prepared);
+            return QueryEntry(fileRaw, "reinspect the active locked control-file entry");
+        });
+    }
+
+    /// <inheritdoc />
     public PhysicalStoreEntryInfo MoveControlFileNoReplaceAt(
         PhysicalStoreDirectoryHandle parent,
         string sourceName,

@@ -26,7 +26,44 @@ public sealed class PhysicalStoreControlRecoveryTests
             var consumed = await Assert.ThrowsAsync<PackageStoreAdmissionException>(
                 () => context.Recovery.RemoveLockedControlFileAsync(locked).AsTask());
             Assert.Equal(PackageStoreAdmissionReason.ExpiredScope, consumed.Reason);
+            var inspectConsumed = Assert.Throws<PackageStoreAdmissionException>(
+                () => context.Recovery.InspectLockedControlFile(locked));
+            Assert.Equal(PackageStoreAdmissionReason.ExpiredScope, inspectConsumed.Reason);
         }
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task InspectLockedControlFile_ReplaysEmptySentinelMetadataWithoutReleasingOwnership()
+    {
+        using var context = CreateContext();
+        var expected = CreateFile(context, "inspect-sentinel.control", []);
+        var token = await context.Recovery.TryOpenAndLockControlFileForRemovalAt(
+            context.Parent, "inspect-sentinel.control", expected);
+        Assert.NotNull(token);
+        await using (token)
+        {
+            var first = context.Recovery.InspectLockedControlFile(token);
+            var second = context.Recovery.InspectLockedControlFile(token);
+            Assert.Equal(PhysicalStoreEntryKind.RegularFile, first.Kind);
+            Assert.Equal(expected, first.Identity);
+            Assert.Equal(1UL, first.LinkCount);
+            Assert.Equal(0L, first.Length);
+            Assert.Equal(first, second);
+
+            var busy = await context.Recovery.TryOpenAndLockControlFileForRemovalAt(
+                context.Parent, "inspect-sentinel.control", expected);
+            Assert.Null(busy);
+
+            var foreign = CreateRecoveryFileSystem();
+            var foreignError = Assert.Throws<PackageStoreAdmissionException>(
+                () => foreign.InspectLockedControlFile(token));
+            Assert.Equal(PackageStoreAdmissionReason.RootMismatch, foreignError.Reason);
+        }
+
+        var disposedError = Assert.Throws<PackageStoreAdmissionException>(
+            () => context.Recovery.InspectLockedControlFile(token));
+        Assert.Equal(PackageStoreAdmissionReason.ExpiredScope, disposedError.Reason);
+        Assert.Equal(expected, RequireEntry(context, "inspect-sentinel.control").Identity);
     }
 
     [SupportedPhysicalStoreFact]

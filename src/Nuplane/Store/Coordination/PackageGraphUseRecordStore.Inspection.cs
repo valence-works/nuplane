@@ -268,6 +268,23 @@ internal sealed partial class PackageGraphUseRecordStore
             expectedRoot.HandleIdentity, checked((int)recordInfo.Length));
         if (payload.Length != recordInfo.Length)
             throw Refused("A graph-use record changed length after its inventory budget was reserved.");
+        var record = DeserializeAndValidateRecord(payload, names.UseId, expectedRoot, enrollmentEpoch);
+        if (record.SentinelIdentity != sentinelInfo.Identity ||
+            record.GraphSnapshot.Roots.Count != 1 || record.GraphSnapshot.Roots[0] != expectedRoot ||
+            record.GraphSnapshot.Nodes.Any(node => node.Install.Root != expectedRoot))
+        {
+            throw Refused("A graph-use record does not match its canonical name, Complete root epoch, sentinel, or single-root graph scope.");
+        }
+
+        return new RecordRead(record, recordInfo.Identity, sentinelInfo.Identity, payload);
+    }
+
+    private GraphUseRecord DeserializeAndValidateRecord(
+        byte[] payload,
+        Guid useId,
+        PhysicalRootIdentity expectedRoot,
+        long enrollmentEpoch)
+    {
         GraphUseRecord record;
         try
         {
@@ -282,15 +299,15 @@ internal sealed partial class PackageGraphUseRecordStore
                 exception);
         }
 
-        if (record.UseId != names.UseId || record.RootIdentity != expectedRoot || record.EnrollmentEpoch != enrollmentEpoch ||
-            record.SentinelIdentity != sentinelInfo.Identity || record.LifetimeKind != GraphUseLifetimeKind.OsExclusiveSentinel ||
+        if (record.UseId != useId || record.RootIdentity != expectedRoot || record.EnrollmentEpoch != enrollmentEpoch ||
+            record.LifetimeKind != GraphUseLifetimeKind.OsExclusiveSentinel ||
             record.GraphSnapshot.Roots.Count != 1 || record.GraphSnapshot.Roots[0] != expectedRoot ||
             record.GraphSnapshot.Nodes.Any(node => node.Install.Root != expectedRoot))
         {
-            throw Refused("A graph-use record does not match its canonical name, Complete root epoch, sentinel, or single-root graph scope.");
+            throw Refused("A graph-use record does not match its canonical name, Complete root epoch, or single-root graph scope.");
         }
 
-        return new RecordRead(record, recordInfo.Identity, sentinelInfo.Identity, payload);
+        return record;
     }
 
     private void ObserveGraphInstalls(
@@ -345,7 +362,9 @@ internal sealed partial class PackageGraphUseRecordStore
             .ToArray());
     }
 
-    private IReadOnlyList<UseArtifactNames> ParseUseArtifactNames(IReadOnlyList<string> artifactNames)
+    private IReadOnlyList<UseArtifactNames> ParseUseArtifactNames(
+        IReadOnlyList<string> artifactNames,
+        bool allowRecoveryArtifacts = false)
     {
         var byId = new Dictionary<Guid, UseArtifactNames>();
         foreach (var name in artifactNames)
@@ -381,14 +400,63 @@ internal sealed partial class PackageGraphUseRecordStore
                     throw Refused("A graph-use identifier has duplicate sentinel names.");
                 pair.SentinelName = name;
             }
+            else if (allowRecoveryArtifacts && string.Equals(name, $"use-{useId:N}.json.stage", StringComparison.Ordinal))
+            {
+                if (pair.StageName is not null)
+                    throw Refused("A graph-use identifier has duplicate staged payload names.");
+                pair.StageName = name;
+            }
+            else if (allowRecoveryArtifacts && string.Equals(name, $"use-{useId:N}.reaping", StringComparison.Ordinal))
+            {
+                if (pair.ReapingName is not null)
+                    throw Refused("A graph-use identifier has duplicate reaping record names.");
+                pair.ReapingName = name;
+            }
+            else if (allowRecoveryArtifacts && string.Equals(name, $"use-{useId:N}.deleting", StringComparison.Ordinal))
+            {
+                if (pair.DeletingName is not null)
+                    throw Refused("A graph-use identifier has duplicate deleting record names.");
+                pair.DeletingName = name;
+            }
+            else if (allowRecoveryArtifacts && string.Equals(name, $"use-{useId:N}.stage-deleting", StringComparison.Ordinal))
+            {
+                if (pair.StageDeletingName is not null)
+                    throw Refused("A graph-use identifier has duplicate deleting stage names.");
+                pair.StageDeletingName = name;
+            }
             else
             {
                 throw Refused("A graph-use namespace contains an unknown, staged, or noncanonical artifact name.");
             }
         }
 
-        if (byId.Values.Any(static pair => pair.RecordName is null || pair.SentinelName is null))
-            throw Refused("A graph-use record and its sentinel must be present as one canonical pair.");
+        foreach (var pair in byId.Values)
+        {
+            var publishedRecords = (pair.RecordName is null ? 0 : 1) +
+                                   (pair.ReapingName is null ? 0 : 1) +
+                                   (pair.DeletingName is null ? 0 : 1);
+            var unpublishedRecords = (pair.StageName is null ? 0 : 1) + (pair.StageDeletingName is null ? 0 : 1);
+            if (!allowRecoveryArtifacts)
+            {
+                if (pair.RecordName is null || pair.SentinelName is null)
+                    throw Refused("A graph-use record and its sentinel must be present as one canonical pair.");
+                continue;
+            }
+
+            if (publishedRecords + unpublishedRecords > 1 || (publishedRecords > 0 && unpublishedRecords > 0))
+                throw Refused("A graph-use identifier has duplicate or mixed recovery phases.");
+
+            var hasSentinel = pair.SentinelName is not null;
+            var hasPublishedRecord = publishedRecords == 1;
+            var hasUnpublishedRecord = unpublishedRecords == 1;
+            var isRecordOnlyTerminalPhase = pair.DeletingName is not null || pair.StageDeletingName is not null;
+            if ((hasPublishedRecord || hasUnpublishedRecord) && !hasSentinel && !isRecordOnlyTerminalPhase)
+                throw Refused("A graph-use recovery phase is missing its sentinel before the terminal cleanup journal.");
+            if (hasSentinel && !(hasPublishedRecord || hasUnpublishedRecord || publishedRecords == 0 && unpublishedRecords == 0))
+                throw Refused("A graph-use sentinel does not match one supported recovery phase.");
+            if (!hasSentinel && !isRecordOnlyTerminalPhase)
+                throw Refused("A graph-use artifact has no sentinel and no terminal recovery journal.");
+        }
 
         return Array.AsReadOnly(byId.Values.OrderBy(static pair => pair.UseId).ToArray());
     }
@@ -398,6 +466,20 @@ internal sealed partial class PackageGraphUseRecordStore
         internal Guid UseId { get; } = useId;
         internal string? RecordName { get; set; }
         internal string? SentinelName { get; set; }
+        internal string? StageName { get; set; }
+        internal string? ReapingName { get; set; }
+        internal string? DeletingName { get; set; }
+        internal string? StageDeletingName { get; set; }
+
+        internal IEnumerable<string> ArtifactNames()
+        {
+            if (RecordName is not null) yield return RecordName;
+            if (SentinelName is not null) yield return SentinelName;
+            if (StageName is not null) yield return StageName;
+            if (ReapingName is not null) yield return ReapingName;
+            if (DeletingName is not null) yield return DeletingName;
+            if (StageDeletingName is not null) yield return StageDeletingName;
+        }
     }
 
     private sealed record RecordRead(
@@ -414,8 +496,11 @@ internal sealed partial class PackageGraphUseRecordStore
         internal InspectionBudget(long maximumBytes) => _maximumBytes = maximumBytes;
 
         internal void AddRecordBytes(int bytes)
+            => AddArtifactBytes(bytes, allowEmpty: false);
+
+        internal void AddArtifactBytes(int bytes, bool allowEmpty)
         {
-            if (bytes <= 0 || bytes > _maximumBytes - _totalRecordBytes)
+            if (bytes < 0 || (!allowEmpty && bytes == 0) || bytes > _maximumBytes - _totalRecordBytes)
                 throw Refused("The graph-use inventory exceeds its cumulative bounded payload size.");
 
             _totalRecordBytes += bytes;

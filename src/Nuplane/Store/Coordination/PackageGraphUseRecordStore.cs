@@ -6,11 +6,12 @@ using Nuplane.Store.Coordination.ProtectionRecords;
 
 namespace Nuplane.Store.Coordination;
 
-/// <summary>Publishes one immutable graph-use candidate beneath an already-held and validated root.</summary>
+/// <summary>Publishes, inspects, and explicitly recovers bounded graph-use control artifacts beneath a held root.</summary>
 /// <remarks>
 /// The caller must already own the root and every member lock and must have validated graph completeness and
-/// install identities. This class takes only graph-use sentinel locks and verifies install metadata during
-/// inspection. It returns no package-read capability and never removes publication artifacts.
+/// install identities. Publication and inspection return no package-read capability. Explicit recovery removes
+/// only exact graph-use control artifacts after a fresh native ownership probe and removal-token replay; it never
+/// removes package content.
 /// </remarks>
 internal sealed partial class PackageGraphUseRecordStore
 {

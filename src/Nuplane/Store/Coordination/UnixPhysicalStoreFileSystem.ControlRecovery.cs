@@ -96,6 +96,21 @@ internal sealed partial class UnixPhysicalStoreFileSystem : IPhysicalStoreContro
     }
 
     /// <inheritdoc />
+    public PhysicalStoreEntryInfo InspectLockedControlFile(PhysicalStoreLockedControlFile file)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        var platform = RequireSupportedPlatform();
+        var prepared = file.CanonicalName;
+        return file.WithInspection(_providerToken, (parentHandle, fileHandle) =>
+        {
+            var parentFd = checked((int)parentHandle.ToInt64());
+            var fd = checked((int)fileHandle.ToInt64());
+            RequireRecoveryFileHandle(platform, parentFd, fd, prepared.Basename, prepared);
+            return ToEntryInfo(InvokeNative("reinspect the active locked control-file entry", () => UnixNative.StatHandle(platform, fd)));
+        });
+    }
+
+    /// <inheritdoc />
     public PhysicalStoreEntryInfo MoveControlFileNoReplaceAt(
         PhysicalStoreDirectoryHandle parent,
         string sourceName,
