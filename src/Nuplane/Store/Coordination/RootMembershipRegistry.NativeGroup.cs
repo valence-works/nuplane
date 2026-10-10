@@ -177,6 +177,13 @@ internal sealed partial class RootMembershipRegistry
             }
             throw Refused("No persisted group transaction is available for recovery.");
         }
+        if (beforeIntent.Any(static ledger => ledger.PendingGroupPublicationV2 is not null))
+        {
+            // A mixed Intent/prior prefix must prove the prior v2 graph against current native installs
+            // before filling any missing Intent row. Otherwise refusal could itself mutate a participant ledger.
+            var currentPrior = await group.TryReadCurrentGroupStateAsync(cancellationToken).ConfigureAwait(false);
+            await group.IsExactPriorStateAsync(currentPrior, cancellationToken).ConfigureAwait(false);
+        }
         await group.EnsureIntentAcrossGroupAsync(cancellationToken, checkpoint).ConfigureAwait(false);
         var pendingRecords = group.Participants.Select(participant => participant.Transaction!.ReadCurrent()).ToArray();
         var groupPending = pendingRecords.Select(static ledger => ledger.PendingGroupPublicationV2)
@@ -441,8 +448,9 @@ internal sealed partial class RootMembershipRegistry
             }
             await union.DisposeAsync().ConfigureAwait(false);
             union = null;
+            var owner = new NativeGroupPublicationOwner(this, descriptor, participants);
             transferred = true;
-            return new NativeGroupPublicationOwner(this, descriptor, participants);
+            return owner;
         }
         catch (Exception exception)
         {
@@ -824,6 +832,7 @@ internal sealed partial class RootMembershipRegistry
                 participant.Transaction.Publish(BuildGroupLedger(ledger, RootMembershipStatus.Incomplete,
                     ledger.Members, pending));
                 checkpoint?.Invoke(NativeGroupPublicationPoint.IntentPublished, participant.Request.RootIdentity);
+                RefreshParticipantMemberLocatorScope(participant);
             }
         }
 
@@ -899,8 +908,14 @@ internal sealed partial class RootMembershipRegistry
                 return false;
             }
             var prior = await ReadAndVerifyPriorAsync(token).ConfigureAwait(false);
-            return prior is null ? current is null : current is not null && prior.Identity == current.Identity &&
-                ProtectionDigest.StateBody(prior.State) == ProtectionDigest.StateBody(current.State);
+            if (prior is null)
+                return current is null;
+            if (current is null || prior.Identity != current.Identity ||
+                ProtectionDigest.StateBody(prior.State) != ProtectionDigest.StateBody(current.State))
+                return false;
+            if (prior.State.ProtectionBundle is { } bundle)
+                VerifyPriorBundleAndInstalls(bundle, prior.State, token);
+            return true;
         }
 
         internal async Task RequireBoundArtifactsConsistentAsync(CancellationToken token, bool allowMissingBackup)
@@ -980,46 +995,76 @@ internal sealed partial class RootMembershipRegistry
 
             _stableSharedScope.Expire();
             foreach (var participant in Participants)
-            {
-                var previousScope = participant.Scope;
-                if (participant.Locations is not null)
-                {
-                    DisposeLocations(participant.Locations.Values.Where(location =>
-                        !ReferenceEquals(location, _stableSharedLocation)));
-                    participant.Locations = null;
-                    participant.SelectedLocation = null;
-                }
-                if (!ReferenceEquals(previousScope, _stableSharedScope))
-                    previousScope?.Expire();
-
-                var current = participant.Transaction!.ReadCurrent();
-                var scope = new MemberLocatorReplayScope(current);
-                IReadOnlyDictionary<string, ResolvedMemberStateLocation>? locations = null;
-                try
-                {
-                    locations = registry.ResolveMemberLocatorMap(current, scope,
-                        LocatorReplayBindingPolicy.GroupAcknowledged);
-                    var selected = locations[participant.Local.PriorMember.MemberId];
-                    var parent = registry._files.InspectHandle(selected.Parent);
-                    if (selected.Slot != Descriptor.SharedStateSlot ||
-                        parent.Kind != PhysicalStoreEntryKind.Directory ||
-                        parent.Identity != Descriptor.SharedStateSlot.ParentIdentity)
-                        throw Refused("The refreshed participant locator no longer identifies the exact group slot.");
-                    selected.Revalidate();
-                    participant.Scope = scope;
-                    participant.Locations = locations;
-                    participant.SelectedLocation = selected;
-                    locations = null;
-                }
-                catch
-                {
-                    if (locations is not null)
-                        DisposeLocations(locations.Values);
-                    scope.Expire();
-                    throw;
-                }
-            }
+                RefreshParticipantMemberLocatorScope(participant);
             RequireStableSharedParent();
+        }
+
+        private void RefreshParticipantMemberLocatorScope(NativeGroupParticipant participant)
+        {
+            var previousScope = participant.Scope;
+            var previousLocations = participant.Locations;
+            participant.Locations = null;
+            participant.SelectedLocation = null;
+            try
+            {
+                if (previousLocations is not null)
+                    DisposeLocationsSafely(previousLocations.Values.Where(location =>
+                        !ReferenceEquals(location, _stableSharedLocation)));
+            }
+            finally
+            {
+                previousScope?.Expire();
+            }
+
+            var current = participant.Transaction!.ReadCurrent();
+            RequireGroupLedgerForDescriptor(current, participant.Local, Descriptor);
+            var scope = new MemberLocatorReplayScope(current);
+            IReadOnlyDictionary<string, ResolvedMemberStateLocation>? locations = null;
+            try
+            {
+                locations = registry.ResolveMemberLocatorMap(current, scope,
+                    LocatorReplayBindingPolicy.GroupAcknowledged);
+                var selected = locations[participant.Local.PriorMember.MemberId];
+                var parent = registry._files.InspectHandle(selected.Parent);
+                if (selected.Slot != Descriptor.SharedStateSlot ||
+                    parent.Kind != PhysicalStoreEntryKind.Directory ||
+                    parent.Identity != Descriptor.SharedStateSlot.ParentIdentity)
+                    throw Refused("The refreshed participant locator no longer identifies the exact group slot.");
+                selected.Revalidate();
+                participant.Scope = scope;
+                participant.Locations = locations;
+                participant.SelectedLocation = selected;
+                locations = null;
+            }
+            catch (Exception failure)
+            {
+                var cleanupErrors = new List<Exception>();
+                if (locations is not null)
+                {
+                    try { DisposeLocationsSafely(locations.Values); }
+                    catch (Exception exception) { cleanupErrors.Add(exception); }
+                }
+                try { scope.Expire(); }
+                catch (Exception exception) { cleanupErrors.Add(exception); }
+                if (cleanupErrors.Count > 0)
+                    throw new AggregateException("A locator-scope refresh failed and its replacement resources did not all release.",
+                        new[] { failure }.Concat(cleanupErrors));
+                throw;
+            }
+        }
+
+        private static void DisposeLocationsSafely(IEnumerable<ResolvedMemberStateLocation> locations)
+        {
+            var errors = new List<Exception>();
+            foreach (var location in locations.Reverse())
+            {
+                try { location.Dispose(); }
+                catch (Exception exception) { errors.Add(exception); }
+            }
+            if (errors.Count == 1)
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(errors[0]).Throw();
+            if (errors.Count > 1)
+                throw new AggregateException("Locator-scope locations did not all release.", errors);
         }
 
         internal async Task RequireBoundArtifactLocationsAsync(PendingGroupPublicationV2 pending, CancellationToken token)
@@ -1141,6 +1186,7 @@ internal sealed partial class RootMembershipRegistry
             var current = registry._files.InspectChildNoFollow(parent, Descriptor.SharedStateSlot.CanonicalBasename);
             if (participant.PriorStateFileIdentity is null ? current is not null : current?.Identity != participant.PriorStateFileIdentity)
                 throw Refused("Prior cleanup requires the exact prior state to remain installed.");
+            await RequireBoundPriorArtifactsConsistentAsync(pending, token).ConfigureAwait(false);
             var stage = registry._files.InspectChildNoFollow(parent, participant.StagedName);
             if (stage is not null)
             {

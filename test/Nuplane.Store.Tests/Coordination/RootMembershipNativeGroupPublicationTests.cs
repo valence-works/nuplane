@@ -167,6 +167,144 @@ public sealed class RootMembershipNativeGroupPublicationTests
     }
 
     [SupportedPhysicalStoreFact]
+    public async Task FreshOwnerRecovery_PriorV2GraphInstallsAreVerifiedBeforeIntentAndBoundPriorRollback()
+    {
+        foreach (var interruption in new[]
+                 {
+                     RootMembershipRegistry.NativeGroupPublicationPoint.IntentPublished,
+                     RootMembershipRegistry.NativeGroupPublicationPoint.ArtifactsBound
+                 })
+        foreach (var removeInstall in new[] { false, true })
+        {
+            using var context = await Context.CreateWithGraphAsync();
+            await context.Registry().PublishNativeGroupAsync(context.Descriptor, context.Requests,
+                context.NextState, CancellationToken.None);
+            var next = context.PrepareNextGraphPublication();
+            var priorStateBytes = context.ReadSharedStateBytes();
+            var priorStateIdentity = context.ReadSharedStateIdentity();
+
+            await Assert.ThrowsAsync<SimulatedCrashException>(() => context.Registry().PublishNativeGroupAsync(
+                next.Descriptor, context.Requests, next.NextState, CancellationToken.None,
+                CrashOnce(interruption, context.FirstParticipantIdentity)));
+
+            var ledgersAtCrash = context.ReadCurrentLedgerBytes();
+            var artifactsAtCrash = new[]
+            {
+                context.ArtifactIdentity(next.StagePath),
+                context.ArtifactIdentity(next.BackupPath)
+            };
+            Assert.Equal(priorStateIdentity, context.ReadSharedStateIdentity());
+            Assert.Equal(priorStateBytes, context.ReadSharedStateBytes());
+
+            if (removeInstall)
+                context.RemoveRootAInstallDirectory();
+            else
+                context.ReplaceRootAInstallDirectory();
+
+            await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => context.Registry().RecoverNativeGroupAsync(
+                next.Descriptor, context.Requests, CancellationToken.None));
+
+            Assert.Equal(ledgersAtCrash, context.ReadCurrentLedgerBytes());
+            Assert.Equal(priorStateIdentity, context.ReadSharedStateIdentity());
+            Assert.Equal(priorStateBytes, context.ReadSharedStateBytes());
+            Assert.Equal(artifactsAtCrash, new[]
+            {
+                context.ArtifactIdentity(next.StagePath),
+                context.ArtifactIdentity(next.BackupPath)
+            });
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task FreshOwnerRecovery_ValidPriorV2GraphInstallRestoresExactLedgerAfterIntentPrefix()
+    {
+        using var context = await Context.CreateWithGraphAsync();
+        await context.Registry().PublishNativeGroupAsync(context.Descriptor, context.Requests,
+            context.NextState, CancellationToken.None);
+        var next = context.PrepareNextGraphPublication();
+
+        await Assert.ThrowsAsync<SimulatedCrashException>(() => context.Registry().PublishNativeGroupAsync(
+            next.Descriptor, context.Requests, next.NextState, CancellationToken.None,
+            CrashOnce(RootMembershipRegistry.NativeGroupPublicationPoint.IntentPublished,
+                context.FirstParticipantIdentity)));
+
+        var recovered = await context.Registry().RecoverNativeGroupAsync(next.Descriptor, context.Requests,
+            CancellationToken.None);
+
+        Assert.Equal(next.PriorLedgerBytes, context.ReadCurrentLedgerBytes());
+        Assert.Equal(next.PriorStateBytes, context.ReadSharedStateBytes());
+        Assert.Equal(next.PriorStateIdentity, context.ReadSharedStateIdentity());
+        Assert.All(recovered, ledger => Assert.Equal(next.PriorLedgers.Single(item => item.RootIdentity == ledger.RootIdentity).LedgerDigest,
+            ledger.LedgerDigest));
+        Assert.Null(context.ArtifactIdentity(next.StagePath));
+        Assert.Null(context.ArtifactIdentity(next.BackupPath));
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task FreshOwnerRecovery_PriorCleanupPreflightsStageAndBackupBeforeEitherRemoval()
+    {
+        foreach (var changedArtifact in new[] { "none", "stage", "backup" })
+        {
+            using var context = await Context.CreateWithGraphAsync();
+            await context.Registry().PublishNativeGroupAsync(context.Descriptor, context.Requests,
+                context.NextState, CancellationToken.None);
+            var next = context.PrepareNextGraphPublication();
+            await Assert.ThrowsAsync<SimulatedCrashException>(() => context.Registry().PublishNativeGroupAsync(
+                next.Descriptor, context.Requests, next.NextState, CancellationToken.None,
+                CrashOnce(RootMembershipRegistry.NativeGroupPublicationPoint.ArtifactsBound,
+                    context.FirstParticipantIdentity)));
+
+            var lastParticipant = next.Descriptor.Participants[^1].RootIdentity;
+            await Assert.ThrowsAsync<SimulatedCrashException>(() => context.Registry().RecoverNativeGroupAsync(
+                next.Descriptor, context.Requests, CancellationToken.None,
+                CrashOnce(RootMembershipRegistry.NativeGroupPublicationPoint.ResolutionPublished, lastParticipant)));
+
+            var priorLedgers = context.ReadCurrentLedgerBytes();
+            Assert.All(context.ReadCurrentLedgers(), ledger =>
+            {
+                Assert.Equal(GroupPublicationResolutionV2.Prior, ledger.PendingGroupPublicationV2!.Resolution);
+                Assert.Equal(GroupPublicationPhaseV2.Resolved, ledger.PendingGroupPublicationV2.Phase);
+            });
+            var priorStateIdentity = context.ReadSharedStateIdentity();
+            var priorStateBytes = context.ReadSharedStateBytes();
+            var stageIdentity = context.ArtifactIdentity(next.StagePath);
+            var backupIdentity = context.ArtifactIdentity(next.BackupPath);
+            Assert.NotNull(stageIdentity);
+            Assert.NotNull(backupIdentity);
+
+            if (changedArtifact != "none")
+            {
+                var changedPath = changedArtifact == "stage" ? next.StagePath : next.BackupPath;
+                context.ReplaceArtifactWithDifferentIdentity(changedPath);
+            }
+            var stageAtRecovery = context.ArtifactIdentity(next.StagePath);
+            var backupAtRecovery = context.ArtifactIdentity(next.BackupPath);
+            var ledgersAtRecovery = context.ReadCurrentLedgerBytes();
+
+            if (changedArtifact == "none")
+            {
+                var recovered = await context.Registry().RecoverNativeGroupAsync(next.Descriptor, context.Requests,
+                    CancellationToken.None);
+                Assert.Equal(next.PriorLedgerBytes, context.ReadCurrentLedgerBytes());
+                Assert.All(recovered, ledger => Assert.Equal(next.PriorLedgers.Single(item => item.RootIdentity == ledger.RootIdentity).LedgerDigest,
+                    ledger.LedgerDigest));
+                Assert.Null(context.ArtifactIdentity(next.StagePath));
+                Assert.Null(context.ArtifactIdentity(next.BackupPath));
+            }
+            else
+            {
+                await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => context.Registry().RecoverNativeGroupAsync(
+                    next.Descriptor, context.Requests, CancellationToken.None));
+                Assert.Equal(ledgersAtRecovery, context.ReadCurrentLedgerBytes());
+                Assert.Equal(stageAtRecovery, context.ArtifactIdentity(next.StagePath));
+                Assert.Equal(backupAtRecovery, context.ArtifactIdentity(next.BackupPath));
+                Assert.Equal(priorStateIdentity, context.ReadSharedStateIdentity());
+                Assert.Equal(priorStateBytes, context.ReadSharedStateBytes());
+            }
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
     public async Task PublishNativeGroup_RejectsKnownEmptyClosuresWhenStateMapsNamePackages()
     {
         using var context = await Context.CreateAsync(nonEmptyActiveMapsWithKnownEmptyRows: true);
@@ -257,6 +395,16 @@ public sealed class RootMembershipNativeGroupPublicationTests
     }
 
     private sealed class SimulatedCrashException : Exception { }
+
+    private sealed record GroupPublicationPlan(
+        GroupPublicationDescriptorV2 Descriptor,
+        StoreStateRecord NextState,
+        RootMembershipRecord[] PriorLedgers,
+        byte[][] PriorLedgerBytes,
+        byte[] PriorStateBytes,
+        PhysicalFileIdentity PriorStateIdentity,
+        string StagePath,
+        string BackupPath);
 
     private sealed class Context : IDisposable
     {
@@ -460,6 +608,67 @@ public sealed class RootMembershipNativeGroupPublicationTests
             return new StoreStateSerializer().ReadPayloadAsync(stream, CancellationToken.None).GetAwaiter().GetResult();
         }
 
+        internal byte[] ReadSharedStateBytes() => File.ReadAllBytes(_sharedPath);
+
+        internal byte[][] ReadCurrentLedgerBytes()
+            => [File.ReadAllBytes(LedgerPath(0)), File.ReadAllBytes(LedgerPath(1))];
+
+        internal PhysicalFileIdentity? ArtifactIdentity(string path)
+            => _files.InspectChildNoFollow(_sharedParent, Path.GetFileName(path))?.Identity;
+
+        internal GroupPublicationPlan PrepareNextGraphPublication()
+        {
+            var priorState = ReadSharedState();
+            var priorBundle = priorState.ProtectionBundle
+                ?? throw new InvalidOperationException("The shared state must contain the published v2 graph bundle.");
+            if (priorBundle.StateGeneration != 1 || priorBundle.LogicalMemberId != Descriptor.LogicalMemberId)
+                throw new InvalidOperationException("The fixture requires the first shared graph publication.");
+
+            var transactionId = Guid.NewGuid();
+            var nextBase = priorState with
+            {
+                UpdatedAt = priorState.UpdatedAt.AddSeconds(1),
+                ProtectionRecord = null,
+                ProtectionBundle = null
+            };
+            var nextBodyDigest = ProtectionDigest.StateBody(nextBase);
+            var nextGeneration = checked(priorBundle.StateGeneration + 1);
+            var rows = priorBundle.Rows.Select(row => new PackageProtectionBundleRootRow(
+                row.RootIdentity, row.EnrollmentEpoch, row.MemberId, checked(row.Revision + 1),
+                nextGeneration, nextBodyDigest, row.ActiveClosure, row.RecoverableClosure,
+                row.RetiredGraphs, row.LegacyUnknownRecovery)).ToArray();
+            var bundle = new PackageProtectionBundle(PackageProtectionBundle.CurrentSchemaVersion,
+                priorBundle.LogicalMemberId, transactionId, nextGeneration, nextBodyDigest, rows);
+            var nextState = nextBase with { ProtectionBundle = bundle };
+
+            var transactionStem = $".nuplane-group-{transactionId:N}";
+            var stagedName = transactionStem + ".tmp";
+            var backupName = transactionStem + ".bak";
+            var currentLedgers = ReadCurrentLedgers().ToArray();
+            var participants = currentLedgers.Select(ledger =>
+            {
+                var selected = ledger.Members.Single(member => member.MemberId ==
+                    (ledger.RootIdentity == RootAIdentity ? "shared-a" : "shared-b"));
+                var binding = selected.Binding as RootMemberRecord.BundleAcknowledgedBinding
+                    ?? throw new InvalidOperationException("The first publication must acknowledge each shared v2 member.");
+                var nextRow = bundle.Rows.Single(row => row.RootIdentity == ledger.RootIdentity);
+                return new GroupPublicationParticipantV2(ledger.RootIdentity, ledger.EnrollmentEpoch,
+                    selected, ledger.Status, ledger.SchemaVersion, ledger.LedgerDigest,
+                    binding.RootRow.Revision, binding.RootRow, binding.ObservedStateFileIdentity,
+                    checked(binding.RootRow.Revision + 1), nextRow.ProtectionDigest,
+                    stagedName, backupName);
+            }).ToArray();
+            var descriptor = new GroupPublicationDescriptorV2(transactionId, bundle.LogicalMemberId,
+                SharedSlot, priorBundle.StateGeneration, priorBundle.StateBodyDigest, priorBundle.BundleDigest,
+                nextGeneration, nextBodyDigest, bundle.BundleDigest, participants);
+
+            return new GroupPublicationPlan(descriptor, nextState, currentLedgers,
+                ReadCurrentLedgerBytes(), ReadSharedStateBytes(),
+                ReadSharedStateIdentity() ?? throw new InvalidOperationException("The shared state must exist."),
+                Path.Combine(Path.GetDirectoryName(_sharedPath)!, stagedName),
+                Path.Combine(Path.GetDirectoryName(_sharedPath)!, backupName));
+        }
+
         internal IReadOnlyList<RootMembershipRecord> ReadCurrentLedgers()
             => Requests.Select((request, index) => new RootMembershipRegistry(_files, new StoreStateSerializer()).ReadCandidate(index == 0 ? _rootA : _rootB)).ToArray();
 
@@ -501,6 +710,23 @@ public sealed class RootMembershipNativeGroupPublicationTests
             Directory.Move(path, moved);
             Directory.CreateDirectory(path);
             File.WriteAllBytes(Path.Combine(path, PackageInstallStore.CompletionMarkerFileName), []);
+        }
+
+        internal void RemoveRootAInstallDirectory()
+        {
+            var path = _rootAInstallPath ?? throw new InvalidOperationException("The graph fixture is not enabled.");
+            Directory.Move(path, path + ".removed");
+        }
+
+        internal void ReplaceArtifactWithDifferentIdentity(string path)
+        {
+            if (ArtifactIdentity(path) is null)
+                throw new InvalidOperationException("The planned artifact must exist before its identity is changed.");
+            var retainedPath = path + ".retained";
+            if (File.Exists(retainedPath))
+                throw new InvalidOperationException("The retained artifact path must be unused.");
+            File.Move(path, retainedPath);
+            File.WriteAllBytes(path, [0x4e, 0x55, 0x50, 0x4c, 0x41, 0x4e, 0x45]);
         }
 
         private void AssertLockHeld(PhysicalStoreDirectoryHandle root, string lockName)
