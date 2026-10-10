@@ -662,6 +662,19 @@ jobs:
             --results-directory "$RUNNER_TEMP/package-content-store"
           python3 build/verify-required-trx.py "$RUNNER_TEMP/package-content-store/package-content-store.trx" "$manifest"
 
+      - name: Qualify scoped direct-restore admission and before-callback refusal
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~NuplaneRestoreAdmissionTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=direct-restore-admission.trx" \
+            --results-directory "$RUNNER_TEMP/direct-restore-admission"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/direct-restore-admission/direct-restore-admission.trx" \
+            build/test-cases/direct-restore-admission.json
+
       - name: Qualify native installed-package probes and dependency graph inputs
         shell: bash
         run: |
