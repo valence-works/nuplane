@@ -3,7 +3,7 @@ using Nuplane.Store.Coordination.PhysicalFiles;
 
 namespace Nuplane.Store.Coordination;
 
-/// <summary>Observes and publishes a prepared directory without replacing any destination entry.</summary>
+/// <summary>Publishes a prepared directory without replacing any destination entry.</summary>
 /// <remarks>
 /// The caller owns the held parent, prepares and verifies all directory contents, and closes staged
 /// descendants before publication. Initial enrollment requires an explicitly quiescent cutover;
@@ -13,15 +13,8 @@ namespace Nuplane.Store.Coordination;
 /// orphan directories, and supplies no power-loss durability or path-based fallback. Any exception
 /// may follow a completed move: preserve evidence and reopen actual entries to resolve the outcome.
 /// </remarks>
-internal interface IPhysicalStoreDirectoryPublicationFileSystem
+internal interface IPhysicalStoreDirectoryPublicationFileSystem : IPhysicalStoreDirectoryNameFileSystem
 {
-    /// <summary>Observes a non-link directory's exact stored basename and native parent name profile.</summary>
-    /// <remarks>Revalidates the held parent and expected directory identity without following the final entry.</remarks>
-    PhysicalStoreCanonicalName ObserveCanonicalDirectoryNameNoFollow(
-        PhysicalStoreDirectoryHandle parent,
-        string singleName,
-        PhysicalFileIdentity expectedDirectoryIdentity);
-
     /// <summary>Atomically moves a verified directory to a positively absent same-parent destination.</summary>
     /// <remarks>Never overwrites an existing file, directory, link or alias; returns the reopened exact source identity.</remarks>
     PhysicalStoreEntryInfo PublishDirectoryNoReplaceAt(
