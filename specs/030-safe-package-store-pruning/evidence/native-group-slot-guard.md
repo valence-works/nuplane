@@ -26,4 +26,16 @@ Frozen artifact hashes:
 - Core build log: `44a7d432a8d761c49871ebe80b91791feed356686722713222c17af75ef5a0f1`.
 - Independent final source review: `017446b5b8949117d79b48883e051cbe6e5550583e6f756b390d3f1fbf54ca34`.
 
-Root and independent review found no remaining actionable issue in this bounded candidate. Hosted qualification of the integrated head remains pending. Ordinary standalone-writer compatibility, all authoritative runtime/startup/LKG/restore/offline paths, actual process-kill recovery through a Complete/schema-1 peer, public maintenance operations and physical pruning/deletion remain unfinished. No stable release or final Foundation adoption is proved here.
+Root and independent review found no remaining actionable issue in this bounded candidate.
+
+## Integrated-head hosted verification
+
+[Validate 38068400371](https://github.com/valence-works/nuplane/actions/runs/38068400371) tests integrated head `71d452c0b29d6a6153182976c5f8feec374e9d00`. Its full build/test job passed all six test assemblies: 2,272 passed, zero failed, 48 explicit platform skips; 2,320 total. Store accounts for 830 passed and 46 skips, Runtime for 905 passed and two skips. The remaining assemblies passed without skips: Directory 21, Loading 259, NuGet 25 and Integration 232. The build retained one existing xUnit2031 warning in `RootMembershipRecordTests.cs:79` and reported zero errors.
+
+All six jobs completed successfully, including Ubuntu x64, Ubuntu ARM64, macOS, Windows and the universal Darwin shim build. On each of the four platform lanes, the focused native group/catalog step executed 34 cases with zero failures/skips and its unchanged strict verifier confirmed the exact required identities. This qualifies the internal increment at the integrated head; it does not accept the complete pruning feature.
+
+Root retained the unmodified completed-job logs and checked the group result and strict-verifier output within the corresponding step, separately from other 34-case gates. Final hosted qualification SHA-256: `f85e8c9f4215383e2e14c51699e48af795db9426f3c7a8a956aeef0c604d09fc`. This workflow does not upload those TRX files; hosted evidence consists of exact-head job state and execution/verifier logs, not a claim that root downloaded and re-parsed the hosted TRX.
+
+## Remaining boundary
+
+Ordinary standalone-writer compatibility, all authoritative runtime/startup/LKG/restore/offline paths, actual process-kill recovery through a Complete/schema-1 peer, public maintenance operations and physical pruning/deletion remain unfinished. No stable release or final Foundation adoption is proved here.
