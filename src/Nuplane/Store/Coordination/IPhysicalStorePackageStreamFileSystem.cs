@@ -2,11 +2,13 @@ using Nuplane.Store.Coordination.PhysicalFiles;
 
 namespace Nuplane.Store.Coordination;
 
-/// <summary>Provides bounded streams for package archives and newly created package files.</summary>
+/// <summary>Provides explicit-limit streams for package archives and newly created package files.</summary>
 /// <remarks>
 /// A stream remains bound to the exact held parent and file handles supplied at creation. The provider
 /// revalidates the direct child name and native identities around every IO operation and never reopens an
 /// absolute path. Read streams are seekable; package-file write streams are exclusive-created and sequential.
+/// The caller selects the byte limit; a standalone state payload may use <c>long.MaxValue</c> and
+/// does not inherit the smaller package-ledger/control-file limits.
 /// </remarks>
 internal interface IPhysicalStorePackageStreamFileSystem
 {

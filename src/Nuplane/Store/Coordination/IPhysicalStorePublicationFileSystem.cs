@@ -3,10 +3,12 @@ using Nuplane.Store.Coordination.PhysicalFiles;
 
 namespace Nuplane.Store.Coordination;
 
-/// <summary>Publishes or removes single transaction-control files relative to an owned parent.</summary>
+/// <summary>Publishes or removes single verified files relative to an owned parent.</summary>
 /// <remarks>
-/// The caller must hold exclusive root/member coordination ownership, close control-file handles
-/// that prevent delete sharing, and stage, flush and verify payload/backup evidence before publication.
+/// Ledger and protection-control callers must hold exclusive root/member coordination ownership. A
+/// standalone state-slot caller may instead hold that slot's supplemental write guard after replaying
+/// retained path evidence. Callers close handles that prevent delete sharing, and stage, flush and verify
+/// payload/backup evidence before publication.
 /// Expected identities are checked around the native transition; they are not an atomic
 /// compare-and-swap against non-cooperating filesystem writers. No path fallback, recursive deletion,
 /// ledger acknowledgement or power-loss durability is supplied by this contract. Any exception may
