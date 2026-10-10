@@ -1,0 +1,68 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit review configuration. AGENTS.md is picked up as a review guideline by default.
+language: en-US
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  in_progress_fortune: false
+  review_status: true
+  collapse_walkthrough: true
+  sequence_diagrams: false
+  suggested_reviewers: false
+  auto_review:
+    enabled: true
+    drafts: false
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+  path_filters:
+    - "!specs/**"
+    - "!.specify/**"
+    - "!.github/agents/**"
+    - "!.github/prompts/**"
+    - "!branding/**"
+    - "!**/*.DotSettings.user"
+  path_instructions:
+    - path: "src/**/*.cs"
+      instructions: |
+        Review against AGENTS.md and docs/coding-conventions.md. In particular:
+        - Reconciliation must stay deterministic and transactional: never leave package/store state partially mutated;
+          use atomic pointer switches and last-known-good fallback.
+        - Package sources must be validated against trust policy before resolving or activating packages.
+        - Module-specific options, registrations, hosted services and builder conveniences belong in the owning module
+          package, not in core Nuplane.
+        - DI-registered services have an interface; register the concrete type first, then expose the interface via a factory.
+        - Reconciliation middleware must call `next()` unless short-circuiting with a documented result.
+        - Preserve single-flight reconciliation semantics when EnableSingleFlight is enabled.
+        - Public and protected APIs need XML docs; null guards use `ArgumentNullException.ThrowIfNull(...)`.
+        - Options validation lives in `IValidateOptions<T>`, not `IsValid()` methods.
+        - Structured logging uses `[LoggerMessage]`; never log secrets, credentials or full stack traces at Information.
+        - Style: file-scoped namespaces mirroring folders, `sealed record` for DTOs/results, `_camelCase` private
+          instance fields and PascalCase private static fields.
+    - path: "test/**/*.cs"
+      instructions: |
+        Test classes are named `{TypeUnderTest}Tests` and methods `MethodUnderTest_Scenario_ExpectedBehavior`, with
+        Arrange/Act/Assert structure. Prefer `Assert.Single(...)` over count comparisons and `Assert.ThrowsAsync<T>` for
+        expected async exceptions. Tests must be deterministic: no real network calls outside isolated integration tests,
+        and filesystem tests use temporary directories that are cleaned up.
+    - path: "{README.md,docs/**}"
+      instructions: |
+        Code samples must match the current public API. Flag behavior or public usage changes elsewhere in the PR that
+        are not reflected in README.md or docs/wiki/.
+    - path: "**/*.{csproj,props,targets}"
+      instructions: |
+        Package versions are managed centrally in Directory.Packages.props; flag any `Version` on a `<PackageReference>`.
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    # Guideline files apply only to their own directory unless mapped with applyTo.
+    filePatterns:
+      - files: "docs/coding-conventions.md"
+        applyTo: "**/*"
+
+chat:
+  auto_reply: true

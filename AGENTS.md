@@ -49,7 +49,6 @@ Run focused tests first for the area changed, then run the full solution when pr
 - Preserve deterministic reconciliation behavior and transactional safety.
 - Do not leave package/store state partially mutated; use atomic pointer switches and LKG fallback patterns where applicable.
 - Validate package sources against trust policy before resolving or activating packages.
-- Keep `Nuplane.Runtime` dependency-lean; it must not reference `Microsoft.Extensions.Hosting.Abstractions`.
 - Keep module-specific options, registration services, hosted services, and builder conveniences in the owning module package, not in the core `Nuplane` package.
 - Every DI-registered service should have an interface. Register the concrete implementation first, then expose the interface via a factory delegate.
 - Reconciliation pipeline middleware must call `next()` unless intentionally short-circuiting with a documented result.
