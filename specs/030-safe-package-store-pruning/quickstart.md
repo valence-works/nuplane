@@ -43,3 +43,5 @@ Extend `.github/workflows/validate.yml` with the actual admission/deletion integ
 Independent self-review and root review accompany automated/behavioral gates; Copilot and Greptile are waived for this delivery. Record implementation and platform evidence on Nuplane #108/its PR. Then follow the parent program's ordered Nuplane release, CShells integration release and Foundation stable-pin/actual-host regression gates. Refresh live versions before selecting tags; do not overwrite existing releases. This work unit alone does not accept stable downstream delivery.
 
 For the internal locked two-state producer-to-Complete boundary and its exact limits, see [protected enrollment completion evidence](evidence/protected-enrollment-completion.md). Runtime admission, leases and destructive operations remain unaccepted.
+
+For the native inventory and accepted pure retention mechanisms, see [inventory and retention evidence](evidence/inventory-and-retention.md). Native inventory platform acceptance and public preview/execution remain pending.
