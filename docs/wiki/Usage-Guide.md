@@ -820,8 +820,11 @@ Hosts can add a named package-store root locator with `NuplaneBuilder.AddPackage
 a label and a root locator. The `default` label is reserved for the root selected by the final
 `Nuplane:FeedResolution:PackageInstallRoot` option (or Nuplane's existing application-base
 fallback). Other labels are unique without regard to case. A relative locator is anchored to the
-callback's final `BasePath`, or to the current directory when no base is supplied; an absolute
-locator stays absolute. This records configured locations for store coordination. Registration does
+callback's final `BasePath`, or to the current directory when no base is supplied, using
+`Path.GetFullPath(locator, basePath)`. On Windows, with `C:\app` as that base, `C:packages` resolves
+to `C:\app\packages`, `\packages` to `C:\packages`, and `D:packages` to `D:\packages` without
+using an ambient per-drive current directory. A fully qualified locator stays absolute.
+This records configured locations for store coordination. Registration does
 not inspect or create a directory, enroll it, or by itself authorize a maintenance operation.
 
 ### Feed credentials

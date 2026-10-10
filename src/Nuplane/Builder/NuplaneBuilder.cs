@@ -53,7 +53,10 @@ public sealed class NuplaneBuilder
     /// <summary>
     /// Adds a named package-store root locator to the host's trusted composition. Relative locators
     /// are anchored to the final <see cref="BasePath"/> for this builder callback, or to the current
-    /// directory when no base path is set. Registration records a locator only; it does not inspect,
+    /// directory when no base path is set, using <see cref="Path.GetFullPath(string, string)"/>.
+    /// On Windows, a same-drive relative path uses that base, a volume-relative path uses its drive
+    /// root, and an other-drive relative path uses the other drive's root without its ambient current directory.
+    /// Registration records a locator only; it does not inspect,
     /// create, enroll, or otherwise grant filesystem authority to the directory.
     /// </summary>
     /// <param name="label">A unique, nonblank label other than the reserved <c>default</c> label.</param>
@@ -86,11 +89,11 @@ public sealed class NuplaneBuilder
 
     internal TrustedPackageStoreRootCatalogDefinition FreezePackageStoreRoots()
     {
-        var hasRelativeRoot = _packageStoreRoots.Any(static root => !Path.IsPathRooted(root.RootLocator));
+        var hasRelativeRoot = _packageStoreRoots.Any(static root => !Path.IsPathFullyQualified(root.RootLocator));
         var finalBasePath = hasRelativeRoot ? Path.GetFullPath(BasePath ?? Environment.CurrentDirectory) : null;
         return new(_packageStoreRoots.Select(root => new TrustedPackageStoreRootRegistration(
             root.Label,
-            Path.IsPathRooted(root.RootLocator)
+            Path.IsPathFullyQualified(root.RootLocator)
                 ? Path.GetFullPath(root.RootLocator)
                 : Path.GetFullPath(root.RootLocator, finalBasePath!))));
     }

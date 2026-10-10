@@ -16,6 +16,29 @@ namespace Nuplane.Store.Tests.State;
 public sealed class PackageProtectionBundleSerializationTests
 {
     [Fact]
+    public async Task WritePayload_LegacyStateRetainsExactJsonBytesAndOmitsBundleWithExternalDefaults()
+    {
+        var state = StoreStateRecord.Empty() with { UpdatedAt = DateTimeOffset.UnixEpoch };
+        using var payload = new MemoryStream();
+
+        await new StoreStateSerializer().WritePayloadAsync(payload, state, CancellationToken.None);
+
+        const string expected = """
+            {
+              "activeVersionById": {},
+              "lastKnownGoodById": {},
+              "lastFailureById": {},
+              "lastSuccessfulSourceSnapshots": {},
+              "updatedAt": "1970-01-01T00:00:00+00:00",
+              "activePackageDescriptorsById": {},
+              "activeGraphsById": {}
+            }
+            """;
+        Assert.Equal(System.Text.Encoding.UTF8.GetBytes(expected), payload.ToArray());
+        Assert.False(JsonNode.Parse(JsonSerializer.Serialize(state))!.AsObject().ContainsKey("protectionBundle"));
+    }
+
+    [Fact]
     public async Task WritePayload_RoundTripsCanonicalMultirootStateAndCommonGenerationEvidence()
     {
         using var fixture = new PackageStoreFixture();
@@ -101,6 +124,17 @@ public sealed class PackageProtectionBundleSerializationTests
     [InlineData("duplicate-row")]
     [InlineData("missing-field")]
     [InlineData("duplicate-property")]
+    [InlineData("logical-member-id")]
+    [InlineData("publication-id")]
+    [InlineData("participant-set-digest")]
+    [InlineData("row-epoch")]
+    [InlineData("row-revision")]
+    [InlineData("row-member-id")]
+    [InlineData("legacy-unknown-recovery")]
+    [InlineData("graph-id")]
+    [InlineData("install-completion")]
+    [InlineData("dependency-range")]
+    [InlineData("recovery-generation")]
     public async Task ReadPayload_RejectsTamperedOrMixedV2State(string mutation)
     {
         var serializer = new StoreStateSerializer();
@@ -136,6 +170,58 @@ public sealed class PackageProtectionBundleSerializationTests
                 break;
             case "duplicate-property":
                 break;
+            case "logical-member-id":
+                json["protectionBundle"]!["logicalMemberId"] = Guid.NewGuid().ToString();
+                break;
+            case "publication-id":
+                json["protectionBundle"]!["publicationId"] = Guid.NewGuid().ToString();
+                break;
+            case "participant-set-digest":
+                json["protectionBundle"]!["participantSetDigest"] = new string('0', 64);
+                break;
+            case "row-epoch":
+                json["protectionBundle"]!["rows"]![0]!["enrollmentEpoch"] = 5;
+                break;
+            case "row-revision":
+                json["protectionBundle"]!["rows"]![0]!["revision"] = 13;
+                break;
+            case "row-member-id":
+                json["protectionBundle"]!["rows"]![0]!["memberId"] = "another-member";
+                break;
+            case "legacy-unknown-recovery":
+                json["protectionBundle"]!["rows"]![0]!["legacyUnknownRecovery"] = true;
+                break;
+            case "graph-id":
+            case "install-completion":
+            case "dependency-range":
+            case "recovery-generation":
+                // Keep every descriptive copy consistent so rejection proves digest binding,
+                // rather than only a disagreement between the Active/LKG copies or root rows.
+                foreach (var row in json["protectionBundle"]!["rows"]!.AsArray())
+                {
+                    foreach (var closure in new[] { "activeClosure", "recoverableClosure" })
+                    {
+                        var graph = row![closure]!["graphs"]![0]!;
+                        switch (mutation)
+                        {
+                            case "graph-id":
+                                graph["graphId"] = "another-graph";
+                                break;
+                            case "install-completion":
+                                graph["nodes"]![0]!["install"]!["completionIdentity"] = "another-completion";
+                                break;
+                            case "dependency-range":
+                                graph["edges"]![0]!["requestedVersionRange"] = "[2.0.0,4.0.0)";
+                                break;
+                            case "recovery-generation":
+                                graph["recoverySelectionEvidence"]!["sourceGeneration"] = 36;
+                                break;
+                        }
+                    }
+                }
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(mutation), mutation, "Unknown fixture mutation.");
         }
 
         var malformedText = json.ToJsonString();
@@ -298,7 +384,7 @@ public sealed class PackageProtectionBundleSerializationTests
             recoverySourceGeneration: 0));
     }
 
-    private static StoreStateRecord AttachBundle(
+    internal static StoreStateRecord AttachBundle(
         StoreStateRecord state,
         IReadOnlyList<PhysicalRootIdentity> roots,
         bool includeGraph = false,

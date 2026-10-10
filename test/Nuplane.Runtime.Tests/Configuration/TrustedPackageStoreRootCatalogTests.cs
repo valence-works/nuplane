@@ -11,6 +11,7 @@ using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Configuration;
 
+[Collection(nameof(ProcessEnvironmentCollection))]
 public sealed class TrustedPackageStoreRootCatalogTests
 {
     [Fact]
@@ -19,6 +20,10 @@ public sealed class TrustedPackageStoreRootCatalogTests
         using var temp = new TempDirectory();
         var installRoot = Path.Combine(temp.Path, "late-install-root");
         var absoluteRoot = Path.Combine(temp.Path, "absolute-root");
+        var driveRelativeRoot = OperatingSystem.IsWindows()
+            ? Path.GetPathRoot(temp.Path)![..2] + "drive-relative-root"
+            : null;
+        var otherDrive = driveRelativeRoot?.StartsWith("Z:", StringComparison.OrdinalIgnoreCase) == true ? "Y:" : "Z:";
         var services = new ServiceCollection();
         services.AddLogging();
         services.Configure<FeedResolutionOptions>(options => options.PackageInstallRoot = "early-root");
@@ -27,6 +32,12 @@ public sealed class TrustedPackageStoreRootCatalogTests
             builder.AddPackageStoreRoot("relative", "relative-root");
             builder.AddPackageStoreRoot("absolute", absoluteRoot);
             builder.AddPackageStoreRoot("same-absolute-root", absoluteRoot);
+            if (driveRelativeRoot is not null)
+            {
+                builder.AddPackageStoreRoot("drive-relative", driveRelativeRoot);
+                builder.AddPackageStoreRoot("volume-relative", "\\volume-relative-root");
+                builder.AddPackageStoreRoot("other-drive-relative", otherDrive + "other-drive-root");
+            }
             builder.UseBasePath(temp.Path);
         });
         services.Configure<FeedResolutionOptions>(options => options.PackageInstallRoot = installRoot);
@@ -34,7 +45,7 @@ public sealed class TrustedPackageStoreRootCatalogTests
         using var provider = services.BuildServiceProvider();
         var roots = provider.GetRequiredService<ITrustedPackageStoreRootCatalog>().Roots;
 
-        Assert.Collection(roots,
+        Assert.Collection(roots.Take(4),
             root =>
             {
                 Assert.Equal("default", root.Label);
@@ -55,6 +66,16 @@ public sealed class TrustedPackageStoreRootCatalogTests
                 Assert.Equal("same-absolute-root", root.Label);
                 Assert.Equal(Path.GetFullPath(absoluteRoot), root.RootPath);
             });
+        Assert.Equal(driveRelativeRoot is null ? 4 : 7, roots.Count);
+        if (driveRelativeRoot is not null)
+        {
+            Assert.Equal(Path.Combine(temp.Path, "drive-relative-root"),
+                Assert.Single(roots, static root => root.Label == "drive-relative").RootPath);
+            Assert.Equal(Path.Combine(Path.GetPathRoot(temp.Path)!, "volume-relative-root"),
+                Assert.Single(roots, static root => root.Label == "volume-relative").RootPath);
+            Assert.Equal(otherDrive + "\\other-drive-root",
+                Assert.Single(roots, static root => root.Label == "other-drive-relative").RootPath);
+        }
 
         Assert.False(Directory.Exists(installRoot));
         Assert.False(Directory.Exists(Path.Combine(temp.Path, "relative-root")));
@@ -66,6 +87,7 @@ public sealed class TrustedPackageStoreRootCatalogTests
     {
         using var temp = new TempDirectory();
         var originalCurrentDirectory = Environment.CurrentDirectory;
+        var frozenCurrentDirectory = originalCurrentDirectory;
         var configuredDirectory = Path.Combine(temp.Path, "configured-cwd");
         var laterDirectory = Path.Combine(temp.Path, "later-cwd");
         Directory.CreateDirectory(configuredDirectory);
@@ -76,6 +98,7 @@ public sealed class TrustedPackageStoreRootCatalogTests
         try
         {
             Environment.CurrentDirectory = configuredDirectory;
+            frozenCurrentDirectory = Environment.CurrentDirectory;
             services.AddNuplane(builder => builder.AddPackageStoreRoot("relative", "packages"));
             Environment.CurrentDirectory = laterDirectory;
         }
@@ -89,7 +112,7 @@ public sealed class TrustedPackageStoreRootCatalogTests
 
         Assert.Equal(Path.Combine(AppContext.BaseDirectory, ".nuplane", "packages"),
             Assert.Single(roots, static root => root.Label == "default").RootPath);
-        Assert.Equal(Path.Combine(configuredDirectory, "packages"),
+        Assert.Equal(Path.Combine(frozenCurrentDirectory, "packages"),
             Assert.Single(roots, static root => root.Label == "relative").RootPath);
         Assert.False(Directory.Exists(Path.Combine(configuredDirectory, "packages")));
     }
@@ -138,8 +161,8 @@ public sealed class TrustedPackageStoreRootCatalogTests
             root => Assert.Equal("second", root.Label));
         Assert.Equal(2, frozenFirstRoots.Count);
         Assert.Same(firstCatalog, firstProvider.GetRequiredService<ITrustedPackageStoreRootCatalog>());
-        Assert.Equal(ServiceLifetime.Singleton, Assert.Single(services.Where(static descriptor =>
-            descriptor.ServiceType == typeof(ITrustedPackageStoreRootCatalog))).Lifetime);
+        Assert.Equal(ServiceLifetime.Singleton, Assert.Single(services, static descriptor =>
+            descriptor.ServiceType == typeof(ITrustedPackageStoreRootCatalog)).Lifetime);
 
         // Resolving the catalog, registry, and current admission in one real AddNuplane provider
         // proves this service remains a leaf and does not introduce a composition cycle.

@@ -149,12 +149,19 @@ public sealed class RootMembershipBindingTests
     [SupportedPhysicalStoreFact]
     public async Task BindDeclaredMembersAsync_ProtectedOrMalformedPriorStateRemainsDeclared()
     {
-        foreach (var malformed in new[] { false, true })
+        foreach (var payloadKind in new[] { "legacy-protected", "v2-protected", "malformed" })
         {
             using var context = await BindingContext.CreateAsync(existingMemberIndexes: [0]);
-            var stateBytes = malformed
-                ? "not-a-store-state"u8.ToArray()
-                : await context.SerializeState(Protect(context.State(0), context.RootIdentity, context.DeclaredMembers[0].MemberId));
+            var stateBytes = payloadKind switch
+            {
+                "malformed" => "not-a-store-state"u8.ToArray(),
+                "legacy-protected" => await context.SerializeState(
+                    Protect(context.State(0), context.RootIdentity, context.DeclaredMembers[0].MemberId)),
+                "v2-protected" => await context.SerializeState(
+                    Nuplane.Store.Tests.State.PackageProtectionBundleSerializationTests.AttachBundle(
+                        context.State(0), [context.RootIdentity])),
+                _ => throw new InvalidOperationException("Unknown fixture payload kind.")
+            };
             context.ReplaceStateBytes(0, stateBytes);
             context.CaptureExternalStateParents();
             context.InitializeIncomplete();
