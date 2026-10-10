@@ -1,6 +1,6 @@
 # Bounded inventory and pure retention planning
 
-This increment implements non-destructive native inventory and pure retention classification. It does not implement public maintenance operations, the fresh inspection application service, physical deletion or restart recovery. The mandatory before-delete gate remains unaccepted.
+This increment implements non-destructive native inventory and pure retention classification. The later [fresh inspection increment](fresh-inspection.md) connects these mechanisms to all-member protection. Public maintenance operations, physical deletion and restart recovery remain incomplete. The mandatory before-delete gate remains unaccepted.
 
 ## Inventory
 
@@ -8,7 +8,7 @@ This increment implements non-destructive native inventory and pure retention cl
 
 Control `.nuplane-store`, root `.tmp`, canonical installer stage/prepared residues, incomplete installs and unknown entries remain distinct and excluded from candidates. Unknown rows may coexist with a complete bounded scan. Native links/special entries and ambiguous completion markers cannot become candidates. Existing unknown content and observed fixture package bytes remain unchanged.
 
-Independent review found same-feed build-metadata versions were grouped as release aliases and incorrectly reported Unknown. A real Complete-admission regression failed against that implementation (expected two completed candidates, actual none). The correction preserves metadata in normalized full-version path keys and candidate identities while refusing true normalized aliases such as `1.0`/`1.0.0`. It uses the existing install-store native profile validator rather than duplicating its matrix. The eight focused inventory cases pass on macOS. Windows/Linux inventory execution remains pending in the new hosted gate; T049/T056 are not accepted yet.
+Independent review found same-feed build-metadata versions were grouped as release aliases and incorrectly reported Unknown. A real Complete-admission regression failed against that implementation (expected two completed candidates, actual none). The correction preserves metadata in normalized full-version path keys and candidate identities while refusing true normalized aliases such as `1.0`/`1.0.0`. It uses the existing install-store native profile validator rather than duplicating its matrix. The eight native inventory cases now pass on macOS and both Linux architectures; Windows passes seven, excluding the Unix symlink/FIFO/hardlink fixture. T049/T056 are accepted after the hosted qualification below.
 
 ## Pure retention planner
 
@@ -32,4 +32,10 @@ Root review and independent review found no remaining actionable finding in this
 
 Inventory regression failure TRX SHA-256: `8355527b3755b25a291aba9250ca56bb02a60f1f7f61fc9e619e235a674a7133`; planner negative-control failure TRX: `d78044f7f8ed9f379c5f9a6489fd20166e280be60003abf82eeb857d1a7ba266`. Earlier failed evidence is retained separately. Root source/review checkpoint SHA-256: `8f2c072d7721d3a99fd411d3ba809f19539d0a67c218889dcef87e69855897b5`.
 
-The accepted checklist is 35/128 after T050/T057. Inventory platform acceptance, fresh all-member/live-use inspection, optional Admin/API operations, remaining runtime entry points, the reviewed real maintenance/before-read gate, safe deletion and recovery, upstream stable releases and Foundation adoption/e2e/main proof remain required. #108 and PR112 remain open and not merge/release ready.
+## Hosted inventory acceptance
+
+Exact head `5942d5f381d75d1791f9311c2a6f3ec4fe604a28` passed [Validate 38025283296](https://github.com/valence-works/nuplane/actions/runs/38025283296). All six jobs passed, including Windows, macOS, Linux x64 and Linux ARM64. The required inventory/planner gate executed exactly 31 Unix or 30 Windows cases without skips, thereby qualifying eight/seven inventory cases and all 23 planner cases on their actual platforms. Full solution: **2,068 passed / 0 failed / 41 platform skips**. Both owned Linux ext4 casefold lanes passed eleven cases. The existing retained-loading, native-reader, protected-candidate, native-installer, scoped-acquisition and runtime/startup required gates also passed on all four platforms.
+
+Terminal raw-log SHA-256: `229dc7fb06ef2d05c7ef63146432c2aac6d5b821c5a58b3cd97d87158478b09f`; parsed terminal/exact-case qualification: `7590b784351b20e824d689b41639daf9a1779593ec87681e65f14584f4cd0a7d`. The parser verified 28 required platform gates, all six full-solution suite results and both actual Linux casefold results. The prior failed fixture runs remain historical failures. This head does not contain the later inspection kernel, control recovery or deletion.
+
+The accepted checklist is **37/128** after T049/T050/T056/T057. Public all-member/live-use inspection operations, optional Admin/API wiring, remaining runtime entry points, the reviewed real maintenance/before-read gate, safe deletion and recovery, upstream stable releases and Foundation adoption/e2e/main proof remain required. #108 and PR112 remain open and not merge/release ready.

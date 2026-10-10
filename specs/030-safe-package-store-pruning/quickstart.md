@@ -44,6 +44,6 @@ Independent self-review and root review accompany automated/behavioral gates; Co
 
 For the internal locked two-state producer-to-Complete boundary and its exact limits, see [protected enrollment completion evidence](evidence/protected-enrollment-completion.md). Runtime admission, leases and destructive operations remain unaccepted.
 
-For the native inventory and accepted pure retention mechanisms, see [inventory and retention evidence](evidence/inventory-and-retention.md). Native inventory platform acceptance and public preview/execution remain pending.
+For the native inventory and accepted pure retention mechanisms, see [inventory and retention evidence](evidence/inventory-and-retention.md). Inventory is qualified on all four hosted platforms; public preview/execution remains pending.
 
 For the internal fresh all-member/live-use inspection kernel and its causal protection control, see [fresh inspection evidence](evidence/fresh-inspection.md). Public operations, stale-use recovery and the actual maintenance/before-read gate remain pending.
