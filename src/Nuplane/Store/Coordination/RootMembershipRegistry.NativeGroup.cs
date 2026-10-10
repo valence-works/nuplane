@@ -162,9 +162,7 @@ internal sealed partial class RootMembershipRegistry
         var beforeIntent = group.Participants.Select(participant => participant.Transaction!.ReadCurrent()).ToArray();
         if (beforeIntent.All(static ledger => ledger.PendingGroupPublicationV2 is null))
         {
-            if (beforeIntent.All(static ledger => ledger.Status == RootMembershipStatus.Complete &&
-                    ledger.SchemaVersion == RootMembershipRecord.BundleSchemaVersion))
-                return await group.ValidateAcknowledgedNextAsync(cancellationToken).ConfigureAwait(false);
+            // The exact prior can itself be a Complete v2 generation after a completed rollback.
             if (beforeIntent.All(ledger => ledger.Status == descriptor.GetParticipant(ledger.RootIdentity).PriorMembershipStatus &&
                     ledger.SchemaVersion == descriptor.GetParticipant(ledger.RootIdentity).PriorSchemaVersion &&
                     ledger.LedgerDigest == descriptor.GetParticipant(ledger.RootIdentity).PriorLedgerDigest))
@@ -175,6 +173,9 @@ internal sealed partial class RootMembershipRegistry
                 group.RequirePlannedArtifactsAbsent();
                 return beforeIntent;
             }
+            if (beforeIntent.All(static ledger => ledger.Status == RootMembershipStatus.Complete &&
+                    ledger.SchemaVersion == RootMembershipRecord.BundleSchemaVersion))
+                return await group.ValidateAcknowledgedNextAsync(cancellationToken).ConfigureAwait(false);
             throw Refused("No persisted group transaction is available for recovery.");
         }
         if (beforeIntent.Any(static ledger => ledger.PendingGroupPublicationV2 is not null))

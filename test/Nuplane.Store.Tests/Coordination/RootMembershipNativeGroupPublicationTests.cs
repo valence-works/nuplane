@@ -228,16 +228,19 @@ public sealed class RootMembershipNativeGroupPublicationTests
             CrashOnce(RootMembershipRegistry.NativeGroupPublicationPoint.IntentPublished,
                 context.FirstParticipantIdentity)));
 
-        var recovered = await context.Registry().RecoverNativeGroupAsync(next.Descriptor, context.Requests,
-            CancellationToken.None);
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var recovered = await context.Registry().RecoverNativeGroupAsync(next.Descriptor, context.Requests,
+                CancellationToken.None);
 
-        Assert.Equal(next.PriorLedgerBytes, context.ReadCurrentLedgerBytes());
-        Assert.Equal(next.PriorStateBytes, context.ReadSharedStateBytes());
-        Assert.Equal(next.PriorStateIdentity, context.ReadSharedStateIdentity());
-        Assert.All(recovered, ledger => Assert.Equal(next.PriorLedgers.Single(item => item.RootIdentity == ledger.RootIdentity).LedgerDigest,
-            ledger.LedgerDigest));
-        Assert.Null(context.ArtifactIdentity(next.StagePath));
-        Assert.Null(context.ArtifactIdentity(next.BackupPath));
+            Assert.Equal(next.PriorLedgerBytes, context.ReadCurrentLedgerBytes());
+            Assert.Equal(next.PriorStateBytes, context.ReadSharedStateBytes());
+            Assert.Equal(next.PriorStateIdentity, context.ReadSharedStateIdentity());
+            Assert.All(recovered, ledger => Assert.Equal(next.PriorLedgers.Single(item => item.RootIdentity == ledger.RootIdentity).LedgerDigest,
+                ledger.LedgerDigest));
+            Assert.Null(context.ArtifactIdentity(next.StagePath));
+            Assert.Null(context.ArtifactIdentity(next.BackupPath));
+        }
     }
 
     [SupportedPhysicalStoreFact]
