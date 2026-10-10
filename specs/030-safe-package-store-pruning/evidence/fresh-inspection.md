@@ -25,9 +25,17 @@ The six integrated source/test files match reviewed worker commit `b1b884764f2d7
 
 The first two gates use input manifest `34af4f2d03e6be72ffa6214d75cbefeb9325d49667d87784c8364ab1465a7a40`; the last two use `335f998a89727a6ed45c32af5b2a9511d83e26c7b73a11265811594ed20801e0` (943 inputs each). Only the workflow and its two exact-case manifests changed between those groups; every production/test input is byte-identical. The existing xUnit2031 warning in RootMembershipRecordTests remains outside this slice; production builds have none.
 
-The combined hosted gate requires exactly 41 Unix or 40 Windows cases. Root verified all 41 actual macOS results, structural accounting for the Windows subset, twelve malformed-result rejection controls, eighteen existing embedded Python blocks and the changed Bash step. Accounting report SHA-256: `62e58ae47859fe922dfe9ecd24c06cb67a22ed925fb20b6d1e0d986b611138e4`. Structural Windows accounting does not qualify Windows behavior; new hosted execution remains required.
+The combined hosted gate requires exactly 41 Unix or 40 Windows cases. Root verified all 41 actual macOS results, structural accounting for the Windows subset, twelve malformed-result rejection controls, eighteen existing embedded Python blocks and the changed Bash step. Accounting report SHA-256: `62e58ae47859fe922dfe9ecd24c06cb67a22ed925fb20b6d1e0d986b611138e4`. Structural accounting alone did not qualify Windows behavior. The exact-head hosted execution below now qualifies those cases on Windows as well as Unix.
 
 Worker causal evidence omitted the service's persistent Active/LKG protection inputs and failed the zero-budget test at the protected row (`Expected Retained / Actual Eligible`). The exact service bytes were restored and the same case passed. Failed-control TRX SHA-256: `bce77f9e5b791c126c398291e7bb4dc9f800baa8cd0e1f6161f81d9f3d53b6d7`; restored-source SHA-256: `fc54d42df53c6158569b24005768266ef6cf5f277b185336ea58a051d121d95a`. Root hash-verified the evidence and executed the combined gates above.
+
+## Hosted inspection qualification
+
+[CI run 38026139136](https://github.com/valence-works/nuplane/actions/runs/38026139136) completed successfully on exact published head `abe484943a096e3fd0a0e32590322fdfb3a30851`. All six jobs succeeded, including native macOS ARM64, Windows x64 NTFS, Linux x64 and Linux ARM64 lanes. Each platform executed the required combined inventory/planner/inspection cases: 41 on Unix and 40 on Windows, with no skips in those required selections. Both Linux owned ext4 casefold lanes passed all 11 cases without skips.
+
+The full solution reported **2,078 passed, 0 failed, 41 platform skips**. Root captured terminal provider state and the complete hosted log, then checked actual timestamped result messages against all 28 required case-count qualifications, all six full-solution assemblies and both ext4 lanes. Qualified summary SHA-256: `699719c503673efb9fa72a972564e2516d176e121f9e2066af0762f944ddea96`; full hosted log SHA-256: `5933c0ff147c041e99cc1fc2971e475fbfa14292a5705299f88bba34e5760ec8`.
+
+This run qualifies the published inspection increment. It contains neither the subsequent native control-recovery candidate nor the actual maintenance/Loading overlap proof. It does not accept public configured-label operations, stale-use recovery, recursive package deletion or full driver/before-delete acceptance. No additional checklist task is accepted; the count remains 37/128.
 
 ## Remaining acceptance
 
