@@ -13,7 +13,7 @@ namespace Nuplane.Store.Coordination;
 /// <see cref="AcquireAsync"/> must already hold and validate the control directory. The bootstrap callback
 /// resolves member metadata under the root lock; it must not read member payloads.
 /// </remarks>
-internal sealed class PhysicalStoreLock
+internal sealed partial class PhysicalStoreLock
 {
     private const string RootLockName = "root.lock";
     private const string MemberLockDomain = "nuplane-member-lock-v1";
@@ -389,7 +389,7 @@ internal sealed class PhysicalStoreLock
         Exception? innerException = null)
         => new(reason, message, innerException: innerException);
 
-    private sealed class HeldFileLock(
+    internal sealed class HeldFileLock(
         PhysicalStoreFileHandle file,
         IAsyncDisposable nativeLock,
         PhysicalFileIdentity identity) : IAsyncDisposable

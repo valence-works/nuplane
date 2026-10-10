@@ -194,8 +194,44 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
             }
 
             var orderedGroups = groups.Values.OrderBy(static group => group.Root, PhysicalRootIdentityComparer.Instance).ToArray();
-            foreach (var group in orderedGroups)
+            owners.EnsureCapacity(orderedGroups.Length);
+            if (orderedGroups.Length > 1)
             {
+                var requests = orderedGroups.Select(static group =>
+                    new RootMembershipRegistry.CompleteMemberLocationsRequest(
+                        group.RootHandle, group.Root, group.Epoch, group.LedgerDigest, group.LedgerIdentity)).ToArray();
+                var unionOwners = await _registry.AcquireCompleteMemberLocationsUnionAsync(requests, cancellationToken)
+                    .ConfigureAwait(false);
+                try
+                {
+                    if (unionOwners.Count != orderedGroups.Length)
+                        throw new InvalidOperationException("The complete member-location union returned the wrong root-owner count.");
+
+                    for (var index = 0; index < orderedGroups.Length; index++)
+                        owners.Add(new RootOwnerEntry(orderedGroups[index], unionOwners[index]));
+                }
+                catch (Exception constructionError)
+                {
+                    var cleanupErrors = new List<Exception>();
+                    for (var index = unionOwners.Count - 1; index >= 0; index--)
+                    {
+                        try { await unionOwners[index].DisposeAsync().ConfigureAwait(false); }
+                        catch (Exception exception) { cleanupErrors.Add(exception); }
+                    }
+
+                    if (cleanupErrors.Count > 0)
+                    {
+                        throw new AggregateException(
+                            "Multi-root admission owner construction failed and one or more root shares did not release cleanly.",
+                            new[] { constructionError }.Concat(cleanupErrors));
+                    }
+
+                    throw;
+                }
+            }
+            else if (orderedGroups.Length == 1)
+            {
+                var group = orderedGroups[0];
                 cancellationToken.ThrowIfCancellationRequested();
                 var locked = await _registry.AcquireCompleteMemberLocationsAsync(group.RootHandle, group.Root,
                     group.Epoch, group.LedgerDigest, group.LedgerIdentity, cancellationToken).ConfigureAwait(false);
@@ -760,19 +796,4 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
         }
     }
 
-    private sealed class PhysicalRootIdentityComparer : IComparer<PhysicalRootIdentity>
-    {
-        internal static PhysicalRootIdentityComparer Instance { get; } = new();
-
-        public int Compare(PhysicalRootIdentity? left, PhysicalRootIdentity? right)
-        {
-            if (ReferenceEquals(left, right)) return 0;
-            if (left is null) return -1;
-            if (right is null) return 1;
-            var result = StringComparer.Ordinal.Compare(left.HandleIdentity.Provider, right.HandleIdentity.Provider);
-            if (result != 0) return result;
-            result = StringComparer.Ordinal.Compare(left.HandleIdentity.VolumeOrDeviceId, right.HandleIdentity.VolumeOrDeviceId);
-            return result != 0 ? result : StringComparer.Ordinal.Compare(left.HandleIdentity.FileId, right.HandleIdentity.FileId);
-        }
-    }
 }

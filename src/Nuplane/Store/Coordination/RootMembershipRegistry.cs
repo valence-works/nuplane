@@ -559,7 +559,7 @@ internal sealed partial class RootMembershipRegistry
 
     private sealed class Transaction(RootMembershipRegistry registry, PhysicalStoreDirectoryHandle root,
         PhysicalStoreDirectoryHandle control, IAsyncDisposable owner, RootMembershipRecord ledger,
-        PhysicalFileIdentity ledgerIdentity) : IAsyncDisposable
+        PhysicalFileIdentity ledgerIdentity, bool ownsControlDirectory = true) : IAsyncDisposable
     {
         private PhysicalFileIdentity _ledgerIdentity = ledgerIdentity;
         internal RootMembershipRecord Ledger { get; private set; } = ledger;
@@ -593,7 +593,11 @@ internal sealed partial class RootMembershipRegistry
         public async ValueTask DisposeAsync()
         {
             try { await owner.DisposeAsync().ConfigureAwait(false); }
-            finally { control.Dispose(); }
+            finally
+            {
+                if (ownsControlDirectory)
+                    control.Dispose();
+            }
         }
     }
 }
