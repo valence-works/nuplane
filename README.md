@@ -241,8 +241,7 @@ Use the `Nuplane` configuration section for infrastructure, then keep host-owned
 ```csharp
 using Nuplane;
 using Nuplane.Loading.Hosting.Builder;
-using Nuplane.Sources.Directory.Hosting.Builder;
-using Nuplane.Sources.Directory.Hosting.Configuration;
+using Nuplane.Sources.Directory.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 var nuplaneConfiguration = builder.Configuration.GetSection("Nuplane");
@@ -774,12 +773,12 @@ Nuplane provides:
 
 Nuplane is modular:
 
-* `Nuplane.Runtime` — control plane + reconciliation loop
-* `Nuplane.Store` — deterministic package store
-* `Nuplane.NuGet` — NuGet protocol integration
-* `Nuplane.Sources.Directory` — folder-based desired source
-* `Nuplane.Hosting` — DI/Generic Host integration
-* `Nuplane.Loading` (optional) — assembly loading support
+* `Nuplane` — control plane: reconciliation loop, deterministic package store, NuGet feed integration, and DI/Generic Host registration
+* `Nuplane.Abstractions` — contracts and data models shared across packages
+* `Nuplane.Sources.Directory` — directory-backed feed with local `.nupkg` discovery and change monitoring
+* `Nuplane.Loading` (optional) — assembly loading with collectible load contexts, with contracts in `Nuplane.Loading.Abstractions`
+* `Nuplane.Admin` (optional) — snapshots and manual reconciliation triggers
+* `Nuplane.Admin.Api` / `Nuplane.Loading.Api` (optional) — ASP.NET Core endpoints for the admin and loading catalog surfaces
 
 ---
 
