@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Loading.Events;
 using Nuplane.Observability;
+using Nuplane.Reconciliation;
 using Nuplane.Store.State;
 
 namespace Nuplane.Loading;
@@ -11,9 +13,10 @@ namespace Nuplane.Loading;
 /// Subscribes to reconciliation completion callbacks, ensures newly applied or not-yet-loaded
 /// packages are loaded into Assembly Load Contexts, and dispatches loading-domain events.
 /// </summary>
-internal sealed class PackageAutoLoadingObserver : INuplaneObserver
+internal sealed class PackageAutoLoadingObserver : IScopedNuplaneObserver, ILeaseBoundPackageGraphLoadingObserver
 {
     private readonly IPackageLoader _loader;
+    private readonly IScopedPackageLoader? _scopedLoader;
     private readonly ILoadingEventDispatcher _dispatcher;
     private readonly LoadingOptions _loadingOptions;
     private readonly ILogger<PackageAutoLoadingObserver> _logger;
@@ -31,6 +34,7 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
         LoadingCatalogRefreshTracker? refreshTracker = null)
     {
         _loader = loader ?? throw new ArgumentNullException(nameof(loader));
+        _scopedLoader = loader as IScopedPackageLoader;
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _loadingOptions = (loadingOptions ?? throw new ArgumentNullException(nameof(loadingOptions))).Value;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -53,6 +57,7 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
         IStoreRegistry? storeRegistry = null)
     {
         _loader = loader ?? throw new ArgumentNullException(nameof(loader));
+        _scopedLoader = loader as IScopedPackageLoader;
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _loadingOptions = (loadingOptions ?? throw new ArgumentNullException(nameof(loadingOptions))).Value;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -76,6 +81,25 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
 
     /// <inheritdoc />
     public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task OnPackagesChangingAsync(PackageChangeSet changeSet, PackageStoreOperationBorrow borrow, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task OnPackagesChangedAsync(PackageChangeSet changeSet, PackageStoreOperationBorrow borrow, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task OnPackageFailedAsync(string packageId, Exception exception, PackageStoreOperationBorrow borrow, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
+    /// Enrolled reconciliation defers all Loading work until its root admission and StoreLock have
+    /// been released. The typed post-admission handoff performs the retained reads.
+    /// </summary>
+    public Task OnPackagesReconciledAsync(
+        PackageChangeSet changeSet,
+        IReadOnlyList<ResolvedPackage> appliedPackages,
+        PackageStoreOperationBorrow borrow,
+        CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <inheritdoc />
     public async Task OnPackagesReconciledAsync(
@@ -171,6 +195,127 @@ internal sealed class PackageAutoLoadingObserver : INuplaneObserver
 
             await _dispatcher.PublishLoadedAsync(evt, ct);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<LeasedPackageGraphLoadingResult> LoadAsync(
+        LeasedPackageGraphLoadingHandoff handoff,
+        IReadOnlyDictionary<string, string>? currentActiveVersions,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(handoff);
+        try
+        {
+            return await LoadLeasedGraphsAsync(handoff, currentActiveVersions, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            // Deferred loading returns failures directly to Core. Drain this module's correlation
+            // even when a host replaces ICycleFailureContributor or an observer throws mid-dispatch.
+            LoadingFailureTracker?.TakeFailedPackageIds(handoff.ChangeSet.CorrelationId);
+        }
+    }
+
+    private async Task<LeasedPackageGraphLoadingResult> LoadLeasedGraphsAsync(
+        LeasedPackageGraphLoadingHandoff handoff,
+        IReadOnlyDictionary<string, string>? currentActiveVersions,
+        CancellationToken cancellationToken)
+    {
+
+        if (!_loadingOptions.Enabled)
+        {
+            _logger.LogDebug("Loading disabled; skipping load for CorrelationId={CorrelationId}.", handoff.ChangeSet.CorrelationId);
+            return new([]);
+        }
+
+        if (currentActiveVersions is not null
+            && (handoff.ChangeSet.Removed.Count > 0 || handoff.ChangeSet.Updated.Count > 0))
+        {
+            var unloaded = _loader.UnloadContextsNotActive(currentActiveVersions);
+            if (unloaded.Count > 0)
+            {
+                _logger.LogInformation(
+                    "Unloaded {Count} package context(s) no longer active before deferred loading: {Keys}. CorrelationId={CorrelationId}",
+                    unloaded.Count,
+                    string.Join(", ", unloaded),
+                    handoff.ChangeSet.CorrelationId);
+            }
+        }
+
+        var graphs = new List<ScopedResolvedPackageGraph>(handoff.GraphSelections.Count);
+        var inertPackageCount = 0;
+        foreach (var selection in handoff.GraphSelections)
+        {
+            if (selection.Packages.All(package => _scopedLoader?.IsInertPackage(package, selection.LeaseOwner.Lease) == true))
+            {
+                inertPackageCount += selection.Packages.Count;
+                _logger.LogInertGraphSkipped(
+                    string.Join(", ", selection.Packages.Select(package => BuildKey(package.Id, package.Version))),
+                    handoff.ChangeSet.CorrelationId);
+                continue;
+            }
+
+            graphs.Add(new ScopedResolvedPackageGraph(
+                selection.Graph,
+                selection.Packages,
+                selection.RootRequests,
+                selection.LeaseOwner));
+        }
+
+        if (graphs.Count == 0)
+        {
+            Metrics?.RecordLoaderBoundaryOutcome(succeeded: 0, failed: 0, inertPackageCount);
+            RefreshTracker?.MarkRefreshed(handoff.ChangeSet.CorrelationId);
+            return new([]);
+        }
+
+        if (_scopedLoader is null)
+        {
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "Enrolled deferred loading requires the lease-bound scoped package loader.");
+        }
+
+        var packageCount = graphs.Sum(static graph => graph.Packages.Count);
+        for (var index = 0; index < packageCount; index++)
+            Metrics?.RecordLoadAttemptStarted();
+
+        var sharedPolicy = _loadingOptions.SharedAssemblies
+            .Select(item => new SharedAssemblyPolicyEntry(item.Name, item.PublicKeyToken, item.MajorVersion))
+            .ToArray();
+        var loadResult = await _scopedLoader.EnsureGraphLoadedAsync(graphs, sharedPolicy, cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var _ in loadResult.Loaded)
+            Metrics?.RecordLoadSucceeded();
+
+        var failures = new List<LeasedPackageGraphLoadingFailure>(loadResult.FailedByPackageId.Count);
+        foreach (var (packageId, reason) in loadResult.FailedByPackageId)
+        {
+            failures.Add(new(packageId, reason));
+            Metrics?.RecordLoadFailed();
+            LoadingFailureTracker?.RecordFailure(handoff.ChangeSet.CorrelationId, packageId, reason);
+            _logger.LogWarning(
+                "Package {PackageId} failed to load: {Reason}. CorrelationId={CorrelationId}",
+                packageId,
+                reason,
+                handoff.ChangeSet.CorrelationId);
+            await _dispatcher.PublishFailedAsync(packageId, reason, cancellationToken).ConfigureAwait(false);
+        }
+
+        Metrics?.RecordLoaderBoundaryOutcome(loadResult.Loaded.Count, loadResult.FailedByPackageId.Count, inertPackageCount);
+        RefreshTracker?.MarkRefreshed(handoff.ChangeSet.CorrelationId);
+
+        if (loadResult.Loaded.Count > 0)
+        {
+            var evt = new PackageLoadedEvent(handoff.ChangeSet.CorrelationId, DateTimeOffset.UtcNow, loadResult.Loaded);
+            _logger.LogInformation(
+                "Packages loaded. Count={Count} CorrelationId={CorrelationId}",
+                loadResult.Loaded.Count,
+                handoff.ChangeSet.CorrelationId);
+            await _dispatcher.PublishLoadedAsync(evt, cancellationToken).ConfigureAwait(false);
+        }
+
+        return new(failures);
     }
 
     /// <inheritdoc />

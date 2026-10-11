@@ -2,6 +2,7 @@ using Nuplane.Abstractions;
 using Nuplane.Observability;
 using Nuplane.Sources;
 using Nuplane.Store.State;
+using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Reconciliation.Middleware;
 
@@ -54,7 +55,7 @@ internal sealed class DesiredStateReadMiddleware(
             .Select(source => new
             {
                 Source = source,
-                SourceName = source.GetType().FullName ?? source.GetType().Name
+                SourceName = DesiredPackageSourceAccess.GetSourceName(source)
             })
             .OrderBy(x => x.SourceName, StringComparer.Ordinal)
             .ToArray();
@@ -71,6 +72,10 @@ internal sealed class DesiredStateReadMiddleware(
                 freshReads++;
             }
             catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (PackageStoreAdmissionException)
             {
                 throw;
             }
@@ -96,4 +101,3 @@ internal sealed class DesiredStateReadMiddleware(
             AllSourcesFresh: freshReads == orderedSources.Length), sourceOutageCount);
     }
 }
-

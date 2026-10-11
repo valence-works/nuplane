@@ -1,0 +1,5 @@
+[
+  "Nuplane.Store.Tests.Coordination.PhysicalStorePackageStreamTests.BoundedStream_PartialWriteCancellationStopsBeforeRetrying",
+  "Nuplane.Store.Tests.Coordination.PhysicalStorePackageStreamTests.UnixReadStream_RefusesWhenTheExactParentNameIsReplaced",
+  "Nuplane.Store.Tests.Coordination.PhysicalStorePackageStreamTests.UnixStreams_AreBoundedSeekableAndCreationOnly"
+]

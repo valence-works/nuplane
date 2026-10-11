@@ -3,13 +3,14 @@ using Nuplane.Reconciliation.Configuration;
 using Polly;
 using Polly.Retry;
 using Polly.Registry;
+using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Reconciliation;
 
 /// <summary>
 /// Implements a resilience-pipeline-backed retry policy for reconciliation operations.
 /// </summary>
-public sealed class ReconciliationRetryPolicy : IReconciliationRetryPolicy
+public sealed class ReconciliationRetryPolicy : IPackageStoreRefusalPreservingRetryPolicy
 {
     internal const string PipelineName = "nuplane.reconciliation.retry";
 
@@ -78,7 +79,7 @@ public sealed class ReconciliationRetryPolicy : IReconciliationRetryPolicy
             BackoffType = DelayBackoffType.Exponential,
             UseJitter = true,
             ShouldHandle = new PredicateBuilder()
-                .Handle<Exception>(static ex => ex is not OperationCanceledException)
+                .Handle<Exception>(static ex => ex is not OperationCanceledException and not PackageStoreAdmissionException)
         };
     }
 

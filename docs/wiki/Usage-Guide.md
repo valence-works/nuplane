@@ -814,6 +814,25 @@ Only `PackageInstallRoot` (and the store state file path) has to be writable. Ea
 extracted into a `.installed/` subdirectory of the feed directory; hosts upgrading from those
 versions can delete that directory, and packages are re-extracted once under the install root.
 
+### Named package-store root locators
+
+Hosts can add a named package-store root locator with `NuplaneBuilder.AddPackageStoreRoot`, supplying
+a label and a root locator. The `default` label is reserved for the root selected by the final
+`Nuplane:FeedResolution:PackageInstallRoot` option (or Nuplane's existing application-base
+fallback). Other labels are unique without regard to case. A relative locator is anchored to the
+callback's final `BasePath`, or to the current directory when no base is supplied, using
+`Path.GetFullPath(locator, basePath)`. On Windows, with `C:\app` as that base, `C:packages` resolves
+to `C:\app\packages`, `\packages` to `C:\packages`, and `D:packages` to `D:\packages` without
+using an ambient per-drive current directory. A fully qualified locator stays absolute.
+This records configured locations for store coordination. Registration does
+not inspect or create a directory, enroll it, or by itself authorize a maintenance operation.
+
+`Nuplane:PackageStoreMaintenance:RootLabel` names the default root for maintenance lookup and
+defaults to `default`. A custom label replaces that maintenance alias; it does not change the
+install path or the catalog's reserved `default` entry. Additional configured roots retain their
+labels. Blank or padded labels and collisions with additional labels fail options validation at
+startup. This lookup configuration does not enroll roots or enable inspection/pruning APIs.
+
 ### Feed credentials
 
 - **Applicability:** `Core`

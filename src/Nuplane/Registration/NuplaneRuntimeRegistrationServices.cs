@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Events;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Health;
@@ -11,6 +12,7 @@ using Nuplane.Operational;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Sources;
+using Nuplane.Store.Coordination;
 using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
 using Polly;
@@ -69,12 +71,16 @@ public static class NuplaneRuntimeRegistrationServices
             sp.GetRequiredService<StartupRecoveryState>(),
             sp.GetServices<ICycleFailureContributor>(),
             sp.GetRequiredService<IOptions<ReconciliationOptions>>(),
-            sp.GetService<IStoreLock>()));
+            sp.GetService<IStoreLock>(),
+            sp.GetRequiredService<IPackageStoreAdmission>()));
         services.AddSingleton<ActivePackageCatalog>();
         services.AddSingleton<IActivePackageCatalog>(sp => sp.GetRequiredService<ActivePackageCatalog>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, PackageCatalogOperationalStateContributor>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, StartupRecoveryOperationalStateContributor>());
-        services.AddSingleton(sp => new ReconciliationService(
+        services.AddSingleton(sp =>
+        {
+            var loadingObserver = sp.GetService<ILeasedPackageGraphLoadingObserver>();
+            return new ReconciliationService(
             sp.GetServices<IDesiredPackageSource>(),
             sp.GetRequiredService<IDesiredStateAggregator>(),
             sp.GetRequiredService<IDesiredActualDiffEngine>(),
@@ -97,7 +103,11 @@ public static class NuplaneRuntimeRegistrationServices
             sp.GetService<StartupRecoveryState>(),
             sp.GetService<IStoreLock>(),
             sp.GetServices<IDesiredStateContributor>(),
-            sp.GetRequiredService<IOptions<HostProvidedPackagesOptions>>()));
+            sp.GetRequiredService<IOptions<HostProvidedPackagesOptions>>(),
+            sp.GetRequiredService<IPackageStoreAdmission>(),
+            loadingObserver is null ? null : sp.GetService<IResolvedPackageGraphUseLeaseAcquisition>(),
+            loadingObserver);
+        });
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
     }
 

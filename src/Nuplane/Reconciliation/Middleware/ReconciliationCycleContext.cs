@@ -2,6 +2,7 @@ using Nuplane.Abstractions;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Sources;
+using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Reconciliation.Middleware;
 
@@ -13,6 +14,15 @@ internal sealed class ReconciliationCycleContext
 
     // Trigger metadata
     public ReconciliationTrigger? Trigger { get; set; }
+
+    /// <summary>Present only while this cycle retains its enrolled package-store owner.</summary>
+    public PackageStoreOperationOwner? PackageStoreOwner { get; set; }
+
+    /// <summary>Whether complete graph/history preflight passed before enrolled transaction execution.</summary>
+    public bool CoordinatedTransitionPreflightPassed { get; set; }
+
+    /// <summary>Whether final health/metrics construction is deferred until post-admission loading finishes.</summary>
+    public bool DeferCycleCompletion { get; set; }
 
     // Desired state
     public IReadOnlyList<PackageRequest> DesiredRequests { get; set; } = [];
@@ -40,5 +50,7 @@ internal sealed class ReconciliationCycleContext
 
     // Result
     public ReconciliationRunResult? Result { get; set; }
-}
 
+    /// <summary>Deferred package-load failures returned after the enrolled cycle releases short locks.</summary>
+    public IReadOnlyList<string> DeferredLoadingFailedPackageIds { get; set; } = [];
+}

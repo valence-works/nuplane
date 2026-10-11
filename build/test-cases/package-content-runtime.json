@@ -1,0 +1,12 @@
+[
+  "Nuplane.Runtime.Tests.PackageContentTests.TryFindByExtension_FindsRootEntryInNupkgArchive",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryFindByExtension_FindsRootFileInDirectory",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryFindByExtension_RefusesDuplicateRootArchiveMatches",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryReadFile_IgnoresUnsafeArchiveMemberNamesAndRejectsUnsafeRequests",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryReadFile_ReadsEntryFromNupkgArchive",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryReadFile_ReadsNestedFileUsingForwardOrBackSlashes",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryReadFile_ReadsRootFileFromExtractedDirectory",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryReadFile_RefusesDuplicateCaseInsensitiveArchiveMembers",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryReadFile_RejectsPathTraversalAndAbsolutePaths",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryReadFile_ReturnsNullForMissingFileOrPath"
+]

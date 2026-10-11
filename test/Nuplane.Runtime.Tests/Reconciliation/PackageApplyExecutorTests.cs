@@ -1,6 +1,7 @@
 using Nuplane.Abstractions;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.LockFile;
+using Nuplane.Reconciliation.Models;
 using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Store.Activation;
 using Nuplane.Store.Transactions;
@@ -46,6 +47,133 @@ public sealed class PackageApplyExecutorTests : IDisposable
         Assert.Equal(PackageUpdatePolicy.Exact, request.UpdatePolicy);
         Assert.Empty(result.FailedPackageIds);
         Assert.Single(result.ResolvedPackages);
+    }
+
+    [Fact]
+    public async Task ExecuteTransactionsAsync_ResolvedGraphSelectionSnapshot_PreservesSuccessfulApplicationAssociation()
+    {
+        var scenario = await CreateGraphApplyScenarioAsync();
+        var resolvedGraph = Assert.Single(scenario.Resolution.ResolvedGraphs);
+        var resolvedSelection = Assert.Single(scenario.Resolution.GraphSelections);
+        Assert.NotSame(resolvedGraph, resolvedSelection.Graph);
+
+        var applied = await scenario.Executor.ExecuteTransactionsAsync(
+            scenario.Resolution,
+            "corr-graph",
+            CancellationToken.None);
+
+        var successfulSelection = Assert.Single(applied.SuccessfulGraphSelections);
+        Assert.Equal([scenario.Package], applied.AppliedPackages);
+        Assert.Equal([scenario.Request], successfulSelection.RootRequests);
+        Assert.Equal(resolvedGraph.GraphId, successfulSelection.Graph.GraphId);
+        Assert.Equal(resolvedGraph.GenerationId, successfulSelection.Graph.GenerationId);
+        Assert.Equal(scenario.Package.Version, scenario.PointerSwitcher.GetCurrentVersion(scenario.Package.Id));
+        Assert.Empty(scenario.FailureRecorder.Records);
+    }
+
+    [Fact]
+    public async Task ExecuteTransactionsAsync_InconsistentExplicitGraphSelection_RefusesBeforeApplicationMutation()
+    {
+        var scenario = await CreateGraphApplyScenarioAsync();
+        var selection = Assert.Single(scenario.Resolution.GraphSelections);
+        var changedPath = selection.Graph.Nodes[0] with
+        {
+            InstallPath = Path.Combine(_tempRoot, "different-install-path")
+        };
+        var changedPackage = selection.Packages[0] with { InstallPath = changedPath.InstallPath! };
+        var pathMismatchGraph = selection.Graph with
+        {
+            Nodes = Array.AsReadOnly(selection.Graph.Nodes.Select((node, index) => index == 0 ? changedPath : node).ToArray())
+        };
+        var invalidResolutions = new[]
+        {
+            scenario.Resolution with
+            {
+                GraphSelections =
+                [
+                    new ResolvedPackageGraphSelection(
+                        selection.Graph with { GenerationId = "different-generation" },
+                        selection.RootRequests,
+                        selection.Packages)
+                ]
+            },
+            scenario.Resolution with
+            {
+                GraphSelections =
+                [new ResolvedPackageGraphSelection(pathMismatchGraph, selection.RootRequests, [changedPackage])]
+            },
+            scenario.Resolution with { GraphSelections = [selection, selection] }
+        };
+
+        foreach (var inconsistent in invalidResolutions)
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => scenario.Executor.ExecuteTransactionsAsync(
+                inconsistent,
+                "corr-graph",
+                CancellationToken.None));
+
+            Assert.Null(scenario.PointerSwitcher.GetCurrentVersion(scenario.Package.Id));
+            Assert.Empty(scenario.FailureRecorder.Records);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteTransactionsAsync_FlatResolvedPackagePathMismatch_RefusesBeforeApplicationMutation()
+    {
+        var scenario = await CreateGraphApplyScenarioAsync();
+        var inconsistent = scenario.Resolution with
+        {
+            ResolvedPackages = [scenario.Package with { InstallPath = Path.Combine(_tempRoot, "different-flat-path") }]
+        };
+
+        Assert.Same(scenario.Resolution.ResolvedGraphs, inconsistent.ResolvedGraphs);
+        Assert.Same(scenario.Resolution.GraphSelections, inconsistent.GraphSelections);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => scenario.Executor.ExecuteTransactionsAsync(
+            inconsistent,
+            "corr-flat-path",
+            CancellationToken.None));
+
+        Assert.Null(scenario.PointerSwitcher.GetCurrentVersion(scenario.Package.Id));
+        Assert.Empty(scenario.FailureRecorder.Records);
+    }
+
+    [Fact]
+    public async Task ExecuteTransactionsAsync_ExplicitGraphSelectionRequiresUniqueCompleteFlatPackageProjection()
+    {
+        var scenario = await CreateGraphApplyScenarioAsync();
+        var invalidResolutions = new[]
+        {
+            scenario.Resolution with { ResolvedPackages = [] },
+            scenario.Resolution with { ResolvedPackages = [scenario.Package, scenario.Package] }
+        };
+
+        foreach (var inconsistent in invalidResolutions)
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => scenario.Executor.ExecuteTransactionsAsync(
+                inconsistent,
+                "corr-flat-projection",
+                CancellationToken.None));
+
+            Assert.Null(scenario.PointerSwitcher.GetCurrentVersion(scenario.Package.Id));
+            Assert.Empty(scenario.FailureRecorder.Records);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteTransactionsAsync_GraphWithoutExplicitSelection_PreservesLegacyApplication()
+    {
+        var scenario = await CreateGraphApplyScenarioAsync();
+        var legacyResolution = scenario.Resolution with { GraphSelections = [] };
+
+        var applied = await scenario.Executor.ExecuteTransactionsAsync(
+            legacyResolution,
+            "corr-legacy",
+            CancellationToken.None);
+
+        Assert.Equal([scenario.Package], applied.AppliedPackages);
+        Assert.Empty(applied.SuccessfulGraphSelections);
+        Assert.Equal(scenario.Package.Version, scenario.PointerSwitcher.GetCurrentVersion(scenario.Package.Id));
+        Assert.Empty(scenario.FailureRecorder.Records);
     }
 
     [Fact]
@@ -222,6 +350,23 @@ public sealed class PackageApplyExecutorTests : IDisposable
         }
     }
 
+    private async Task<GraphApplyScenario> CreateGraphApplyScenarioAsync()
+    {
+        var package = CreateInstalledPackage("Root.Graph", "1.0.0");
+        var request = new PackageRequest("Root.Graph", "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source");
+        var resolver = new RecordingResolver(package);
+        var failureRecorder = new RecordingFailureRecorder();
+        var pointerSwitcher = new AtomicPointerSwitcher();
+        var executor = new PackageApplyExecutor(
+            resolver,
+            new PackageTransactionCoordinator(pointerSwitcher, failureRecorder),
+            new PassthroughRetryPolicy(),
+            failureRecorder);
+        var resolution = await executor.ResolveAsync([request], "corr-graph", CancellationToken.None);
+
+        return new(executor, pointerSwitcher, failureRecorder, package, request, resolution);
+    }
+
     private ResolvedPackage CreateInstalledPackage(
         string packageId,
         string version,
@@ -301,4 +446,12 @@ public sealed class PackageApplyExecutorTests : IDisposable
     {
         public Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken) => operation(cancellationToken);
     }
+
+    private sealed record GraphApplyScenario(
+        PackageApplyExecutor Executor,
+        AtomicPointerSwitcher PointerSwitcher,
+        RecordingFailureRecorder FailureRecorder,
+        ResolvedPackage Package,
+        PackageRequest Request,
+        PackageResolutionResult Resolution);
 }

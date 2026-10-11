@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using Microsoft.Extensions.Logging;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Store.Coordination.ProtectionRecords;
 
 namespace Nuplane.Store.State;
 
@@ -9,11 +11,12 @@ namespace Nuplane.Store.State;
 /// last-known-good versions, failure records, and source snapshots. Supports lazy loading
 /// from a serialized state file.
 /// </summary>
-public sealed partial class StoreRegistry : IStoreRegistry, IStoreStateCycleRefresher
+public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreStateCycleRefresher
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly IStoreStateSerializer _serializer;
     private readonly string? _stateFilePath;
+    private readonly string? _coordinatedStateFileLocator;
     private readonly ILogger<StoreRegistry> _logger;
     private readonly EffectiveStorePersistenceSettings? _effectiveSettings;
     private StoreStateRecord _currentState = StoreStateRecord.Empty();
@@ -29,6 +32,7 @@ public sealed partial class StoreRegistry : IStoreRegistry, IStoreStateCycleRefr
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _stateFilePath = stateFilePath;
+        _coordinatedStateFileLocator = CreateReplayLocator(stateFilePath);
         _logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<StoreRegistry>.Instance;
     }
 
@@ -46,6 +50,20 @@ public sealed partial class StoreRegistry : IStoreRegistry, IStoreStateCycleRefr
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _effectiveSettings = effectiveSettings;
         _stateFilePath = effectiveSettings.ResolvedStateFilePath;
+        _coordinatedStateFileLocator = effectiveSettings.CoordinatedStateFileLocator;
+    }
+
+    internal IStoreStateSerializer PayloadSerializer => _serializer;
+
+    internal string? CoordinatedStateFileLocator => _coordinatedStateFileLocator;
+
+    private static string? CreateReplayLocator(string? configuredPath)
+    {
+        if (string.IsNullOrWhiteSpace(configuredPath))
+            return null;
+        return Path.IsPathFullyQualified(configuredPath)
+            ? configuredPath
+            : Path.Combine(Directory.GetCurrentDirectory(), configuredPath);
     }
 
 
@@ -72,14 +90,18 @@ public sealed partial class StoreRegistry : IStoreRegistry, IStoreStateCycleRefr
         try
         {
             await EnsureLoadedUnderLockAsync(cancellationToken);
-            return new(
+            return new StoreStateRecord(
                 new(_currentState.ActiveVersionById, StringComparer.OrdinalIgnoreCase),
                 new(_currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase),
                 new(_currentState.LastFailureById, StringComparer.OrdinalIgnoreCase),
                 new(_currentState.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
                 _currentState.UpdatedAt,
                 new(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase),
-                new(_currentState.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase));
+                new(_currentState.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase))
+            {
+                ProtectionRecord = _currentState.ProtectionRecord,
+                ProtectionBundle = _currentState.ProtectionBundle?.Copy()
+            };
         }
         finally
         {
@@ -198,7 +220,7 @@ public sealed partial class StoreRegistry : IStoreRegistry, IStoreStateCycleRefr
                 ActiveGraphsById = nextGraphs
             };
 
-            await CommitStateUnderLockAsync(nextState, cancellationToken);
+            await CommitStateUnderLockAsync(nextState, currentState, cancellationToken);
         }
         finally
         {
@@ -235,7 +257,7 @@ public sealed partial class StoreRegistry : IStoreRegistry, IStoreStateCycleRefr
                 UpdatedAt = DateTimeOffset.UtcNow
             };
 
-            await CommitStateUnderLockAsync(nextState, cancellationToken);
+            await CommitStateUnderLockAsync(nextState, currentState, cancellationToken);
         }
         finally
         {
@@ -268,7 +290,7 @@ public sealed partial class StoreRegistry : IStoreRegistry, IStoreStateCycleRefr
                 UpdatedAt = DateTimeOffset.UtcNow
             };
 
-            await CommitStateUnderLockAsync(nextState, cancellationToken);
+            await CommitStateUnderLockAsync(nextState, currentState, cancellationToken);
         }
         finally
         {
@@ -297,8 +319,12 @@ public sealed partial class StoreRegistry : IStoreRegistry, IStoreStateCycleRefr
             : await _serializer.LoadAsync(_stateFilePath, cancellationToken);
     }
 
-    private async Task CommitStateUnderLockAsync(StoreStateRecord nextState, CancellationToken cancellationToken)
+    private async Task CommitStateUnderLockAsync(
+        StoreStateRecord nextState,
+        StoreStateRecord priorState,
+        CancellationToken cancellationToken)
     {
+        RefuseLegacyMutationOfBundle(priorState, nextState);
         if (!string.IsNullOrWhiteSpace(_stateFilePath))
         {
             await _serializer.SaveAsync(_stateFilePath, nextState, cancellationToken);
@@ -306,6 +332,13 @@ public sealed partial class StoreRegistry : IStoreRegistry, IStoreStateCycleRefr
 
         _currentState = nextState;
         _loaded = true;
+    }
+
+    private static void RefuseLegacyMutationOfBundle(StoreStateRecord priorState, StoreStateRecord nextState)
+    {
+        if (priorState.ProtectionBundle is not null || nextState.ProtectionBundle is not null)
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "The direct store registry cannot mutate or replace a v2 protection bundle without its group owner.");
     }
 
     private void LogPersistenceActivationOnce()

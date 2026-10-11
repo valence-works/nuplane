@@ -232,6 +232,11 @@ public sealed class PackageApplyExecutorCapabilityTests : IDisposable
         Assert.Contains(lastAcquired, result.FailedPackageIds);
         Assert.Contains(refused, result.FailedPackageIds);
         Assert.DoesNotContain(refused, _resolvedRequestIds);
+        Assert.DoesNotContain(result.ResolvedPackages, package => package.Id == lastAcquired);
+        Assert.DoesNotContain(result.ResolvedGraphs.SelectMany(graph => graph.Roots), root => root.PackageId == lastAcquired);
+        Assert.All(result.GraphSelections, selection =>
+            Assert.Equal(selection.Graph.Roots.Select(root => root.PackageId).Order(StringComparer.OrdinalIgnoreCase),
+                selection.RootRequests.Select(request => request.Id).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)));
         var message = _recorder.MessageFor(refused, "capability-contribution-limit");
         Assert.Contains($"within {PackageApplyExecutor.MaxContributionRounds} rounds", message, StringComparison.Ordinal);
         Assert.Contains($"{ChainId(1)} (capability:link-0=Next)", message, StringComparison.Ordinal);

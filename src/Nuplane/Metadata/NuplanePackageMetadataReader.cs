@@ -3,6 +3,11 @@ using System.Text.RegularExpressions;
 using NuGet.Packaging;
 using NuGet.Versioning;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Registration;
+using Nuplane.Store.Coordination;
+using Nuplane.Store.Coordination.PhysicalFiles;
+using Nuplane.Store.State;
 
 namespace Nuplane.Metadata;
 
@@ -12,7 +17,7 @@ namespace Nuplane.Metadata;
 /// validation of the file. A document is valid or invalid as a whole; partial results are never
 /// returned.
 /// </summary>
-public sealed class NuplanePackageMetadataReader : IPackageMetadataReader
+public sealed class NuplanePackageMetadataReader : IPackageMetadataReader, IScopedPackageMetadataReader
 {
     /// <summary>The file name Nuplane reads from a resolved package's install root.</summary>
     public const string MetadataFileName = "nuplane.json";
@@ -49,6 +54,11 @@ public sealed class NuplanePackageMetadataReader : IPackageMetadataReader
         AllowTrailingCommas = true
     };
 
+    /// <summary>Creates a package metadata reader.</summary>
+    public NuplanePackageMetadataReader()
+    {
+    }
+
     /// <summary>
     /// Reads and validates the <c>nuplane.json</c> document at the root of a resolved package's
     /// install path.
@@ -63,42 +73,301 @@ public sealed class NuplanePackageMetadataReader : IPackageMetadataReader
         ArgumentException.ThrowIfNullOrWhiteSpace(version);
         ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
 
-        var metadataPath = Path.Combine(installPath, MetadataFileName);
-        if (!File.Exists(metadataPath))
+        return ExecuteRead(packageId, version, () =>
+            PackageStoreRuntimeAdmission.WithUnenrolledPackageDirectory(
+                installPath,
+                (files, availability, directory) => availability == UnenrolledPackageDirectoryStatus.Missing
+                    ? NuplanePackageMetadataReadResult.Missing
+                    : ReadNativeDirectory(packageId, version, root: null, files: files,
+                        directory: directory ?? throw new PackageStoreAdmissionException(
+                            PackageStoreAdmissionReason.UnknownAuthority,
+                            "A present unenrolled package directory did not provide a held native handle."))));
+    }
+
+    NuplanePackageMetadataReadResult IScopedPackageMetadataReader.Read(
+        string packageId,
+        string version,
+        string installPath,
+        PackageStoreOperationBorrow borrow)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+        ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+        ArgumentNullException.ThrowIfNull(borrow);
+
+        return ExecuteRead(packageId, version, () =>
+            PackageStoreOperationAccess.WithValidatedPackageDirectory(
+                borrow,
+                installPath,
+                (files, directory) => ReadNativeDirectory(packageId, version, borrow.Root, files, directory)));
+    }
+
+    /// <summary>Reads metadata under an already-published exact graph-use lease.</summary>
+    /// <remarks>
+    /// This path does not reacquire root/member locks or require a fresh non-pending membership ledger. It uses
+    /// the filesystem provider captured by the lease, pins the exact original path, and replays the native root,
+    /// install-directory, completion-marker, and metadata-name identities before returning detached metadata.
+    /// </remarks>
+    public NuplanePackageMetadataReadResult ReadForGraphUseLease(
+        string packageId,
+        string version,
+        string installPath,
+        PackageGraphUseLease lease)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+        ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
+        ArgumentNullException.ThrowIfNull(lease);
+
+        return ExecuteRead(packageId, version, () =>
         {
+            using var pin = lease.AcquireRead(installPath);
+            var expectedInstall = lease.GetInstallIdentityForExactPath(installPath);
+            if (!string.Equals(expectedInstall.PackageId, packageId, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(expectedInstall.Version, version, StringComparison.Ordinal))
+            {
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.RootMismatch,
+                    "The requested package identity does not match the exact graph-use path.", expectedInstall.Root);
+            }
+
+            var nativeFileSystem = (lease.Control as PackageGraphUseLeaseOwnerControl)?.NativeFileSystem
+                ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "The graph-use lease does not carry its original native filesystem provider.", expectedInstall.Root);
+            var resolver = new PackageStoreAuthorityResolver(nativeFileSystem,
+                new RootMembershipRegistry(nativeFileSystem, new StoreStateSerializer()));
+            using var resolved = resolver.ResolveRetainedInstallPath(installPath, expectedInstall);
+            var resolvedDirectory = resolved.Target as PhysicalStoreDirectoryHandle
+                ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
+                    "The retained graph-use path did not resolve to a held package directory.", expectedInstall.Root);
+
+            var root = resolved.AuthorityRoot
+                ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
+                    "The retained graph-use path no longer has its admitted physical root.", expectedInstall.Root);
+            if (resolved.RootIdentity != expectedInstall.Root)
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.RootMismatch,
+                    "The retained graph-use path resolved to a different physical root.", expectedInstall.Root);
+
+            using var observation = new PackageInstallIdentityReader(nativeFileSystem).Observe(
+                root,
+                expectedInstall.Root,
+                expectedInstall.RootRelativeInstallPath,
+                expectedInstall.PackageId,
+                expectedInstall.Version,
+                expectedInstall.VerifiedArchiveHash);
+            var resolvedInfo = nativeFileSystem.InspectHandle(resolvedDirectory);
+            if (observation.InstallIdentity != expectedInstall ||
+                resolvedInfo.Kind != PhysicalStoreEntryKind.Directory ||
+                resolvedInfo.Identity != observation.InstallIdentity.DirectoryIdentity)
+            {
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
+                    "The retained graph-use install no longer matches its published native identity.", expectedInstall.Root);
+            }
+
+            resolved.Revalidate();
+            observation.Revalidate();
+            var result = ReadNativeDirectory(packageId, version, expectedInstall.Root,
+                nativeFileSystem, observation.InstallDirectory);
+            observation.Revalidate();
+            resolved.Revalidate();
+            return result;
+        });
+    }
+
+    private static NuplanePackageMetadataReadResult ExecuteRead(
+        string packageId,
+        string version,
+        Func<NuplanePackageMetadataReadResult> read)
+    {
+        try
+        {
+            return read();
+        }
+        catch (PackageStoreAdmissionException exception)
+        {
+            return NuplanePackageMetadataReadResult.Refused(exception.Reason);
+        }
+        catch (IOException exception)
+        {
+            return NuplanePackageMetadataReadResult.Invalid(
+                $"Package metadata for '{packageId}@{version}' could not be read: {exception.Message}");
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            return NuplanePackageMetadataReadResult.Invalid(
+                $"Package metadata for '{packageId}@{version}' could not be accessed: {exception.Message}");
+        }
+    }
+
+    private static NuplanePackageMetadataReadResult ReadNativeDirectory(
+        string packageId,
+        string version,
+        PhysicalRootIdentity? root,
+        IPhysicalStoreFileSystem files,
+        PhysicalStoreDirectoryHandle directory)
+    {
+        var names = files as IPhysicalStoreNameFileSystem
+            ?? throw new PackageStoreAdmissionException(
+                PackageStoreAdmissionReason.UnsupportedFilesystem,
+                "The filesystem cannot retain native package metadata name semantics.",
+                root);
+        var directoryBefore = files.InspectHandle(directory);
+        RequireDirectory(directoryBefore, directoryBefore.Identity, root);
+        RequireSameVolume(directoryBefore.Identity, root?.HandleIdentity ?? directoryBefore.Identity, root);
+        var packageVolumeIdentity = root?.HandleIdentity ?? directoryBefore.Identity;
+        var nameSemantics = names.ObserveDirectoryNameSemantics(directory);
+        var namedBefore = files.InspectChildNoFollow(directory, MetadataFileName);
+        if (namedBefore is null)
+        {
+            RequireMetadataNameStillMissing(files, names, directory, directoryBefore, nameSemantics, root);
             return NuplanePackageMetadataReadResult.Missing;
         }
 
+        RequireMetadataFile(namedBefore, root);
+        RequireSameVolume(namedBefore.Identity, packageVolumeIdentity, root);
+        var canonicalBefore = names.ObserveCanonicalFileNameNoFollow(directory, MetadataFileName, namedBefore.Identity);
+        if (canonicalBefore.ParentIdentity != directoryBefore.Identity ||
+            canonicalBefore.FileIdentity != namedBefore.Identity ||
+            !string.Equals(canonicalBefore.Basename, MetadataFileName, StringComparison.Ordinal) ||
+            canonicalBefore.Semantics != nameSemantics)
+        {
+            throw Unknown("The package metadata entry does not use its exact native basename under the observed parent/profile.", root);
+        }
+        if (namedBefore.Length > MaxMetadataBytes)
+        {
+            RequireMetadataNameStillSame(files, names, directory, directoryBefore, nameSemantics, namedBefore, root);
+            return Oversized(packageId, version);
+        }
+
+        using var file = files.OpenFileChildNoFollow(directory, MetadataFileName, FileAccess.Read);
+        var opened = files.InspectHandle(file);
+        RequireMetadataFile(opened, root);
+        RequireSameVolume(opened.Identity, packageVolumeIdentity, root);
+        if (opened.Identity != namedBefore.Identity || opened.Length != namedBefore.Length)
+            throw Unknown("The package metadata file changed between native inspection and open.", root);
+
+        var bytes = files.ReadControlFile(file, checked((int)MaxMetadataBytes));
+        var heldAfter = files.InspectHandle(file);
+        RequireMetadataFile(heldAfter, root);
+        RequireSameVolume(heldAfter.Identity, packageVolumeIdentity, root);
+        if (heldAfter.Identity != opened.Identity || heldAfter.Length != opened.Length || bytes.LongLength != opened.Length)
+            throw Unknown("The package metadata file changed while its bytes were read.", root);
+
+        var namedAfter = files.InspectChildNoFollow(directory, MetadataFileName);
+        RequireMetadataFile(namedAfter, root);
+        if (namedAfter!.Identity != opened.Identity || namedAfter.Length != opened.Length)
+            throw Unknown("The package metadata name no longer identifies the file that was read.", root);
+        var canonicalAfter = names.ObserveCanonicalFileNameNoFollow(directory, MetadataFileName, opened.Identity);
+        if (canonicalAfter.ParentIdentity != canonicalBefore.ParentIdentity ||
+            canonicalAfter.FileIdentity != canonicalBefore.FileIdentity ||
+            !string.Equals(canonicalAfter.Basename, canonicalBefore.Basename, StringComparison.Ordinal) ||
+            canonicalAfter.Semantics != canonicalBefore.Semantics)
+        {
+            throw Unknown("The canonical package metadata name changed while its bytes were read.", root);
+        }
+        RequireDirectoryAndProfileUnchanged(files, names, directory, directoryBefore, nameSemantics, root);
+
+        using var stream = new MemoryStream(bytes, writable: false);
+        return ParseMetadata(packageId, version, stream);
+    }
+
+    private static NuplanePackageMetadataReadResult ParseMetadata(string packageId, string version, Stream stream)
+    {
+        if (stream.Length > MaxMetadataBytes)
+            return Oversized(packageId, version);
+
         try
         {
-            using var stream = File.OpenRead(metadataPath);
-            if (stream.Length > MaxMetadataBytes)
-            {
-                return NuplanePackageMetadataReadResult.Invalid(
-                    $"Package metadata for '{packageId}@{version}' exceeds the {MaxMetadataBytes} byte limit.");
-            }
-
             var document = JsonSerializer.Deserialize<MetadataDocument>(stream, JsonOptions);
             if (document is null)
-            {
                 return NuplanePackageMetadataReadResult.Invalid($"Package metadata for '{packageId}@{version}' is empty.");
-            }
 
             return Validate(packageId, version, document);
         }
-        catch (JsonException ex)
+        catch (JsonException exception)
         {
-            return NuplanePackageMetadataReadResult.Invalid($"Package metadata for '{packageId}@{version}' is not valid JSON: {ex.Message}");
-        }
-        catch (IOException ex)
-        {
-            return NuplanePackageMetadataReadResult.Invalid($"Package metadata for '{packageId}@{version}' could not be read: {ex.Message}");
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return NuplanePackageMetadataReadResult.Invalid($"Package metadata for '{packageId}@{version}' could not be accessed: {ex.Message}");
+            return NuplanePackageMetadataReadResult.Invalid(
+                $"Package metadata for '{packageId}@{version}' is not valid JSON: {exception.Message}");
         }
     }
+
+    private static NuplanePackageMetadataReadResult Oversized(string packageId, string version)
+        => NuplanePackageMetadataReadResult.Invalid(
+            $"Package metadata for '{packageId}@{version}' exceeds the {MaxMetadataBytes} byte limit.");
+
+    private static PhysicalStoreEntryInfo RequireDirectory(
+        PhysicalStoreEntryInfo? info,
+        PhysicalFileIdentity expectedIdentity,
+        PhysicalRootIdentity? root)
+    {
+        if (info is null || info.Kind != PhysicalStoreEntryKind.Directory || info.Identity != expectedIdentity)
+            throw Unknown("The admitted package install directory changed during metadata access.", root);
+        return info;
+    }
+
+    private static void RequireMetadataFile(PhysicalStoreEntryInfo? info, PhysicalRootIdentity? root)
+    {
+        if (info is null || info.Kind != PhysicalStoreEntryKind.RegularFile || info.LinkCount != 1)
+            throw Unknown("Package metadata must be one no-follow, single-link regular file.", root);
+    }
+
+    private static void RequireSameVolume(
+        PhysicalFileIdentity identity,
+        PhysicalFileIdentity rootIdentity,
+        PhysicalRootIdentity? root)
+    {
+        if (!string.Equals(identity.Provider, rootIdentity.Provider, StringComparison.Ordinal) ||
+            !string.Equals(identity.VolumeOrDeviceId, rootIdentity.VolumeOrDeviceId, StringComparison.Ordinal))
+        {
+            throw Unknown("Package metadata is not on the admitted root's native volume.", root);
+        }
+    }
+
+    private static void RequireMetadataNameStillMissing(
+        IPhysicalStoreFileSystem files,
+        IPhysicalStoreNameFileSystem names,
+        PhysicalStoreDirectoryHandle directory,
+        PhysicalStoreEntryInfo directoryBefore,
+        PhysicalStoreNameSemantics nameSemantics,
+        PhysicalRootIdentity? root)
+    {
+        RequireDirectoryAndProfileUnchanged(files, names, directory, directoryBefore, nameSemantics, root);
+        if (files.InspectChildNoFollow(directory, MetadataFileName) is not null)
+            throw Unknown("Package metadata appeared while its absence was being observed.", root);
+    }
+
+    private static void RequireMetadataNameStillSame(
+        IPhysicalStoreFileSystem files,
+        IPhysicalStoreNameFileSystem names,
+        PhysicalStoreDirectoryHandle directory,
+        PhysicalStoreEntryInfo directoryBefore,
+        PhysicalStoreNameSemantics nameSemantics,
+        PhysicalStoreEntryInfo metadataBefore,
+        PhysicalRootIdentity? root)
+    {
+        RequireDirectoryAndProfileUnchanged(files, names, directory, directoryBefore, nameSemantics, root);
+        var namedAfter = files.InspectChildNoFollow(directory, MetadataFileName);
+        RequireMetadataFile(namedAfter, root);
+        if (namedAfter!.Identity != metadataBefore.Identity || namedAfter.Length != metadataBefore.Length)
+            throw Unknown("The package metadata name changed during native inspection.", root);
+    }
+
+    private static void RequireDirectoryAndProfileUnchanged(
+        IPhysicalStoreFileSystem files,
+        IPhysicalStoreNameFileSystem names,
+        PhysicalStoreDirectoryHandle directory,
+        PhysicalStoreEntryInfo directoryBefore,
+        PhysicalStoreNameSemantics nameSemantics,
+        PhysicalRootIdentity? root)
+    {
+        var directoryAfter = files.InspectHandle(directory);
+        RequireDirectory(directoryAfter, directoryBefore.Identity, root);
+        RequireSameVolume(directoryAfter.Identity, root?.HandleIdentity ?? directoryBefore.Identity, root);
+        if (names.ObserveDirectoryNameSemantics(directory) != nameSemantics)
+            throw Unknown("The package install directory's native name profile changed during metadata access.", root);
+    }
+
+    private static PackageStoreAdmissionException Unknown(string message, PhysicalRootIdentity? root)
+        => new(PackageStoreAdmissionReason.UnknownAuthority, message, root);
 
     private static NuplanePackageMetadataReadResult Validate(string packageId, string version, MetadataDocument document)
     {

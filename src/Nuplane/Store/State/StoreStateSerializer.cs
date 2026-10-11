@@ -1,12 +1,16 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Store.Coordination;
+using Nuplane.Store.Coordination.ProtectionRecords;
+using Nuplane.Store.State.ProtectionSerialization;
 
 namespace Nuplane.Store.State;
 
 /// <summary>
 /// Serializes and deserializes <see cref="StoreStateRecord"/> to/from JSON files.
 /// </summary>
-public sealed class StoreStateSerializer : IStoreStateSerializer
+public sealed class StoreStateSerializer : IPackageProtectionBundleStatePayloadSerializer
 {
     private readonly AtomicFileWriter _fileWriter;
 
@@ -14,7 +18,8 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new PackageProtectionRecordJsonConverter(), new PackageProtectionBundleJsonConverter() }
     };
 
     /// <summary>Initializes a serializer that writes state through atomic file replacement.</summary>
@@ -48,7 +53,7 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
             FileShare.ReadWrite | FileShare.Delete,
             bufferSize: 4096,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
-        return await DeserializeAsync(stream, cancellationToken).ConfigureAwait(false);
+        return await ReadPayloadAsync(stream, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -59,26 +64,61 @@ public sealed class StoreStateSerializer : IStoreStateSerializer
     /// </summary>
     internal static async Task<StoreStateRecord> DeserializeAsync(Stream stream, CancellationToken cancellationToken)
     {
-        var state = await JsonSerializer.DeserializeAsync<StoreStateRecord>(stream, JsonOptions, cancellationToken);
-        return Normalize(state ?? StoreStateRecord.Empty());
+        ArgumentNullException.ThrowIfNull(stream);
+        var stateFile = await JsonSerializer.DeserializeAsync<StoreStateFileDto>(stream, JsonOptions, cancellationToken);
+        return Normalize(stateFile?.ToStoreStateRecord() ?? StoreStateRecord.Empty());
+    }
+
+    /// <inheritdoc />
+    public Task<StoreStateRecord> ReadPayloadAsync(Stream payload, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        return DeserializeAsync(payload, cancellationToken);
     }
 
     /// <inheritdoc />
     public async Task SaveAsync(string stateFilePath, StoreStateRecord state, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(state);
+        cancellationToken.ThrowIfCancellationRequested();
+        RefuseLegacyPathWriteForBundle(state, "A path-based state write cannot publish a v2 protection bundle.");
+        if (File.Exists(stateFilePath))
+        {
+            var current = await LoadAsync(stateFilePath, cancellationToken).ConfigureAwait(false);
+            RefuseLegacyPathWriteForBundle(current, "A path-based state write cannot replace an existing v2 protection bundle.");
+        }
+
         await _fileWriter.WriteAsync(
             stateFilePath,
-            async (stream, token) =>
-            {
-                await JsonSerializer.SerializeAsync(stream, Normalize(state), JsonOptions, token).ConfigureAwait(false);
-            },
+            (stream, token) => WritePayloadAsync(stream, state, token),
             cancellationToken);
     }
 
-    private static StoreStateRecord Normalize(StoreStateRecord state) =>
+    /// <inheritdoc />
+    public async Task WritePayloadAsync(Stream payload, StoreStateRecord state, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        ArgumentNullException.ThrowIfNull(state);
+        var stateDto = StoreStateFileDto.FromState(Normalize(state));
+        await JsonSerializer.SerializeAsync(
+            payload,
+            stateDto,
+            JsonOptions,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static StoreStateRecord Normalize(StoreStateRecord state) =>
         state with
         {
             ActivePackageDescriptorsById = new(state.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase),
-            ActiveGraphsById = new(state.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase)
+            ActiveGraphsById = new(state.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase),
+            ProtectionRecord = state.ProtectionRecord,
+            ProtectionBundle = state.ProtectionBundle?.Copy()
         };
+
+    private static void RefuseLegacyPathWriteForBundle(StoreStateRecord state, string message)
+    {
+        if (state.ProtectionBundle is not null)
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant, message);
+    }
 }

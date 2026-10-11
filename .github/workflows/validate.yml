@@ -14,6 +14,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  darwin-native-shim:
+    name: Build universal Darwin store shim
+    runs-on: macos-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Build and verify universal native shim
+        shell: bash
+        run: bash native/nuplane-store/build-darwin.sh "$RUNNER_TEMP/nuplane-darwin-native"
+
+      - name: Upload verified native shim
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuplane-darwin-native
+          path: |
+            ${{ runner.temp }}/nuplane-darwin-native/libnuplane_store_native.dylib
+            ${{ runner.temp }}/nuplane-darwin-native/nuplane-store-native.manifest.json
+          if-no-files-found: error
+
   state-persistence-platform:
     name: State persistence (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -23,6 +49,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
+          - ubuntu-24.04-arm
           - macos-latest
           - windows-latest
     steps:
@@ -35,7 +62,413 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Verify protection serialization and canonical digests on every supported framework
+        shell: bash
+        run: |
+          set -euo pipefail
+          for framework in net8.0 net9.0 net10.0; do
+            dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+              --configuration Release -p:NuplaneProtectionFrameworkMatrix=true --framework "$framework" \
+              --filter "FullyQualifiedName~GraphUsePayloadSerializerTests|FullyQualifiedName~ProtectionStateSerializationTests|FullyQualifiedName~ProtectionStatePayloadSerializerTests|FullyQualifiedName~ProtectionDigestTests|FullyQualifiedName~RootMembershipPayloadSerializerTests|FullyQualifiedName~PersistedStoreStateGraphVerifierTests" \
+              --logger "trx;LogFileName=protection-$framework.trx" \
+              --results-directory "$RUNNER_TEMP/protection-results/$framework"
+            python3 - "$RUNNER_TEMP/protection-results/$framework/protection-$framework.trx" <<'GRAPHUSE'
+          import collections
+          import sys
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          required = [
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Constructor_RejectsGraphInstallOnAnotherNativeVolume',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Constructor_RequiresRootMembershipAndNativeVolumeAgreement',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsDigestTamperingTruncationAndOversize',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsDuplicatePropertiesAtEveryDepth',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingNestedFieldsAndNullRequiredValues',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "diagnosticProcessId")',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "enrollmentEpoch")',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "graphSnapshot")',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "lifetimeKind")',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "payloadDigest")',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "rootIdentity")',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "schemaVersion")',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "sentinelIdentity")',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "snapshotState")',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "useId")',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnknownAndCaseMismatchedProperties',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnsupportedOrInvalidScalarValues(property: "diagnosticProcessId", value: 0)',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnsupportedOrInvalidScalarValues(property: "lifetimeKind", value: 2)',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnsupportedOrInvalidScalarValues(property: "schemaVersion", value: 2)',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnsupportedOrInvalidScalarValues(property: "snapshotState", value: 99)',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Digest_BindsEveryVariableRecordField',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.GraphDigest_IsIndependentOfSetInputOrder',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.GraphDigest_MatchesIndependentRevisionOneGoldenVector',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.RoundTrip_PreservesCandidateAndCopiesTheFullGraph',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Serialize_RejectsCandidateWithMismatchedDigest',
+              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Serialize_RejectsPayloadLargerThanBound',
+          ]
+          codec_rows = [row for row in rows if '.GraphUsePayloadSerializerTests.' in row.attrib['testName']]
+          if collections.Counter(row.attrib['testName'] for row in codec_rows) != collections.Counter(required):
+              raise SystemExit('graph-use-record-codec: required scenario names or multiplicity differ.')
+          legacy_classes = {
+              'Nuplane.Store.Tests.State.ProtectionStateSerializationTests': 29,
+              'Nuplane.Store.Tests.State.ProtectionStatePayloadSerializerTests': 7,
+              'Nuplane.Store.Tests.Coordination.ProtectionDigestTests': 28,
+              'Nuplane.Store.Tests.Coordination.RootMembershipPayloadSerializerTests': 28,
+              'Nuplane.Store.Tests.Coordination.PersistedStoreStateGraphVerifierTests': 10,
+          }
+          legacy_rows = [row for row in rows if row not in codec_rows]
+          observed_classes = collections.Counter(row.attrib['testName'].split('(', 1)[0].rsplit('.', 1)[0] for row in legacy_rows)
+          if observed_classes != collections.Counter(legacy_classes):
+              raise SystemExit('Existing serialization/digest suites must retain their required scenario counts.')
+          if len({row.attrib['testName'] for row in rows}) != len(rows):
+              raise SystemExit('Serialization/digest scenario names must be unique.')
+          group_models = {
+              'RoundTrip_Schema2MixedLedger_PreservesV1MembersAndV2RootRow',
+              'RoundTrip_GroupIntent_IsImmutableAndRetainsLocalPriorTuple',
+              'GroupPending_BindingAndResolutionCannotMoveBackwards',
+              'GroupDescriptor_RejectsRevisionJumpsMixedPriorFilesAndSkippedInitialGeneration',
+              'GroupDescriptor_RejectsV2PriorHeaderThatDoesNotMatchParticipantSet',
+          }
+          for name in group_models:
+              expected = 'Nuplane.Store.Tests.Coordination.RootMembershipPayloadSerializerTests.' + name
+              if sum(row.attrib['testName'] == expected for row in rows) != 1:
+                  raise SystemExit('Missing required group membership scenario: ' + name)
+          if len(rows) != 128 or any(row.attrib.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('All 26 graph-use codec, 97 existing and five group membership cases must pass without skips.')
+          print('Qualified all 128 serialization/digest cases with no skips.')
+          GRAPHUSE
+          done
+
+      - name: Qualify multiroot protection encoding and legacy writer refusal on every framework
+        shell: bash
+        run: |
+          set -euo pipefail
+          for framework in net8.0 net9.0 net10.0; do
+            dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+              --configuration Release -p:NuplaneProtectionFrameworkMatrix=true --framework "$framework" \
+              --filter "FullyQualifiedName~PackageProtectionBundleSerializationTests|FullyQualifiedName~BindDeclaredMembersAsync_ProtectedOrMalformedPriorStateRemainsDeclared" \
+              --blame-hang-timeout 3m \
+              --logger "trx;LogFileName=multiroot-v2-$framework.trx" \
+              --results-directory "$RUNNER_TEMP/multiroot-v2/$framework"
+            python3 build/verify-required-trx.py "$RUNNER_TEMP/multiroot-v2/$framework/multiroot-v2-$framework.trx" \
+              build/test-cases/multiroot-v2-encoding.json
+          done
+
+      - name: Qualify trusted package-store root composition
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~TrustedPackageStoreRootCatalogTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=trusted-root-catalog.trx" \
+            --results-directory "$RUNNER_TEMP/trusted-root-catalog"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/trusted-root-catalog/trusted-root-catalog.trx" \
+            build/test-cases/trusted-root-catalog.json
+
+      - name: Qualify configured maintenance root labels and startup validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~PackageStoreMaintenanceOptionsTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=maintenance-root-labels.trx" \
+            --results-directory "$RUNNER_TEMP/maintenance-root-labels"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/maintenance-root-labels/maintenance-root-labels.trx" \
+            build/test-cases/maintenance-root-labels.json
+
+      - name: Run coordinated native ledger publication and recovery tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~RootMembershipRegistryTests|FullyQualifiedName~PhysicalStoreLockTests|FullyQualifiedName~PhysicalStoreLockOrderingTests" \
+            --logger "trx;LogFileName=coordinated-publication.trx" \
+            --results-directory "$RUNNER_TEMP/coordinated-publication"
+          python3 - "$RUNNER_TEMP/coordinated-publication/coordinated-publication.trx" <<'PYCODE'
+          import sys
+          import xml.etree.ElementTree as ET
+          ns = {'t': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+          rows = ET.parse(sys.argv[1]).findall('.//t:UnitTestResult', ns)
+          required = [
+              'PublishStateAsync_AllPriorBranches_ReopensActualNativePayloadAndAcknowledgesNewIdentity',
+              'RecoverAsync_DurablePendingBeforeArtifacts_ExactPriorRollsBackAndRemainsIncomplete',
+              'RecoverAsync_BoundArtifactsBeforeReplacement_ExactPriorRollsBackAndRemovesOnlyBoundFiles',
+              'RecoverAsync_ReplacedAndVerifiedSeams_ExactNextAcknowledgesReopenedStagedIdentity',
+              'RecoverAsync_UnboundArtifactOrChangedBoundBackup_RefusesAndPreservesPendingEvidence',
+              'RecoverAsync_ThirdOrMissingState_RefusesWithoutChangingLedgerOrArtifacts',
+              'RecoverAsync_CompletePrior_RestoresStatusOnlyAfterEveryMemberReopensCorrectly',
+              'PublishStateAsync_AnotherMembersMissingStateOrParent_RefusesBeforePendingPublication',
+              'PublishStateAsync_SerializerDropsProtectionOnActualStageReopen_PreservesPendingAndPrior',
+              'PublishStateAsync_DurableResolutionAndCleanupSeams_RecoverWithoutUnreferencedBackups',
+              'RecoverAsync_PriorCleanupInterruptedBetweenRemovals_ResumesExactPriorAndRetainsSibling',
+              'RecoverAsync_UnresolvedMissingBoundArtifact_RefusesBeforeDurableCleanupSelection',
+              'RecoverAsync_ResolvedPriorChangedStageOrBackup_ValidatesAllArtifactsBeforeAnyRemoval',
+              'RecoverAsync_ResolvedNextChangedStateOrSibling_RefusesAndKeepsBackup',
+              'PublishStateAsync_CompletePrior_AcknowledgesOnlyAfterCleanupAndAllMembersValidate',
+              'RecoverAsync_BackupChangesAfterStageRemoval_RevalidatesPayloadBeforeRemovingBackup',
+              'RecoverAsync_CancelAfterFirstRemoval_RetainsDurableResolutionForFreshRecovery',
+              'RecoverAsync_SelectedStateChangesAfterStageRemoval_RetainsExactPriorBackup',
+              'AcquireAsync_SortsMemberLocksAndReleasesInReverseOrder',
+              'AcquireAsync_CancellationAfterFirstMemberUnwindsAndLeavesEveryLockReusable',
+              'AcquireBootstrapAsync_PreparesUnderRootCreatesMissingLocksAndAcquiresSorted',
+              'AcquireBootstrapAsync_BusyLaterMemberUnwindsAndRetryReusesProvisionedLockFiles',
+              'AcquireBootstrapAsync_CancellationAfterFirstMemberUnwindsAndRetryReusesCreatedLocks',
+              'AcquireBootstrapAsync_CallbackFailureReleasesRootWithoutProvisioningMembers',
+              'AcquireBootstrapAsync_CallbackCancellationReleasesRootWithoutProvisioningMembers',
+              'AcquireBootstrapAsync_DuplicatePreparedSlotsFailBeforeMemberProvisioning',
+              'QuiescentBoundContext_PublishesTwiceUnderOneOwnerAndRefreshesEveryLocation',
+              'QuiescentBoundContext_InterruptedPendingExpiresLocationsAndCompleteReplayRefusesBeforeStateRead',
+          ]
+          if len(rows) < 39 or any(row.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('Coordinated native publication/lock scenarios must execute without skips.')
+          for name in required:
+              if sum(row.get('testName', '').endswith('.' + name) for row in rows) != 1:
+                  raise SystemExit('Missing coordinated scenario: ' + name)
+          PYCODE
+
+      - name: Qualify initial incomplete declaration and native prospective-slot profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~RootMembershipInitializationTests|FullyQualifiedName~PhysicalStoreDirectoryNameSemanticsTests" \
+            --logger "trx;LogFileName=initial-declaration.trx" \
+            --results-directory "$RUNNER_TEMP/initial-declaration"
+          python3 - "$RUNNER_TEMP/initial-declaration/initial-declaration.trx" <<'PYCODE'
+          import sys
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          required = [
+              'Observe_EmptyParentCreatesNothingAndMatchesCanonicalFileObservation',
+              'Observe_RejectsForeignAndClosedParentHandles',
+              'InitializeIncomplete_PublishesEveryDeclaredTargetAndRootLockBeforeMemberStateIo',
+              'InitializeIncomplete_PreconditionRefusalDoesNotMutateTheRootOrMemberStateParents',
+              'InitializeIncomplete_PresentFinalWithMissingLedgerIsPreserved',
+              'InitializeIncomplete_PresentFinalWithMalformedLedgerIsPreserved',
+              'InitializeIncomplete_CancellationOrFaultBeforeMoveRetainsStageAndLeavesFinalAbsent',
+              'InitializeIncomplete_ExceptionAfterMoveLeavesExactValidIncompleteDeclaration',
+              'InitializeIncomplete_CompetingPublishersCannotOverwriteWinnerAndRetainLosingStage',
+          ]
+          if len(rows) != 9 or any(row.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('All nine initial declaration/profile scenarios must execute and pass without skips.')
+          for name in required:
+              if sum(row.get('testName', '').endswith('.' + name) for row in rows) != 1:
+                  raise SystemExit('Missing initial declaration/profile scenario: ' + name)
+          PYCODE
+
+      - name: Qualify incomplete declared-member binding before state payload reads
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~RootMembershipBindingTests&FullyQualifiedName!~Ext4Casefold" \
+            --logger "trx;LogFileName=declared-member-binding.trx" \
+            --results-directory "$RUNNER_TEMP/declared-member-binding"
+          python3 - "$RUNNER_TEMP/declared-member-binding/declared-member-binding.trx" <<'PYCODE'
+          import sys
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          required = [
+              'BindDeclaredMembersAsync_BindsOrderedUnionAfterLocksAndPreservesStateSlots',
+              'BindDeclaredMembersAsync_PreconditionMismatchesPreserveDeclaration',
+              'BindDeclaredMembersAsync_DuplicateActualSlotsRefuseBeforeMemberLockProvisioning',
+              'BindDeclaredMembersAsync_ProtectedOrMalformedPriorStateRemainsDeclared',
+              'BindDeclaredMembersAsync_RereadsLedgerAfterAllLocksBeforeDecodingMemberPayload',
+              'BindDeclaredMembersAsync_StateReplacementAfterAllLocksRefusesBeforePayloadDecode',
+              'BindDeclaredMembersAsync_FaultOrCancellationBeforePublishLeavesAllMembersDeclared',
+              'BindDeclaredMembersAsync_ExceptionAfterPublicationLeavesWholeBoundUnionIncomplete',
+              'BindDeclaredMembersAsync_BusyLastSortedMemberLockRefusesAndCanRetry',
+              'BindDeclaredMembersAsync_DoesNotAdoptDigestValidMismatchedOrAlreadyBoundLedger',
+          ]
+          if len(rows) != 10 or any(row.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('All ten incomplete binding scenarios must execute and pass without skips.')
+          for name in required:
+              if sum(row.get('testName', '').endswith('.' + name) for row in rows) != 1:
+                  raise SystemExit('Missing or duplicate incomplete binding scenario: ' + name)
+          PYCODE
+
+      - name: Qualify configured authority and retained state-slot parent resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~PackageStoreAuthorityResolverTests&FullyQualifiedName!~Ext4Casefold" \
+            --logger "trx;LogFileName=configured-authority.trx" \
+            --results-directory "$RUNNER_TEMP/configured-authority"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/configured-authority/configured-authority.trx" \
+            build/test-cases/configured-authority.json
+
+      - name: Qualify locked member locations and completed install graph snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~RootMembershipLocatorReplayTests|FullyQualifiedName~PackageInstallIdentityReaderTests|FullyQualifiedName~CreateCandidate_ActualDependencyGraphAndNativeInstallsSurvivePayloadRoundTrip|FullyQualifiedName~RootMembershipProtectionVerificationTests|FullyQualifiedName~PackageStoreAdmissionTests|FullyQualifiedName~PackageStoreAdmissionRefusalTests|FullyQualifiedName~PackageStoreAdmissionOrderingTests|FullyQualifiedName~CoordinatedStoreRegistryTests|FullyQualifiedName~PackageStoreAdmissionProspectiveRootTests" \
+            --logger "trx;LogFileName=member-install.trx" \
+            --results-directory "$RUNNER_TEMP/member-install"
+          python3 - "$RUNNER_TEMP/member-install/member-install.trx" "${{ runner.os }}" <<'PYCODE'
+          import sys
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          required = ['Observe_UsesHeldNativeDirectoriesAndEmptySingleLinkMarkerWithoutContentOrMutationIO', 'Observe_RejectsMissingNonemptyAndHardLinkedCompletionMarkers', 'Observe_RejectsLinkedDirectoryComponentsAndLinkedCompletionMarker', 'Observe_RejectsWrongRootAndForeignFilesystemHandles', 'Observe_RejectsRootLevelControlAndStagingDirectories', 'Observe_RefusesAnUnknownNativeNameProfile', 'WithQuiescentIncompleteMemberLocationsAsync_ReplaysExternalAndSameRootProspectiveSlotsWithoutPayloadReads', 'WithCompleteMemberLocationsAsync_ReplaysParentAliasAndUsesOnlyExistingBoundLocks', 'WithCompleteMemberLocationsAsync_RefusesFinalFileLinksAndHardlinksBeforeCallback', 'WithCompleteMemberLocationsAsync_ChangedLedgerAndStateSlotRefuseBeforeCallback', 'WithQuiescentIncompleteMemberLocationsAsync_RequiresQuiescenceAndAbsoluteHints', 'Revalidate_ExternalMemberLocatorRejectsLedgerChangedInsideCallback', 'WithCompleteMemberLocationsAsync_MissingBoundLockIsRefusedWithoutRecreation', 'WithQuiescentIncompleteMemberLocationsAsync_DuplicateNativeSlotsRefuseBeforeMemberLockProvisioning', 'WithCompleteMemberLocationsAsync_ParentAliasThroughDifferentAuthorityRefusesBeforeCallback', 'CreateCandidate_ActualDependencyGraphAndNativeInstallsSurvivePayloadRoundTrip', 'WithQuiescentIncompleteMemberLocationsAsync_DeclaredMemberStateReadRefusesBeforePayloadRead', 'WithCompleteMemberLocationsAsync_ReadsExactBoundStateOnlyInsideTheCallback', 'CompleteEnrollment_ActualTwoStateGraphsPublishAndReopenBeforeComplete', 'CompleteEnrollment_RejectsChangedNativeInstallWrongDescriptorAndUnknownLegacyRecovery', 'CompleteEnrollment_RejectsDigestValidStateWithUnselectedGraphVersions', 'CompleteEnrollment_RequiresQuiescenceAndEveryActualAcknowledgedState', 'ConfiguredRootAdmissionRetainsVerifiedLocksUntilBorrowDrains', 'MultiPathAdmissionDeduplicatesRootAliasesAndRestrictsEachBorrowToItsExactPath', 'MultiRootAdmissionHoldsEveryVerifiedMemberSetAndDrainsBeforeUnlock', 'MultiRootRefusalUnwindsEarlierRootWhenLaterSortedRootIsBusy', 'ArchivePathsRequireSingleNativeFileIdentityWithoutArchivePayloadReads', 'PostResolutionTargetInspectionFaultClosesTheUntransferredNativeResolution', 'PartialMultiRootUnwindReportsBothAdmissionAndNativeReleaseFailures', 'FailedNativeOwnerReleaseRemainsVisibleOnRepeatedDisposal', 'UnenrolledConfiguredRootIsOnlyReturnedAfterPositiveNativeAbsenceObservation', 'IncompleteEnrollmentRefusesRootAndPathAdmission', 'BothAdmissionPathsRefuseDigestValidSemanticallyInvalidCompleteStateAndUnwind', 'BothAdmissionPathsRefuseReplacedNativeCompletionMarkerIdentityAndUnwind', 'BothAdmissionPathsRefuseReplacedNativeInstallDirectoryIdentityAndUnwind', 'MultiRootAdmissionHoldsEveryRootAndMemberLockBeforeFirstMemberPayloadRead', 'CancellationWhileAcquiringLaterRootReleasesEarlierRootAndMemberLocks', 'CoordinatedStateReadAndThreePublicationsUseOneExistingOwnerAcrossTwoMembers', 'UnlistedConfiguredSlotRefusesBeforeAnyMemberPayloadReadOrWrite', 'DifferentEligibleSerializerRefusesBeforeAnyMemberPayloadReadOrWrite', 'UnknownCompleteCandidateRefusesBeforePublication', 'IncoherentCurrentMemberRefusesBeforeAnyPublication', 'ExpiredBorrowAndUnsupportedSerializerRefuseBeforePayloadRead', 'CoordinatedStateReadAndPublicationsRemainAvailableWithRetainedMultiPathAdmission', 'ConfiguredRootAdmissionAcceptsOnlyAnAbsentOrdinaryUnenrolledSuffix', 'ConfiguredRootAdmissionRefusesMissingSuffixBeneathObservedCompleteAuthority', 'ConfiguredRootAdmissionRefusesReservedControlNameAsFirstMissingEdge', 'ConfiguredRootAdmissionRefusesReservedControlNameLaterInMissingSuffix', 'ConfiguredRootAdmissionUsesObservedNameProfileForReservedNameAlias', 'ConfiguredRootAdmissionDoesNotBroadenTheReservedNameMatchToPrefixes', 'ConfiguredRootAdmissionRefusesUnknownNativeNameProfileForMissingSuffix', 'ConfiguredRootAdmissionDoesNotGuessUnicodeReservedNameEquivalence', 'ConfiguredRootAdmissionRefusesNonAsciiLaterSuffixWithoutItsNativeProfile', 'ConfiguredRootAdmissionRefusesAliasEscapeFromCompleteAuthorityBeforeMissingSuffix', 'ConfiguredRootAdmissionRefusesMissingTargetInsideAnUnresolvedAliasExpansion', 'ConfiguredRootAdmissionRevalidatesMissingEdgeDuringInitialResolutionReplay', 'ConfiguredRootAdmissionRevalidatesMissingEdgeBeforeAdmissionReturns', 'MultiRootAdmissionAcquiresEveryRootBeforeFirstMemberAndIgnoresRequestOrder', 'MultiRootAdmission_LateMemberContentionUnwindsEveryAcquiredLock', 'MultiRootAdmission_LedgerMutationAfterAllRootsRefusesBeforeMemberLocks', 'MultiRootAdmission_PartialLocatorReplayFailureReleasesTheWholeLockUnion', 'MultiRootAdmission_ProfileMutationAfterAllRootsRefusesBeforeMemberLocks', 'MultiRootAdmission_SecondRootBusyUnwindsEarlierRootLock', 'MultiRootPathAdmissionRestrictsBorrowsAndRetainsUnionUntilDrainWithUnenrolledPath', 'PhysicalLockUnion_EqualStateSlotRetainsBothRootLocalMemberLocks', 'PhysicalLockUnion_RetainsLocksUntilEveryCountedRootOwnerDrains']
+          if len(rows) != 76:
+              raise SystemExit('All 76 member-location/install/producer/completion/admission scenarios must be discovered.')
+          for name in required:
+              matching = [row for row in rows if row.get('testName', '').endswith('.' + name)]
+              if len(matching) != 1 or matching[0].get('outcome') != 'Passed':
+                  raise SystemExit('Missing, duplicate, failed or skipped native member/install scenario: ' + name)
+          theory = [row for row in rows if '.Observe_RejectsMalformedOrMismatchedPathHints(' in row.get('testName', '')]
+          if len(theory) != 6 or len({row.get('testName') for row in theory}) != 6 or any(row.get('outcome') != 'Passed' for row in theory):
+              raise SystemExit('All six malformed install path inputs must execute and pass uniquely.')
+          conditional = {
+              'ConfiguredRootAdmissionRefusesExt4CasefoldAliasOfReservedControlName': 'NotExecuted',
+              'Observe_UsesNativeCasefoldProfileForReservedAliasesAndRetainsOrdinaryAliasSpelling': 'NotExecuted',
+              'Revalidate_RefusesAnInstallRenamedIntoAReservedNativeAlias': 'NotExecuted',
+              'Revalidate_RefusesReplacedInstallDirectoryAndCompletionMarker': 'NotExecuted' if sys.argv[2] == 'Windows' else 'Passed',
+          }
+          for name, outcome in conditional.items():
+              matching = [row for row in rows if row.get('testName', '').endswith('.' + name)]
+              if len(matching) != 1 or matching[0].get('outcome') != outcome:
+                  raise SystemExit('Unexpected supported-platform outcome for ' + name)
+          PYCODE
+
+      - name: Qualify actual process incomplete member binding interruption
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~RootMembershipBindingProcessTests" \
+            --logger "trx;LogFileName=binding-process.trx" \
+            --results-directory "$RUNNER_TEMP/binding-process"
+          python3 - "$RUNNER_TEMP/binding-process/binding-process.trx" <<'PYCODE'
+          import sys
+          import re
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          if len(rows) != 2 or any(row.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('Both incomplete binding process interruption cases must execute and pass without skips.')
+          for point in ['BindingsPrepared', 'BoundLedgerPublished']:
+              matches = [row for row in rows
+                         if '.BindProcess_TerminationPreservesDeclaredOrWholeBoundIncompleteLedger(' in row.get('testName', '')
+                         and re.findall(r'"([^"]+)"', row.get('testName', '')) == [point]]
+              if len(matches) != 1:
+                  raise SystemExit('Missing or duplicate incomplete binding process checkpoint: ' + point)
+          PYCODE
+
+      - name: Qualify actual process initial declaration interruption
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~RootMembershipInitializationProcessTests" \
+            --logger "trx;LogFileName=initial-declaration-process.trx" \
+            --results-directory "$RUNNER_TEMP/initial-declaration-process"
+          python3 - "$RUNNER_TEMP/initial-declaration-process/initial-declaration-process.trx" <<'PYCODE'
+          import sys
+          import re
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          if len(rows) != 2 or any(row.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('Both initial declaration process interruption cases must execute and pass without skips.')
+          for point in ['DeclarationPrepared', 'ControlPublished']:
+              matches = [row for row in rows
+                         if '.InitializeProcess_TerminationLeavesAbsentFinalOrExactIncompleteDeclaration(' in row.get('testName', '')
+                         and re.findall(r'"([^"]+)"', row.get('testName', '')) == [point]]
+              if len(matches) != 1:
+                  raise SystemExit('Missing or duplicate initial declaration process checkpoint: ' + point)
+          PYCODE
+
+      - name: Qualify actual process publication and cleanup recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~RootMembershipRegistryProcessTests|FullyQualifiedName~PackageStoreParticipantProcessTests" \
+            --logger "trx;LogFileName=membership-process.trx" \
+            --results-directory "$RUNNER_TEMP/membership-process"
+          python3 - "$RUNNER_TEMP/membership-process/membership-process.trx" <<'PYCODE'
+          import sys
+          import re
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          if len(rows) != 33 or any(row.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('All 28 publisher cases, recovery restart case and four gate cases must pass without skips.')
+          publisher = [r.get('testName', '') for r in rows if '.PublisherProcess_CheckpointsRecoverOrPreserveExactEvidenceAcrossAllPriorBindings(' in r.get('testName', '')]
+          shapes = ['Prospective', 'ExistingUnprotected', 'Acknowledged']
+          points = ['PendingPublished', 'StageFlushed', 'BackupFlushed', 'ArtifactsBound', 'StatePublished',
+                    'StateVerified', 'ResolutionPublished', 'BackupRemoved', 'ArtifactsRemoved', 'Acknowledged']
+          pairs = [re.findall(r'"([^"]+)"', name)[:2] for name in publisher]
+          if len(publisher) != 28:
+              raise SystemExit('The actual publisher checkpoint matrix did not execute all 28 cases.')
+          for shape in shapes:
+              for point in points:
+                  if shape == 'Prospective' and point in ['BackupFlushed', 'BackupRemoved']:
+                      continue
+                  if pairs.count([shape, point]) != 1:
+                      raise SystemExit('Missing or duplicate publisher case: ' + shape + '/' + point)
+          required = ['RecoveryProcesses_CrashAfterPriorStageAndNextBackupRemoval_ResumeWithFreshOwner',
+                      'ReleaseAsync_AfterReadiness_CapturesSuccessfulChildExit',
+                      'DisposeAsync_BeforeRelease_TerminatesOwnedChildAndIsIdempotent',
+                      'ReleaseAsync_WhenCancelled_LeavesGateWaitingUntilOwnedTermination',
+                      'StartAsync_WhenAlreadyCancelled_DoesNotStartAChild']
+          for name in required:
+              if sum(row.get('testName', '').endswith('.' + name) for row in rows) != 1:
+                  raise SystemExit('Missing process ownership/recovery case: ' + name)
+          PYCODE
+
+      - name: Qualify prepared directory no-replace publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          common="FullyQualifiedName~Nuplane.Store.Tests.Coordination.PhysicalStoreDirectoryPublicationTests"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            native="FullyQualifiedName~WindowsPhysicalStoreDirectoryPublicationTests"
+          else
+            native="(FullyQualifiedName~UnixPhysicalStoreDirectoryPublicationTests&FullyQualifiedName!~Ext4Casefold)"
+          fi
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "$common|$native" \
+            --logger "trx;LogFileName=directory-publication.trx" \
+            --results-directory "$RUNNER_TEMP/directory-publication"
+          python3 - "$RUNNER_TEMP/directory-publication/directory-publication.trx" "$RUNNER_OS" <<'PYCODE'
+          import sys
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          required = [
+              'Publish_PopulatedDirectoryPreservesChildIdentitiesAndContents',
+              'Publish_OccupiedDirectoryFileOrLinkPreservesAllEvidence',
+              'Publish_RejectsWrongIdentityRegularFileAndDirectoryLink',
+              'Publish_RequiresCanonicalSpellingAndRefusesDestinationAliases',
+              'Publish_UsesNativeUnicodeSpellingAndRefusesNormalizationAliases',
+              'Publish_RefusesForeignClosedParentsAndInvalidComponents',
+              'Publish_SecondPublisherCannotOverwriteWinnerAndRetainsLosingStage',
+              'NativeNoReplace_RefusesOccupiedDirectoryWithoutManagedPreinspection',
+              'Publish_RefusesOpenStagedDescendantAndSucceedsAfterItCloses' if sys.argv[2] == 'Windows'
+                  else 'Publish_UsesHeldParentAfterItsTextualNameIsReplaced',
+          ]
+          if len(rows) != 9 or any(row.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('All nine native directory publication scenarios must execute and pass without skips.')
+          for name in required:
+              if sum(row.get('testName', '').endswith('.' + name) for row in rows) != 1:
+                  raise SystemExit('Missing native directory publication scenario: ' + name)
+          PYCODE
 
       - name: Run atomic state and registry tests
         run: dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj --configuration Release --filter "FullyQualifiedName~StoreRegistryTests.PersistActiveVersions_WhenSaveFails|FullyQualifiedName~StoreRegistryTests.PersistFailure_WhenSaveFails|FullyQualifiedName~StoreRegistryTests.PersistSourceSnapshot_WhenSaveFails|FullyQualifiedName~StoreRegistryTests.PersistMutations_TwoLockCoordinatedRegistriesLoadedBeforeWrites_RetainsAllUpdates|FullyQualifiedName~StoreStateSerializerTests"
@@ -43,7 +476,744 @@ jobs:
       - name: Run lock-held state refresh and snapshot tests
         run: dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj --configuration Release --filter "FullyQualifiedName~DesiredSourceSnapshotCacheTests.SaveAsync_WhenRegistryPersistenceFails|FullyQualifiedName~ReconciliationServiceStoreLockTests.TriggerAsync_WhenAnotherRegistryUpdatesState_RefreshesStateAndSnapshotBeforeSourceFallback|FullyQualifiedName~LastKnownGoodStartupRecoveryServiceStoreLockTests.TryRecoverAsync_WhenAnotherRegistryUpdatesLoadedState_UsesRefreshedLastKnownGoodVersion"
 
+      - name: Qualify coordinated runtime admission and public startup compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~CoordinatedReconciliationAdmissionTests|FullyQualifiedName~StartupCycleTests" \
+            --logger "trx;LogFileName=coordinated-runtime.trx" \
+            --results-directory "$RUNNER_TEMP/coordinated-runtime"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/coordinated-runtime/coordinated-runtime.trx" \
+            build/test-cases/coordinated-runtime.json
+
+      - name: Qualify scoped native package metadata reads
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "(FullyQualifiedName~NuplanePackageMetadataReaderAdmissionTests|FullyQualifiedName~PackageDirectoryAllowMissingSuffixTests)&FullyQualifiedName!~Ext4Casefold" \
+            --logger "trx;LogFileName=native-metadata.trx" \
+            --results-directory "$RUNNER_TEMP/native-metadata"
+          python3 - "$RUNNER_TEMP/native-metadata/native-metadata.trx" <<'PYCODE'
+          import collections
+          import sys
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          required = [
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.ScopedRead_ExpiredBorrowRefusesBeforeOpeningMetadata",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.ScopedRead_PathBorrowCannotBeReusedForAnUnadmittedAlias",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.ScopedRead_RefusesFinalPackageDirectoryAliasBeforeReadingMetadata",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.ScopedRead_RefusesHardLinkedMetadataBeforeReadingBytes",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.ScopedRead_RefusesMetadataAliasingIntroducedAfterReadingTheHeldFile",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.ScopedRead_RefusesSymbolicLinkMetadataBeforeReadingBytes",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.ScopedRead_UsesHeldNativeFileAndRetainsEveryLockThroughByteRead",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.ScopedRead_WhenMetadataIsAbsent_ReturnsMissingWithoutOpeningAPayloadFile",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.UnscopedRead_PreservesRelativeInstallPathResolution",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.UnscopedRead_RefusesAMissingInstallSuffixBelowCompleteAuthority",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.UnscopedRead_RefusesAMissingInstallSuffixBelowIncompleteAuthority",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.UnscopedRead_RefusesAnEnrolledInstallBeforeParsingItsMetadata",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.UnscopedRead_RefusesAnEnrolledRootAliasBeforeParsingItsMetadata",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.UnscopedRead_RefusesAnIncompleteInstallBeforeParsingItsMetadata",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.UnscopedRead_WhenAuthorityAppearsAndCallbackThrows_ReturnsTheTypedReplayRefusal",
+              "Nuplane.Store.Tests.Coordination.NuplanePackageMetadataReaderAdmissionTests.UnscopedRead_WhenTheWholeInstallDirectoryIsMissingBelowUnenrolledAncestry_ReturnsMissing",
+              "Nuplane.Store.Tests.Coordination.PackageDirectoryAllowMissingSuffixTests.Resolve_WhenAnObservedMissingEdgeAppearsBeforeReplay_RefusesTheStaleObservation",
+              "Nuplane.Store.Tests.Coordination.PackageDirectoryAllowMissingSuffixTests.Resolve_WhenFinalDirectoryAliasTargetsAnUnenrolledDirectory_StillRefusesTheAlias",
+              "Nuplane.Store.Tests.Coordination.PackageDirectoryAllowMissingSuffixTests.Resolve_WhenLaterMissingNameHasNoObservableNativeProfile_RefusesToGuessUnicodeAliases",
+              "Nuplane.Store.Tests.Coordination.PackageDirectoryAllowMissingSuffixTests.Resolve_WhenMissingPackageNameCouldBeReservedControlDirectory_RefusesFirstAndLaterEdges",
+              "Nuplane.Store.Tests.Coordination.PackageDirectoryAllowMissingSuffixTests.Resolve_WhenMissingSuffixEscapesACompleteAuthorityThroughAnAlias_RefusesTheEscape",
+              "Nuplane.Store.Tests.Coordination.PackageDirectoryAllowMissingSuffixTests.Resolve_WhenOrdinaryUnenrolledPackageSuffixIsMissing_RetainsTheAbsentEdgeWithoutCreatingIt",
+              "Nuplane.Store.Tests.Coordination.PackageDirectoryAllowMissingSuffixTests.Resolve_WhenRelativePackagePathHasAnExplicitCapturedBase_PreservesTheRawComponents",
+              "Nuplane.Store.Tests.Coordination.PackageDirectoryAllowMissingSuffixTests.Resolve_WhenSuffixIsMissingBelowCompleteAuthority_RefusesInsteadOfInferringUnenrolled",
+              "Nuplane.Store.Tests.Coordination.PackageDirectoryAllowMissingSuffixTests.Resolve_WhenSuffixIsMissingBelowIncompleteAuthority_RefusesBeforePackageContentCanBeRead",
+              "Nuplane.Store.Tests.Coordination.PackageDirectoryAllowMissingSuffixTests.Resolve_WhenTheFirstMissingNameUsesAnObservedCaseInsensitiveAliasOfControl_RefusesIt"
+          ]
+          if collections.Counter(row.attrib['testName'] for row in rows) != collections.Counter(required):
+              raise SystemExit('native-metadata: required scenario names or multiplicity differ.')
+          if any(row.attrib.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('native-metadata: every required scenario must pass without skips.')
+          print('Qualified all 26 native-metadata cases with no skips.')
+          PYCODE
+
+      - name: Qualify graph-use lease pins and passive weak lifetime
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "(FullyQualifiedName~PackageGraphUseLeaseLifetimeTests|FullyQualifiedName~PackageGraphUseLifetimeObserverIdleTests)&FullyQualifiedName!~Ext4Casefold" \
+            --logger "trx;LogFileName=graph-use-lifetime.trx" \
+            --results-directory "$RUNNER_TEMP/graph-use-lifetime"
+          python3 - "$RUNNER_TEMP/graph-use-lifetime/graph-use-lifetime.trx" <<'PYCODE'
+          import collections
+          import sys
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          required = [
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.AcquireRead_RequiresExactRootBoundPathAndLiveLease",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.BindingFactory_RefusesMissingExtraForeignAndAliasedPathEntries",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.CollectibleLifetime_ClosesNewReadsAndHoldsNativeSentinelUntilExistingReadDrains",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.DisposeAsync_RejectsNewReadsAndReleasesOnlyAfterExistingPinsDrain",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.DisposingObserver_DoesNotReleaseLiveTransferredLifetime",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.FailedExplicitRelease_RemainsAnchoredAndIsNotRetried",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.FailedExplicitRelease_RetainsTheUncertainControlAndSentinel",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.FailedTransferredRelease_IsRetainedDiagnosedAndNotRetried",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.NativeSentinelLock_RemainsExclusiveUntilGraphReadPinsDrain",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.TransferToCollectibleLifetime_ReleasesPassivelyAfterWeakDeathWithoutAnotherAdmission",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseLifetimeTests.TransferToNonCollectibleLifetime_RetainsOwnerAfterCallerAndObserverDisposal",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLifetimeObserverIdleTests.CollectibleWork_StartsTimerAndLastClaimStopsEveryObserver_TimerRestartsForNewWork",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLifetimeObserverIdleTests.CompletedRelease_DoesNotAbandonOutstandingTickBeforeNextCollectibleRelease",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLifetimeObserverIdleTests.DisposingDuringRelease_DrainsClaimedOwnerAndLeavesUnclaimedWorkForNextObserver",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLifetimeObserverIdleTests.NonCollectibleAndFailedRelease_DoNotKeepPollingAlive",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLifetimeObserverIdleTests.DisposingIdleObserver_DrainsWithoutCreatingTimerOrAcceptingNewWork",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLifetimeObserverIdleTests.DisposingWithLiveCollectible_DrainsTickWaitAndAllowsNextObserverToResume",
+          ]
+          if collections.Counter(row.attrib['testName'] for row in rows) != collections.Counter(required):
+              raise SystemExit('graph-use-lifetime: required scenario names or multiplicity differ.')
+          if any(row.attrib.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('graph-use-lifetime: every required scenario must pass without skips.')
+          print('Qualified all 17 graph-use-lifetime and passive-observer cases with no skips.')
+          PYCODE
+
+      - name: Qualify native graph-use publication and trusted acquisition
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "(FullyQualifiedName~PackageGraphUseRecordStoreTests&FullyQualifiedName!~RecoverAsync_)|FullyQualifiedName~PackageGraphUseInstallBindingTests|FullyQualifiedName~PackageGraphUseLeaseAcquisitionTests" \
+            --logger "trx;LogFileName=graph-use-publication.trx" \
+            --results-directory "$RUNNER_TEMP/graph-use-publication"
+          python3 - "$RUNNER_TEMP/graph-use-publication/graph-use-publication.trx" <<'PYCODE'
+          import collections
+          import sys
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          required = [
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_ClassifiesLiveAndStaleCompleteGraphsWithoutChangingArtifacts",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_EmptyNamespaceReturnsNoUseRecords",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_CancellationAfterAcquiringProbeReleasesLockAndPreservesArtifacts",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_CumulativePayloadBudgetRefusesBeforeProbingNextGraph",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesMissingRecordWithoutDeletingItsSentinel",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesMissingSentinelWithoutDeletingItsRecord",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesUnknownStageName",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesNoncanonicalUsePrefixAndExtension",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesMalformedRecordAndDigestMismatch",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesWhenRecordedInstallCompletionEvidenceIsMissing",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesDigestValidRecordBoundToDifferentSentinelIdentity",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesRecordFromAnotherEnrollmentEpoch",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesGraphWithForeignRootWithoutRemovingEitherArtifact",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesHardLinkedSentinel",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.InspectAsync_RefusesWhenBoundedControlEnumerationOverflows",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_RefusesMismatchedHeldRootBeforeCreatingArtifacts",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_InvalidCandidateMetadataIsRejectedBeforeCreatingArtifacts",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_ReopensExactRecordAndRetainsNativeSentinelUntilDisposal",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_RefusesWhenNativeSentinelLockIsBusyAndPreservesCreatedFile",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_NoReplaceRaceLeavesUnpublishedStageAndNeverReturnsOwnership",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_RejectsStagedByteTamperingAndLeavesArtifactsForInspection",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_CancellationAfterStageFlushReleasesSentinelAndPreservesEvidence",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_CancellationAfterNativePublicationLeavesVerifiedArtifactsWithoutOwner",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_ProviderFailureAfterNativePublicationLeavesEvidenceWithoutOwner",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseRecordStoreTests.PublishAsync_RefusesSentinelTamperingDuringExclusiveInitialization",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseInstallBindingTests.Observe_ActualResolvedClosure_BindsEveryExactPathAndNativeInstall",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseInstallBindingTests.CreateActiveCandidate_BindingPairedWithChangedGraphPath_RefusesDespiteSameGraphId",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseInstallBindingTests.Observe_PathChangedWithoutGraphIdChange_RefusesDifferentNativeInstall",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseInstallBindingTests.Observe_OriginalPathSpelling_IsPreservedAfterNativeVerification",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseInstallBindingTests.Observe_ForeignRootOrDuplicateNativePath_RefusesTheSelection",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseInstallBindingTests.Observe_PartialFailure_ReleasesObservationsAndAllowsFreshVerification",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseAcquisitionTests.AcquireForRootAsync_PublishesCompleteGraphBeforeReads_AndDrainsPinsBeforeUnlock",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseAcquisitionTests.AcquireForRootAsync_MemberChangesAfterPublication_RefusesAndReleasesUnreturnedSentinel",
+              "Nuplane.Store.Tests.Coordination.PackageGraphUseLeaseAcquisitionTests.AcquireForRootAsync_ExpiredOrPathRestrictedBorrow_RefusesBeforePublication",
+          ]
+          if collections.Counter(row.attrib['testName'] for row in rows) != collections.Counter(required):
+              raise SystemExit('graph-use-publication: required scenario names or multiplicity differ.')
+          if any(row.attrib.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('graph-use-publication: every required scenario must pass without skips.')
+          print('Qualified all 34 native graph-use publication, inspection, binding and acquisition cases with no skips.')
+          PYCODE
+
+      - name: Qualify graph-use control artifact recovery phases
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~PackageGraphUseRecordStoreTests.RecoverAsync_" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=graph-use-recovery.trx" \
+            --results-directory "$RUNNER_TEMP/graph-use-recovery"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/graph-use-recovery/graph-use-recovery.trx" \
+            build/test-cases/graph-use-recovery.json
+
+      - name: Qualify retained Loading across a newer committed generation
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~OverlappingPackageGraphProtectionTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=retained-loading.trx" \
+            --results-directory "$RUNNER_TEMP/retained-loading"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/retained-loading/retained-loading.trx" \
+            build/test-cases/retained-loading.json
+
+      - name: Qualify compatible package-content directory and archive reads
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~Nuplane.Runtime.Tests.PackageContentTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=package-content-runtime.trx" \
+            --results-directory "$RUNNER_TEMP/package-content-runtime"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/package-content-runtime/package-content-runtime.trx" \
+            build/test-cases/package-content-runtime.json
+
+      - name: Qualify package-content admission and held native replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          filter="FullyQualifiedName~PackageContentAdmissionTests"
+          manifest="build/test-cases/package-content-store-unix.json"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            filter="$filter&FullyQualifiedName!~DirectoryEdgeReplacementAfterPayloadReadRefusesDetachedBytes&FullyQualifiedName!~DirectoryEdgeReplacementAfterMissingObservationDoesNotReturnFalseAbsence"
+            manifest="build/test-cases/package-content-store-windows.json"
+          fi
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "$filter" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=package-content-store.trx" \
+            --results-directory "$RUNNER_TEMP/package-content-store"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/package-content-store/package-content-store.trx" "$manifest"
+
+      - name: Qualify scoped direct-restore admission and before-callback refusal
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~NuplaneRestoreAdmissionTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=direct-restore-admission.trx" \
+            --results-directory "$RUNNER_TEMP/direct-restore-admission"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/direct-restore-admission/direct-restore-admission.trx" \
+            build/test-cases/direct-restore-admission.json
+
+      - name: Qualify all-root admission ordering and shared ownership drain
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~PackageStoreAdmissionOrderingTests|FullyQualifiedName~MultiRootAdmissionHoldsEveryVerifiedMemberSetAndDrainsBeforeUnlock" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=multiroot-admission-ownership.trx" \
+            --results-directory "$RUNNER_TEMP/multiroot-admission-ownership"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/multiroot-admission-ownership/multiroot-admission-ownership.trx" \
+            build/test-cases/multiroot-admission-ownership.json
+
+      - name: Qualify native Directory desired-source sampling and authority replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          filter="(FullyQualifiedName~DirectoryNupkgDesiredSourceTests|FullyQualifiedName~NupkgFileStabilityProbeTests)"
+          manifest="build/test-cases/directory-source-unix.json"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            filter="$filter&FullyQualifiedName!~GetDesiredAsync_RefusesPackageSuffixLinksBeforeStabilityCallback"
+            manifest="build/test-cases/directory-source-windows.json"
+          else
+            filter="$filter&FullyQualifiedName!~WindowsMetadataPinAllowsCompatibleGrowthAndReportsBusyForWriterConflict&FullyQualifiedName!~GetDesiredAsync_WithoutStabilityProbeIncludesMetadataVerifiedBusyRegularCandidateOnWindows"
+          fi
+          dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "$filter" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=directory-source.trx" \
+            --results-directory "$RUNNER_TEMP/directory-source"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/directory-source/directory-source.trx" "$manifest"
+
+      - name: Qualify native Manifest desired-source reads and authority replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          filter="FullyQualifiedName~DesiredManifestNativeReadTests"
+          manifest="build/test-cases/manifest-source-unix.json"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            filter="$filter&FullyQualifiedName!~ReadAsync_RefusesSameLengthReplacementDuringAwaitedNativeRead&FullyQualifiedName!~ReadAsync_SpecialFileIsTypedAuthorityRefusal"
+            manifest="build/test-cases/manifest-source-windows.json"
+          fi
+          dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "$filter" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=manifest-source.trx" \
+            --results-directory "$RUNNER_TEMP/manifest-source"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/manifest-source/manifest-source.trx" "$manifest"
+
+      - name: Qualify AddNuplane Manifest admission and held source ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~NuplaneRestoreManifestAdmissionTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=manifest-admission.trx" \
+            --results-directory "$RUNNER_TEMP/manifest-admission"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/manifest-admission/manifest-admission.trx" \
+            build/test-cases/manifest-source-admission.json
+
+      - name: Qualify native installed-package probes and dependency graph inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~NativePackageGraphFileReaderTests|FullyQualifiedName~PackageInstallStoreAdmissionTests|FullyQualifiedName~OwnedPackageResolverGraphReadTests|FullyQualifiedName~MultiFeedPackageResolverScopedTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=native-resolution-readers.trx" \
+            --results-directory "$RUNNER_TEMP/native-resolution-readers"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/native-resolution-readers/native-resolution-readers.trx" \
+            build/test-cases/native-resolution-readers.json
+
+      - name: Qualify complete native protected active-state candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~CoordinatedActiveStateTransitionProducerTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=protected-active-transitions.trx" \
+            --results-directory "$RUNNER_TEMP/protected-active-transitions"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/protected-active-transitions/protected-active-transitions.trx" \
+            build/test-cases/protected-active-transitions.json
+
+      - name: Qualify bounded native package archive and creation-only file streams
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            excluded="Unix"
+            manifest="build/test-cases/package-streams-windows.json"
+          else
+            excluded="Windows"
+            manifest="build/test-cases/package-streams-unix.json"
+          fi
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~PhysicalStorePackageStreamTests&FullyQualifiedName!~$excluded" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=package-streams.trx" \
+            --results-directory "$RUNNER_TEMP/package-streams"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/package-streams/package-streams.trx" "$manifest"
+
+      - name: Qualify native package archive installation and publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~NativePackageInstallSessionTests&FullyQualifiedName!~Ext4Casefold" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=native-package-install.trx" \
+            --results-directory "$RUNNER_TEMP/native-package-install"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/native-package-install/native-package-install.trx" \
+            build/test-cases/native-package-install.json
+
+      - name: Qualify native inventory, retention planning and fresh inspection
+        shell: bash
+        run: |
+          set -euo pipefail
+          filter="FullyQualifiedName~PackageStoreInventoryTests|FullyQualifiedName~PackageStoreRetentionPlannerTests|FullyQualifiedName~PackageStoreInspectionServiceTests"
+          manifest="build/test-cases/package-store-preview-unix.json"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            filter="(FullyQualifiedName~PackageStoreInventoryTests&FullyQualifiedName!~SymbolicLinksAndSpecialEntries)|FullyQualifiedName~PackageStoreRetentionPlannerTests|FullyQualifiedName~PackageStoreInspectionServiceTests"
+            manifest="build/test-cases/package-store-preview-windows.json"
+          fi
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "$filter" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=package-store-preview.trx" \
+            --results-directory "$RUNNER_TEMP/package-store-preview"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/package-store-preview/package-store-preview.trx" "$manifest"
+
+      - name: Qualify native same-handle control recovery and disposal serialization
+        shell: bash
+        run: |
+          set -euo pipefail
+          excluded="Windows"
+          manifest="build/test-cases/control-recovery-unix.json"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            excluded="RemoveLockedControlFile_RefusesNameReplacedAfterTokenAcquisition"
+            manifest="build/test-cases/control-recovery-windows.json"
+          fi
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~PhysicalStoreControlRecoveryTests&FullyQualifiedName!~$excluded" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=control-recovery.trx" \
+            --results-directory "$RUNNER_TEMP/control-recovery"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/control-recovery/control-recovery.trx" "$manifest"
+
+      - name: Qualify scoped HTTP acquisition and capability metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~ScopedNuGetRemotePackageAcquirerTests|FullyQualifiedName~ScopedCapabilityDesiredStateContributorTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=scoped-acquisition-capability.trx" \
+            --results-directory "$RUNNER_TEMP/scoped-acquisition-capability"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/scoped-acquisition-capability/scoped-acquisition-capability.trx" \
+            build/test-cases/scoped-acquisition-capability.json
+
+      - name: Qualify counted native root access across awaits and member replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~PackageStoreOperationRootAccessTests|FullyQualifiedName~PackageStoreOperationStateTests" \
+            --logger "trx;LogFileName=graph-use-root-access.trx" \
+            --results-directory "$RUNNER_TEMP/graph-use-root-access"
+          python3 - "$RUNNER_TEMP/graph-use-root-access/graph-use-root-access.trx" <<'PYCODE'
+          import collections
+          import sys
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          required = [
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationRootAccessTests.WithValidatedRootAsync_AwaitAndDisposedBorrow_RetainsEveryNativeLockUntilReplayEnds',
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationRootAccessTests.WithValidatedRootAsync_ExpiredBorrow_RefusesBeforeCallback',
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationRootAccessTests.WithValidatedRootAsync_InvalidMemberPayload_RefusesBeforeCallback',
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationRootAccessTests.WithValidatedRootAsync_MemberChangedDuringCallback_RefusesReturnedResult',
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationRootAccessTests.WithValidatedRootAsync_CallbackFailsAfterMemberChanged_ReplayRefusalWins',
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationRootAccessTests.WithValidatedRootAsync_CancellationAfterCallback_DoesNotReturnResult',
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationRootAccessTests.WithValidatedRootAsync_AwaitedCallback_SerializesConfiguredStateAccess',
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationStateTests.DisposeAsync_WithOutstandingBorrow_WaitsAndKeepsThatBorrowUsableWhileClosing',
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationStateTests.DisposeAsync_DoubleBorrowDisposal_DoesNotReleaseBeforeAllBorrowsEnd',
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationStateTests.DisposeAsync_ConcurrentCloseCalls_JoinOneReleaseAndShareItsFailure',
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationStateTests.BorrowAndCloseRace_AdmitsOnlyWorkCountedBeforeClose',
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationStateTests.ValidateForInstallPath_InFlightValidationDelaysRootRelease',
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationStateTests.ForeignAndExpiredScopes_AreRejectedWithTypedReasons',
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationStateTests.WithValidatedRootAsync_PathRestrictedBorrow_RefusesExpansionBeforeCallback',
+              'Nuplane.Store.Tests.Coordination.PackageStoreOperationStateTests.WithValidatedRootAsync_OwnerWithoutNativeContext_RefusesBeforeCallback',
+          ]
+          if collections.Counter(row.attrib['testName'] for row in rows) != collections.Counter(required):
+              raise SystemExit('graph-use-root-access: required scenario names or multiplicity differ.')
+          if any(row.attrib.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('graph-use-root-access: every required scenario must pass without skips.')
+          print('Qualified all 15 counted native root-access cases with no skips.')
+          PYCODE
+
+      - name: Qualify native held-directory enumeration and complete entry bounds
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == 'Windows' ]]; then
+            enumeration_filter='FullyQualifiedName~WindowsPhysicalStoreDirectoryEnumerationTests'
+          else
+            enumeration_filter='(FullyQualifiedName~UnixPhysicalStoreDirectoryEnumerationTests&FullyQualifiedName!~Ext4Casefold)|FullyQualifiedName~WindowsPhysicalStoreDirectoryEnumerationTests.DirectoryQueryStatus_|FullyQualifiedName~WindowsPhysicalStoreDirectoryEnumerationTests.ParseDirectoryRecords_'
+          fi
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "$enumeration_filter" \
+            --logger "trx;LogFileName=held-directory-enumeration.trx" \
+            --results-directory "$RUNNER_TEMP/held-directory-enumeration"
+          python3 - "$RUNNER_TEMP/held-directory-enumeration/held-directory-enumeration.trx" <<'PYCODE'
+          import collections
+          import os
+          import sys
+          import xml.etree.ElementTree as ET
+          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
+          windows = [
+              'Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreDirectoryEnumerationTests.Enumerate_ReturnsExactSortedDirectNamesIncludingLinksAndUsesIndependentCursors',
+              'Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreDirectoryEnumerationTests.Enumerate_MultipleNativeBatchesPreserveEveryNameAndEnforceGlobalBound',
+              'Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreDirectoryEnumerationTests.Enumerate_HeldDirectoryPreventsLocatorReplacementAndKeepsOwnedEntriesVisible',
+              'Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreDirectoryEnumerationTests.Enumerate_RequiresPositiveBoundAndRefusesOverflowWithoutReturningPartialNames',
+              'Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreDirectoryEnumerationTests.Enumerate_RefusesForeignAndClosedDirectoryHandles',
+              'Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreDirectoryEnumerationTests.DirectoryQueryStatus_RecognizesOnlyConsistentZeroByteTerminalResults',
+              'Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreDirectoryEnumerationTests.ParseDirectoryRecords_RejectsMalformedAndDuplicateNames',
+          ]
+          unix = [
+              'Nuplane.Store.Tests.Coordination.UnixPhysicalStoreDirectoryEnumerationTests.EnumerateChildNamesNoFollow_EmptyDirectory_ReturnsEmptyList',
+              'Nuplane.Store.Tests.Coordination.UnixPhysicalStoreDirectoryEnumerationTests.EnumerateChildNamesNoFollow_ReturnsExactFileDirectoryAndLinkNamesInOrdinalOrder',
+              'Nuplane.Store.Tests.Coordination.UnixPhysicalStoreDirectoryEnumerationTests.EnumerateChildNamesNoFollow_UsesAnIndependentCursorForEachCall',
+              'Nuplane.Store.Tests.Coordination.UnixPhysicalStoreDirectoryEnumerationTests.EnumerateChildNamesNoFollow_EnforcesOneGlobalBoundAcrossNativeBatches',
+              'Nuplane.Store.Tests.Coordination.UnixPhysicalStoreDirectoryEnumerationTests.EnumerateChildNamesNoFollow_UsesHeldDirectoryAfterItsTextualPathIsReplaced',
+              'Nuplane.Store.Tests.Coordination.UnixPhysicalStoreDirectoryEnumerationTests.EnumerateChildNamesNoFollow_RefusesInvalidBoundForeignAndClosedHandles',
+              'Nuplane.Store.Tests.Coordination.UnixPhysicalStoreDirectoryEnumerationTests.EnumerateChildNamesNoFollow_RefusesNonPortableComponentsWithoutReturningNames',
+              'Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreDirectoryEnumerationTests.DirectoryQueryStatus_RecognizesOnlyConsistentZeroByteTerminalResults',
+              'Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreDirectoryEnumerationTests.ParseDirectoryRecords_RejectsMalformedAndDuplicateNames',
+          ]
+          required = windows if os.environ['RUNNER_OS'] == 'Windows' else unix
+          if collections.Counter(row.attrib['testName'] for row in rows) != collections.Counter(required):
+              raise SystemExit('held-directory-enumeration: required scenario names or multiplicity differ.')
+          if any(row.attrib.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('held-directory-enumeration: every required scenario must pass without skips.')
+          print(f'Qualified all {len(required)} native held-directory enumeration cases with no skips.')
+          PYCODE
+
+      - name: Qualify metadata refusal propagation through capability and loading consumers
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~ContributeAsync_WhenMetadataAdmissionIsRefused_ThrowsWithoutMemoizingAbsence" \
+            --logger "trx;LogFileName=capability-refusal.trx" \
+            --results-directory "$RUNNER_TEMP/metadata-consumer-refusals"
+          dotnet test test/Nuplane.Loading.Tests/Nuplane.Loading.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~Read_WhenMetadataAdmissionIsRefused_ThrowsInsteadOfReturningMissing" \
+            --logger "trx;LogFileName=loading-refusal.trx" \
+            --results-directory "$RUNNER_TEMP/metadata-consumer-refusals"
+          python3 - "$RUNNER_TEMP/metadata-consumer-refusals/capability-refusal.trx" "$RUNNER_TEMP/metadata-consumer-refusals/loading-refusal.trx" <<'PYCODE'
+          import collections
+          import sys
+          import xml.etree.ElementTree as ET
+          required = [
+              'Nuplane.Runtime.Tests.Capabilities.CapabilityDesiredStateContributorTests.ContributeAsync_WhenMetadataAdmissionIsRefused_ThrowsWithoutMemoizingAbsence',
+              'Nuplane.Loading.Tests.PackageMetadataLoadModeReaderTests.Read_WhenMetadataAdmissionIsRefused_ThrowsInsteadOfReturningMissing',
+          ]
+          rows = [row for path in sys.argv[1:] for row in ET.parse(path).findall('.//{*}UnitTestResult')]
+          if collections.Counter(row.attrib['testName'] for row in rows) != collections.Counter(required):
+              raise SystemExit('Both actual metadata-consumer refusal scenarios must execute exactly once.')
+          if any(row.attrib.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('Both metadata-consumer refusal scenarios must pass without skips.')
+          print('Qualified both metadata-consumer refusal scenarios with no skips.')
+          PYCODE
+
+      - name: Run native Unix store adapter and identity tests
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == "macOS" && "$(uname -m)" != "arm64" ]]; then
+            echo "The native Unix store adapter qualification requires a macOS arm64 runner."
+            exit 1
+          fi
+          if [[ "${{ matrix.os }}" == "ubuntu-24.04-arm" && "$(uname -m)" != "aarch64" ]]; then
+            echo "The Linux arm64 lane must execute natively on arm64."
+            exit 1
+          fi
+
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            native_shim=$(find test/Nuplane.Store.Tests/bin/Release -type f -name libnuplane_store_native.dylib -print -quit)
+            if [[ -z "${native_shim}" ]]; then
+              echo "The project-reference build did not copy libnuplane_store_native.dylib to the Store test output."
+              exit 1
+            fi
+          fi
+
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release \
+            --filter "(FullyQualifiedName~Nuplane.Store.Tests.Coordination.UnixPhysicalStoreFileSystemTests|FullyQualifiedName~Nuplane.Store.Tests.Coordination.UnixPhysicalStoreIdentityTests|FullyQualifiedName~Nuplane.Store.Tests.Coordination.UnixPhysicalStorePublicationTests)&FullyQualifiedName!~Ext4Casefold" \
+            --logger "trx;LogFileName=native-unix.trx" \
+            --results-directory "$RUNNER_TEMP/native-unix-results"
+
+          python3 - "$RUNNER_TEMP/native-unix-results/native-unix.trx" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          root = ET.parse(sys.argv[1]).getroot()
+          counters = root.find('.//{*}Counters')
+          if counters is None:
+              raise SystemExit('Native qualification returned no test counters.')
+          total = int(counters.get('total', '0'))
+          passed = int(counters.get('passed', '0'))
+          if total < 19 or passed != total:
+              raise SystemExit(f'Native qualification requires every test to pass without skips: {counters.attrib}')
+          names = {r.get('testName') for r in root.findall('.//{*}UnitTestResult') if r.get('outcome') == 'Passed'}
+          required = {
+              'NativeChildOpen_RefusesFinalLinksWithoutManagedPreInspection',
+              'ObserveStateSlot_UsesFilesystemSpellingAndNameProfileForAliases',
+              'ObserveStateSlot_ParentAliasesConvergeAndAtomicReplacePreservesSlot',
+              'ObserveCanonicalFileNameNoFollow_RejectsWrongIdentityLinksAndForeignHandles',
+              'NativeNoReplace_RefusesOccupiedTargetWithoutManagedPreInspection',
+              'Publish_ReplacesExistingSlotAndPreservesItsIdentity',
+              'Remove_RequiresExactRegularSingleLinkIdentity',
+              'Publish_RefusesAliasSpellingForeignAndClosedParents',
+          }
+          if not all(any(n.endswith('.' + expected) for n in names) for expected in required):
+              raise SystemExit('The Unix state-slot identity scenarios did not all execute and pass.')
+          PY
+
+      - name: Qualify native multiroot publication and catalog-owner verification/recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~RootMembershipNativeGroupPublicationTests|FullyQualifiedName~RootMembershipRegistryTests.CatalogOwner_" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=native-multiroot-group.trx" \
+            --results-directory "$RUNNER_TEMP/native-multiroot-group"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/native-multiroot-group/native-multiroot-group.trx" \
+            build/test-cases/native-multiroot-group.json
+
+      - name: Qualify guarded native standalone state publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~GuardedNativeStoreStateWriterTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=guarded-native-state-writer.trx" \
+            --results-directory "$RUNNER_TEMP/guarded-native-state-writer"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/guarded-native-state-writer/guarded-native-state-writer.trx" \
+            build/test-cases/guarded-native-state-writer.json
+
+      - name: Qualify native state-slot writer guard and immutable group marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          excluded="DistinctNamesOnCaseSensitiveParent_KeepIndependentControlDirectories"
+          manifest="build/test-cases/state-slot-write-guard-case-insensitive.json"
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            excluded="AcquireAsync_RefusesNativeAliasOfReservedControlNamespace|ProspectiveNativeAliases_ContendForOneGuardAndRejectMarkerBoundToOtherExactSpelling|ReadGroupBindingMarker_RefusesNativeAliasOfFixedMarkerLeaf"
+            manifest="build/test-cases/state-slot-write-guard-linux.json"
+          fi
+          filter="FullyQualifiedName~PhysicalStoreStateSlotWriteGuardTests&FullyQualifiedName!~ProspectiveNativeAliases_Ext4CasefoldContendForOneGuardAndRejectMarkerBoundToOtherExactSpelling"
+          IFS='|' read -ra excluded_cases <<< "$excluded"
+          for case_name in "${excluded_cases[@]}"; do
+            filter="$filter&FullyQualifiedName!~$case_name"
+          done
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "$filter" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=state-slot-write-guard.trx" \
+            --results-directory "$RUNNER_TEMP/state-slot-write-guard"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/state-slot-write-guard/state-slot-write-guard.trx" "$manifest"
+
+      - name: Qualify ext4 casefold aliases on an owned loopback filesystem
+        if: startsWith(matrix.os, 'ubuntu-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          owned_root=$(mktemp -d "$RUNNER_TEMP/nuplane-casefold.XXXXXX")
+          image="$owned_root/store.ext4"
+          mount_root="$owned_root/mount"
+          mkdir "$mount_root"
+          cleanup() {
+            if mountpoint -q "$mount_root"; then
+              sudo umount "$mount_root"
+            fi
+          }
+          trap cleanup EXIT
+          truncate -s 256M "$image"
+          mkfs.ext4 -q -F -O casefold -E encoding=utf8-12.1 "$image"
+          sudo mount -o loop,nosuid,nodev,noexec "$image" "$mount_root"
+          sudo chown "$(id -u):$(id -g)" "$mount_root"
+          TMPDIR="$mount_root" NUPLANE_REQUIRE_EXT4_CASEFOLD=1 \
+            dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --no-build --no-restore \
+            --filter "FullyQualifiedName~UnixPhysicalStoreIdentityTests.ObserveStateSlot_Ext4Casefold|FullyQualifiedName~UnixPhysicalStorePublicationTests.Publish_Ext4CasefoldAliasesRequireCanonicalNames|FullyQualifiedName~UnixPhysicalStoreDirectoryPublicationTests.Publish_Ext4CasefoldAliasIsObservedButOnlyCanonicalNameCanMove|FullyQualifiedName~RootMembershipBindingTests.BindDeclaredMembersAsync_Ext4CasefoldAliasPublishesObservedCanonicalSpelling|FullyQualifiedName~PackageStoreAuthorityResolverTests.Resolve_Ext4CasefoldDirectorySpellingFindsNativeAliasAndReservedAuthority|FullyQualifiedName~PackageInstallIdentityReaderTests.Observe_UsesNativeCasefoldProfileForReservedAliasesAndRetainsOrdinaryAliasSpelling|FullyQualifiedName~PackageInstallIdentityReaderTests.Revalidate_RefusesAnInstallRenamedIntoAReservedNativeAlias|FullyQualifiedName~PackageStoreAdmissionProspectiveRootTests.ConfiguredRootAdmissionRefusesExt4CasefoldAliasOfReservedControlName|FullyQualifiedName~PackageDirectoryAllowMissingSuffixTests.Resolve_OnExt4Casefold_RefusesUnicodeAliasOfReservedControlName|FullyQualifiedName~UnixPhysicalStoreDirectoryEnumerationTests.EnumerateChildNamesNoFollow_Ext4CasefoldPreservesExactStoredUnicodeSpelling|FullyQualifiedName~NativePackageInstallSessionTests.AcquireAsync_Ext4CasefoldRejectsSharedParentAliasBeforePublication|FullyQualifiedName~PhysicalStoreStateSlotWriteGuardTests.ProspectiveNativeAliases_Ext4CasefoldContendForOneGuardAndRejectMarkerBoundToOtherExactSpelling" \
+            --logger "trx;LogFileName=casefold.trx" \
+            --results-directory "$RUNNER_TEMP/casefold-results"
+          python3 - "$RUNNER_TEMP/casefold-results/casefold.trx" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          root = ET.parse(sys.argv[1]).getroot()
+          rows = root.findall('.//{*}UnitTestResult')
+          required = {'ProspectiveNativeAliases_Ext4CasefoldContendForOneGuardAndRejectMarkerBoundToOtherExactSpelling', 'AcquireAsync_Ext4CasefoldRejectsSharedParentAliasBeforePublication', 'EnumerateChildNamesNoFollow_Ext4CasefoldPreservesExactStoredUnicodeSpelling', 'Resolve_OnExt4Casefold_RefusesUnicodeAliasOfReservedControlName', 'BindDeclaredMembersAsync_Ext4CasefoldAliasPublishesObservedCanonicalSpelling', 'ConfiguredRootAdmissionRefusesExt4CasefoldAliasOfReservedControlName', 'ObserveStateSlot_Ext4CasefoldResolvesCaseAndNormalizationAliases', 'Observe_UsesNativeCasefoldProfileForReservedAliasesAndRetainsOrdinaryAliasSpelling', 'Publish_Ext4CasefoldAliasIsObservedButOnlyCanonicalNameCanMove', 'Publish_Ext4CasefoldAliasesRequireCanonicalNames', 'Resolve_Ext4CasefoldDirectorySpellingFindsNativeAliasAndReservedAuthority', 'Revalidate_RefusesAnInstallRenamedIntoAReservedNativeAlias'}
+          if len(rows) != 12 or any(row.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('All twelve required native ext4 casefold scenarios must execute and pass without skips.')
+          if not all(any(row.get('testName', '').endswith('.' + name) for row in rows) for name in required):
+              raise SystemExit('The required ext4 casefold identity/file/directory publication/binding/authority/install scenarios did not all execute.')
+          PY
+
+      - name: Run native Windows store adapter tests on Windows x64 NTFS
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64') {
+            throw 'Native Windows store qualification requires a Windows x64 runner.'
+          }
+          $temporaryDrive = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot([System.IO.Path]::GetTempPath()))
+          if ($temporaryDrive.DriveFormat -ne 'NTFS') {
+            throw 'Native Windows store qualification requires the owned test temporary root to reside on NTFS.'
+          }
+
+          $results = Join-Path $env:RUNNER_TEMP 'native-windows-results'
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj `
+            --configuration Release `
+            --filter 'FullyQualifiedName~Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreFileSystemTests|FullyQualifiedName~Nuplane.Store.Tests.Coordination.WindowsPhysicalStorePublicationTests|FullyQualifiedName~Nuplane.Store.Tests.Coordination.WindowsReparseTargetParserTests' `
+            --logger 'trx;LogFileName=native-windows.trx' `
+            --results-directory $results
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          [xml]$report = Get-Content (Join-Path $results 'native-windows.trx') -Raw
+          $counters = $report.SelectSingleNode('//*[local-name()="Counters"]')
+          if ($null -eq $counters) { throw 'Native Windows qualification returned no test counters.' }
+          $total = [int]$counters.total
+          $passed = [int]$counters.passed
+          if ($total -lt 21 -or $passed -ne $total) {
+            throw "Native Windows qualification requires every test to pass without skips: $($counters.OuterXml)"
+          }
+          $rows = @($report.SelectNodes('//*[local-name()="UnitTestResult"]'))
+          foreach ($name in @(
+            'NativeNoReplace_RefusesOccupiedTargetWithoutManagedPreInspection',
+            'Publish_ReplacesExistingSlotAndPreservesItsIdentity',
+            'Publish_DeleteSharingReaderRetainsPriorBytesWhileNewOpensSeeReplacement',
+            'Publish_NonDeleteSharingReaderRefusesReplacementAndPreservesBothFiles',
+            'Remove_RequiresExactRegularSingleLinkIdentity',
+            'Publish_RefusesAliasSpellingForeignAndClosedParents'
+          )) {
+            $matched = @($rows | Where-Object { $_.testName.EndsWith('.' + $name) -and $_.outcome -eq 'Passed' })
+            if ($matched.Count -ne 1) { throw "The required native publication scenario did not execute and pass: $name" }
+          }
+
+      - name: Run native Windows state-slot identity tests
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $results = Join-Path $env:RUNNER_TEMP 'identity-windows-results'
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj `
+            --configuration Release `
+            --filter 'FullyQualifiedName~Nuplane.Store.Tests.Coordination.WindowsPhysicalStoreIdentityTests' `
+            --logger 'trx;LogFileName=identity-windows.trx' `
+            --results-directory $results
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          [xml]$report = Get-Content (Join-Path $results 'identity-windows.trx') -Raw
+          $rows = @($report.SelectNodes('//*[local-name()="UnitTestResult"]'))
+          $required = @(
+            'StateSlotObservation_UsesStoredCaseAndNativeCaseInsensitiveProfile',
+            'StateSlotObservation_CaseSensitiveDirectoryKeepsCaseVariantsDistinct',
+            'StateSlotObservation_RefusesWrongIdentityReparseAndHardLinkEntries',
+            'CanonicalNameObservation_RequiresTheOwnedParentHandleToRemainOpen',
+            'StateSlotObservation_AtomicReplacementKeepsSlotButChangesFileIdentityAndRenameChangesSlot'
+          )
+          foreach ($name in $required) {
+            $matched = @($rows | Where-Object { $_.testName.EndsWith('.' + $name) -and $_.outcome -eq 'Passed' })
+            if ($matched.Count -ne 1) { throw "The required native identity scenario did not execute and pass: $name" }
+          }
+          $aliasName = '.StateSlotObservation_8Dot3AliasResolvesToTheStoredLongBasenameWhenEnabled'
+          $alias = @($rows | Where-Object { $_.testName.EndsWith($aliasName) })
+          if ($alias.Count -ne 1 -or $alias[0].outcome -notin @('Passed', 'NotExecuted')) {
+            throw 'The 8.3 alias scenario must either pass or report an explicit capability skip.'
+          }
+          if (@($rows | Where-Object { $_.outcome -ne 'Passed' -and -not $_.testName.EndsWith($aliasName) }).Count -ne 0) {
+            throw 'Only the optional 8.3 alias capability scenario may be skipped.'
+          }
+          if ($alias[0].outcome -eq 'NotExecuted') {
+            Write-Host '8.3 aliases are unavailable on this test volume; that scenario remains unqualified.'
+          }
+
   build-test:
+    needs:
+      - darwin-native-shim
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -58,6 +1228,16 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Download verified Darwin native shim
+        uses: actions/download-artifact@v4
+        with:
+          name: nuplane-darwin-native
+          path: ${{ github.workspace }}/artifacts/nuplane-darwin-native
+
+      - name: Set Darwin native shim directory for project-reference builds
+        shell: bash
+        run: echo "NuplaneDarwinNativeDirectory=$GITHUB_WORKSPACE/artifacts/nuplane-darwin-native" >> "$GITHUB_ENV"
+
       - name: Restore
         run: dotnet restore nuplane.sln
 
@@ -66,3 +1246,23 @@ jobs:
 
       - name: Run tests
         run: dotnet test nuplane.sln --configuration Release --no-restore --no-build
+
+      - name: Verify Darwin assets survive Linux packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet pack src/Nuplane/Nuplane.csproj --configuration Release --no-build \
+            -p:PackageVersion=0.0.0-ci.native --output artifacts/validation-packages
+          python3 - <<'PY'
+          import hashlib
+          import pathlib
+          import zipfile
+          source = pathlib.Path('artifacts/nuplane-darwin-native/libnuplane_store_native.dylib')
+          expected = hashlib.sha256(source.read_bytes()).digest()
+          package = pathlib.Path('artifacts/validation-packages/Nuplane.0.0.0-ci.native.nupkg')
+          with zipfile.ZipFile(package) as archive:
+              for rid in ('osx-arm64', 'osx-x64'):
+                  asset = f'runtimes/{rid}/native/libnuplane_store_native.dylib'
+                  if hashlib.sha256(archive.read(asset)).digest() != expected:
+                      raise SystemExit(f'Packaged native asset differs: {asset}')
+          PY

@@ -57,9 +57,26 @@ internal sealed class HealthAndMetricsMiddleware(
             await observerEventDispatcher.PublishReconciledAsync(changeSet, applyResult.AppliedPackages, context.CancellationToken);
         }
         
-        var loaderFailedIds = cycleFailureContributor?.TakeFailedPackageIds(context.CorrelationId) ?? [];
+        if (!context.DeferCycleCompletion)
+            CompleteCycle(context);
+
+        await next();
+    }
+
+    internal void CompleteCycle(ReconciliationCycleContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (context.Result is not null)
+            return;
+
+        var changeSet = context.ChangeSet!;
+        var applyResult = context.ApplyResult!;
+        var loaderFailedIds = (cycleFailureContributor?.TakeFailedPackageIds(context.CorrelationId) ?? [])
+            .Concat(context.DeferredLoadingFailedPackageIds)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var hadFailures = context.ReadResult!.UsedFallback || applyResult.FailedPackageIds.Count > 0
-            || loaderFailedIds.Count > 0;
+            || loaderFailedIds.Length > 0;
         var isDegraded = healthEvaluator.Evaluate(new(
             hadFailures,
             context.ReadResult.AllSourcesFresh,
@@ -72,7 +89,7 @@ internal sealed class HealthAndMetricsMiddleware(
         }
 
         var cycleDuration = DateTimeOffset.UtcNow - context.CycleStartedAt;
-        var totalFailureCount = applyResult.FailedPackageIds.Count + loaderFailedIds.Count;
+        var totalFailureCount = applyResult.FailedPackageIds.Count + loaderFailedIds.Length;
         metrics.RecordCycle(changeSet, totalFailureCount, cycleDuration, context.MergedActive!.Count);
         metrics.RecordConvergenceCycle(isDegraded);
         if (applyResult.FailedPackageIds.Count > 0)
@@ -88,7 +105,5 @@ internal sealed class HealthAndMetricsMiddleware(
             .ToArray();
 
         context.Result = new(false, changeSet, failedPackages, isDegraded);
-
-        await next();
     }
 }

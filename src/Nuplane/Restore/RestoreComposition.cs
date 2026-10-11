@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Capabilities;
 using Nuplane.Feeds;
 using Nuplane.Feeds.Configuration;
@@ -10,6 +11,7 @@ using Nuplane.Feeds.Credentials;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Models;
+using Nuplane.Reconciliation;
 using Nuplane.Sources;
 using Nuplane.Store.State;
 using Nuplane.Versioning;
@@ -195,12 +197,57 @@ internal sealed class RestoreComposition : IAsyncDisposable
     /// </summary>
     public async Task<NuplaneDesiredDescription> DescribeDesiredAsync(CancellationToken cancellationToken)
     {
-        var sources = _provider.GetServices<IDesiredPackageSource>()
-            .Where(static source => source is not DesiredManifestPackageSource { IsEnabled: false });
-
-        var aggregate = await _provider.GetRequiredService<IDesiredStateAggregator>()
-            .AggregateAsync(sources, cancellationToken)
+        await using var admission = await _provider.GetRequiredService<IPackageStoreAdmission>()
+            .AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Restore, cancellationToken)
             .ConfigureAwait(false);
+
+        var sources = _provider.GetServices<IDesiredPackageSource>()
+            .Where(static source => source is not DesiredManifestPackageSource { IsEnabled: false })
+            .ToArray();
+        var aggregator = _provider.GetRequiredService<IDesiredStateAggregator>();
+
+        DesiredAggregateResult aggregate;
+        switch (admission.Status)
+        {
+            case PackageStoreAdmissionStatus.Unenrolled:
+                // Preserve the host-free compatibility path where no enrolled authority exists.
+                aggregate = await aggregator.AggregateAsync(sources, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case PackageStoreAdmissionStatus.Enrolled:
+                if (aggregator is not IScopedDesiredStateAggregator scopedAggregator)
+                {
+                    throw Refuse(PackageStoreAdmissionReason.UnsupportedParticipant,
+                        "The configured desired-state aggregator has no scoped package-store contract.");
+                }
+
+                CoordinatedReconciliationAdapters.ValidateDesiredPackageSources(sources);
+
+                var owner = admission.Owner
+                    ?? throw Refuse(PackageStoreAdmissionReason.UnknownAuthority,
+                        "Enrolled configured-root admission did not retain an operation owner.");
+                if (admission.Root is null || owner.Root != admission.Root)
+                {
+                    throw Refuse(PackageStoreAdmissionReason.RootMismatch,
+                        "Configured-root admission and its operation owner identify different roots.", admission.Root);
+                }
+
+                aggregate = await scopedAggregator.AggregateAsync(sources, owner, cancellationToken)
+                    .ConfigureAwait(false);
+                break;
+
+            default:
+                throw Refuse(PackageStoreAdmissionReason.UnknownAuthority,
+                    "Configured-root admission returned an unknown status.", admission.Root);
+        }
+
+        // A custom scoped aggregator can return source failures itself. Do not turn a typed
+        // authority refusal into an ordinary display string at this host-free boundary.
+        foreach (var sourceError in aggregate.SourceErrors.Values)
+        {
+            if (sourceError is PackageStoreAdmissionException admissionRefusal)
+                throw admissionRefusal;
+        }
 
         return new(
             aggregate.Requests.Select(Describe).ToArray(),
@@ -215,6 +262,11 @@ internal sealed class RestoreComposition : IAsyncDisposable
                 _provider.GetRequiredService<IOptions<CapabilityOptions>>().Value.Selections,
                 StringComparer.OrdinalIgnoreCase));
     }
+
+    private static PackageStoreAdmissionException Refuse(
+        PackageStoreAdmissionReason reason,
+        string message,
+        PhysicalRootIdentity? root = null) => new(reason, message, root);
 
     /// <summary>
     /// The capability contributions the cycle this composition just ran refused for not naming a

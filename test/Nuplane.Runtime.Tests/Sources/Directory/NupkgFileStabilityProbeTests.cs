@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Sources.Directory;
 
@@ -120,6 +122,117 @@ public sealed class NupkgFileStabilityProbeTests
         // The file was mutated during probing. The probe should handle this
         // gracefully without throwing, returning false because the size changed.
         Assert.False(result);
+    }
+
+    [Fact]
+    [Trait("Platform", "Native")]
+    public async Task ReplacingCandidateDuringAwaitedRetryRefusesOnUnixAndWindowsPinBlocksReplacement()
+    {
+        using var tempDir = new TempDirectory();
+        var filePath = Path.Combine(tempDir.Path, "replayed.nupkg");
+        var movedPath = Path.Combine(tempDir.Path, "replayed.original");
+        var originalBytes = new byte[64];
+        var replacementBytes = Enumerable.Repeat((byte)0x5A, originalBytes.Length).ToArray();
+        await File.WriteAllBytesAsync(filePath, originalBytes);
+        Exception? mutationFailure = null;
+
+        var probe = new NupkgFileStabilityProbe(
+            NullLogger<NupkgFileStabilityProbe>.Instance,
+            maxAttempts: 2,
+            retryDelay: TimeSpan.Zero,
+            onBeforeRetryAsync: (_, _) =>
+            {
+                try
+                {
+                    File.Move(filePath, movedPath);
+                    File.WriteAllBytes(filePath, replacementBytes);
+                }
+                catch (Exception exception)
+                {
+                    mutationFailure = exception;
+                }
+
+                return Task.CompletedTask;
+            });
+
+        if (OperatingSystem.IsWindows())
+        {
+            var stable = await probe.IsStableAsync(filePath);
+
+            Assert.IsAssignableFrom<IOException>(mutationFailure);
+            Assert.False(File.Exists(movedPath));
+            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(filePath));
+            Assert.True(stable);
+        }
+        else
+        {
+            var refusal = await Assert.ThrowsAsync<PackageStoreAdmissionException>(
+                () => probe.IsStableAsync(filePath));
+
+            Assert.Null(mutationFailure);
+            Assert.Equal(PackageStoreAdmissionReason.UnknownAuthority, refusal.Reason);
+            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(movedPath));
+            Assert.Equal(replacementBytes, await File.ReadAllBytesAsync(filePath));
+        }
+    }
+
+    [SupportedWindowsFact]
+    [Trait("Platform", "Windows")]
+    public async Task WindowsMetadataPinAllowsCompatibleGrowthAndReportsBusyForWriterConflict()
+    {
+        using var tempDir = new TempDirectory();
+        var filePath = Path.Combine(tempDir.Path, "growth-under-pin.nupkg");
+        await File.WriteAllBytesAsync(filePath, new byte[64]);
+        var logs = new CapturingLoggerProvider();
+        using var loggerFactory = logs.CreateFactory();
+        FileStream? writer = null;
+        Exception? exclusiveWriterFailure = null;
+        var probe = new NupkgFileStabilityProbe(
+            loggerFactory.CreateLogger<NupkgFileStabilityProbe>(),
+            maxAttempts: 4,
+            retryDelay: TimeSpan.Zero,
+            onBeforeRetryAsync: (attempt, _) =>
+            {
+                if (attempt == 1)
+                {
+                    try
+                    {
+                        using var exclusiveWriter = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.None);
+                    }
+                    catch (Exception exception)
+                    {
+                        exclusiveWriterFailure = exception;
+                    }
+
+                    // The retained read-access pin permits this writer, but its read-only share
+                    // mask denies the next data-read sample until the handle is closed.
+                    writer = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.Read);
+                    writer.SetLength(96);
+                    writer.Flush();
+                }
+                else if (attempt == 2)
+                {
+                    writer?.Dispose();
+                    writer = null;
+                }
+
+                return Task.CompletedTask;
+            });
+
+        bool stable;
+        try
+        {
+            stable = await probe.IsStableAsync(filePath);
+        }
+        finally
+        {
+            writer?.Dispose();
+        }
+
+        Assert.True(stable);
+        Assert.Contains("is locked on attempt 2", logs.AllText, StringComparison.OrdinalIgnoreCase);
+        Assert.IsAssignableFrom<IOException>(exclusiveWriterFailure);
+        Assert.Equal(96L, new FileInfo(filePath).Length);
     }
 
     [Fact]

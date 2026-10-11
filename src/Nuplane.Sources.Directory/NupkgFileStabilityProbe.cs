@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using Nuplane.Store.Coordination;
+using Nuplane.Store.Coordination.PhysicalFiles;
 
 namespace Nuplane.Sources.Directory;
 
@@ -8,14 +10,10 @@ namespace Nuplane.Sources.Directory;
 /// </summary>
 public sealed class NupkgFileStabilityProbe
 {
-    /// <summary>
-    /// Default maximum number of stability check attempts before giving up.
-    /// </summary>
+    /// <summary>Default maximum number of stability check attempts before giving up.</summary>
     public const int DefaultMaxAttempts = 5;
 
-    /// <summary>
-    /// Default delay between stability check attempts.
-    /// </summary>
+    /// <summary>Default delay between stability check attempts.</summary>
     public static readonly TimeSpan DefaultRetryDelay = TimeSpan.FromMilliseconds(200);
 
     private readonly int _maxAttempts;
@@ -23,16 +21,11 @@ public sealed class NupkgFileStabilityProbe
     private readonly ILogger<NupkgFileStabilityProbe> _logger;
     private readonly Func<int, CancellationToken, Task>? _onBeforeRetryAsync;
 
-    /// <summary>
-    /// Initializes a new instance of <see cref="NupkgFileStabilityProbe"/>.
-    /// </summary>
+    /// <summary>Initializes a new instance of <see cref="NupkgFileStabilityProbe"/>.</summary>
     /// <param name="logger">A logger for diagnostic output.</param>
     /// <param name="maxAttempts">Maximum retry attempts (default: 5).</param>
     /// <param name="retryDelay">Delay between retries (default: 200ms).</param>
-    /// <param name="onBeforeRetryAsync">
-    /// Optional callback invoked before each retry delay with the current attempt number.
-    /// Primarily useful for deterministic coordination in tests.
-    /// </param>
+    /// <param name="onBeforeRetryAsync">Optional callback before each retry; primarily useful for deterministic coordination in tests.</param>
     public NupkgFileStabilityProbe(
         ILogger<NupkgFileStabilityProbe> logger,
         int maxAttempts = DefaultMaxAttempts,
@@ -47,74 +40,114 @@ public sealed class NupkgFileStabilityProbe
         _onBeforeRetryAsync = onBeforeRetryAsync;
     }
 
-    /// <summary>
-    /// Probes the specified file path for stability. A file is considered stable
-    /// when it can be opened for read with no sharing violations and has a
-    /// consistent size across two consecutive checks.
-    /// </summary>
-    /// <param name="filePath">The absolute path to the <c>.nupkg</c> file.</param>
+    /// <summary>Probes one exact package-file basename through a positively Unenrolled native parent directory.</summary>
+    /// <param name="filePath">The path to the <c>.nupkg</c> file.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns><see langword="true"/> if the file is stable; <see langword="false"/> otherwise.</returns>
-    public async Task<bool> IsStableAsync(string filePath, CancellationToken cancellationToken = default)
+    /// <returns><see langword="true"/> if the file is stable; otherwise <see langword="false"/>.</returns>
+    public Task<bool> IsStableAsync(string filePath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        var (parentPath, basename) = SplitParentAndBasename(filePath);
+        return DesiredSourceDirectoryAccess.WithDirectoryAsync(
+            parentPath,
+            borrow: null,
+            session => IsStableAsync(session, basename, filePath, cancellationToken),
+            cancellationToken);
+    }
 
-        long previousSize = -1;
+    internal async Task<bool> IsStableAsync(
+        DesiredSourceDirectorySession session,
+        string basename,
+        string displayPath,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        PhysicalStoreNames.ValidateSingleComponent(basename);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (session.IsMissing)
+            return false;
 
+        long previousLength = -1;
         for (var attempt = 1; attempt <= _maxAttempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            try
+            session.Revalidate();
+            var sample = session.SamplePackageCandidate(basename);
+            switch (sample.Kind)
             {
-                // Try opening with FileShare.Read to detect write locks
-                using var stream = new FileStream(
-                    filePath,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.Read);
-
-                var currentSize = stream.Length;
-
-                if (previousSize >= 0 && currentSize == previousSize && currentSize > 0)
-                {
+                case PhysicalStoreDirectoryCandidateKind.Missing:
                     _logger.LogDebug(
-                        "File '{FilePath}' is stable after {Attempt} attempt(s) (size: {Size} bytes).",
-                        filePath, attempt, currentSize);
-                    return true;
-                }
+                        "File '{FilePath}' not found on attempt {Attempt}/{MaxAttempts}; treating as unstable.",
+                        displayPath, attempt, _maxAttempts);
+                    return false;
+                case PhysicalStoreDirectoryCandidateKind.Directory:
+                    return false;
+                case PhysicalStoreDirectoryCandidateKind.Busy:
+                    _logger.LogDebug(
+                        "File '{FilePath}' is locked on attempt {Attempt}/{MaxAttempts}.",
+                        displayPath, attempt, _maxAttempts);
+                    break;
+                case PhysicalStoreDirectoryCandidateKind.RegularFile:
+                    if (previousLength >= 0 && sample.Length == previousLength && sample.Length > 0)
+                    {
+                        _logger.LogDebug(
+                            "File '{FilePath}' is stable after {Attempt} attempt(s) (size: {Size} bytes).",
+                            displayPath, attempt, sample.Length);
+                        return true;
+                    }
 
-                previousSize = currentSize;
-            }
-            catch (IOException ex) when (ex is not FileNotFoundException)
-            {
-                _logger.LogDebug(
-                    ex,
-                    "File '{FilePath}' is locked on attempt {Attempt}/{MaxAttempts}.",
-                    filePath, attempt, _maxAttempts);
-            }
-            catch (FileNotFoundException)
-            {
-                _logger.LogDebug(
-                    "File '{FilePath}' not found on attempt {Attempt}/{MaxAttempts}; treating as unstable.",
-                    filePath, attempt, _maxAttempts);
-                return false;
+                    previousLength = sample.Length;
+                    break;
+                default:
+                    throw new InvalidOperationException("The native candidate sampler returned an undefined result.");
             }
 
-            if (attempt < _maxAttempts)
-            {
-                if (_onBeforeRetryAsync is not null)
-                {
-                    await _onBeforeRetryAsync(attempt, cancellationToken);
-                }
+            if (attempt == _maxAttempts)
+                break;
 
-                await Task.Delay(_retryDelay, cancellationToken);
+            if (_onBeforeRetryAsync is not null)
+            {
+                await _onBeforeRetryAsync(attempt, cancellationToken).ConfigureAwait(false);
+                session.Revalidate();
             }
+
+            await Task.Delay(_retryDelay, cancellationToken).ConfigureAwait(false);
+            session.Revalidate();
         }
 
         _logger.LogWarning(
             "File '{FilePath}' did not stabilize after {MaxAttempts} attempts. Treating as unstable.",
-            filePath, _maxAttempts);
+            displayPath, _maxAttempts);
         return false;
+    }
+
+    private static (string ParentPath, string Basename) SplitParentAndBasename(string filePath)
+    {
+        var separator = Math.Max(
+            filePath.LastIndexOf(Path.DirectorySeparatorChar),
+            filePath.LastIndexOf(Path.AltDirectorySeparatorChar));
+        var basename = separator < 0 ? filePath : filePath[(separator + 1)..];
+        if (basename.Length == 0)
+            throw new ArgumentException("The file path must end in one file name.", nameof(filePath));
+
+        string parentPath;
+        if (separator < 0)
+        {
+            parentPath = ".";
+        }
+        else if (separator == 0)
+        {
+            parentPath = filePath[..1];
+        }
+        else if (OperatingSystem.IsWindows() && separator == 2 && filePath.Length >= 3 && filePath[1] == ':')
+        {
+            parentPath = filePath[..3];
+        }
+        else
+        {
+            parentPath = filePath[..separator];
+        }
+
+        return (parentPath, basename);
     }
 }

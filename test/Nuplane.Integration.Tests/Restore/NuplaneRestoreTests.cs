@@ -94,12 +94,13 @@ public sealed class NuplaneRestoreTests : IDisposable
     {
         var package = HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory);
         var configuration = Configure();
-        var contextsBefore = AssemblyLoadContext.All.Count();
+        var contextsBefore = AssemblyLoadContext.All.ToHashSet();
 
         await NuplaneRestore.RestoreAsync(configuration, Options());
 
         Assert.False(HostFreeRestoreTestSupport.IsAssemblyVisible(package));
-        Assert.Equal(contextsBefore, AssemblyLoadContext.All.Count());
+        // A collectible context from another test may retire during restore; only added contexts violate this invariant.
+        Assert.All(AssemblyLoadContext.All, context => Assert.Contains(context, contextsBefore));
     }
 
     [Fact]

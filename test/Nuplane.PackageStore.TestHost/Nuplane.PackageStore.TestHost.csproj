@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nuplane\Nuplane.csproj" />
+    <Compile Include="..\Shared\OwnedProcessDirectory.cs" Link="Shared\OwnedProcessDirectory.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Remove="coverlet.collector" />
+    <PackageReference Remove="Microsoft.NET.Test.Sdk" />
+    <PackageReference Remove="NSubstitute" />
+    <PackageReference Remove="xunit" />
+    <PackageReference Remove="xunit.runner.visualstudio" />
+    <Using Remove="Xunit" />
+  </ItemGroup>
+</Project>

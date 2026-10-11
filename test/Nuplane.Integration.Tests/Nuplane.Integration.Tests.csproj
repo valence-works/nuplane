@@ -5,6 +5,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Shared\OwnedProcessDirectory.cs" Link="Shared\OwnedProcessDirectory.cs" />
+    <Compile Include="..\Shared\PackageStoreFixture.cs" Link="Shared\PackageStoreFixture.cs" />
+    <ProjectReference Include="..\Nuplane.PackageStore.TestHost\Nuplane.PackageStore.TestHost.csproj"
+                      ReferenceOutputAssembly="false" PrivateAssets="all" />
     <ProjectReference Include="..\..\src\Nuplane.Admin\Nuplane.Admin.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Admin.Api\Nuplane.Admin.Api.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Loading\Nuplane.Loading.csproj" />
@@ -12,5 +16,20 @@
     <ProjectReference Include="..\..\src\Nuplane.Sources.Directory\Nuplane.Sources.Directory.csproj" />
   </ItemGroup>
 
-</Project>
+  <Target Name="CopyPackageStoreTestHost" AfterTargets="Build">
+    <PropertyGroup>
+      <_PackageStoreTestHostOutput>$(MSBuildThisFileDirectory)../Nuplane.PackageStore.TestHost/bin/$(Configuration)/$(TargetFramework)/</_PackageStoreTestHostOutput>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_PackageStoreTestHostOutput)Nuplane.PackageStore.TestHost.dll') or !Exists('$(_PackageStoreTestHostOutput)Nuplane.PackageStore.TestHost.runtimeconfig.json') or !Exists('$(_PackageStoreTestHostOutput)Nuplane.PackageStore.TestHost.deps.json')"
+           Text="The package-store test host must be built before copying its executable artifacts." />
+    <Error Condition="$([MSBuild]::IsOSPlatform('OSX')) and !Exists('$(_PackageStoreTestHostOutput)libnuplane_store_native.dylib')"
+           Text="The macOS package-store process host must include libnuplane_store_native.dylib from its Nuplane project reference." />
+    <ItemGroup>
+      <PackageStoreTestHostArtifact Include="$(_PackageStoreTestHostOutput)**/*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PackageStoreTestHostArtifact)"
+          DestinationFiles="@(PackageStoreTestHostArtifact->'$(OutDir)PackageStoreTestHost\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
 
+</Project>

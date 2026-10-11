@@ -49,6 +49,25 @@ public sealed class PackageContentTests : IDisposable
     }
 
     [Fact]
+    public void TryReadFile_RefusesDuplicateCaseInsensitiveArchiveMembers()
+    {
+        var nupkg = CreateNupkg(("manifest.json", "first"), ("MANIFEST.JSON", "second"));
+
+        Assert.Null(PackageContent.TryReadFile(nupkg, "manifest.json"));
+        Assert.Null(PackageContent.TryReadFile(nupkg, "Manifest.Json"));
+    }
+
+    [Fact]
+    public void TryReadFile_IgnoresUnsafeArchiveMemberNamesAndRejectsUnsafeRequests()
+    {
+        var nupkg = CreateNupkg(("../manifest.json", "traversal"), ("/manifest.json", "rooted"), ("C:/manifest.json", "drive"));
+
+        Assert.Null(PackageContent.TryReadFile(nupkg, "manifest.json"));
+        Assert.Null(PackageContent.TryReadFile(nupkg, "../manifest.json"));
+        Assert.Null(PackageContent.TryReadFile(nupkg, "C:/manifest.json"));
+    }
+
+    [Fact]
     public void TryReadFile_RejectsPathTraversalAndAbsolutePaths()
     {
         // A secret living next to (outside) the package root must never be reachable via traversal.
@@ -88,6 +107,14 @@ public sealed class PackageContentTests : IDisposable
         Assert.NotNull(found);
         Assert.Equal("Acme.Package.nuspec", found!.Name);
         Assert.Equal("<archive-nuspec/>", Encoding.UTF8.GetString(found.Content));
+    }
+
+    [Fact]
+    public void TryFindByExtension_RefusesDuplicateRootArchiveMatches()
+    {
+        var nupkg = CreateNupkg(("Acme.Package.nuspec", "first"), ("ACME.PACKAGE.NUSPEC", "second"));
+
+        Assert.Null(PackageContent.TryFindByExtension(nupkg, ".nuspec"));
     }
 
     private string CreateNupkg(params (string Path, string Content)[] entries)

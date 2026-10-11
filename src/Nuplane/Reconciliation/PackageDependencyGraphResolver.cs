@@ -10,6 +10,7 @@ using NuGet.Versioning;
 using Nuplane.Abstractions;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Models;
+using Nuplane.Reconciliation.PackageFiles;
 
 namespace Nuplane.Reconciliation;
 
@@ -26,6 +27,7 @@ public sealed class PackageDependencyGraphResolver
 
     private readonly IPackageResolver _packageResolver;
     private readonly IReconciliationRetryPolicy _retryPolicy;
+    private readonly IPackageGraphFileReader _packageFiles;
     private readonly HostProvidedPackageDeclarationIndex _hostProvidedPackageDeclarations;
     private readonly IReadOnlyDictionary<string, string>? _hostPackageVersionsOverride;
 
@@ -52,10 +54,12 @@ public sealed class PackageDependencyGraphResolver
         IPackageResolver packageResolver,
         IReconciliationRetryPolicy retryPolicy,
         HostProvidedPackagesOptions? hostProvidedPackagesOptions,
-        IReadOnlyDictionary<string, string>? hostPackageVersions)
+        IReadOnlyDictionary<string, string>? hostPackageVersions,
+        IPackageGraphFileReader? packageFiles = null)
     {
         _packageResolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver));
         _retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
+        _packageFiles = packageFiles ?? packageResolver as IPackageGraphFileReader ?? new NativePackageGraphFileReader();
         _hostProvidedPackageDeclarations =
             HostProvidedPackageDeclarationIndex.Build((IEnumerable<string>?)hostProvidedPackagesOptions?.Entries ?? HostProvidedPackagesOptions.DefaultEntries);
         _hostPackageVersionsOverride = hostPackageVersions;
@@ -104,6 +108,16 @@ public sealed class PackageDependencyGraphResolver
         var rootPackages = new List<ResolvedPackage>();
         var discoveredEdges = new List<DiscoveredDependencyEdge>();
         var generationId = Guid.NewGuid().ToString("N");
+        var installedFiles = new Dictionary<ResolvedPackage, InstalledPackageGraphFiles>();
+        InstalledPackageGraphFiles GetFiles(ResolvedPackage package)
+        {
+            if (!installedFiles.TryGetValue(package, out var files))
+            {
+                files = _packageFiles.ReadInstallFiles(package);
+                installedFiles.Add(package, files);
+            }
+            return files;
+        }
 
         foreach (var request in desiredRequests.OrderBy(static request => request.Id, StringComparer.OrdinalIgnoreCase))
         {
@@ -127,7 +141,7 @@ public sealed class PackageDependencyGraphResolver
         foreach (var rootPackage in rootPackages)
         {
             var rootKey = BuildPackageKey(rootPackage.Id, rootPackage.Version);
-            foreach (var dependency in ReadDependencyMetadata(rootPackage))
+            foreach (var dependency in ReadDependencyMetadata(GetFiles(rootPackage).Nuspec))
             {
                 queue.Enqueue((rootPackage, dependency, [rootKey]));
             }
@@ -183,13 +197,13 @@ public sealed class PackageDependencyGraphResolver
                 continue;
             }
 
-            foreach (var transitiveDependency in ReadDependencyMetadata(dependencyPackage))
+            foreach (var transitiveDependency in ReadDependencyMetadata(GetFiles(dependencyPackage).Nuspec))
             {
                 queue.Enqueue((dependencyPackage, transitiveDependency, path.Concat([dependencyKey]).ToArray()));
             }
         }
 
-        var selectedPackages = SelectNuGetResolvedPackages(rootPackages, resolvedPackages.Values, cancellationToken);
+        var selectedPackages = SelectNuGetResolvedPackages(rootPackages, resolvedPackages.Values, GetFiles, cancellationToken);
         var selectedKeys = selectedPackages
             .Select(package => BuildPackageKey(package.Id, package.Version))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -198,7 +212,8 @@ public sealed class PackageDependencyGraphResolver
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var nodes = selectedPackages
-            .Select(package => CreateNode(package, DetermineNodeRole(package, rootKeys, selectedKeys, discoveredEdges)))
+            .Select(package => CreateNode(package, DetermineNodeRole(package, rootKeys, selectedKeys, discoveredEdges),
+                GetFiles(package).RuntimeAssets))
             .OrderBy(static node => node.PackageId, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static node => node.Version, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -316,6 +331,7 @@ public sealed class PackageDependencyGraphResolver
     private IReadOnlyList<ResolvedPackage> SelectNuGetResolvedPackages(
         IReadOnlyList<ResolvedPackage> rootPackages,
         IEnumerable<ResolvedPackage> candidatePackages,
+        Func<ResolvedPackage, InstalledPackageGraphFiles> getFiles,
         CancellationToken cancellationToken)
     {
         var source = new SourceRepository(
@@ -337,7 +353,7 @@ public sealed class PackageDependencyGraphResolver
             .Select(package => new SourcePackageDependencyInfo(
                 package.Id,
                 ParsePackageVersion(package),
-                ReadDependencyMetadata(package)
+                ReadDependencyMetadata(getFiles(package).Nuspec)
                     .Where(dependency => ClassifyHostProvision(dependency.PackageId, dependency.VersionRange, out _) == HostProvision.NotHostProvided)
                     .Select(static dependency => TryCreatePackageDependency(dependency))
                     .OfType<PackageDependency>()
@@ -448,7 +464,8 @@ public sealed class PackageDependencyGraphResolver
 
     private static ResolvedPackageNode CreateNode(
         ResolvedPackage package,
-        PackageNodeRole role) =>
+        PackageNodeRole role,
+        IReadOnlyList<string> runtimeAssets) =>
         new(
             package.Id,
             package.Version,
@@ -457,43 +474,16 @@ public sealed class PackageDependencyGraphResolver
             PackageSourceKind.RemoteFeed,
             string.IsNullOrWhiteSpace(package.SourceName) ? package.FeedName : package.SourceName,
             PackageContentHash: package.PackageContentHash,
-            RuntimeAssets: ResolveRuntimeAssets(package.InstallPath),
-            DiscoverableAssets: role is PackageNodeRole.Root or PackageNodeRole.RootAndDependency ? ResolveRuntimeAssets(package.InstallPath) : [],
-            SupportAssets: role is PackageNodeRole.Dependency ? ResolveRuntimeAssets(package.InstallPath) : []);
+            RuntimeAssets: runtimeAssets,
+            DiscoverableAssets: role is PackageNodeRole.Root or PackageNodeRole.RootAndDependency ? runtimeAssets : [],
+            SupportAssets: role is PackageNodeRole.Dependency ? runtimeAssets : []);
 
-    private static IReadOnlyList<string> ResolveRuntimeAssets(string installPath)
+    private static IReadOnlyList<PackageDependencyMetadata> ReadDependencyMetadata(XDocument? document)
     {
-        if (string.IsNullOrWhiteSpace(installPath) || !Directory.Exists(installPath))
+        if (document is null)
         {
             return [];
         }
-
-        return Directory
-            .EnumerateFiles(installPath, "*.dll", SearchOption.AllDirectories)
-            .Select(path => Path.GetRelativePath(installPath, path))
-            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    private static IReadOnlyList<PackageDependencyMetadata> ReadDependencyMetadata(ResolvedPackage package)
-    {
-        if (string.IsNullOrWhiteSpace(package.InstallPath) || !Directory.Exists(package.InstallPath))
-        {
-            return [];
-        }
-
-        var nuspecPath = Directory
-            .EnumerateFiles(package.InstallPath, "*.nuspec", SearchOption.TopDirectoryOnly)
-            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
-
-        if (nuspecPath is null)
-        {
-            return [];
-        }
-
-        using var stream = File.OpenRead(nuspecPath);
-        var document = XDocument.Load(stream);
 
         var groups = document
             .Descendants()

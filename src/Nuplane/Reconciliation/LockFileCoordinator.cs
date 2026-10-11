@@ -13,6 +13,7 @@ namespace Nuplane.Reconciliation;
 /// </summary>
 public sealed class LockFileCoordinator(LockFileStore store, IOptions<LockFileOptions> options) :
     ILockFileCoordinator,
+    IPackagePathIndependentLockFileCoordinator,
     ILockFileCycleCoordinator
 {
     private const string CurrentSchemaVersion = "2.0";

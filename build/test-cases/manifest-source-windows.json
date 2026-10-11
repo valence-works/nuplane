@@ -1,0 +1,16 @@
+[
+  "Nuplane.Runtime.Tests.Sources.DesiredManifestNativeReadTests.ReadAsync_AwaitsWhileNativeFileIsHeldAndCancellationReleasesIt",
+  "Nuplane.Runtime.Tests.Sources.DesiredManifestNativeReadTests.ReadAsync_DisposedOriginalBorrowDrainsUntilAwaitedNativeReadCompletes",
+  "Nuplane.Runtime.Tests.Sources.DesiredManifestNativeReadTests.ReadAsync_EmptyAndMalformedFilesRemainInvalid",
+  "Nuplane.Runtime.Tests.Sources.DesiredManifestNativeReadTests.ReadAsync_FinalSymbolicLinkIsTypedAuthorityRefusal",
+  "Nuplane.Runtime.Tests.Sources.DesiredManifestNativeReadTests.ReadAsync_HardLinkedFileIsTypedAuthorityRefusal",
+  "Nuplane.Runtime.Tests.Sources.DesiredManifestNativeReadTests.ReadAsync_MissingFileAndOrdinaryDirectoryRemainNotFound",
+  "Nuplane.Runtime.Tests.Sources.DesiredManifestNativeReadTests.ReadAsync_PathRestrictedBorrowRefusesBeforeNativeRead",
+  "Nuplane.Runtime.Tests.Sources.DesiredManifestNativeReadTests.ReadAsync_PreservesFileReadAllTextBomSemantics(encodingName: \"utf16-be\")",
+  "Nuplane.Runtime.Tests.Sources.DesiredManifestNativeReadTests.ReadAsync_PreservesFileReadAllTextBomSemantics(encodingName: \"utf16-le\")",
+  "Nuplane.Runtime.Tests.Sources.DesiredManifestNativeReadTests.ReadAsync_PreservesFileReadAllTextBomSemantics(encodingName: \"utf32-be\")",
+  "Nuplane.Runtime.Tests.Sources.DesiredManifestNativeReadTests.ReadAsync_PreservesFileReadAllTextBomSemantics(encodingName: \"utf32-le\")",
+  "Nuplane.Runtime.Tests.Sources.DesiredManifestNativeReadTests.ReadAsync_PreservesFileReadAllTextBomSemantics(encodingName: \"utf8\")",
+  "Nuplane.Runtime.Tests.Sources.DesiredManifestNativeReadTests.ReadAsync_PreservesFileReadAllTextBomSemantics(encodingName: \"utf8-bom\")",
+  "Nuplane.Runtime.Tests.Sources.DesiredManifestNativeReadTests.ReadAsync_RefusesAuthorityIntroducedAfterNativeSnapshot"
+]

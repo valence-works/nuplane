@@ -39,4 +39,3 @@ internal static class NuplaneDesiredStatePlanningRegistrationServices
         services.AddSingleton<IDryRunPlanner>(sp => sp.GetRequiredService<DryRunPlanner>());
     }
 }
-
