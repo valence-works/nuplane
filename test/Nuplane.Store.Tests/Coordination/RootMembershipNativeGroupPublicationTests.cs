@@ -1,4 +1,6 @@
 using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
+using Nuplane;
 using Nuplane.Abstractions;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Store.Coordination;
@@ -7,6 +9,9 @@ using Nuplane.Store.Coordination.MembershipSerialization;
 using Nuplane.Store.Coordination.PhysicalFiles;
 using Nuplane.Store.Coordination.ProtectionRecords;
 using Nuplane.Feeds;
+using Nuplane.Feeds.Configuration;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Models;
 using Nuplane.Store.State;
 using Nuplane.Tests.Shared;
 
@@ -80,6 +85,87 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
         var recovered = await context.Registry().RecoverNativeGroupAsync(context.Descriptor, context.Requests,
             CancellationToken.None);
         AssertNextPublished(context, recovered);
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task AddNuplane_RefusesStableGroupAcknowledgedConfiguredStateBeforeDesiredSource()
+    {
+        using var context = await CreatePublishedGroupContextAsync();
+        var source = new CountingDesiredPackageSource();
+        using var provider = CreateRuntimeProvider(context, source);
+
+        var error = await Record.ExceptionAsync(() => provider.GetRequiredService<IReconciliationService>()
+            .TriggerAsync(ReconciliationTrigger.Manual("stable-group-state"), CancellationToken.None));
+
+        Assert.IsAssignableFrom<PackageStoreAdmissionException>(error);
+        Assert.Equal(0, source.CallbackCount);
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task AddNuplane_RefusesStableGroupAcknowledgedInstallPathBeforePackageCallback()
+    {
+        using var context = await CreatePublishedGroupContextAsync();
+        using var provider = CreateRuntimeProvider(context, new CountingDesiredPackageSource());
+        var callbacks = 0;
+
+        var error = await Record.ExceptionAsync(async () =>
+        {
+            await using var admission = await provider.GetRequiredService<IPackageStoreAdmission>()
+                .AcquireForInstallPathsAsync([context.RootAInstallPath], PackageStoreAdmissionKind.Loading);
+            using var borrow = admission.BorrowFor(context.RootAInstallPath);
+            PackageStoreOperationAccess.WithValidatedPackageDirectory(borrow, context.RootAInstallPath,
+                (_, _) => ++callbacks);
+        });
+
+        Assert.IsAssignableFrom<PackageStoreAdmissionException>(error);
+        Assert.Equal(0, callbacks);
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task AddNuplane_RefusesStableGroupCatalogPeerForIndependentV1ConfiguredStateBeforeDesiredSource()
+    {
+        using var context = await CreatePublishedGroupContextAsync();
+        var selected = await context.AddIndependentCompleteV1RootAsync();
+        using (var selectedRoot = PhysicalStoreTestDirectory.Open(context.Files, selected.PackageInstallRoot))
+        {
+            var selectedLedger = context.Registry().ReadCandidate(selectedRoot);
+            Assert.Equal(RootMembershipRecord.CurrentSchemaVersion, selectedLedger.SchemaVersion);
+            Assert.Equal(RootMembershipStatus.Complete, selectedLedger.Status);
+            Assert.IsType<RootMemberRecord.AcknowledgedBinding>(Assert.Single(selectedLedger.Members).Binding);
+        }
+
+        var source = new CountingDesiredPackageSource();
+        using var provider = CreateRuntimeProvider(selected.PackageInstallRoot, selected.StateFilePath, source,
+            ("group-a", context.RootAPath), ("group-b", context.RootBPath));
+
+        var error = await Record.ExceptionAsync(() => provider.GetRequiredService<IReconciliationService>()
+            .TriggerAsync(ReconciliationTrigger.Manual("stable-group-peer-with-v1-selection"), CancellationToken.None));
+
+        Assert.IsAssignableFrom<PackageStoreAdmissionException>(error);
+        Assert.Equal(0, source.CallbackCount);
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task AddNuplane_RefusesStableGroupCatalogPeerForIndependentV1InstallPathBeforePackageCallback()
+    {
+        using var context = await CreatePublishedGroupContextAsync();
+        var selected = await context.AddIndependentCompleteV1RootAsync();
+        var installPath = context.CreateIndependentV1ProbeInstallPath();
+        using var provider = CreateRuntimeProvider(selected.PackageInstallRoot, selected.StateFilePath,
+            new CountingDesiredPackageSource(), ("group-a", context.RootAPath), ("group-b", context.RootBPath));
+        var callbacks = 0;
+
+        var error = await Record.ExceptionAsync(async () =>
+        {
+            await using var admission = await provider.GetRequiredService<IPackageStoreAdmission>()
+                .AcquireForInstallPathsAsync([installPath], PackageStoreAdmissionKind.Loading);
+            using var borrow = admission.BorrowFor(installPath);
+            PackageStoreOperationAccess.WithValidatedPackageDirectory(borrow, installPath,
+                (_, _) => ++callbacks);
+        });
+
+        Assert.IsAssignableFrom<PackageStoreAdmissionException>(error);
+        Assert.Equal(0, callbacks);
     }
 
     [SupportedPhysicalStoreFact]
@@ -409,6 +495,56 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
         };
     }
 
+    private static async Task<Context> CreatePublishedGroupContextAsync()
+    {
+        var context = await Context.CreateWithGraphAsync();
+        try
+        {
+            var ledgers = await context.Registry().PublishNativeGroupAsync(context.Descriptor, context.Requests,
+                context.NextState, CancellationToken.None);
+            AssertNextPublished(context, ledgers);
+            return context;
+        }
+        catch
+        {
+            context.Dispose();
+            throw;
+        }
+    }
+
+    private static ServiceProvider CreateRuntimeProvider(Context context, IDesiredPackageSource source)
+        => CreateRuntimeProvider(context.RootAPath, context.SharedStatePath, source,
+            ("peer", context.RootBPath));
+
+    private static ServiceProvider CreateRuntimeProvider(string configuredRoot, string statePath,
+        IDesiredPackageSource source, params (string Label, string RootPath)[] catalogRoots)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(builder =>
+        {
+            foreach (var (label, rootPath) in catalogRoots)
+                builder.AddPackageStoreRoot(label, rootPath);
+        });
+        services.Configure<FeedResolutionOptions>(options => options.PackageInstallRoot = configuredRoot);
+        services.Configure<StoreRegistryOptions>(options => options.StateFilePath = statePath);
+        services.AddSingleton<IDesiredPackageSource>(source);
+        return services.BuildServiceProvider();
+    }
+
+    private sealed class CountingDesiredPackageSource : IDesiredPackageSource
+    {
+        private int _callbackCount;
+
+        internal int CallbackCount => Volatile.Read(ref _callbackCount);
+
+        public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
+        {
+            Interlocked.Increment(ref _callbackCount);
+            return Task.FromResult<IReadOnlyList<PackageRequest>>([]);
+        }
+    }
+
     private sealed class SimulatedCrashException : Exception { }
 
     private sealed record GroupPublicationPlan(
@@ -610,6 +746,40 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
             PhysicalStoreStateSlotWriteGuard.GroupMarkerLeafName);
         internal string RootAPath => _rootAPath;
         internal string RootBPath => _rootBPath;
+        internal string SharedStatePath => _sharedPath;
+        internal string CreateIndependentV1ProbeInstallPath()
+            => _fixture.CreateDirectory("independent-v1/empty-package");
+        internal string RootAInstallPath => _rootAInstallPath
+            ?? throw new InvalidOperationException("The graph fixture must create the root-A install path.");
+
+        internal async Task<(string PackageInstallRoot, string StateFilePath)> AddIndependentCompleteV1RootAsync()
+        {
+            var rootPath = _fixture.CreateDirectory("independent-v1");
+            var statePath = _fixture.CreateStateSlot("independent-v1-state/state.json");
+            using var root = PhysicalStoreTestDirectory.Open(_files, rootPath);
+            using var stateParent = PhysicalStoreTestDirectory.Open(_files, Path.GetDirectoryName(statePath)!);
+            var rootIdentity = new PhysicalRootIdentity(_files.InspectHandle(root).Identity);
+            const string memberId = "independent-v1-member";
+            var declaration = new RootMemberRecord(memberId, statePath, new RootMemberRecord.DeclaredBinding());
+            var initialState = StoreStateRecord.Empty() with { UpdatedAt = DateTimeOffset.UnixEpoch };
+            File.WriteAllBytes(statePath, SerializeState(initialState));
+            _registry.InitializeIncomplete(root, rootIdentity, 1, [declaration], true, CancellationToken.None);
+            var locations = new Dictionary<string, (PhysicalStoreDirectoryHandle Parent, string RequestedBasename)>
+            {
+                [memberId] = (stateParent, Path.GetFileName(statePath))
+            };
+            await _registry.BindDeclaredMembersAsync(root, rootIdentity, 1, [declaration], locations,
+                true, CancellationToken.None);
+            var protectedState = Protect(initialState, rootIdentity, memberId);
+            await _registry.WithQuiescentBoundIncompleteMemberLocationsAsync(root, rootIdentity, 1, true,
+                async (locked, token) =>
+                {
+                    await locked.PublishStateAsync(memberId, protectedState, token);
+                    return true;
+                }, CancellationToken.None);
+            await _registry.CompleteEnrollmentAsync(root, rootIdentity, 1, true, CancellationToken.None);
+            return (rootPath, statePath);
+        }
 
         internal async Task<PhysicalStoreStateSlotWriteGuard.PhysicalStoreStateSlotWriteLease> AcquireSharedSlotGuardAsync(
             CancellationToken cancellationToken = default)

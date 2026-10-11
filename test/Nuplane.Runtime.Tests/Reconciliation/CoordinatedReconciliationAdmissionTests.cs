@@ -30,7 +30,7 @@ using Nuplane.Sources;
 
 namespace Nuplane.Runtime.Tests.Reconciliation;
 
-public sealed class CoordinatedReconciliationAdmissionTests
+public sealed partial class CoordinatedReconciliationAdmissionTests
 {
     public enum UnknownParticipant
     {
@@ -866,11 +866,16 @@ public sealed class CoordinatedReconciliationAdmissionTests
         ILockFileCoordinator? lockFileCoordinatorOverride = null,
         IReconciliationRetryPolicy? retryPolicyOverride = null,
         LockFileMode? lockFileMode = null,
-        IDesiredPackageSource? additionalSource = null)
+        IDesiredPackageSource? additionalSource = null,
+        string? additionalPackageStoreRoot = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddNuplane(_ => { });
+        services.AddNuplane(builder =>
+        {
+            if (additionalPackageStoreRoot is not null)
+                builder.AddPackageStoreRoot("peer", additionalPackageStoreRoot);
+        });
         services.Configure<FeedResolutionOptions>(options => options.PackageInstallRoot = packageInstallRoot);
         services.Configure<StoreRegistryOptions>(options => options.StateFilePath = stateFilePath);
         services.Configure<ReconciliationOptions>(options => options.MaxRetryAttempts = 0);
