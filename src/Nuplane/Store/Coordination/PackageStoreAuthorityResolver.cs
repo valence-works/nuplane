@@ -1228,11 +1228,9 @@ internal sealed class PackageStoreAuthorityResolver
             var entryAfter = resolver._files.InspectChildNoFollow(parent, name);
             if (before.Kind != PhysicalStoreEntryKind.Directory || after.Kind != PhysicalStoreEntryKind.Directory ||
                 before.Identity != after.Identity || semantics != semanticsAfter ||
-                (entry is null) != (entryAfter is null) ||
-                (entry is not null && entryAfter is not null &&
-                 (entry.Kind != entryAfter.Kind || entry.Identity != entryAfter.Identity)))
+                entry is not null || entryAfter is not null)
             {
-                throw Unknown("A prospective state-parent edge changed during native preflight.", RootIdentity);
+                throw Unknown("A prospective state-parent edge was occupied or changed during native preflight.", RootIdentity);
             }
 
             // Replay every retained prefix edge and every reserved-authority observation immediately before
@@ -1248,6 +1246,9 @@ internal sealed class PackageStoreAuthorityResolver
             }
 
             cancellationToken.ThrowIfCancellationRequested();
+            if (resolver._files.InspectChildNoFollow(parent, name) is not null)
+                throw Unknown("A prospective state-parent name became occupied before exclusive creation.", RootIdentity);
+
             PhysicalStoreDirectoryHandle created;
             try
             {

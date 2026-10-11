@@ -211,6 +211,46 @@ public sealed partial class PackageStoreAuthorityResolverTests
     }
 
     [SupportedPhysicalStoreFact]
+    public void ResolveStateSlotForWrite_EntryAppearingBeforeNativeCreate_RefusesWithoutTypedCollision()
+    {
+        using (var context = new Context())
+        {
+            var racedPath = Path.Combine(context.Fixture.RootPath, "occupied-during-preflight");
+            var matchingInspections = 0;
+            context.Observed.AfterInspectChild = (_, name, _) =>
+            {
+                if (name == "occupied-during-preflight" && ++matchingInspections == 1)
+                    Directory.CreateDirectory(racedPath);
+            };
+
+            Assert.Throws<PackageStoreAdmissionException>(() =>
+                context.ResolveStateSlotForWrite(Path.Combine(racedPath, "state.json")));
+
+            Assert.True(Directory.Exists(racedPath));
+            Assert.Equal(0, context.Observed.CreateCount);
+            context.AssertTrackedHandlesClosed();
+        }
+
+        using (var context = new Context())
+        {
+            var racedPath = Path.Combine(context.Fixture.RootPath, "occupied-during-replay");
+            var matchingInspections = 0;
+            context.Observed.AfterInspectChild = (_, name, _) =>
+            {
+                if (name == "occupied-during-replay" && ++matchingInspections == 3)
+                    Directory.CreateDirectory(racedPath);
+            };
+
+            Assert.Throws<PackageStoreAdmissionException>(() =>
+                context.ResolveStateSlotForWrite(Path.Combine(racedPath, "state.json")));
+
+            Assert.True(Directory.Exists(racedPath));
+            Assert.Equal(0, context.Observed.CreateCount);
+            context.AssertTrackedHandlesClosed();
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
     public void ResolveStateSlotForWrite_UntypedCreateFailureAfterDirectoryAppears_PropagatesWithoutAdoption()
     {
         using var context = new Context();
