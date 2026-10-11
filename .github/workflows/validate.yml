@@ -298,7 +298,7 @@ jobs:
                   raise SystemExit('Missing or duplicate incomplete binding scenario: ' + name)
           PYCODE
 
-      - name: Qualify metadata-only configured store authority resolution
+      - name: Qualify configured authority and retained state-slot parent resolution
         shell: bash
         run: |
           set -euo pipefail
@@ -307,31 +307,8 @@ jobs:
             --filter "FullyQualifiedName~PackageStoreAuthorityResolverTests&FullyQualifiedName!~Ext4Casefold" \
             --logger "trx;LogFileName=configured-authority.trx" \
             --results-directory "$RUNNER_TEMP/configured-authority"
-          python3 - "$RUNNER_TEMP/configured-authority/configured-authority.trx" <<'PYCODE'
-          import sys
-          import xml.etree.ElementTree as ET
-          rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
-          required = [
-              'Resolve_UnenrolledDirectoryAndArchive_ReplaysAbsoluteAndExplicitBaseComponents',
-              'Resolve_MissingTargetsAndInvalidBaseForms_RefuseWithoutFilesystemSideEffects',
-              'Resolve_ConfiguredRootAliasesAbsoluteAndRelative_ConvergeOnNativeRootIdentity',
-              'Resolve_RequiredRootWithParentComponentsBeforeAuthority_ReplaysWithoutInventingAnEarlierBoundary',
-              'Resolve_FinalPackageAndArchiveLinksOrHardlinks_RefusesWithoutReadingPayload',
-              'Resolve_InspectsReservedAuthorityBeforeFollowingAnEscapingAlias',
-              'Resolve_NestedDifferentAndEscapeThenReturnAuthorities_Refuses',
-              'Resolve_PresentMissingMalformedOrIncompleteControlNamespace_IsTypedUnknown',
-              'Resolve_ReservedControlOrMembershipLedgerLinksAreNeverAuthority',
-              'Revalidate_RejectsIdenticalLedgerBytesPublishedWithANewNativeIdentity',
-              'Resolve_AliasOrDirectoryEdgeReplacementDuringReplay_RefusesAndClosesOwnedHandles',
-              'Revalidate_DetectsNewAuthorityReplacedDirectoryAndChangedAlias',
-              'Revalidate_AfterResultDisposal_RefusesExpiredEvidence',
-          ]
-          if len(rows) != 13 or any(row.get('outcome') != 'Passed' for row in rows):
-              raise SystemExit('All thirteen configured authority scenarios must execute and pass without skips.')
-          for name in required:
-              if sum(row.get('testName', '').endswith('.' + name) for row in rows) != 1:
-                  raise SystemExit('Missing or duplicate configured authority scenario: ' + name)
-          PYCODE
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/configured-authority/configured-authority.trx" \
+            build/test-cases/configured-authority.json
 
       - name: Qualify locked member locations and completed install graph snapshots
         shell: bash

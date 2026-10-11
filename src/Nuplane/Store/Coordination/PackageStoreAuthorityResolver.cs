@@ -1006,8 +1006,7 @@ internal sealed class PackageStoreAuthorityResolver
                         cleanupFailure);
                 }
 
-                ExceptionDispatchInfo.Capture(refusal).Throw();
-                throw;
+                throw refusal;
             }
             _handles.Add(handle);
         }
