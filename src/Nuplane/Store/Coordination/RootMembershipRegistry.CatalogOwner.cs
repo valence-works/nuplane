@@ -401,6 +401,8 @@ internal sealed partial class RootMembershipRegistry
             return root;
         }
 
+        internal NativeCatalogLockedRoot[] SnapshotRetainedRoots() => _roots.Values.ToArray();
+
         internal void RequireOperationMayStart()
         {
             lock (_gate)

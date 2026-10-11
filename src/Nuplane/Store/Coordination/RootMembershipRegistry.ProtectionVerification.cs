@@ -125,7 +125,8 @@ internal sealed partial class RootMembershipRegistry
                 var graphs = PersistedStoreStateGraphVerifier.VerifyAcknowledgedMember(
                     state, ledger, member, expectedRoot, expectedEpoch, requiredStatus);
                 ObserveProtectedInstalls(root, expectedRoot, state,
-                    graphs.ActiveGraphs.Concat(graphs.RecoverableGraphs), scope, observations, revalidations);
+                    graphs.ActiveGraphs.Concat(graphs.RecoverableGraphs), scope, observations, revalidations,
+                    cancellationToken);
                 result.Add(member.MemberId, state);
             }
 
@@ -157,13 +158,42 @@ internal sealed partial class RootMembershipRegistry
         IEnumerable<ProtectedGraphSnapshot> graphs,
         MemberLocatorReplayScope scope,
         ICollection<IDisposable> observations,
-        ICollection<Action> revalidations)
+        ICollection<Action> revalidations,
+        CancellationToken cancellationToken = default)
+    {
+        var installs = graphs.SelectMany(graph => graph.Nodes).Select(node => node.Install).Distinct().ToArray();
+        var paths = new List<ActiveInstallPathEvidence>();
+        foreach (var descriptor in state.ActivePackageDescriptorsByIdNormalized.Values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var associated = installs.Where(install =>
+                string.Equals(install.PackageId, descriptor.PackageId, StringComparison.OrdinalIgnoreCase) &&
+                NuGet.Versioning.NuGetVersion.TryParse(install.Version, out var expectedVersion) &&
+                NuGet.Versioning.NuGetVersion.TryParse(descriptor.Version, out var descriptorVersion) &&
+                NuGet.Versioning.VersionComparer.VersionRelease.Equals(expectedVersion, descriptorVersion)).ToArray();
+            if (associated.Length == 0)
+                throw Refused("An active descriptor has no exact protected install identity.");
+            paths.Add(new ActiveInstallPathEvidence(descriptor, associated));
+        }
+
+        ObserveNativeInstallEvidence(root, expectedRoot, installs, paths, scope, observations, revalidations,
+            cancellationToken);
+    }
+
+    private void ObserveNativeInstallEvidence(
+        PhysicalStoreDirectoryHandle root,
+        PhysicalRootIdentity expectedRoot,
+        IEnumerable<PackageInstallIdentity> installs,
+        IEnumerable<ActiveInstallPathEvidence> paths,
+        MemberLocatorReplayScope scope,
+        ICollection<IDisposable> observations,
+        ICollection<Action> revalidations,
+        CancellationToken cancellationToken)
     {
         var reader = new PackageInstallIdentityReader(_files);
-        var resolver = new PackageStoreAuthorityResolver(_files, this);
-        var installs = graphs.SelectMany(graph => graph.Nodes).Select(node => node.Install).Distinct().ToArray();
-        foreach (var install in installs)
+        foreach (var install in installs.Distinct())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (install.Root != expectedRoot)
                 throw Refused("A member's protected graph names another physical package root.");
             var observed = reader.Observe(root, expectedRoot, install.RootRelativeInstallPath,
@@ -175,22 +205,21 @@ internal sealed partial class RootMembershipRegistry
             revalidations.Add(observed.Revalidate);
         }
 
-        foreach (var descriptor in state.ActivePackageDescriptorsByIdNormalized.Values)
+        var resolver = new PackageStoreAuthorityResolver(_files, this);
+        foreach (var path in paths)
         {
-            var associated = installs.Where(install =>
-                string.Equals(install.PackageId, descriptor.PackageId, StringComparison.OrdinalIgnoreCase) &&
-                NuGet.Versioning.NuGetVersion.TryParse(install.Version, out var expectedVersion) &&
-                NuGet.Versioning.NuGetVersion.TryParse(descriptor.Version, out var descriptorVersion) &&
-                NuGet.Versioning.VersionComparer.VersionRelease.Equals(expectedVersion, descriptorVersion)).ToArray();
-            if (associated.Length == 0)
-                throw Refused("An active descriptor has no exact protected install identity.");
-            var resolved = resolver.ResolveProtectedInstallPath(descriptor.InstallPath, scope);
+            cancellationToken.ThrowIfCancellationRequested();
+            var resolved = resolver.ResolveProtectedInstallPath(path.Descriptor.InstallPath, scope);
             observations.Add(resolved);
             var target = _files.InspectHandle(resolved.Target);
             if (target.Kind != PhysicalStoreEntryKind.Directory ||
-                associated.Any(install => install.DirectoryIdentity != target.Identity))
+                path.AssociatedInstalls.Any(install => install.DirectoryIdentity != target.Identity))
                 throw Refused("An active descriptor's actual path does not identify its protected native install.");
             revalidations.Add(resolved.Revalidate);
         }
     }
+
+    private sealed record ActiveInstallPathEvidence(
+        Nuplane.Abstractions.ActivePackageDescriptor Descriptor,
+        IReadOnlyList<PackageInstallIdentity> AssociatedInstalls);
 }

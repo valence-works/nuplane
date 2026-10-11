@@ -797,7 +797,7 @@ internal sealed partial class RootMembershipRegistry
         {
             ObserveProtectedInstalls(root, expectedRoot, nextState,
                 graphs.ActiveGraphs.Concat(graphs.RecoverableGraphs), candidateScope,
-                observations, revalidations);
+                observations, revalidations, cancellationToken);
             RevalidateCandidateLedger(transaction, ledger, scope, locations, policy);
             foreach (var revalidate in revalidations)
             {
