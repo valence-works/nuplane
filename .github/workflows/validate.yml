@@ -1068,7 +1068,7 @@ jobs:
               raise SystemExit('The Unix state-slot identity scenarios did not all execute and pass.')
           PY
 
-      - name: Qualify native multiroot publication and catalog-owner recovery
+      - name: Qualify native multiroot publication and catalog-owner verification/recovery
         shell: bash
         run: |
           set -euo pipefail
