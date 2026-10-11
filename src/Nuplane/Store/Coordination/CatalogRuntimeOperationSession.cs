@@ -207,7 +207,7 @@ internal sealed class CatalogRuntimeOperationSession : IAsyncDisposable
             Exception? poisonReason;
             lock (_gate) poisonReason = _poisonReason;
             if (poisonReason is not null)
-                errors.Add(Refused("The catalog runtime session was poisoned by an incomplete or uncertain operation.", poisonReason));
+                errors.Add(poisonReason);
 
             try { await _borrow.DisposeAsync().ConfigureAwait(false); }
             catch (Exception exception) { errors.Add(exception); }
@@ -232,10 +232,17 @@ internal sealed class CatalogRuntimeOperationSession : IAsyncDisposable
     {
         private CatalogRuntimeOperationSession? _session;
         private bool _completed;
+        private Exception? _failure;
 
         internal OperationLease(CatalogRuntimeOperationSession session) => _session = session;
 
         internal void Complete() => _completed = true;
+
+        internal void Fail(Exception failure)
+        {
+            ArgumentNullException.ThrowIfNull(failure);
+            _failure ??= failure;
+        }
 
         public ValueTask DisposeAsync()
         {
@@ -251,7 +258,7 @@ internal sealed class CatalogRuntimeOperationSession : IAsyncDisposable
                 session.Poison(exception);
             }
             if (!_completed)
-                session.Poison();
+                session.Poison(_failure);
 
             session._operationGate.Release();
             if (_completed && replayError is not null)

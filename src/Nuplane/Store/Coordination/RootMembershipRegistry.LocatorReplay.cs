@@ -1093,9 +1093,11 @@ internal sealed partial class RootMembershipRegistry
             await using var catalogOperation = _catalogSession is null
                 ? null
                 : await _catalogSession.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
-            await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var operationGateAcquired = false;
             try
             {
+                await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                operationGateAcquired = true;
                 EnsureValidMap();
                 RequireAcknowledgedPolicy();
                 await _verifyCurrentStates(_scope, _locations, cancellationToken).ConfigureAwait(false);
@@ -1122,9 +1124,15 @@ internal sealed partial class RootMembershipRegistry
                 catalogOperation?.Complete();
                 return result;
             }
+            catch (Exception exception)
+            {
+                catalogOperation?.Fail(exception);
+                throw;
+            }
             finally
             {
-                _operationGate.Release();
+                if (operationGateAcquired)
+                    _operationGate.Release();
             }
         }
 
@@ -1135,9 +1143,11 @@ internal sealed partial class RootMembershipRegistry
             await using var catalogOperation = _catalogSession is null
                 ? null
                 : await _catalogSession.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
-            await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var operationGateAcquired = false;
             try
             {
+                await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                operationGateAcquired = true;
                 EnsureValidMap();
                 if (!_locations.TryGetValue(memberId, out var location))
                     throw Refused("The requested state member is not in the exact locked membership union.");
@@ -1146,9 +1156,15 @@ internal sealed partial class RootMembershipRegistry
                 catalogOperation?.Complete();
                 return state;
             }
+            catch (Exception exception)
+            {
+                catalogOperation?.Fail(exception);
+                throw;
+            }
             finally
             {
-                _operationGate.Release();
+                if (operationGateAcquired)
+                    _operationGate.Release();
             }
         }
 
@@ -1158,9 +1174,11 @@ internal sealed partial class RootMembershipRegistry
             await using var catalogOperation = _catalogSession is null
                 ? null
                 : await _catalogSession.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
-            await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var operationGateAcquired = false;
             try
             {
+                await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                operationGateAcquired = true;
                 EnsureValidMap();
                 RequireAcknowledgedPolicy();
                 using var binding = _bindConfiguredStateFile(_scope, _locations, configuredPath);
@@ -1173,9 +1191,15 @@ internal sealed partial class RootMembershipRegistry
                 catalogOperation?.Complete();
                 return result;
             }
+            catch (Exception exception)
+            {
+                catalogOperation?.Fail(exception);
+                throw;
+            }
             finally
             {
-                _operationGate.Release();
+                if (operationGateAcquired)
+                    _operationGate.Release();
             }
         }
 
@@ -1189,9 +1213,11 @@ internal sealed partial class RootMembershipRegistry
             await using var catalogOperation = _catalogSession is null
                 ? null
                 : await _catalogSession.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
-            await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var operationGateAcquired = false;
             try
             {
+                await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                operationGateAcquired = true;
                 EnsureValidMap();
                 RequireAcknowledgedPolicy();
                 using var binding = _bindConfiguredStateFile(_scope, _locations, configuredPath);
@@ -1214,9 +1240,15 @@ internal sealed partial class RootMembershipRegistry
                 catalogOperation?.Complete();
                 return nextState;
             }
+            catch (Exception exception)
+            {
+                catalogOperation?.Fail(exception);
+                throw;
+            }
             finally
             {
-                _operationGate.Release();
+                if (operationGateAcquired)
+                    _operationGate.Release();
             }
         }
 
@@ -1232,17 +1264,25 @@ internal sealed partial class RootMembershipRegistry
             await using var catalogOperation = _catalogSession is null
                 ? null
                 : await _catalogSession.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
-            await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var operationGateAcquired = false;
             try
             {
+                await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                operationGateAcquired = true;
                 var published = await PublishStateUnderGateAsync(memberId, nextState, cancellationToken, checkpoint)
                     .ConfigureAwait(false);
                 catalogOperation?.Complete();
                 return published;
             }
+            catch (Exception exception)
+            {
+                catalogOperation?.Fail(exception);
+                throw;
+            }
             finally
             {
-                _operationGate.Release();
+                if (operationGateAcquired)
+                    _operationGate.Release();
             }
         }
 
