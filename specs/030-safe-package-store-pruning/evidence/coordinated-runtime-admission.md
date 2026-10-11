@@ -77,3 +77,17 @@ An actual pre-implementation compiled control on `7b62cf4` ran ten of the new ru
 Root local qualification report SHA-256: `1f40b20ce5935322cfc6f950c904a8f39daa0e4808c2b5a54c29e69d68d13bc4`. The final production source matches the eight independent review hashes. The selected commands compile the affected projects; the Store test compilation reports the existing xUnit2031 warning in unchanged `RootMembershipRecordTests.cs`. The final worker net10 core build reports zero warnings/errors. Exact-head hosted all-framework and four-platform qualification is still required; earlier hosted runs do not qualify this new runtime source.
 
 This is bounded local prerequisite acceptance only. The checklist remains **43/128**, with complete T026/T051/T064 unchecked. Ordinary standalone-writer compatibility/routing, authoritative v2 integration, remaining startup/LKG/restore/offline and graph-lifetime drivers, process-restart proof, public maintenance operations and real physical deletion remain required. No deletion or new package version is enabled. The [extraction releases and Foundation adoption have shipped separately](https://github.com/elsa-workflows/elsa-foundation/issues/2500#issuecomment-6104315745); the pruning follow-up still requires its own eventual release and downstream adoption.
+
+### Incomplete-enrollment refusal correction
+
+[Validate 38105799005](https://github.com/valence-works/nuplane/actions/runs/38105799005) failed at `e909278`: full Integration caught two existing restore/manifest tests returning `StateMismatch` instead of `IncompleteEnrollment`; each native platform lane stopped at the corresponding direct-restore refusal. The failure is retained as failed evidence, not qualification. Root reproduced both unchanged tests locally, with two failures and zero skips.
+
+Worker `99b8a29`, integrated as `d890423`, restores `IncompleteEnrollment` for a nonpending Incomplete catalog root with no matching group descriptor. Common root/member checks, exact pending-state recovery, local group intent and descriptor-backed recovery retain precedence. Ambiguous or invalid group evidence still refuses, and incomplete roots remain inadmissible before source/native-read callbacks. Independent source review passed; no test, manifest or verifier changed.
+
+| Corrected Release/net10.0 gate on macOS native provider | Actual result | TRX SHA-256 |
+| --- | --- | --- |
+| Full Integration, including both unchanged restore regressions | 232 passed; zero failed/skipped | `b66047ba31475c10f59984098636ba287f6964b61b54474e416997bfa6f679b1` |
+| Exact coordinated runtime/startup manifest | 52 passed; zero failed/skipped | `0117836b9fc74dd44e51bb3e71ce25da5baa008641ade25cfccceb81f3416be6` |
+| Exact native multiroot publication/catalog recovery manifest | 48 passed; zero failed/skipped | `09e1a9dba0515ab1d3c79d04dbf09e8428795026aa693054ee86ed2f57ec7b8a` |
+
+The unchanged strict verifier accepted both manifests. Eighteen pinned source/test/gate inputs remained unchanged through these runs. Root qualification report SHA-256 is `409bc408f6165337a87a31cf1ec4b296c2adfadb1ae627a7605ccc077435cb6b`; the failed hosted log SHA-256 is `0a900e1d389f2095857d09d776eb7a8b513852963cb2b208abb1fb269aaef652`. Fresh exact-head hosted qualification remains required. This correction changes no whole-task acceptance or pruning/release readiness.
