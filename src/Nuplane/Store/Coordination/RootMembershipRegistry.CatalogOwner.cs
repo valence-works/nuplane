@@ -483,9 +483,11 @@ internal sealed partial class RootMembershipRegistry
             }
         }
 
-        private async Task<Transaction> OpenTransactionAsync(NativeCatalogLockedRoot root)
+        private async Task<Transaction> OpenTransactionAsync(
+            NativeCatalogLockedRoot root,
+            PhysicalStoreDirectoryHandle? retainedRootHandle = null)
         {
-            var rootHandle = root.PrimaryResolution.AuthorityRoot
+            var rootHandle = retainedRootHandle ?? root.PrimaryResolution.AuthorityRoot
                 ?? throw Refused("An enrolled catalog root lost its retained native handle.", root.RootIdentity);
             var share = CreateShare();
             PhysicalStoreDirectoryHandle? control = null;
@@ -531,8 +533,7 @@ internal sealed partial class RootMembershipRegistry
                 root.Ledger.Members.Any(static member => member.Binding is not RootMemberRecord.AcknowledgedBinding))
                 throw Refused("Runtime projection requires a verified Complete schema-1 acknowledged catalog root.", rootIdentity);
 
-            var rootHandle = root.PrimaryResolution.AuthorityRoot
-                ?? throw Refused("The selected catalog root has no retained native directory.", rootIdentity);
+            ResolvedPackageStorePath? rootObservation = null;
             Transaction? transaction = null;
             MemberLocatorReplayScope? scope = null;
             IReadOnlyDictionary<string, ResolvedMemberStateLocation>? locations = null;
@@ -540,7 +541,20 @@ internal sealed partial class RootMembershipRegistry
             IAsyncDisposable? projectionShare = null;
             try
             {
-                var projectedTransaction = await OpenTransactionAsync(root).ConfigureAwait(false);
+                // The catalog owner replaces and disposes its locator observations after a successful
+                // transaction. Keep an independent native root observation for this projection's lifetime.
+                var retainedRootObservation = _resolver.ResolveTrustedCatalogRoot(root.Aliases[0].Configured.RootPath);
+                rootObservation = retainedRootObservation;
+                var candidate = retainedRootObservation.MembershipCandidate;
+                if (retainedRootObservation.RootIdentity != rootIdentity || candidate is null ||
+                    candidate.EnrollmentEpoch != root.EnrollmentEpoch ||
+                    candidate.LedgerDigest != root.Ledger.LedgerDigest ||
+                    retainedRootObservation.MembershipLedgerIdentity != root.LedgerIdentity)
+                    throw Refused("An independent projected root observation does not match the retained catalog identity and ledger.", rootIdentity);
+                retainedRootObservation.Revalidate();
+                var rootHandle = retainedRootObservation.AuthorityRoot
+                    ?? throw Refused("The selected catalog root has no independently retained native directory.", rootIdentity);
+                var projectedTransaction = await OpenTransactionAsync(root, rootHandle).ConfigureAwait(false);
                 transaction = projectedTransaction;
                 var ledger = projectedTransaction.ReadCurrent();
                 if (ledger.SchemaVersion != RootMembershipRecord.CurrentSchemaVersion ||
@@ -558,18 +572,27 @@ internal sealed partial class RootMembershipRegistry
                 context = _registry.CreateLockedMemberLocations(projectedTransaction, rootHandle, scope, locations,
                     LocatorReplayBindingPolicy.Acknowledged, rootIdentity, root.EnrollmentEpoch,
                     session,
-                    published => session.RefreshAfterOwnedPublicationAsync(
-                        rootIdentity, published, projectedTransaction.LedgerIdentity));
+                    async published =>
+                    {
+                        var identity = projectedTransaction.LedgerIdentity;
+                        await session.RefreshAfterOwnedPublicationAsync(rootIdentity, published, identity)
+                            .ConfigureAwait(false);
+                        retainedRootObservation.RevalidateOwnedLedgerOutcome(published, identity);
+                    },
+                    () => retainedRootObservation.RevalidateOwnedLedgerOutcome(
+                        projectedTransaction.Ledger, projectedTransaction.LedgerIdentity));
                 scope = null;
                 locations = null;
                 RevalidateRetainedEvidence();
                 projectionShare = session.CreateProjectionShare();
-                var projection = new NativeCatalogRuntimeProjection(context, () => projectedTransaction.LedgerIdentity,
+                var projection = new NativeCatalogRuntimeProjection(context, retainedRootObservation,
+                    () => projectedTransaction.LedgerIdentity,
                     () => projectedTransaction.DisposeAsync(),
                     session,
                     projectionShare);
                 context = null;
                 transaction = null;
+                rootObservation = null;
                 projectionShare = null;
                 return projection;
             }
@@ -590,6 +613,8 @@ internal sealed partial class RootMembershipRegistry
                     try { await transaction.DisposeAsync().ConfigureAwait(false); }
                     catch (Exception cleanupError) { cleanupErrors.Add(cleanupError); }
                 }
+                try { rootObservation?.Dispose(); }
+                catch (Exception cleanupError) { cleanupErrors.Add(cleanupError); }
                 if (projectionShare is not null)
                 {
                     try { await projectionShare.DisposeAsync().ConfigureAwait(false); }

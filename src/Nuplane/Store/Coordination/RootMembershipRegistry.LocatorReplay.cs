@@ -629,7 +629,8 @@ internal sealed partial class RootMembershipRegistry
         PhysicalRootIdentity expectedRoot,
         long expectedEnrollmentEpoch,
         CatalogRuntimeOperationSession? catalogSession = null,
-        Func<RootMembershipRecord, Task>? afterOwnedPublication = null)
+        Func<RootMembershipRecord, Task>? afterOwnedPublication = null,
+        Action? revalidateProjectionRoot = null)
     {
         return new LockedMemberLocations(
             _files,
@@ -666,7 +667,8 @@ internal sealed partial class RootMembershipRegistry
                 transaction, root, currentScope, currentLocations, memberId, priorState, nextState,
                 expectedRoot, expectedEnrollmentEpoch, policy, token),
             catalogSession,
-            afterOwnedPublication);
+            afterOwnedPublication,
+            revalidateProjectionRoot);
     }
 
     private LockedMemberLocations.ConfiguredMemberBinding BindConfiguredStateFile(
@@ -954,6 +956,7 @@ internal sealed partial class RootMembershipRegistry
             StoreStateRecord, StoreStateRecord, CancellationToken, Task> _verifyCandidate;
         private readonly CatalogRuntimeOperationSession? _catalogSession;
         private readonly Func<RootMembershipRecord, Task>? _afterOwnedPublication;
+        private readonly Action? _revalidateProjectionRoot;
         private readonly SemaphoreSlim _operationGate = new(1, 1);
         private MemberLocatorReplayScope _scope;
         private IReadOnlyDictionary<string, ResolvedMemberStateLocation> _locations;
@@ -979,7 +982,8 @@ internal sealed partial class RootMembershipRegistry
             Func<MemberLocatorReplayScope, IReadOnlyDictionary<string, ResolvedMemberStateLocation>, string,
                 StoreStateRecord, StoreStateRecord, CancellationToken, Task> verifyCandidate,
             CatalogRuntimeOperationSession? catalogSession = null,
-            Func<RootMembershipRecord, Task>? afterOwnedPublication = null)
+            Func<RootMembershipRecord, Task>? afterOwnedPublication = null,
+            Action? revalidateProjectionRoot = null)
         {
             ArgumentNullException.ThrowIfNull(files);
             ArgumentNullException.ThrowIfNull(root);
@@ -1008,6 +1012,7 @@ internal sealed partial class RootMembershipRegistry
             _verifyCandidate = verifyCandidate;
             _catalogSession = catalogSession;
             _afterOwnedPublication = afterOwnedPublication;
+            _revalidateProjectionRoot = revalidateProjectionRoot;
         }
 
         internal RootMembershipRecord Ledger
@@ -1323,6 +1328,7 @@ internal sealed partial class RootMembershipRegistry
         private void EnsureValidMap()
         {
             EnsureActive();
+            _revalidateProjectionRoot?.Invoke();
             var ledger = _getLedger();
             RequireLocatorPolicyLedger(ledger, _scope.RootIdentity, _scope.EnrollmentEpoch, _policy);
             RevalidateMemberLocationMap(ledger, _locations, _policy);

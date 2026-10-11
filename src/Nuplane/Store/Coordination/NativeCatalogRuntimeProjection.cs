@@ -9,6 +9,7 @@ internal sealed class NativeCatalogRuntimeProjection : IAsyncDisposable, IStoreO
 {
     private readonly Func<PhysicalFileIdentity> _getLedgerIdentity;
     private readonly Func<ValueTask> _disposeTransaction;
+    private readonly ResolvedPackageStorePath _rootObservation;
     private readonly CatalogRuntimeOperationSession _session;
     private readonly IAsyncDisposable _sessionShare;
     private readonly object _gate = new();
@@ -16,17 +17,20 @@ internal sealed class NativeCatalogRuntimeProjection : IAsyncDisposable, IStoreO
 
     internal NativeCatalogRuntimeProjection(
         RootMembershipRegistry.LockedMemberLocations context,
+        ResolvedPackageStorePath rootObservation,
         Func<PhysicalFileIdentity> getLedgerIdentity,
         Func<ValueTask> disposeTransaction,
         CatalogRuntimeOperationSession session,
         IAsyncDisposable sessionShare)
     {
         ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(rootObservation);
         ArgumentNullException.ThrowIfNull(getLedgerIdentity);
         ArgumentNullException.ThrowIfNull(disposeTransaction);
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(sessionShare);
         LockedMemberLocations = context;
+        _rootObservation = rootObservation;
         _getLedgerIdentity = getLedgerIdentity;
         _disposeTransaction = disposeTransaction;
         _session = session;
@@ -54,6 +58,8 @@ internal sealed class NativeCatalogRuntimeProjection : IAsyncDisposable, IStoreO
         try { LockedMemberLocations.Dispose(); }
         catch (Exception exception) { errors.Add(exception); }
         try { await _disposeTransaction().ConfigureAwait(false); }
+        catch (Exception exception) { errors.Add(exception); }
+        try { _rootObservation.Dispose(); }
         catch (Exception exception) { errors.Add(exception); }
         if (errors.Count > 0)
         {
