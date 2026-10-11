@@ -280,6 +280,11 @@ internal sealed partial class RootMembershipRegistry
             return LocatorReplayBindingPolicy.GroupAcknowledged;
         }
 
+        if (ledger.Status == RootMembershipStatus.Incomplete && groupPending is null && matchingDescriptors.Length == 0)
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.IncompleteEnrollment,
+                "A catalog root remains incompletely enrolled without an exact pending recovery or group publication.",
+                rootIdentity);
+
         throw Refused("A catalog owner refuses generic Incomplete, declared, malformed, or unsupported membership evidence.", rootIdentity);
     }
 
