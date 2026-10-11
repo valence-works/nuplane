@@ -11,6 +11,7 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
     private readonly IPhysicalStoreFileSystem _files;
     private readonly RootMembershipRegistry _registry;
     private readonly PackageStoreAuthorityResolver _resolver;
+    private readonly ITrustedPackageStoreRootCatalog? _trustedCatalog;
     private readonly string _configuredRootLocator;
     private readonly string? _configuredRootBaseLocator;
 
@@ -20,7 +21,8 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
         IPhysicalStoreFileSystem files,
         RootMembershipRegistry registry,
         string configuredRootLocator,
-        string? configuredRootBaseLocator = null)
+        string? configuredRootBaseLocator = null,
+        ITrustedPackageStoreRootCatalog? trustedCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(registry);
@@ -28,6 +30,7 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
         _files = files;
         _registry = registry;
         _resolver = new PackageStoreAuthorityResolver(files, registry);
+        _trustedCatalog = trustedCatalog;
         _configuredRootLocator = configuredRootLocator;
         _configuredRootBaseLocator = configuredRootBaseLocator;
     }
@@ -40,8 +43,11 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
             throw new ArgumentOutOfRangeException(nameof(kind));
         cancellationToken.ThrowIfCancellationRequested();
 
-        var resolved = _resolver.Resolve(_configuredRootLocator,
-            PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix, exactBaseLocator: _configuredRootBaseLocator);
+        var resolved = _trustedCatalog is null
+            ? _resolver.Resolve(_configuredRootLocator,
+                PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix, exactBaseLocator: _configuredRootBaseLocator)
+            : _resolver.ResolveCatalogAdmissionCandidate(_configuredRootLocator,
+                PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix, _configuredRootBaseLocator);
         var transferred = false;
         Exception? admissionError = null;
         try
@@ -72,6 +78,44 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
 
             var candidate = resolved.MembershipCandidate
                 ?? throw Refusal("The configured root has no retained membership candidate.");
+            if (_trustedCatalog is not null)
+            {
+                var session = await AcquireCatalogRuntimeSessionAsync(cancellationToken).ConfigureAwait(false);
+                NativeCatalogRuntimeProjection? projection = null;
+                try
+                {
+                    session.RevalidateRequestObservations([resolved]);
+                    projection = await _registry.CreateCatalogRuntimeProjectionAsync(session,
+                        resolved.RootIdentity!, cancellationToken).ConfigureAwait(false);
+                    var retainedProjection = projection
+                        ?? throw new InvalidOperationException("Catalog projection creation returned no operation owner.");
+                    var validator = new AdmittedPathValidator(_files, _resolver, resolved.RootIdentity!,
+                        candidate.EnrollmentEpoch, () => (retainedProjection.Ledger.LedgerDigest, retainedProjection.LedgerIdentity),
+                        pathIdentities: null);
+                    var state = new PackageStoreOperationState(resolved.RootIdentity!, candidate.EnrollmentEpoch,
+                        new EnrolledOperationOwnership(retainedProjection, retainedProjection.LockedMemberLocations, resolved), validator);
+                    projection = null;
+                    transferred = true;
+                    return new PackageStoreRootOperationAdmission(PackageStoreAdmissionStatus.Enrolled,
+                        resolved.RootIdentity, state.Owner);
+                }
+                catch (Exception exception)
+                {
+                    var cleanupErrors = new List<Exception>();
+                    if (projection is not null)
+                    {
+                        try { await projection.DisposeAsync().ConfigureAwait(false); }
+                        catch (Exception cleanupError) { cleanupErrors.Add(cleanupError); }
+                    }
+                    try { await session.DisposeUnprojectedAsync().ConfigureAwait(false); }
+                    catch (Exception cleanupError) { cleanupErrors.Add(cleanupError); }
+                    if (cleanupErrors.Count > 0)
+                        throw new AggregateException("Catalog-backed configured-root admission failed and its retained session did not release cleanly.",
+                            new[] { exception }.Concat(cleanupErrors));
+                    throw;
+                }
+            }
+
             var ledgerIdentity = resolved.MembershipLedgerIdentity
                 ?? throw Refusal("The configured root has no retained ledger-file identity.");
             var owner = await AcquireVerifiedOwnerAsync(resolved.AuthorityRoot!, resolved.RootIdentity,
@@ -83,7 +127,7 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
                     candidate.EnrollmentEpoch, () => (owner.Ledger.LedgerDigest, owner.LedgerIdentity),
                     pathIdentities: null);
                 var state = new PackageStoreOperationState(resolved.RootIdentity, candidate.EnrollmentEpoch,
-                    new EnrolledOperationOwnership(owner, resolved), validator);
+                    new EnrolledOperationOwnership(owner, owner.Context, resolved), validator);
                 transferred = true;
                 return new PackageStoreRootOperationAdmission(PackageStoreAdmissionStatus.Enrolled,
                     resolved.RootIdentity, state.Owner);
@@ -144,6 +188,7 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
         var observations = new List<PathObservation>(requestedPaths.Length);
         var groups = new Dictionary<PhysicalRootIdentity, RootGroup>();
         var owners = new List<RootOwnerEntry>();
+        CatalogRuntimeOperationSession? catalogSession = null;
         var transferred = false;
         Exception? admissionError = null;
         try
@@ -195,7 +240,53 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
 
             var orderedGroups = groups.Values.OrderBy(static group => group.Root, PhysicalRootIdentityComparer.Instance).ToArray();
             owners.EnsureCapacity(orderedGroups.Length);
-            if (orderedGroups.Length > 1)
+            if (_trustedCatalog is not null && orderedGroups.Length > 0)
+            {
+                catalogSession = await AcquireCatalogRuntimeSessionAsync(cancellationToken).ConfigureAwait(false);
+                catalogSession.RevalidateRequestObservations(observations.Select(static observation => observation.Resolved));
+
+                foreach (var group in orderedGroups)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    NativeCatalogRuntimeProjection? projection = null;
+                    try
+                    {
+                        projection = await _registry.CreateCatalogRuntimeProjectionAsync(catalogSession,
+                            group.Root, cancellationToken).ConfigureAwait(false);
+                        var retainedProjection = projection
+                            ?? throw new InvalidOperationException("Catalog projection creation returned no operation owner.");
+                        if (retainedProjection.Ledger.EnrollmentEpoch != group.Epoch)
+                            throw Refusal("The selected catalog root changed enrollment epoch during request-path recovery.", group.Root);
+                        var expectedIdentities = group.Paths
+                            .GroupBy(static observation => observation.Path, StringComparer.Ordinal)
+                            .ToDictionary(static paths => paths.Key,
+                                static paths => new AdmittedPathIdentity(paths.First().TargetIdentity, paths.First().TargetKind),
+                                StringComparer.Ordinal);
+                        var validator = new AdmittedPathValidator(_files, _resolver, group.Root, group.Epoch,
+                            () => (retainedProjection.Ledger.LedgerDigest, retainedProjection.LedgerIdentity), expectedIdentities);
+                        var state = new PackageStoreOperationState(group.Root, group.Epoch,
+                            new EnrolledOperationOwnership(retainedProjection, retainedProjection.LockedMemberLocations), validator);
+                        owners.Add(new RootOwnerEntry(group, retainedProjection));
+                        owners[^1].State = state;
+                        projection = null;
+                    }
+                    catch (Exception exception)
+                    {
+                        if (projection is not null)
+                        {
+                            try { await projection.DisposeAsync().ConfigureAwait(false); }
+                            catch (Exception cleanupError)
+                            {
+                                throw new AggregateException(
+                                    "Catalog-backed path projection failed and its retained context did not release cleanly.",
+                                    exception, cleanupError);
+                            }
+                        }
+                        throw;
+                    }
+                }
+            }
+            else if (orderedGroups.Length > 1)
             {
                 var requests = orderedGroups.Select(static group =>
                     new RootMembershipRegistry.CompleteMemberLocationsRequest(
@@ -238,25 +329,30 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
                 owners.Add(new RootOwnerEntry(group, locked));
             }
 
-            // Every distinct root and every declared member lock is now held before the first member payload read.
-            foreach (var owner in owners)
+            // The catalog branch already recovered and verified the whole catalog before projecting roots.
+            if (catalogSession is null)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var locked = owner.Locked ?? throw new InvalidOperationException("A root lock scope was not retained.");
-                await _registry.VerifyAllMemberProtectionAsync(locked.Context, owner.Group.RootHandle,
-                    owner.Group.Root, owner.Group.Epoch, RootMembershipStatus.Complete, cancellationToken)
-                    .ConfigureAwait(false);
+                foreach (var owner in owners)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var locked = owner.Locked ?? throw new InvalidOperationException("A root lock scope was not retained.");
+                    await _registry.VerifyAllMemberProtectionAsync(owner.Context, owner.Group.RootHandle,
+                        owner.Group.Root, owner.Group.Epoch, RootMembershipStatus.Complete, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                // Retained observations for the complete path union are rechecked after all roots and members verify.
+                foreach (var observation in observations)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    observation.Resolved.Revalidate();
+                }
             }
 
-            // Retained observations for the complete path union are rechecked after all roots and members verify.
-            foreach (var observation in observations)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                observation.Resolved.Revalidate();
-            }
-
             foreach (var owner in owners)
             {
+                if (owner.State is not null)
+                    continue;
                 var locked = owner.Locked ?? throw new InvalidOperationException("A root lock scope was not retained.");
                 var expectedIdentities = owner.Group.Paths
                     .GroupBy(static observation => observation.Path, StringComparer.Ordinal)
@@ -264,9 +360,9 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
                         static group => new AdmittedPathIdentity(group.First().TargetIdentity, group.First().TargetKind),
                         StringComparer.Ordinal);
                 var validator = new AdmittedPathValidator(_files, _resolver, owner.Group.Root, owner.Group.Epoch,
-                    () => (locked.Ledger.LedgerDigest, locked.LedgerIdentity), expectedIdentities);
+                    () => (owner.Ledger.LedgerDigest, owner.LedgerIdentity), expectedIdentities);
                 var state = new PackageStoreOperationState(owner.Group.Root, owner.Group.Epoch,
-                    new EnrolledOperationOwnership(locked), validator);
+                    new EnrolledOperationOwnership(locked, owner.Context), validator);
                 owner.State = state;
                 owner.Locked = null;
             }
@@ -313,14 +409,19 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
                     catch (Exception exception) { cleanupErrors.Add(exception); }
                 }
 
+                if (catalogSession is not null)
+                {
+                    try { await catalogSession.DisposeUnprojectedAsync().ConfigureAwait(false); }
+                    catch (Exception cleanupError) { cleanupErrors.Add(cleanupError); }
+                }
+
                 if (cleanupErrors.Count > 0)
                 {
-                    var failures = admissionError is null
-                        ? cleanupErrors
-                        : new[] { admissionError }.Concat(cleanupErrors).ToList();
+                    var failures = admissionError is null ? cleanupErrors : new[] { admissionError }.Concat(cleanupErrors);
                     throw new AggregateException(
                         "Path admission failed and one or more retained resources did not release cleanly.", failures);
                 }
+
             }
         }
     }
@@ -354,6 +455,118 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
         }
     }
 
+    private async Task<CatalogRuntimeOperationSession> AcquireCatalogRuntimeSessionAsync(
+        CancellationToken cancellationToken)
+    {
+        var catalog = _trustedCatalog
+            ?? throw new InvalidOperationException("Catalog-backed admission requires the immutable trusted root catalog.");
+        var owner = await _registry.AcquireNativeCatalogOwnerAsync(catalog, cancellationToken).ConfigureAwait(false);
+        RootMembershipRegistry.NativeCatalogOwnerBorrow? borrow = null;
+        CatalogRuntimeOperationSession? session = null;
+        try
+        {
+            borrow = await owner.BorrowAsync(cancellationToken).ConfigureAwait(false);
+            session = new CatalogRuntimeOperationSession(_registry, owner, borrow);
+            borrow = null;
+            await RecoverCatalogPendingAsync(session, cancellationToken).ConfigureAwait(false);
+            owner.RevalidateRetainedEvidence();
+            _ = await _registry.VerifyCatalogMemberProtectionAsync(session.Borrow, cancellationToken)
+                .ConfigureAwait(false);
+            RequireSupportedCatalogV1(owner.SnapshotRetainedRoots());
+            owner.RevalidateRetainedEvidence();
+            return session;
+        }
+        catch (Exception exception)
+        {
+            var cleanupErrors = new List<Exception>();
+            if (session is not null)
+            {
+                try { await session.DisposeUnprojectedAsync().ConfigureAwait(false); }
+                catch (Exception cleanupError) { cleanupErrors.Add(cleanupError); }
+            }
+            else
+            {
+                if (borrow is not null)
+                {
+                    try { await borrow.DisposeAsync().ConfigureAwait(false); }
+                    catch (Exception cleanupError) { cleanupErrors.Add(cleanupError); }
+                }
+                try { await owner.DisposeAsync().ConfigureAwait(false); }
+                catch (Exception cleanupError) { cleanupErrors.Add(cleanupError); }
+            }
+
+            if (cleanupErrors.Count > 0)
+                throw new AggregateException("Catalog admission failed and its retained owner did not release cleanly.",
+                    new[] { exception }.Concat(cleanupErrors));
+            throw;
+        }
+    }
+
+    private async Task RecoverCatalogPendingAsync(
+        CatalogRuntimeOperationSession session,
+        CancellationToken cancellationToken)
+    {
+        var owner = session.Owner;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            owner.RevalidateRetainedEvidence();
+            var roots = owner.SnapshotRetainedRoots()
+                .OrderBy(static root => root.RootIdentity, PhysicalRootIdentityComparer.Instance)
+                .ToArray();
+            var localPending = roots.FirstOrDefault(static root => root.Ledger.PendingStateCommit is not null);
+            if (localPending is not null)
+            {
+                await _registry.RecoverLocalAsync(session.Borrow, localPending.RootIdentity, cancellationToken)
+                    .ConfigureAwait(false);
+                if (session.RequireCurrentRoot(localPending.RootIdentity).Ledger.PendingStateCommit is not null)
+                    throw Refusal("Catalog-local recovery did not clear its exact pending transaction.", localPending.RootIdentity);
+                continue;
+            }
+
+            var pendingDigests = roots
+                .Select(static root => root.Ledger.PendingGroupPublicationV2?.Descriptor.IntentDigest)
+                .Where(static digest => digest is not null)
+                .ToHashSet(StringComparer.Ordinal);
+            if (pendingDigests.Count == 0)
+                return;
+
+            var descriptor = owner.SnapshotGroupDescriptors()
+                .Where(candidate => pendingDigests.Contains(candidate.IntentDigest))
+                .OrderBy(static candidate => candidate.IntentDigest, StringComparer.Ordinal)
+                .FirstOrDefault()
+                ?? throw Refusal("A pending catalog group has no exact retained descriptor.");
+            var participants = descriptor.Participants.Select(static participant => participant.RootIdentity).ToArray();
+            await _registry.RecoverNativeGroupAsync(session.Borrow, descriptor, cancellationToken)
+                .ConfigureAwait(false);
+            foreach (var participant in participants)
+            {
+                var current = session.RequireCurrentRoot(participant);
+                if (current.Ledger.PendingGroupPublicationV2?.Descriptor.IntentDigest == descriptor.IntentDigest)
+                    throw Refusal("Catalog group recovery did not clear the exact pending descriptor.", participant);
+            }
+        }
+    }
+
+    private static void RequireSupportedCatalogV1(
+        IReadOnlyList<NativeCatalogLockedRoot> roots)
+    {
+        if (roots.Count == 0)
+            throw Refusal("Catalog-backed enrolled admission requires at least one enrolled trusted root.");
+        foreach (var root in roots)
+        {
+            var ledger = root.Ledger;
+            if (root.ReplayPolicy != RootMembershipRegistry.LocatorReplayBindingPolicy.Acknowledged ||
+                ledger.SchemaVersion != RootMembershipRecord.CurrentSchemaVersion ||
+                ledger.Status != RootMembershipStatus.Complete || ledger.PendingStateCommit is not null ||
+                ledger.PendingGroupPublicationV2 is not null || ledger.Members.Count == 0 ||
+                ledger.Members.Any(static member => member.Binding is not RootMemberRecord.AcknowledgedBinding))
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "Built-in coordinated runtime admission currently supports only Complete schema-1 acknowledged catalog roots.",
+                    root.RootIdentity);
+        }
+    }
+
     private static void DisposeResolutionAfterFailure(ResolvedPackageStorePath resolved, Exception admissionError)
     {
         try { resolved.Dispose(); }
@@ -372,13 +585,19 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
     {
         try
         {
-            return (_resolver.Resolve(path, PhysicalStorePathTarget.PackageDirectory), PhysicalStorePathTarget.PackageDirectory);
+            var resolved = _trustedCatalog is null
+                ? _resolver.Resolve(path, PhysicalStorePathTarget.PackageDirectory)
+                : _resolver.ResolveCatalogAdmissionCandidate(path, PhysicalStorePathTarget.PackageDirectory);
+            return (resolved, PhysicalStorePathTarget.PackageDirectory);
         }
         catch (PackageStoreAdmissionException)
         {
             // The second metadata-only walk distinguishes a single-link archive from a directory. Both paths
             // reject final aliases and both must complete before any package/archive payload is opened.
-            return (_resolver.Resolve(path, PhysicalStorePathTarget.ArchiveFile), PhysicalStorePathTarget.ArchiveFile);
+            var resolved = _trustedCatalog is null
+                ? _resolver.Resolve(path, PhysicalStorePathTarget.ArchiveFile)
+                : _resolver.ResolveCatalogAdmissionCandidate(path, PhysicalStorePathTarget.ArchiveFile);
+            return (resolved, PhysicalStorePathTarget.ArchiveFile);
         }
     }
 
@@ -405,28 +624,59 @@ internal sealed class PackageStoreAdmission : IPackageStoreAdmission
 
     private sealed record AdmittedPathIdentity(PhysicalFileIdentity Identity, PhysicalStorePathTarget TargetKind);
 
-    private sealed class RootOwnerEntry(RootGroup group, RootMembershipRegistry.CompleteMemberLocationsOwner locked)
+    private sealed class RootOwnerEntry
     {
-        internal RootGroup Group { get; } = group;
-        internal RootMembershipRegistry.CompleteMemberLocationsOwner? Locked { get; set; } = locked;
+        private readonly Func<PhysicalFileIdentity> _getLedgerIdentity;
+
+        internal RootOwnerEntry(RootGroup group, RootMembershipRegistry.CompleteMemberLocationsOwner locked)
+            : this(group, locked, locked.Context, () => locked.LedgerIdentity)
+        {
+        }
+
+        internal RootOwnerEntry(RootGroup group, NativeCatalogRuntimeProjection projection)
+            : this(group, projection, projection.LockedMemberLocations, () => projection.LedgerIdentity)
+        {
+        }
+
+        private RootOwnerEntry(
+            RootGroup group,
+            IAsyncDisposable locked,
+            RootMembershipRegistry.LockedMemberLocations context,
+            Func<PhysicalFileIdentity> getLedgerIdentity)
+        {
+            Group = group;
+            Locked = locked;
+            Context = context;
+            _getLedgerIdentity = getLedgerIdentity;
+        }
+
+        internal RootGroup Group { get; }
+        internal IAsyncDisposable? Locked { get; set; }
+        internal RootMembershipRegistry.LockedMemberLocations Context { get; }
+        internal RootMembershipRecord Ledger => Context.Ledger;
+        internal PhysicalFileIdentity LedgerIdentity => _getLedgerIdentity();
         internal PackageStoreOperationState? State { get; set; }
     }
 
     private sealed class EnrolledOperationOwnership : IAsyncDisposable, IStoreOperationLockedMemberContext
     {
-        private readonly RootMembershipRegistry.CompleteMemberLocationsOwner _locked;
+        private readonly IAsyncDisposable _locked;
+        private readonly RootMembershipRegistry.LockedMemberLocations _context;
         private readonly ResolvedPackageStorePath? _configuredRootObservation;
 
         internal EnrolledOperationOwnership(
-            RootMembershipRegistry.CompleteMemberLocationsOwner locked,
+            IAsyncDisposable locked,
+            RootMembershipRegistry.LockedMemberLocations context,
             ResolvedPackageStorePath? configuredRootObservation = null)
         {
+            ArgumentNullException.ThrowIfNull(locked);
+            ArgumentNullException.ThrowIfNull(context);
             _locked = locked;
+            _context = context;
             _configuredRootObservation = configuredRootObservation;
         }
 
-        public RootMembershipRegistry.LockedMemberLocations LockedMemberLocations => _locked.Context;
-        internal RootMembershipRegistry.CompleteMemberLocationsOwner Locked => _locked;
+        public RootMembershipRegistry.LockedMemberLocations LockedMemberLocations => _context;
 
         public async ValueTask DisposeAsync()
         {

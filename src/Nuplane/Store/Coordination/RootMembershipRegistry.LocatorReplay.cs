@@ -627,7 +627,9 @@ internal sealed partial class RootMembershipRegistry
         IReadOnlyDictionary<string, ResolvedMemberStateLocation> locations,
         LocatorReplayBindingPolicy policy,
         PhysicalRootIdentity expectedRoot,
-        long expectedEnrollmentEpoch)
+        long expectedEnrollmentEpoch,
+        CatalogRuntimeOperationSession? catalogSession = null,
+        Func<RootMembershipRecord, Task>? afterOwnedPublication = null)
     {
         return new LockedMemberLocations(
             _files,
@@ -662,7 +664,9 @@ internal sealed partial class RootMembershipRegistry
                 transaction, root, currentScope, currentLocations, expectedRoot, expectedEnrollmentEpoch, policy, token),
             (currentScope, currentLocations, memberId, priorState, nextState, token) => VerifyCoordinatedCandidateAsync(
                 transaction, root, currentScope, currentLocations, memberId, priorState, nextState,
-                expectedRoot, expectedEnrollmentEpoch, policy, token));
+                expectedRoot, expectedEnrollmentEpoch, policy, token),
+            catalogSession,
+            afterOwnedPublication);
     }
 
     private LockedMemberLocations.ConfiguredMemberBinding BindConfiguredStateFile(
@@ -948,6 +952,8 @@ internal sealed partial class RootMembershipRegistry
             CancellationToken, Task<IReadOnlyDictionary<string, StoreStateRecord>>> _verifyCurrentStates;
         private readonly Func<MemberLocatorReplayScope, IReadOnlyDictionary<string, ResolvedMemberStateLocation>, string,
             StoreStateRecord, StoreStateRecord, CancellationToken, Task> _verifyCandidate;
+        private readonly CatalogRuntimeOperationSession? _catalogSession;
+        private readonly Func<RootMembershipRecord, Task>? _afterOwnedPublication;
         private readonly SemaphoreSlim _operationGate = new(1, 1);
         private MemberLocatorReplayScope _scope;
         private IReadOnlyDictionary<string, ResolvedMemberStateLocation> _locations;
@@ -971,7 +977,9 @@ internal sealed partial class RootMembershipRegistry
             Func<MemberLocatorReplayScope, IReadOnlyDictionary<string, ResolvedMemberStateLocation>,
                 CancellationToken, Task<IReadOnlyDictionary<string, StoreStateRecord>>> verifyCurrentStates,
             Func<MemberLocatorReplayScope, IReadOnlyDictionary<string, ResolvedMemberStateLocation>, string,
-                StoreStateRecord, StoreStateRecord, CancellationToken, Task> verifyCandidate)
+                StoreStateRecord, StoreStateRecord, CancellationToken, Task> verifyCandidate,
+            CatalogRuntimeOperationSession? catalogSession = null,
+            Func<RootMembershipRecord, Task>? afterOwnedPublication = null)
         {
             ArgumentNullException.ThrowIfNull(files);
             ArgumentNullException.ThrowIfNull(root);
@@ -998,6 +1006,8 @@ internal sealed partial class RootMembershipRegistry
             _bindConfiguredStateFile = bindConfiguredStateFile;
             _verifyCurrentStates = verifyCurrentStates;
             _verifyCandidate = verifyCandidate;
+            _catalogSession = catalogSession;
+            _afterOwnedPublication = afterOwnedPublication;
         }
 
         internal RootMembershipRecord Ledger
@@ -1075,6 +1085,9 @@ internal sealed partial class RootMembershipRegistry
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(callback);
+            await using var catalogOperation = _catalogSession is null
+                ? null
+                : await _catalogSession.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
             await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
@@ -1101,6 +1114,7 @@ internal sealed partial class RootMembershipRegistry
                 await _verifyCurrentStates(_scope, _locations, CancellationToken.None).ConfigureAwait(false);
                 EnsureValidMap();
                 cancellationToken.ThrowIfCancellationRequested();
+                catalogOperation?.Complete();
                 return result;
             }
             finally
@@ -1113,6 +1127,9 @@ internal sealed partial class RootMembershipRegistry
         internal async Task<StoreStateRecord?> ReadMemberStateAsync(string memberId, CancellationToken cancellationToken)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(memberId);
+            await using var catalogOperation = _catalogSession is null
+                ? null
+                : await _catalogSession.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
             await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
@@ -1121,6 +1138,7 @@ internal sealed partial class RootMembershipRegistry
                     throw Refused("The requested state member is not in the exact locked membership union.");
                 var state = await _readState(memberId, location.Parent, cancellationToken).ConfigureAwait(false);
                 EnsureValidMap();
+                catalogOperation?.Complete();
                 return state;
             }
             finally
@@ -1132,6 +1150,9 @@ internal sealed partial class RootMembershipRegistry
         /// <summary>Reads one exactly bound configured state slot after full current-state and native verification.</summary>
         internal async Task<StoreStateRecord> ReadConfiguredStateAsync(string configuredPath, CancellationToken cancellationToken)
         {
+            await using var catalogOperation = _catalogSession is null
+                ? null
+                : await _catalogSession.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
             await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
@@ -1141,9 +1162,11 @@ internal sealed partial class RootMembershipRegistry
                 var states = await _verifyCurrentStates(_scope, _locations, cancellationToken).ConfigureAwait(false);
                 EnsureValidMap();
                 binding.Revalidate();
-                return states.TryGetValue(binding.MemberId, out var state)
+                var result = states.TryGetValue(binding.MemberId, out var state)
                     ? state
                     : throw Refused("The configured state-file binding is absent from the fully verified member union.");
+                catalogOperation?.Complete();
+                return result;
             }
             finally
             {
@@ -1158,6 +1181,9 @@ internal sealed partial class RootMembershipRegistry
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(createNextState);
+            await using var catalogOperation = _catalogSession is null
+                ? null
+                : await _catalogSession.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
             await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
@@ -1180,6 +1206,7 @@ internal sealed partial class RootMembershipRegistry
                 binding.Revalidate();
                 await PublishStateUnderGateAsync(binding.MemberId, nextState, cancellationToken, checkpoint: null)
                     .ConfigureAwait(false);
+                catalogOperation?.Complete();
                 return nextState;
             }
             finally
@@ -1197,11 +1224,16 @@ internal sealed partial class RootMembershipRegistry
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(memberId);
             ArgumentNullException.ThrowIfNull(nextState);
+            await using var catalogOperation = _catalogSession is null
+                ? null
+                : await _catalogSession.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
             await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                return await PublishStateUnderGateAsync(memberId, nextState, cancellationToken, checkpoint)
+                var published = await PublishStateUnderGateAsync(memberId, nextState, cancellationToken, checkpoint)
                     .ConfigureAwait(false);
+                catalogOperation?.Complete();
+                return published;
             }
             finally
             {
@@ -1236,6 +1268,8 @@ internal sealed partial class RootMembershipRegistry
                 DisposeLocations(priorLocations.Values);
                 _locations = refreshed.Locations;
                 _scope = refreshed.Scope;
+                if (_afterOwnedPublication is not null)
+                    await _afterOwnedPublication(published).ConfigureAwait(false);
                 return published;
             }
             catch

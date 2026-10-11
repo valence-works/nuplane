@@ -21,7 +21,8 @@ internal static class PackageStoreRuntimeAdmission
         IPhysicalStoreFileSystem files,
         IStoreRegistry selectedRegistry,
         IStoreStateSerializer serializer,
-        string? configuredInstallRoot)
+        string? configuredInstallRoot,
+        ITrustedPackageStoreRootCatalog? trustedCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(selectedRegistry);
@@ -36,7 +37,7 @@ internal static class PackageStoreRuntimeAdmission
             ? Path.Combine(AppContext.BaseDirectory, ".nuplane", "packages")
             : configuredInstallRoot;
         var baseLocator = Path.IsPathFullyQualified(rootLocator) ? null : Directory.GetCurrentDirectory();
-        return new PackageStoreAdmission(files, registry, rootLocator, baseLocator);
+        return new PackageStoreAdmission(files, registry, rootLocator, baseLocator, trustedCatalog);
     }
 
     internal static IPackageStoreAdmission CreateManual(IStoreRegistry storeRegistry, FeedResolutionOptions feedOptions)

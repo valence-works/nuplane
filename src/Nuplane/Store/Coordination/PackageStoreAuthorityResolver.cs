@@ -65,8 +65,26 @@ internal sealed class PackageStoreAuthorityResolver
     internal ResolvedPackageStorePath ResolveTrustedCatalogRoot(string exactLocator)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(exactLocator);
-        return ResolveParsed(ParseRequest(exactLocator, exactBaseLocator: null),
-            PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix,
+        return ResolveCatalogAdmissionCandidate(exactLocator,
+            PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix);
+    }
+
+    /// <summary>Retains native request-path evidence for catalog admission, including one recoverable pending candidate.</summary>
+    /// <remarks>
+    /// A returned membership candidate is metadata only. The catalog owner must recover and verify the complete
+    /// trusted root/member union before this path can be projected into an operation owner.
+    /// </remarks>
+    internal ResolvedPackageStorePath ResolveCatalogAdmissionCandidate(
+        string exactLocator,
+        PhysicalStorePathTarget target,
+        string? exactBaseLocator = null)
+    {
+        ArgumentNullException.ThrowIfNull(exactLocator);
+        if (string.IsNullOrWhiteSpace(exactLocator))
+            throw Unknown("The configured locator is blank.");
+        if (!Enum.IsDefined(target))
+            throw new ArgumentOutOfRangeException(nameof(target));
+        return ResolveParsed(ParseRequest(exactLocator, exactBaseLocator), target,
             requiredRoot: null, memberLocatorScope: null, allowCatalogCandidate: true);
     }
 

@@ -54,7 +54,8 @@ internal static class NuplaneStorePersistenceRegistrationServices
                 sp.GetRequiredService<IPhysicalStoreFileSystem>(),
                 sp.GetRequiredService<IStoreRegistry>(),
                 sp.GetRequiredService<IStoreStateSerializer>(),
-                feedOptions.PackageInstallRoot);
+                feedOptions.PackageInstallRoot,
+                sp.GetRequiredService<ITrustedPackageStoreRootCatalog>());
         });
         services.AddSingleton<PackageGraphUseLifetimeObserver>(sp =>
             new PackageGraphUseLifetimeObserver(sp.GetService<TimeProvider>()));

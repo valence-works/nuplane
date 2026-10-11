@@ -9,6 +9,18 @@ internal sealed partial class RootMembershipRegistry
 {
     private readonly object _catalogOwnerMint = new();
 
+    internal Task<NativeCatalogRuntimeProjection> CreateCatalogRuntimeProjectionAsync(
+        CatalogRuntimeOperationSession session,
+        PhysicalRootIdentity rootIdentity,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!ReferenceEquals(session.Registry, this))
+            throw Refused("A catalog runtime session minted by another registry cannot project an operation.", rootIdentity);
+        return session.Owner.CreateRuntimeProjectionAsync(session.Borrow, rootIdentity, session,
+            cancellationToken, _catalogOwnerMint);
+    }
+
     /// <summary>Resolves and retains every immutable configured root, then locks the complete enrolled catalog.</summary>
     internal Task<NativeCatalogOwner> AcquireNativeCatalogOwnerAsync(
         ITrustedPackageStoreRootCatalog catalog,
@@ -403,6 +415,31 @@ internal sealed partial class RootMembershipRegistry
 
         internal NativeCatalogLockedRoot[] SnapshotRetainedRoots() => _roots.Values.ToArray();
 
+        internal GroupPublicationDescriptorV2[] SnapshotGroupDescriptors()
+            => _groupDescriptors.Select(static descriptor => descriptor.Copy()).ToArray();
+
+        internal Task RefreshRuntimeProjectionAfterOwnedOutcomeAsync(
+            NativeCatalogOwnerBorrow borrow,
+            PhysicalRootIdentity rootIdentity,
+            RootMembershipRecord ledger,
+            PhysicalFileIdentity ledgerIdentity)
+        {
+            ArgumentNullException.ThrowIfNull(borrow);
+            ArgumentNullException.ThrowIfNull(rootIdentity);
+            ArgumentNullException.ThrowIfNull(ledger);
+            ArgumentNullException.ThrowIfNull(ledgerIdentity);
+            borrow.RequireRegistry(_registry);
+            if (!ReferenceEquals(borrow.Owner, this) || ledger.RootIdentity != rootIdentity)
+                throw Refused("A runtime projection outcome does not belong to this retained catalog session.", rootIdentity);
+            return RefreshAfterOwnedOutcomesAsync(
+                new Dictionary<PhysicalRootIdentity, (RootMembershipRecord Ledger, PhysicalFileIdentity Identity)>
+                {
+                    [rootIdentity] = (ledger, ledgerIdentity)
+                },
+                adoptedDescriptor: null,
+                _registry._catalogOwnerMint);
+        }
+
         internal void RequireOperationMayStart()
         {
             lock (_gate)
@@ -470,6 +507,98 @@ internal sealed partial class RootMembershipRegistry
                 control?.Dispose();
                 if (share is not null)
                     await share.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        internal async Task<NativeCatalogRuntimeProjection> CreateRuntimeProjectionAsync(
+            NativeCatalogOwnerBorrow borrow,
+            PhysicalRootIdentity rootIdentity,
+            CatalogRuntimeOperationSession session,
+            CancellationToken cancellationToken,
+            object mint)
+        {
+            if (!ReferenceEquals(mint, _registry._catalogOwnerMint) || !ReferenceEquals(borrow.Owner, this))
+                throw Refused("Only this registry-minted catalog borrow can project a runtime operation.", rootIdentity);
+            borrow.RequireRegistry(_registry);
+            ArgumentNullException.ThrowIfNull(session);
+            cancellationToken.ThrowIfCancellationRequested();
+            RevalidateRetainedEvidence();
+            var root = RequireRoot(rootIdentity, mint);
+            if (root.ReplayPolicy != LocatorReplayBindingPolicy.Acknowledged ||
+                root.Ledger.SchemaVersion != RootMembershipRecord.CurrentSchemaVersion ||
+                root.Ledger.Status != RootMembershipStatus.Complete || root.Ledger.PendingStateCommit is not null ||
+                root.Ledger.PendingGroupPublicationV2 is not null ||
+                root.Ledger.Members.Any(static member => member.Binding is not RootMemberRecord.AcknowledgedBinding))
+                throw Refused("Runtime projection requires a verified Complete schema-1 acknowledged catalog root.", rootIdentity);
+
+            var rootHandle = root.PrimaryResolution.AuthorityRoot
+                ?? throw Refused("The selected catalog root has no retained native directory.", rootIdentity);
+            Transaction? transaction = null;
+            MemberLocatorReplayScope? scope = null;
+            IReadOnlyDictionary<string, ResolvedMemberStateLocation>? locations = null;
+            LockedMemberLocations? context = null;
+            IAsyncDisposable? projectionShare = null;
+            try
+            {
+                var projectedTransaction = await OpenTransactionAsync(root).ConfigureAwait(false);
+                transaction = projectedTransaction;
+                var ledger = projectedTransaction.ReadCurrent();
+                if (ledger.SchemaVersion != RootMembershipRecord.CurrentSchemaVersion ||
+                    ledger.Status != RootMembershipStatus.Complete || ledger.PendingStateCommit is not null ||
+                    ledger.PendingGroupPublicationV2 is not null ||
+                    ledger.Members.Any(static member => member.Binding is not RootMemberRecord.AcknowledgedBinding))
+                    throw Refused("The selected catalog root changed out of Complete schema-1 acknowledged state before projection.", rootIdentity);
+
+                scope = new MemberLocatorReplayScope(ledger);
+                locations = _registry.ResolveMemberLocatorMap(ledger, scope, LocatorReplayBindingPolicy.Acknowledged);
+                var slots = ledger.Members.Select(static member => RootMembershipRegistry.GetSlot(member)).ToArray();
+                if (root.LockedSlots is null || !slots.SequenceEqual(root.LockedSlots))
+                    throw Refused("The projected member map differs from the catalog's retained root-local lock obligations.", rootIdentity);
+                RevalidateMemberLocationMap(ledger, locations, LocatorReplayBindingPolicy.Acknowledged);
+                context = _registry.CreateLockedMemberLocations(projectedTransaction, rootHandle, scope, locations,
+                    LocatorReplayBindingPolicy.Acknowledged, rootIdentity, root.EnrollmentEpoch,
+                    session,
+                    published => session.RefreshAfterOwnedPublicationAsync(
+                        rootIdentity, published, projectedTransaction.LedgerIdentity));
+                scope = null;
+                locations = null;
+                RevalidateRetainedEvidence();
+                projectionShare = session.CreateProjectionShare();
+                var projection = new NativeCatalogRuntimeProjection(context, () => projectedTransaction.LedgerIdentity,
+                    () => projectedTransaction.DisposeAsync(),
+                    session,
+                    projectionShare);
+                context = null;
+                transaction = null;
+                projectionShare = null;
+                return projection;
+            }
+            catch (Exception exception)
+            {
+                var cleanupErrors = new List<Exception>();
+                try { context?.Dispose(); }
+                catch (Exception cleanupError) { cleanupErrors.Add(cleanupError); }
+                if (context is null && locations is not null)
+                {
+                    try { DisposeLocations(locations.Values); }
+                    catch (Exception cleanupError) { cleanupErrors.Add(cleanupError); }
+                }
+                try { scope?.Expire(); }
+                catch (Exception cleanupError) { cleanupErrors.Add(cleanupError); }
+                if (transaction is not null)
+                {
+                    try { await transaction.DisposeAsync().ConfigureAwait(false); }
+                    catch (Exception cleanupError) { cleanupErrors.Add(cleanupError); }
+                }
+                if (projectionShare is not null)
+                {
+                    try { await projectionShare.DisposeAsync().ConfigureAwait(false); }
+                    catch (Exception cleanupError) { cleanupErrors.Add(cleanupError); }
+                }
+                if (cleanupErrors.Count > 0)
+                    throw new AggregateException("Catalog runtime projection failed and retained resources did not release cleanly.",
+                        new[] { exception }.Concat(cleanupErrors));
+                throw;
             }
         }
 
