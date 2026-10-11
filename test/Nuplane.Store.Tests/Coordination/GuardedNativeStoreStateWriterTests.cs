@@ -465,6 +465,89 @@ public sealed class GuardedNativeStoreStateWriterTests
         }
     }
 
+    [SupportedPhysicalStoreFact]
+    public async Task WriteAsync_RefusesIncomingV1ProtectionBeforeNativeOrPayloadIo()
+    {
+        using var context = CreateContext();
+        var serializer = new TrackingPayloadSerializer();
+        var writer = new GuardedNativeStoreStateWriter(context.Files, serializer);
+        context.Files.FailInspectFor = context.Parent;
+        var replayCalls = 0;
+
+        var error = await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => writer.WriteAsync(
+            context.Parent, context.Slot, WithV1Protection(State("owned", 1)),
+            _ => { replayCalls++; return ValueTask.CompletedTask; }, CancellationToken.None));
+
+        Assert.Equal(PackageStoreAdmissionReason.UnsupportedParticipant, error.Reason);
+        Assert.Equal(0, replayCalls);
+        Assert.Equal(0, serializer.ReadCalls);
+        Assert.Equal(0, serializer.WriteCalls);
+        Assert.Same(context.Parent, context.Files.FailInspectFor);
+        Assert.False(File.Exists(context.StatePath));
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task WriteAsync_RefusesExistingV1ProtectionBeforeStagingAndReleasesGuard()
+    {
+        using var context = CreateContext();
+        await SeedAsync(context, WithV1Protection(State("owned", 1)));
+        var priorBytes = File.ReadAllBytes(context.StatePath);
+        var serializer = new TrackingPayloadSerializer();
+        var writer = new GuardedNativeStoreStateWriter(context.Files, serializer);
+
+        var error = await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => writer.WriteAsync(
+            context.Parent, context.Slot, State("2.0.0", 2), NoReplay, CancellationToken.None));
+
+        Assert.Equal(PackageStoreAdmissionReason.UnsupportedParticipant, error.Reason);
+        Assert.True(serializer.ReadCalls > 0);
+        Assert.Equal(0, serializer.WriteCalls);
+        Assert.Equal(priorBytes, File.ReadAllBytes(context.StatePath));
+        AssertNoStateArtifacts(context);
+        await using var nextWriter = await new PhysicalStoreStateSlotWriteGuard(context.NativeFiles)
+            .AcquireAsync(context.Parent, context.Slot, CancellationToken.None);
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task WriteAsync_RefusesV1ProtectionIntroducedByStageCodecBeforePublication()
+    {
+        using var context = CreateContext();
+        var priorBytes = await SeedWithUnknownFieldAsync(context);
+        var serializer = new TrackingPayloadSerializer
+        {
+            WriteOverride = (stream, state, token) => new StoreStateSerializer()
+                .WritePayloadAsync(stream, WithV1Protection(state), token)
+        };
+        var writer = new GuardedNativeStoreStateWriter(context.Files, serializer);
+        var publicationAttempted = false;
+        context.Files.BeforePublish = (_, _, _) => publicationAttempted = true;
+
+        var error = await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => writer.WriteAsync(
+            context.Parent, context.Slot, State("2.0.0", 2), NoReplay, CancellationToken.None));
+
+        Assert.Equal(PackageStoreAdmissionReason.UnsupportedParticipant, error.Reason);
+        Assert.False(publicationAttempted);
+        Assert.Equal(priorBytes, File.ReadAllBytes(context.StatePath));
+        AssertNoStateArtifacts(context);
+        await using var nextWriter = await new PhysicalStoreStateSlotWriteGuard(context.NativeFiles)
+            .AcquireAsync(context.Parent, context.Slot, CancellationToken.None);
+    }
+
+    private static void AssertNoStateArtifacts(TestContext context)
+        => Assert.DoesNotContain(Directory.GetFiles(context.StateDirectory), path =>
+            path.EndsWith(".tmp", StringComparison.Ordinal) || path.EndsWith(".bak", StringComparison.Ordinal));
+
+    private static StoreStateRecord WithV1Protection(StoreStateRecord state)
+    {
+        var unknown = new PackageProtectionClosure(PackageProtectionClosureKnowledge.Unknown,
+            PackageProtectionUnknownReasonCode.LegacyProtectionMissing, graphs: null);
+        var root = new PhysicalRootIdentity(new PhysicalFileIdentity("test-provider", "test-volume", "test-root"));
+        var candidate = new PackageProtectionRecord(1, root, 1, "test-member", 1,
+            ProtectionDigest.StateBody(state), new string('0', 64), unknown, unknown, [], true);
+        var protection = new PackageProtectionRecord(1, root, 1, "test-member", 1,
+            candidate.StateBodyDigest, ProtectionDigest.Protection(candidate), unknown, unknown, [], true);
+        return state with { ProtectionRecord = protection };
+    }
+
     private static TestContext CreateContext()
     {
         var fixture = new PackageStoreFixture();

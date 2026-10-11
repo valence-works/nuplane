@@ -38,10 +38,10 @@ internal sealed class GuardedNativeStoreStateWriter
         _guard = new PhysicalStoreStateSlotWriteGuard(files);
     }
 
-    /// <summary>Publishes the supplied v1 state at its resolved parent/name after proving marker absence.</summary>
+    /// <summary>Publishes unbound v1 state at its resolved parent/name after proving marker absence.</summary>
     /// <param name="parent">The already-resolved, retained parent directory handle.</param>
     /// <param name="slot">The exact current slot identity derived by the caller's resolver.</param>
-    /// <param name="state">The v1 state payload to publish.</param>
+    /// <param name="state">The unbound v1 state payload to publish without root/member ownership.</param>
     /// <param name="revalidateRetainedPath">A callback that replays retained ancestry and parent evidence without pinning the replaceable state-file identity or acquiring root/member locks.</param>
     /// <param name="cancellationToken">Cancellation requested before the native publication transition.</param>
     /// <returns>A verified committed state identity and whether exact recovery evidence remains.</returns>
@@ -59,7 +59,7 @@ internal sealed class GuardedNativeStoreStateWriter
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(revalidateRetainedPath);
         cancellationToken.ThrowIfCancellationRequested();
-        RefuseBundle(state, "A standalone state-slot writer cannot publish a v2 protection bundle.");
+        RefuseOwnerBearingState(state, "A standalone state-slot writer cannot publish owner-bearing protection metadata.");
 
         await ReplayAndRequireUnboundAsync(parent, slot, null, revalidateRetainedPath, cancellationToken).ConfigureAwait(false);
         var lease = await _guard.AcquireAsync(parent, slot, cancellationToken).ConfigureAwait(false);
@@ -79,7 +79,7 @@ internal sealed class GuardedNativeStoreStateWriter
             {
                 var existing = await ReadStateAsync(
                     parent, slot, prior, lease, revalidateRetainedPath, cancellationToken, computeCanonicalHash: false).ConfigureAwait(false);
-                RefuseBundle(existing.State, "A standalone state-slot writer cannot replace a v2 protection bundle.");
+                RefuseOwnerBearingState(existing.State, "A standalone state-slot writer cannot replace owner-bearing protected state.");
                 priorHash = existing.RawHash;
                 backup = await StageBackupAsync(
                     parent, slot, prior, priorHash, lease, revalidateRetainedPath, cancellationToken).ConfigureAwait(false);
@@ -225,7 +225,7 @@ internal sealed class GuardedNativeStoreStateWriter
             {
                 var evidence = await ReadStateAsync(parent, slot, published, lease, revalidateRetainedPath, CancellationToken.None).ConfigureAwait(false);
                 var expectedPayloadHash = temporary.PayloadHash;
-                if (expectedPayloadHash is null || evidence.CanonicalHash is null || evidence.State.ProtectionBundle is not null ||
+                if (expectedPayloadHash is null || evidence.CanonicalHash is null || HasProtection(evidence.State) ||
                     !CryptographicOperations.FixedTimeEquals(evidence.RawHash, expectedPayloadHash) ||
                     !CryptographicOperations.FixedTimeEquals(evidence.CanonicalHash, expectedPayloadHash))
                 {
@@ -389,7 +389,7 @@ internal sealed class GuardedNativeStoreStateWriter
 
             var stageInfo = VerifyArtifact(parent, slot, artifact!);
             var evidence = await ReadStateAsync(parent, slot, stageInfo, lease, revalidateRetainedPath, cancellationToken, artifact!.Name).ConfigureAwait(false);
-            RefuseBundle(evidence.State, "A standalone state-slot writer cannot stage a v2 protection bundle.");
+            RefuseOwnerBearingState(evidence.State, "A standalone state-slot writer cannot stage owner-bearing protection metadata.");
             if (evidence.CanonicalHash is null || !CryptographicOperations.FixedTimeEquals(evidence.RawHash, evidence.CanonicalHash))
                 throw Unknown("The staged state payload does not round-trip through the selected serializer.");
             return artifact! with { PayloadHash = evidence.RawHash };
@@ -805,7 +805,7 @@ internal sealed class GuardedNativeStoreStateWriter
             throw Unknown("The committed state slot changed during recovery-artifact cleanup.", cleanupError);
         var finalPayload = await ReadStateAsync(
             parent, slot, committed, lease, revalidateRetainedPath, CancellationToken.None).ConfigureAwait(false);
-        if (finalPayload.CanonicalHash is null || finalPayload.State.ProtectionBundle is not null ||
+        if (finalPayload.CanonicalHash is null || HasProtection(finalPayload.State) ||
             !CryptographicOperations.FixedTimeEquals(finalPayload.RawHash, expectedPayloadHash) ||
             !CryptographicOperations.FixedTimeEquals(finalPayload.CanonicalHash, expectedPayloadHash))
         {
@@ -850,9 +850,12 @@ internal sealed class GuardedNativeStoreStateWriter
             throw Unknown(message);
     }
 
-    private static void RefuseBundle(StoreStateRecord state, string message)
+    private static bool HasProtection(StoreStateRecord state)
+        => state.ProtectionRecord is not null || state.ProtectionBundle is not null;
+
+    private static void RefuseOwnerBearingState(StoreStateRecord state, string message)
     {
-        if (state.ProtectionBundle is not null)
+        if (HasProtection(state))
             throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant, message);
     }
 
