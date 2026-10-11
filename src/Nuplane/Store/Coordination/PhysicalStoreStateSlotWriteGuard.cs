@@ -470,16 +470,7 @@ internal sealed class PhysicalStoreStateSlotWriteGuard
     }
 
     private static bool IsExclusiveCreateCollision(Exception exception)
-    {
-        if (exception is not PackageStoreAdmissionException { InnerException: { } inner })
-            return false;
-
-        if (inner is UnixNativeCallException unix)
-            return unix.Error == 17; // EEXIST on the supported Darwin/Linux providers.
-
-        return inner is WindowsNativeCallException windows &&
-               windows.NtStatus == WindowsNative.StatusObjectNameCollision;
-    }
+        => PhysicalStoreExclusiveCreateCollision.IsCollision(exception);
 
     private static async Task<List<Exception>> DisposeAcquisitionResourcesAsync(
         IAsyncDisposable? nativeLock,

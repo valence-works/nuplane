@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Store.Coordination.MembershipRecords;
 using Nuplane.Store.Coordination.PhysicalFiles;
@@ -134,6 +135,7 @@ internal sealed class ResolvedPackageStorePath : IDisposable
     /// <summary>Releases all retained native handles in reverse acquisition order.</summary>
     public void Dispose()
     {
+        List<Exception>? errors = null;
         lock (_gate)
         {
             if (_disposed)
@@ -141,7 +143,15 @@ internal sealed class ResolvedPackageStorePath : IDisposable
 
             _disposed = true;
             for (var index = _ownedHandles.Count - 1; index >= 0; index--)
-                _ownedHandles[index].Dispose();
+            {
+                try { _ownedHandles[index].Dispose(); }
+                catch (Exception exception) { (errors ??= []).Add(exception); }
+            }
         }
+
+        if (errors is { Count: 1 })
+            ExceptionDispatchInfo.Capture(errors[0]).Throw();
+        if (errors is { Count: > 1 })
+            throw new AggregateException("Configured path native handles could not be fully released.", errors);
     }
 }

@@ -215,7 +215,10 @@ internal sealed partial class UnixPhysicalStoreFileSystem : IPhysicalStoreFileSy
         ArgumentNullException.ThrowIfNull(parent);
         var beforeCreate = InspectChildNoFollow(parent, singleName);
         if (beforeCreate is not null)
-            throw Unknown("The directory name already exists.");
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
+                "The directory name became occupied before exclusive creation.",
+                innerException: new PhysicalStoreExclusiveCreateCollisionException(
+                    "The requested native directory name is already occupied."));
 
         using var parentHandle = parent.AcquireScopedSafeHandle(_providerToken);
         InvokeNative(

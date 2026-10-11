@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using System.Text;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Store.Coordination.MembershipRecords;
@@ -7,8 +8,10 @@ namespace Nuplane.Store.Coordination;
 
 /// <summary>Resolves configured store locators component by component using metadata-only held handles.</summary>
 /// <remarks>
-/// Resolution returns a retained structural membership candidate, never operation admission. It does not
-/// normalize paths, read package/state/archive payloads, create entries, acquire locks, or enumerate package/content directories.
+/// The general metadata resolution APIs return a retained structural membership candidate, never operation
+/// admission. They do not normalize paths, read package/state/archive payloads, create entries, acquire locks,
+/// or enumerate package/content directories. The isolated state-slot writer resolver is the only entry point
+/// that can create missing parent directories, and it does so relative to verified held native handles.
 /// </remarks>
 internal sealed class PackageStoreAuthorityResolver
 {
@@ -24,6 +27,7 @@ internal sealed class PackageStoreAuthorityResolver
 
     private readonly IPhysicalStoreFileSystem _files;
     private readonly IPhysicalStoreNameFileSystem _names;
+    private readonly IPhysicalStoreDirectoryNameFileSystem? _directoryNames;
     private readonly RootMembershipRegistry _registry;
 
     internal PackageStoreAuthorityResolver(IPhysicalStoreFileSystem files, RootMembershipRegistry registry)
@@ -34,6 +38,7 @@ internal sealed class PackageStoreAuthorityResolver
         _names = files as IPhysicalStoreNameFileSystem ?? throw Refusal(
             PackageStoreAdmissionReason.UnsupportedFilesystem,
             "The filesystem provider cannot establish stable native directory-name semantics.");
+        _directoryNames = files as IPhysicalStoreDirectoryNameFileSystem;
         _registry = registry;
     }
 
@@ -58,6 +63,146 @@ internal sealed class PackageStoreAuthorityResolver
 
         var path = ParseRequest(exactLocator, exactBaseLocator);
         return ResolveParsed(path, target, requiredRoot, memberLocatorScope: null);
+    }
+
+    /// <summary>Resolves a state-file slot and creates only missing parent directories through retained native handles.</summary>
+    /// <remarks>
+    /// The caller supplies one captured, fully qualified path. This writer-only path retains both the evidence used
+    /// while creating parents and a strict full-path re-resolution. Replay covers the parent and authority, never the
+    /// replaceable final state-file identity, and it acquires no root or member locks.
+    /// </remarks>
+    internal ResolvedNativeStateSlot ResolveStateSlotForWrite(
+        string exactAbsoluteStatePath,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(exactAbsoluteStatePath);
+        cancellationToken.ThrowIfCancellationRequested();
+        var statePath = ParseRequest(exactAbsoluteStatePath, exactBaseLocator: null);
+        if (statePath.Anchor is null || statePath.Components.Length == 0)
+            throw Unknown("A native state-slot path must be fully qualified and name a final state file.");
+
+        var requestedBasename = statePath.Components[^1];
+        try
+        {
+            PhysicalStoreNames.ValidateSingleComponent(requestedBasename);
+            ValidateComponentEncoding(requestedBasename);
+        }
+        catch (ArgumentException exception)
+        {
+            throw Unknown("A native state-slot path has an unsupported final name.", innerException: exception);
+        }
+
+        var parentPath = new ParsedPath(statePath.Anchor, statePath.Components[..^1]);
+        ResolvedPackageStorePath? creationEvidence = null;
+        ResolvedPackageStorePath? finalEvidence = null;
+        try
+        {
+            creationEvidence = ResolveParsed(parentPath, PhysicalStorePathTarget.ConfiguredRootDirectory,
+                requiredRoot: null, memberLocatorScope: null,
+                createMissingParentDirectories: true, cancellationToken: cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            finalEvidence = ResolveParsed(parentPath, PhysicalStorePathTarget.ConfiguredRootDirectory,
+                requiredRoot: null, memberLocatorScope: null);
+
+            // Keep and replay the evidence through which creation occurred. A fresh spelling can reach the
+            // same directory identity after an alias retarget, so identity equality alone is insufficient.
+            creationEvidence.Revalidate();
+            var createdParent = RequireStateParent(creationEvidence);
+            var finalParent = RequireStateParent(finalEvidence);
+            var createdInfo = _files.InspectHandle(createdParent);
+            var finalInfo = _files.InspectHandle(finalParent);
+            if (createdInfo.Identity != finalInfo.Identity)
+                throw Unknown("The state parent changed identity during strict post-creation re-resolution.");
+
+            ResolvedNativeStateSlot.RequireSameAuthorityEvidence(creationEvidence, finalEvidence);
+            var (slot, existingFileIdentity) = ObserveStateSlotForWrite(finalParent, requestedBasename);
+            var result = new ResolvedNativeStateSlot(
+                _files, _names, creationEvidence, finalEvidence, requestedBasename, slot, existingFileIdentity);
+            creationEvidence = null;
+            finalEvidence = null;
+            try
+            {
+                result.RevalidateRetainedParent(cancellationToken);
+            }
+            catch (Exception primaryFailure)
+            {
+                try
+                {
+                    result.Dispose();
+                }
+                catch (Exception cleanupFailure)
+                {
+                    throw new AggregateException(
+                        "State-slot revalidation failed and retained path evidence could not be fully released.",
+                        primaryFailure,
+                        cleanupFailure);
+                }
+
+                ExceptionDispatchInfo.Capture(primaryFailure).Throw();
+                throw;
+            }
+            return result;
+        }
+        catch (Exception primaryFailure)
+        {
+            var cleanupErrors = new List<Exception>();
+            try { finalEvidence?.Dispose(); }
+            catch (Exception exception) { cleanupErrors.Add(exception); }
+            try { creationEvidence?.Dispose(); }
+            catch (Exception exception) { cleanupErrors.Add(exception); }
+
+            if (cleanupErrors.Count > 0)
+            {
+                throw new AggregateException(
+                    "State-slot resolution failed and retained path evidence could not be fully released.",
+                    new[] { primaryFailure }.Concat(cleanupErrors));
+            }
+
+            ExceptionDispatchInfo.Capture(primaryFailure).Throw();
+            throw;
+        }
+    }
+
+    private PhysicalStoreDirectoryHandle RequireStateParent(ResolvedPackageStorePath resolution)
+        => resolution.Target as PhysicalStoreDirectoryHandle
+           ?? throw Unknown("A native state-slot path did not resolve to a held parent directory.");
+
+    private (StateSlotIdentity Slot, PhysicalFileIdentity? ExistingFileIdentity) ObserveStateSlotForWrite(
+        PhysicalStoreDirectoryHandle parent,
+        string requestedBasename)
+    {
+        var parentBefore = _files.InspectHandle(parent);
+        if (parentBefore.Kind != PhysicalStoreEntryKind.Directory)
+            throw Unknown("The native state parent is not a directory.");
+
+        var entry = _files.InspectChildNoFollow(parent, requestedBasename);
+        if (entry is null)
+        {
+            var semantics = _names.ObserveDirectoryNameSemantics(parent);
+            var absentAfter = _files.InspectChildNoFollow(parent, requestedBasename);
+            var parentAfter = _files.InspectHandle(parent);
+            var semanticsAfter = _names.ObserveDirectoryNameSemantics(parent);
+            var absentFinal = _files.InspectChildNoFollow(parent, requestedBasename);
+            var parentFinal = _files.InspectHandle(parent);
+            var semanticsFinal = _names.ObserveDirectoryNameSemantics(parent);
+            if (absentAfter is not null || absentFinal is not null ||
+                parentAfter.Kind != PhysicalStoreEntryKind.Directory || parentFinal.Kind != PhysicalStoreEntryKind.Directory ||
+                parentAfter.Identity != parentBefore.Identity || parentFinal.Identity != parentBefore.Identity ||
+                semanticsAfter != semantics || semanticsFinal != semantics)
+            {
+                throw Unknown("The prospective native state slot changed during positive absence observation.");
+            }
+
+            return (new StateSlotIdentity(parentBefore.Identity, semantics, requestedBasename), null);
+        }
+
+        if (entry.Kind != PhysicalStoreEntryKind.RegularFile || entry.LinkCount != 1)
+            throw Unknown("A native state slot must be a regular single-link file without a final alias.");
+
+        var observed = new PhysicalStoreIdentity(_files).ObserveStateSlot(parent, requestedBasename);
+        if (observed.FileIdentity != entry.Identity || observed.Slot.ParentIdentity != parentBefore.Identity)
+            throw Unknown("The native state slot changed during canonical-name observation.");
+        return (observed.Slot, observed.FileIdentity);
     }
 
     /// <summary>Retains a trusted catalog root candidate even when it records one exact recoverable transaction.</summary>
@@ -238,10 +383,20 @@ internal sealed class PackageStoreAuthorityResolver
         RootMembershipRegistry.MemberLocatorReplayScope? memberLocatorScope,
         PackageInstallIdentity? retainedInstall = null,
         bool allowStableMissingDirectoryRetry = false,
-        bool allowCatalogCandidate = false)
+        bool allowCatalogCandidate = false,
+        bool createMissingParentDirectories = false,
+        CancellationToken cancellationToken = default)
     {
         if (!Enum.IsDefined(target))
             throw new ArgumentOutOfRangeException(nameof(target));
+        if (createMissingParentDirectories &&
+            (target != PhysicalStorePathTarget.ConfiguredRootDirectory || requiredRoot is not null ||
+             memberLocatorScope is not null || retainedInstall is not null || allowStableMissingDirectoryRetry ||
+             allowCatalogCandidate))
+        {
+            throw new ArgumentException("Missing-parent creation is available only to the isolated unscoped state-slot resolver.");
+        }
+
         memberLocatorScope?.EnsureActive();
         var state = new ResolutionState(this, requiredRoot, memberLocatorScope, retainedInstall, allowCatalogCandidate);
         try
@@ -257,6 +412,7 @@ internal sealed class PackageStoreAuthorityResolver
 
             while (frames.Count > 0)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var frame = frames[^1];
                 if (frame.Index == frame.Components.Length)
                 {
@@ -301,6 +457,18 @@ internal sealed class PackageStoreAuthorityResolver
                 var entry = _files.InspectChildNoFollow(current, component);
                 if (entry is null)
                 {
+                    if (createMissingParentDirectories)
+                    {
+                        if (target != PhysicalStorePathTarget.ConfiguredRootDirectory ||
+                            !TryGetOrdinaryRemainingSuffix(frames, out var writableSuffix))
+                        {
+                            throw Unknown("Missing state-parent creation requires an ordinary remaining suffix.", state.RootIdentity);
+                        }
+
+                        current = state.CreateMissingParentDirectory(current, component, writableSuffix, cancellationToken);
+                        continue;
+                    }
+
                     if (target is not (PhysicalStorePathTarget.ConfiguredRootDirectoryAllowMissingSuffix or
                             PhysicalStorePathTarget.PackageDirectoryAllowMissingSuffix or
                             PhysicalStorePathTarget.AdmittedPackageDirectoryAllowMissingSuffix or
@@ -434,9 +602,21 @@ internal sealed class PackageStoreAuthorityResolver
             state.DetachHandles();
             return result;
         }
-        catch
+        catch (Exception primaryFailure)
         {
-            state.DisposeHandles();
+            try
+            {
+                state.DisposeHandles();
+            }
+            catch (Exception cleanupFailure)
+            {
+                throw new AggregateException(
+                    "Configured path resolution failed and retained native handles could not be fully released.",
+                    primaryFailure,
+                    cleanupFailure);
+            }
+
+            ExceptionDispatchInfo.Capture(primaryFailure).Throw();
             throw;
         }
     }
@@ -830,9 +1010,18 @@ internal sealed class PackageStoreAuthorityResolver
 
         internal void DisposeHandles()
         {
+            List<Exception>? errors = null;
             for (var index = _handles.Count - 1; index >= 0; index--)
-                _handles[index].Dispose();
+            {
+                try { _handles[index].Dispose(); }
+                catch (Exception exception) { (errors ??= []).Add(exception); }
+            }
             _handles.Clear();
+
+            if (errors is { Count: 1 })
+                ExceptionDispatchInfo.Capture(errors[0]).Throw();
+            if (errors is { Count: > 1 })
+                throw new AggregateException("Configured path native handles could not be fully released.", errors);
         }
 
         internal void RecordAnchor(string exactAnchor, PhysicalStoreDirectoryHandle directory, PhysicalFileIdentity identity)
@@ -1012,6 +1201,170 @@ internal sealed class PackageStoreAuthorityResolver
                 firstMissingName, stableDirectoryAppeared
                     ? (missingAfter ?? missingFinal)!.Identity
                     : null));
+        }
+
+        internal PhysicalStoreDirectoryHandle CreateMissingParentDirectory(
+            PhysicalStoreDirectoryHandle parent,
+            string name,
+            IReadOnlyList<string> remainingSuffix,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (RootIdentity is not null || MemberLocatorScope is not null || RequiredRoot is not null || RetainedInstall is not null)
+                throw Unknown("A missing state parent cannot be created after observing root authority.", RootIdentity);
+
+            var directoryNames = resolver._directoryNames ?? throw Refusal(
+                PackageStoreAdmissionReason.UnsupportedFilesystem,
+                "The filesystem provider cannot verify canonical native parent-directory names.");
+            var before = resolver._files.InspectHandle(parent);
+            var semantics = resolver._names.ObserveDirectoryNameSemantics(parent);
+            RequireSupportedMissingNameProfile(semantics);
+            if (IsReservedControlName(name, semantics) || remainingSuffix.Any(IsPotentialReservedControlName))
+                throw Unknown("A missing state parent cannot occupy or descend through the reserved control directory name.", RootIdentity);
+
+            var entry = resolver._files.InspectChildNoFollow(parent, name);
+            var after = resolver._files.InspectHandle(parent);
+            var semanticsAfter = resolver._names.ObserveDirectoryNameSemantics(parent);
+            var entryAfter = resolver._files.InspectChildNoFollow(parent, name);
+            if (before.Kind != PhysicalStoreEntryKind.Directory || after.Kind != PhysicalStoreEntryKind.Directory ||
+                before.Identity != after.Identity || semantics != semanticsAfter ||
+                (entry is null) != (entryAfter is null) ||
+                (entry is not null && entryAfter is not null &&
+                 (entry.Kind != entryAfter.Kind || entry.Identity != entryAfter.Identity)))
+            {
+                throw Unknown("A prospective state-parent edge changed during native preflight.", RootIdentity);
+            }
+
+            // Replay every retained prefix edge and every reserved-authority observation immediately before
+            // the exclusive relative create. A collision is separately revalidated before it can be adopted.
+            Revalidate(parent, PhysicalStorePathTarget.ConfiguredRootDirectory, targetParent: null);
+            cancellationToken.ThrowIfCancellationRequested();
+            var finalParent = resolver._files.InspectHandle(parent);
+            var finalSemantics = resolver._names.ObserveDirectoryNameSemantics(parent);
+            if (finalParent.Kind != PhysicalStoreEntryKind.Directory || finalParent.Identity != before.Identity ||
+                finalSemantics != semantics)
+            {
+                throw Unknown("The held state-parent directory changed before exclusive creation.", RootIdentity);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            PhysicalStoreDirectoryHandle created;
+            try
+            {
+                created = resolver._files.CreateDirectoryExclusiveAt(parent, name);
+            }
+            catch (Exception exception) when (PhysicalStoreExclusiveCreateCollision.IsCollision(exception))
+            {
+                return AdoptRacedDirectory(parent, name, before.Identity, semantics, directoryNames, exception);
+            }
+
+            var tracked = false;
+            try
+            {
+                Track(created);
+                tracked = true;
+                VerifyCreatedDirectory(parent, name, before.Identity, semantics, created, directoryNames);
+                RecordChildEdge(parent, name, created, resolver._files.InspectHandle(created).Identity);
+                ObserveDirectory(created);
+                ObserveReservedAuthority(created);
+                Revalidate(created, PhysicalStorePathTarget.ConfiguredRootDirectory, targetParent: null);
+                cancellationToken.ThrowIfCancellationRequested();
+                return created;
+            }
+            catch
+            {
+                if (!tracked)
+                    created.Dispose();
+                throw;
+            }
+        }
+
+        private PhysicalStoreDirectoryHandle AdoptRacedDirectory(
+            PhysicalStoreDirectoryHandle parent,
+            string name,
+            PhysicalFileIdentity expectedParentIdentity,
+            PhysicalStoreNameSemantics expectedSemantics,
+            IPhysicalStoreDirectoryNameFileSystem directoryNames,
+            Exception? collision)
+        {
+            Revalidate(parent, PhysicalStorePathTarget.ConfiguredRootDirectory, targetParent: null);
+            if (RootIdentity is not null)
+                throw Unknown("Root authority appeared while a state-parent directory was racing to creation.", RootIdentity);
+
+            var parentInfo = resolver._files.InspectHandle(parent);
+            var entry = resolver._files.InspectChildNoFollow(parent, name);
+            if (parentInfo.Kind != PhysicalStoreEntryKind.Directory || parentInfo.Identity != expectedParentIdentity ||
+                entry is null)
+            {
+                if (collision is not null)
+                    ExceptionDispatchInfo.Capture(collision).Throw();
+                throw Unknown("The racing state-parent directory disappeared before it could be verified.", RootIdentity);
+            }
+
+            if (entry.Kind != PhysicalStoreEntryKind.Directory)
+                throw Unknown("Only an ordinary no-follow directory may be adopted after exclusive-create collision.", RootIdentity);
+
+            var canonical = directoryNames.ObserveCanonicalDirectoryNameNoFollow(parent, name, entry.Identity);
+            if (canonical.ParentIdentity != expectedParentIdentity || canonical.FileIdentity != entry.Identity ||
+                !string.Equals(canonical.Basename, name, StringComparison.Ordinal) || canonical.Semantics != expectedSemantics)
+            {
+                throw Unknown("A racing state-parent directory has a different native canonical spelling.", RootIdentity);
+            }
+
+            var child = resolver._files.OpenDirectoryChildNoFollow(parent, name);
+            var tracked = false;
+            try
+            {
+                Track(child);
+                tracked = true;
+                var opened = resolver._files.InspectHandle(child);
+                var named = resolver._files.InspectChildNoFollow(parent, name);
+                var childSemantics = resolver._names.ObserveDirectoryNameSemantics(child);
+                RequireSupportedMissingNameProfile(childSemantics);
+                if (opened.Kind != PhysicalStoreEntryKind.Directory || opened.Identity != entry.Identity ||
+                    named is null || named.Kind != PhysicalStoreEntryKind.Directory || named.Identity != entry.Identity ||
+                    childSemantics != expectedSemantics)
+                {
+                    throw Unknown("The racing state-parent directory changed during no-follow adoption.", RootIdentity);
+                }
+
+                RecordChildEdge(parent, name, child, entry.Identity);
+                ObserveDirectory(child);
+                ObserveReservedAuthority(child);
+                Revalidate(child, PhysicalStorePathTarget.ConfiguredRootDirectory, targetParent: null);
+                return child;
+            }
+            catch
+            {
+                if (!tracked)
+                    child.Dispose();
+                throw;
+            }
+        }
+
+        private void VerifyCreatedDirectory(
+            PhysicalStoreDirectoryHandle parent,
+            string name,
+            PhysicalFileIdentity expectedParentIdentity,
+            PhysicalStoreNameSemantics expectedParentSemantics,
+            PhysicalStoreDirectoryHandle created,
+            IPhysicalStoreDirectoryNameFileSystem directoryNames)
+        {
+            var parentInfo = resolver._files.InspectHandle(parent);
+            var opened = resolver._files.InspectHandle(created);
+            var named = resolver._files.InspectChildNoFollow(parent, name);
+            var canonical = directoryNames.ObserveCanonicalDirectoryNameNoFollow(parent, name, opened.Identity);
+            var childSemantics = resolver._names.ObserveDirectoryNameSemantics(created);
+            RequireSupportedMissingNameProfile(childSemantics);
+            if (parentInfo.Kind != PhysicalStoreEntryKind.Directory || parentInfo.Identity != expectedParentIdentity ||
+                opened.Kind != PhysicalStoreEntryKind.Directory || named is null ||
+                named.Kind != PhysicalStoreEntryKind.Directory || named.Identity != opened.Identity ||
+                canonical.ParentIdentity != expectedParentIdentity || canonical.FileIdentity != opened.Identity ||
+                !string.Equals(canonical.Basename, name, StringComparison.Ordinal) ||
+                canonical.Semantics != expectedParentSemantics || childSemantics != expectedParentSemantics)
+            {
+                throw Unknown("The exclusively created state-parent directory failed exact native identity verification.", RootIdentity);
+            }
         }
 
         private static bool IsReservedControlName(string name, PhysicalStoreNameSemantics semantics)

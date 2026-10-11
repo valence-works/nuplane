@@ -12,7 +12,7 @@ using Nuplane.Tests.Shared;
 namespace Nuplane.Store.Tests.Coordination;
 
 [Trait("Platform", "Native")]
-public sealed class PackageStoreAuthorityResolverTests
+public sealed partial class PackageStoreAuthorityResolverTests
 {
     private const long Epoch = 23;
     private const string MemberId = "member";
@@ -692,6 +692,13 @@ public sealed class PackageStoreAuthorityResolverTests
             return Resolver.Resolve(locator, target, requiredRoot, exactBaseLocator);
         }
 
+        internal ResolvedNativeStateSlot ResolveStateSlotForWrite(string absolutePath,
+            CancellationToken cancellationToken = default)
+        {
+            Observed.ResetForCall();
+            return Resolver.ResolveStateSlotForWrite(absolutePath, cancellationToken);
+        }
+
         internal PhysicalRootIdentity PublishCompleteCandidate(string rootPath, bool corruptLedgerDigest = false,
             PhysicalRootIdentity? rootIdentityOverride = null)
         {
@@ -855,7 +862,7 @@ public sealed class PackageStoreAuthorityResolverTests
     private sealed class ObservingFileSystem(
         IPhysicalStoreFileSystem inner,
         IReadOnlySet<PhysicalFileIdentity> ledgerIdentities)
-        : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem
+        : IPhysicalStoreFileSystem, IPhysicalStoreNameFileSystem, IPhysicalStoreDirectoryNameFileSystem
     {
         private readonly List<PhysicalStoreHandle> _openedHandles = [];
         private readonly List<string> _events = [];
@@ -871,8 +878,21 @@ public sealed class PackageStoreAuthorityResolverTests
         internal IReadOnlyList<string> Events => _events;
         internal Action<PhysicalStoreDirectoryHandle, string, PhysicalStoreEntryInfo?>? AfterInspectChild { get; set; }
         internal Action<PhysicalStoreDirectoryHandle, string, string>? AfterLinkRead { get; set; }
+        internal Action<PhysicalStoreDirectoryHandle, string>? BeforeCreateDirectory { get; set; }
+        internal Action<PhysicalStoreDirectoryHandle, string, PhysicalStoreDirectoryHandle>? AfterCreateDirectory { get; set; }
+        internal PhysicalStoreNameSemantics? NameSemanticsOverride { get; set; }
 
         internal void Reset()
+        {
+            ResetForCall();
+            AfterInspectChild = null;
+            AfterLinkRead = null;
+            BeforeCreateDirectory = null;
+            AfterCreateDirectory = null;
+            NameSemanticsOverride = null;
+        }
+
+        internal void ResetForCall()
         {
             _openedHandles.Clear();
             _events.Clear();
@@ -882,8 +902,6 @@ public sealed class PackageStoreAuthorityResolverTests
             LockAttemptCount = 0;
             ParentOpenCount = 0;
             LinkReadCount = 0;
-            AfterInspectChild = null;
-            AfterLinkRead = null;
             _orderedRootIdentity = null;
             _orderedLinkName = null;
         }
@@ -944,7 +962,18 @@ public sealed class PackageStoreAuthorityResolverTests
         public PhysicalStoreDirectoryHandle CreateDirectoryExclusiveAt(PhysicalStoreDirectoryHandle parent, string singleName)
         {
             CreateCount++;
-            return Track(inner.CreateDirectoryExclusiveAt(parent, singleName));
+            BeforeCreateDirectory?.Invoke(parent, singleName);
+            var created = Track(inner.CreateDirectoryExclusiveAt(parent, singleName));
+            try
+            {
+                AfterCreateDirectory?.Invoke(parent, singleName, created);
+                return created;
+            }
+            catch
+            {
+                created.Dispose();
+                throw;
+            }
         }
 
         public PhysicalStoreFileHandle CreateFileExclusiveAt(PhysicalStoreDirectoryHandle parent, string singleName)
@@ -973,11 +1002,16 @@ public sealed class PackageStoreAuthorityResolverTests
         }
 
         public PhysicalStoreNameSemantics ObserveDirectoryNameSemantics(PhysicalStoreDirectoryHandle parent)
-            => ((IPhysicalStoreNameFileSystem)inner).ObserveDirectoryNameSemantics(parent);
+            => NameSemanticsOverride ?? ((IPhysicalStoreNameFileSystem)inner).ObserveDirectoryNameSemantics(parent);
 
         public PhysicalStoreCanonicalName ObserveCanonicalFileNameNoFollow(
             PhysicalStoreDirectoryHandle parent, string singleName, PhysicalFileIdentity expectedFileIdentity)
             => ((IPhysicalStoreNameFileSystem)inner).ObserveCanonicalFileNameNoFollow(parent, singleName, expectedFileIdentity);
+
+        public PhysicalStoreCanonicalName ObserveCanonicalDirectoryNameNoFollow(
+            PhysicalStoreDirectoryHandle parent, string singleName, PhysicalFileIdentity expectedDirectoryIdentity)
+            => ((IPhysicalStoreDirectoryNameFileSystem)inner).ObserveCanonicalDirectoryNameNoFollow(
+                parent, singleName, expectedDirectoryIdentity);
 
         private T Track<T>(T handle) where T : PhysicalStoreHandle
         {
