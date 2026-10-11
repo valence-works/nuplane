@@ -993,8 +993,21 @@ internal sealed class PackageStoreAuthorityResolver
         {
             if (_handles.Count >= MaximumEvidenceItems)
             {
-                handle.Dispose();
-                throw Unknown("Configured path resolution exceeded the retained-handle bound.", RootIdentity);
+                var refusal = Unknown("Configured path resolution exceeded the retained-handle bound.", RootIdentity);
+                try
+                {
+                    handle.Dispose();
+                }
+                catch (Exception cleanupFailure)
+                {
+                    throw new AggregateException(
+                        "Configured path resolution exceeded its retained-handle bound and the excess handle could not be released.",
+                        refusal,
+                        cleanupFailure);
+                }
+
+                ExceptionDispatchInfo.Capture(refusal).Throw();
+                throw;
             }
             _handles.Add(handle);
         }
