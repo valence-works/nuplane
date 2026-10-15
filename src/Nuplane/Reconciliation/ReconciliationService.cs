@@ -37,6 +37,7 @@ public sealed class ReconciliationService : IReconciliationService
     private readonly bool _coordinatedParticipantRoute;
     private readonly IResolvedPackageGraphUseLeaseAcquisition? _graphUseLeaseAcquisition;
     private readonly ILeasedPackageGraphLoadingObserver? _leasedPackageGraphLoadingObserver;
+    private readonly IPostLoadingObserverEventDispatcher? _postLoadingObserverEventDispatcher;
     private readonly IReconciliationLogger _reconciliationLogger;
     private int _inFlight;
 
@@ -225,6 +226,7 @@ public sealed class ReconciliationService : IReconciliationService
         _storeRegistry = storeReg;
         _reconciliationOptions = reconciliationOpts;
         var eventDispatcher = observerEventDispatcher ?? throw new ArgumentNullException(nameof(observerEventDispatcher));
+        _postLoadingObserverEventDispatcher = eventDispatcher as IPostLoadingObserverEventDispatcher;
         var healthEval = healthEvaluator ?? throw new ArgumentNullException(nameof(healthEvaluator));
         var loggerInstance = logger ?? throw new ArgumentNullException(nameof(logger));
         _reconciliationLogger = loggerInstance;
@@ -374,11 +376,14 @@ public sealed class ReconciliationService : IReconciliationService
                 }
 
                 context.PackageStoreOwner = owner;
-                context.DeferCycleCompletion = owner is not null && _leasedPackageGraphLoadingObserver is not null;
+                context.DeferCycleCompletion = owner is not null &&
+                    (_leasedPackageGraphLoadingObserver is not null ||
+                     _postLoadingObserverEventDispatcher?.HasPostLoadingObservers == true);
                 await pipeline.ExecuteAsync(context).ConfigureAwait(false);
                 cycleFailuresDrained = context.Result is not null;
 
-                if (context.DeferCycleCompletion && HasDeferredLoadingWork(context))
+                if (context.DeferCycleCompletion && _leasedPackageGraphLoadingObserver is not null &&
+                    HasReconciledPublication(context))
                 {
                     IReadOnlyList<ResolvedPackageGraphSelection> successfulSelections = context.ApplyResult!.AppliedPackages.Count > 0
                         ? context.ApplyResult!.SuccessfulGraphSelections
@@ -422,7 +427,7 @@ public sealed class ReconciliationService : IReconciliationService
 
             if (context.DeferCycleCompletion)
             {
-                if (loadingHandoff is not null)
+                if (loadingHandoff is not null && _leasedPackageGraphLoadingObserver is not null)
                 {
                     var currentActiveVersions = loadingHandoff.ChangeSet.Removed.Count + loadingHandoff.ChangeSet.Updated.Count > 0
                         ? await ReadCurrentActiveVersionsForLoadingAsync(cancellationToken).ConfigureAwait(false)
@@ -468,9 +473,19 @@ public sealed class ReconciliationService : IReconciliationService
                     }
                 }
 
+                if (HasReconciledPublication(context) &&
+                    _postLoadingObserverEventDispatcher?.HasPostLoadingObservers == true)
+                {
+                    await _postLoadingObserverEventDispatcher.PublishPackageLoadingCompletedAsync(
+                        context.ChangeSet!, context.ApplyResult!.AppliedPackages, cancellationToken).ConfigureAwait(false);
+                }
+
                 (completionMiddleware ?? throw new InvalidOperationException(
                     "The enrolled reconciliation pipeline did not provide cycle completion.")).CompleteCycle(context);
                 cycleFailuresDrained = true;
+                await LockFileCycleMiddleware.GenerateIfSuccessfulAsync(
+                    _pipelineDefinition.LockFileCoordinator as ILockFileCycleCoordinator,
+                    context).ConfigureAwait(false);
             }
 
             return context.Result!;
@@ -522,8 +537,9 @@ public sealed class ReconciliationService : IReconciliationService
         }
     }
 
-    private static bool HasDeferredLoadingWork(ReconciliationCycleContext context) =>
-        context.ApplyResult!.AppliedPackages.Count > 0 || context.ChangeSet!.Removed.Count > 0;
+    private static bool HasReconciledPublication(ReconciliationCycleContext context) =>
+        context.ApplyResult is { } applyResult && context.ChangeSet is { } changeSet &&
+        (applyResult.AppliedPackages.Count > 0 || changeSet.Removed.Count > 0);
 
     private static LeasedPackageGraphLoadingResult DescribeDeferredLoadingFailure(
         LeasedPackageGraphLoadingHandoff handoff,

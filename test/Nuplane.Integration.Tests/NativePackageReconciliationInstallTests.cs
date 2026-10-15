@@ -146,12 +146,22 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         }
     }
 
-    private static byte[] CreatePackageArchive(string packageId, string version, string dependencyId, string dependencyVersion)
+    private static byte[] CreatePackageArchive(
+        string packageId,
+        string version,
+        string? dependencyId = null,
+        string? dependencyVersion = null)
     {
+        if (dependencyId is not null && dependencyVersion is null)
+            throw new ArgumentException("A dependency version is required when a dependency is supplied.", nameof(dependencyVersion));
+
         using var assemblyFixture = new PackageStoreFixture();
         var assemblyDirectory = assemblyFixture.CreateDirectory("archive-builder");
         var assemblyPath = Path.Combine(assemblyDirectory, packageId + ".dll");
         EmitPackageAssembly(packageId, assemblyPath);
+        var dependencyMetadata = dependencyId is null
+            ? string.Empty
+            : $"<dependencies><dependency id=\"{dependencyId}\" version=\"[{dependencyVersion}]\" /></dependencies>";
 
         var nuspec = $$"""
             <?xml version="1.0" encoding="utf-8"?>
@@ -161,7 +171,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
                 <version>{{version}}</version>
                 <authors>test</authors>
                 <description>Native reconciliation integration package.</description>
-                <dependencies><dependency id="{{dependencyId}}" version="[{{dependencyVersion}}]" /></dependencies>
+                {{dependencyMetadata}}
               </metadata>
             </package>
             """;

@@ -26,6 +26,16 @@ must preserve the protection metadata. Custom observers/resolvers/loaders must
 participate or explicitly satisfy the relevant path-independent contract. Do not
 mark a component path-independent merely to suppress a refusal.
 
+An observer that refreshes a package-backed catalog after loading can implement
+`IPostLoadingNuplaneObserver`. Its scoped callbacks run under reconciliation's
+existing owner; the additional `OnPackageLoadingCompletedAsync` callback runs after
+that owner and the store lock close, deferred loading finishes and loading failures
+are published. Catalog reads then acquire fresh admission. The applied-package list
+describes successful application, so check loading/catalog results rather than
+assuming every package loaded successfully. This notification is coordinated-only;
+ordinary hosts retain `OnPackagesReconciledAsync` behavior. Existing observer and
+dispatcher interfaces gain no required members.
+
 Existing state-body construction/deconstruction remains compatible. Missing
 protection in old state is read as unknown, not empty. Ordinary reconciliation does
 not silently erase historical recovery uncertainty. Enrollment is an explicit
