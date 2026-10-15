@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Nuplane.Abstractions;
@@ -291,8 +292,15 @@ public sealed class PackageLoaderTests : IDisposable
 
     private static string GetResolvedAssemblyPath(string installPath, string packageId, string hostTargetFramework)
     {
-        var loader = new PackageLoader(hostTargetFrameworkOverride: hostTargetFramework);
-        return Assert.Single(loader.BuildScanCandidates(packageId, installPath), candidate => candidate.CandidateKind == "PrimaryLoadAssembly").AssemblyPath;
+        var method = typeof(PackageLoader).GetMethod(
+            "ResolveMainAssemblyPath",
+            BindingFlags.NonPublic | BindingFlags.Static,
+            binder: null,
+            [typeof(string), typeof(string), typeof(string)],
+            modifiers: null);
+
+        Assert.NotNull(method);
+        return Assert.IsType<string>(method.Invoke(null, [installPath, packageId, hostTargetFramework]));
     }
 
     private static string GetHostFrameworkFolderName()

@@ -7,7 +7,7 @@ namespace Nuplane.Loading;
 
 internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPolicyLoadContext
 {
-    private readonly IReadOnlyDictionary<string, string> _assemblyPathsByName;
+    private readonly IReadOnlyDictionary<string, string> assemblyPathsByName;
     private readonly IReadOnlyList<AssemblyDependencyResolver> _dependencyResolvers;
     private readonly IReadOnlyList<string> _packageInstallPaths;
     private readonly IReadOnlyList<SharedAssemblyPolicyEntry> _sharedPolicy;
@@ -16,17 +16,17 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
 
     public PackageGraphLoadContext(
         string contextName,
-        IReadOnlyList<string> runtimeAssemblyPaths,
+        IReadOnlyList<string> mainAssemblyPaths,
         IReadOnlyList<string> packageInstallPaths,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         SharedAssemblyPolicyMatcher matcher)
-        : this(contextName, runtimeAssemblyPaths, packageInstallPaths, sharedPolicy, matcher, isCollectible: true)
+        : this(contextName, mainAssemblyPaths, packageInstallPaths, sharedPolicy, matcher, isCollectible: true)
     {
     }
 
     protected PackageGraphLoadContext(
         string contextName,
-        IReadOnlyList<string> runtimeAssemblyPaths,
+        IReadOnlyList<string> mainAssemblyPaths,
         IReadOnlyList<string> packageInstallPaths,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         SharedAssemblyPolicyMatcher matcher,
@@ -34,31 +34,22 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
         : base(contextName, isCollectible)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(contextName);
-        ArgumentNullException.ThrowIfNull(runtimeAssemblyPaths);
+        ArgumentNullException.ThrowIfNull(mainAssemblyPaths);
 
         _sharedPolicy = sharedPolicy ?? throw new ArgumentNullException(nameof(sharedPolicy));
         _matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
         _packageInstallPaths = packageInstallPaths ?? throw new ArgumentNullException(nameof(packageInstallPaths));
-        _dependencyResolvers = runtimeAssemblyPaths.Select(static path => new AssemblyDependencyResolver(path)).ToArray();
-        // The loader has already selected the compatible TFM/RID asset set.
-        _assemblyPathsByName = runtimeAssemblyPaths
+        _dependencyResolvers = mainAssemblyPaths.Select(static path => new AssemblyDependencyResolver(path)).ToArray();
+        assemblyPathsByName = mainAssemblyPaths
+            .SelectMany(path => Directory.EnumerateFiles(Path.GetDirectoryName(path)!, "*.dll", SearchOption.AllDirectories))
             .Select(static path => new
             {
                 Path = path,
                 AssemblyName = TryGetManagedAssemblyName(path)
             })
             .Where(static candidate => candidate.AssemblyName is not null)
-            .Where(candidate => !_matcher.IsMatch(candidate.AssemblyName!, _sharedPolicy))
-            .GroupBy(static candidate => candidate.AssemblyName!.Name!, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(static group => group.Key, group =>
-            {
-                if (group.Select(static candidate => candidate.AssemblyName!.FullName).Distinct(StringComparer.OrdinalIgnoreCase).Skip(1).Any())
-                {
-                    throw new FileLoadException($"Conflicting assembly identities for '{group.Key}' in package graph '{contextName}': {string.Join(", ", group.Select(static candidate => candidate.Path))}.");
-                }
-
-                return group.OrderBy(static candidate => candidate.Path, StringComparer.OrdinalIgnoreCase).First().Path;
-            }, StringComparer.OrdinalIgnoreCase);
+            .GroupBy(static candidate => candidate.AssemblyName!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.OrderBy(static candidate => candidate.Path, StringComparer.OrdinalIgnoreCase).First().Path, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <inheritdoc />
@@ -78,7 +69,7 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
             }
         }
 
-        if (assemblyName.Name is not null && _assemblyPathsByName.TryGetValue(assemblyName.Name, out var graphAssemblyPath))
+        if (assemblyName.Name is not null && assemblyPathsByName.TryGetValue(assemblyName.Name, out var graphAssemblyPath))
         {
             return LoadFromAssemblyPath(graphAssemblyPath);
         }
@@ -209,11 +200,11 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
         }
     }
 
-    private static AssemblyName? TryGetManagedAssemblyName(string path)
+    private static string? TryGetManagedAssemblyName(string path)
     {
         try
         {
-            return AssemblyName.GetAssemblyName(path);
+            return AssemblyName.GetAssemblyName(path).Name ?? Path.GetFileNameWithoutExtension(path);
         }
         catch (BadImageFormatException)
         {
