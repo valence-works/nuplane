@@ -60,6 +60,16 @@ Before you open the sample, keep these ideas in mind:
 - Add the loading module when you need package assemblies loaded into the current process.
 - Keep in mind that Nuplane still does not define plugin semantics or host activation policy.
 
+## Package versions and feeds
+
+Main-branch preview packages are published to [Feedz](https://f.feedz.io/valence-works/nuplane/nuget/index.json)
+as `1.0.0-preview.<workflow-run-number>`. The numeric suffix is the publishing workflow's run number.
+Keep references to Nuplane's packages on the same version when upgrading.
+
+Tagged releases use the release tag as their package version, with an optional leading `v` removed,
+and publish to both nuget.org and Feedz. Release tag versions are independent of the preview base
+version; changing the preview base does not change the version selected by a release tag.
+
 ## Copyable onboarding commands
 
 These commands are intentionally small. They point you to the canonical sample and quickstart instead of duplicating the full maintained walkthrough.
