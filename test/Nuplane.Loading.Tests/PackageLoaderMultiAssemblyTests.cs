@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Reflection.Emit;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using Microsoft.Extensions.Options;
@@ -128,16 +130,32 @@ public sealed class PackageLoaderMultiAssemblyTests(ITestOutputHelper output) : 
     [InlineData(PackageLoadMode.HostIntegrated)]
     public async Task EnsureGraphLoadedAsync_MultiAssemblyLibraryWithMissingDependency_FailsWhenDependencyIsUsed(PackageLoadMode mode)
     {
-        var package = CreatePackage("Library.Bundle", false, "Plugin.Root.dll");
-        File.Copy(typeof(FixtureMarker).Assembly.Location, Path.Combine(SelectedDirectory(package, false), "Nuplane.Loading.Tests.Fixtures.dll"));
+        var package = CreatePackage("Library.Bundle", false);
+        var directory = SelectedDirectory(package, false);
+        // Other tests publish Plugin.Dependency for process-lifetime resolution. Use a unique
+        // missing identity so neither the default context nor another graph can satisfy this reference.
+        var missingAssemblyName = $"Missing.Dependency.N{Guid.NewGuid():N}";
+        var missingBuilder = new PersistedAssemblyBuilder(new AssemblyName(missingAssemblyName), typeof(object).Assembly);
+        var missingContract = missingBuilder.DefineDynamicModule(missingAssemblyName)
+            .DefineType("Missing.Contract", TypeAttributes.Public | TypeAttributes.Interface | TypeAttributes.Abstract)
+            .CreateType()!;
+        var rootAssemblyName = $"Library.Root.N{Guid.NewGuid():N}";
+        var rootBuilder = new PersistedAssemblyBuilder(new AssemblyName(rootAssemblyName), typeof(object).Assembly);
+        var rootType = rootBuilder.DefineDynamicModule(rootAssemblyName)
+            .DefineType("Library.RootMarker", TypeAttributes.Public | TypeAttributes.Class);
+        rootType.AddInterfaceImplementation(missingContract);
+        rootType.CreateType();
+        // Save only the referencing assembly, deliberately omitting the missing dependency.
+        rootBuilder.Save(Path.Combine(directory, $"{rootAssemblyName}.dll"));
+        File.Copy(typeof(FixtureMarker).Assembly.Location, Path.Combine(directory, "Nuplane.Loading.Tests.Fixtures.dll"));
         var loader = CreateLoader(mode);
 
         var result = await loader.EnsureGraphLoadedAsync([[package]], [], CancellationToken.None);
 
         Assert.Empty(result.FailedByPackageId);
-        var root = Assert.Single(new PackageAssemblyProvider(loader).GetAssemblies(package.Id, package.Version), assembly => assembly.GetName().Name == "Plugin.Root");
-        var error = Assert.Throws<FileNotFoundException>(() => root.GetType("Plugin.Root.RootMarker", throwOnError: true));
-        Assert.Contains("Plugin.Dependency", error.Message);
+        var root = Assert.Single(new PackageAssemblyProvider(loader).GetAssemblies(package.Id, package.Version), assembly => assembly.GetName().Name == rootAssemblyName);
+        var error = Assert.Throws<FileNotFoundException>(() => root.GetType("Library.RootMarker", throwOnError: true));
+        Assert.Contains(missingAssemblyName, error.Message);
     }
 
     [Theory]
