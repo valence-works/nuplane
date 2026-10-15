@@ -79,6 +79,7 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
 
             _entries = retained
                 .OrderBy(static entry => entry.AssemblySimpleName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static entry => entry.Assembly.GetName().CultureName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static entry => entry.Version?.ToString(), StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static entry => entry.PackageId, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static entry => entry.PackageVersion, StringComparer.OrdinalIgnoreCase)
@@ -109,12 +110,14 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
                     entry.AssemblySimpleName,
                     entry.Version,
                     entry.PackageId,
-                    entry.PackageVersion))
+                    entry.PackageVersion,
+                    entry.Assembly.GetName().CultureName))
                 .Concat(candidates.Select(static candidate => new ConflictCandidate(
                     candidate.AssemblySimpleName,
                     candidate.Version,
                     candidate.PackageId,
-                    candidate.PackageVersion)))
+                    candidate.PackageVersion,
+                    candidate.CultureName)))
                 .ToArray();
 
             ValidateNoConflicts(proposedEntries);
@@ -153,8 +156,9 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
             snapshot = _entries;
         }
 
+        var requestedKey = new AssemblyNameCultureKey(assemblyName);
         var candidates = snapshot
-            .Where(entry => string.Equals(entry.AssemblySimpleName, assemblyName.Name, StringComparison.OrdinalIgnoreCase))
+            .Where(entry => new AssemblyNameCultureKey(entry.Assembly.GetName()) == requestedKey)
             .ToArray();
 
         if (candidates.Length == 0)
@@ -195,15 +199,17 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
             entry.AssemblySimpleName,
             entry.Version,
             entry.PackageId,
-            entry.PackageVersion)));
+            entry.PackageVersion,
+            entry.Assembly.GetName().CultureName)));
 
     private static void ValidateNoConflicts(IEnumerable<ConflictCandidate> proposedEntries)
     {
         var conflict = proposedEntries
-            .GroupBy(static entry => entry.AssemblySimpleName, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(static entry => new AssemblyNameCultureKey(entry.AssemblySimpleName, entry.CultureName))
             .Select(group => new
             {
-                SimpleName = group.Key,
+                SimpleName = group.First().AssemblySimpleName,
+                group.Key.CultureName,
                 Versions = group
                     .Select(static entry => entry.Version?.ToString() ?? string.Empty)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -225,7 +231,7 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
             .OrderBy(static entry => entry.PackageId, StringComparer.OrdinalIgnoreCase)
             .Select(static entry => $"{entry.PackageId}@{entry.PackageVersion} ({entry.Version})"));
         throw new InvalidOperationException(
-            $"Host-integrated assembly conflict for '{conflict.SimpleName}': active packages expose ambiguous assembly identities. Candidates: {packages}.");
+            $"Host-integrated assembly conflict for '{conflict.SimpleName}' (culture '{conflict.CultureName}'): active packages expose ambiguous assembly identities. Candidates: {packages}.");
     }
 
     private static string FormatCandidate(HostIntegratedAssemblyResolutionEntry entry) =>
@@ -234,22 +240,17 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
     private static string BuildPackageKey(string packageId, string version) => $"{packageId}@{version}";
 
     private static bool AssemblyNamesMatch(AssemblyName requested, AssemblyName definition) =>
-        string.Equals(requested.Name, definition.Name, StringComparison.OrdinalIgnoreCase)
+        new AssemblyNameCultureKey(requested) == new AssemblyNameCultureKey(definition)
         && Equals(requested.Version, definition.Version)
-        && string.Equals(NormalizeCultureName(requested.CultureName), NormalizeCultureName(definition.CultureName), StringComparison.OrdinalIgnoreCase)
         && PublicKeyTokensMatch(requested.GetPublicKeyToken(), definition.GetPublicKeyToken());
 
     private static bool PublicKeyTokensMatch(byte[]? requested, byte[]? definition) =>
         (requested ?? []).AsSpan().SequenceEqual(definition ?? []);
 
-    private static string NormalizeCultureName(string? cultureName) =>
-        string.IsNullOrWhiteSpace(cultureName) || string.Equals(cultureName, "neutral", StringComparison.OrdinalIgnoreCase)
-            ? string.Empty
-            : cultureName;
-
     private sealed record ConflictCandidate(
         string AssemblySimpleName,
         Version? Version,
         string PackageId,
-        string PackageVersion);
+        string PackageVersion,
+        string? CultureName);
 }
