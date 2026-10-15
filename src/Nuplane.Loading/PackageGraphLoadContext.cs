@@ -60,11 +60,6 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
         _sharedPolicy = sharedPolicy ?? throw new ArgumentNullException(nameof(sharedPolicy));
         _matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
         _packageInstallPaths = packageInstallPaths ?? throw new ArgumentNullException(nameof(packageInstallPaths));
-        _graphUseLease = graphLeaseOwner?.Lease;
-        if (graphLeaseOwner is null)
-            PackageNativeLibraryLifetimeRetention.Retain(this, _nativeLibraryHandles, isCollectible);
-        else
-            graphLeaseOwner.TransferToLifetime(this, isCollectible, _nativeLibraryHandles);
         _dependencyResolvers = resolverAssemblyPaths.Select(static path => new AssemblyDependencyResolver(path)).ToArray();
         // The loader has already selected the compatible TFM/RID asset set.
         _assemblyPathsByName = runtimeAssemblyPaths
@@ -85,6 +80,14 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
 
                 return group.OrderBy(static candidate => candidate.Path, StringComparer.OrdinalIgnoreCase).First().Path;
             });
+
+        // Validation can fail without loading an assembly. Keep ownership with the caller until
+        // construction succeeds, especially for noncollectible contexts retained until process exit.
+        _graphUseLease = graphLeaseOwner?.Lease;
+        if (graphLeaseOwner is null)
+            PackageNativeLibraryLifetimeRetention.Retain(this, _nativeLibraryHandles, isCollectible);
+        else
+            graphLeaseOwner.TransferToLifetime(this, isCollectible, _nativeLibraryHandles);
     }
 
     /// <inheritdoc />
