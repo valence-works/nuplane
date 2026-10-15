@@ -936,6 +936,20 @@ The sample `Program.cs` is the best concrete repository anchor for this path.
 - The loading module is opt-in, and it does not change the rule that the host owns plugin or activation semantics.
 - If the loading module is absent or disabled, that is still a valid Nuplane integration.
 
+NuGet package IDs and assembly names can differ. A library package can supply several runtime
+assemblies without a DLL named after the package (for example, `PdfPig` supplies
+`UglyToad.PdfPig.*.dll`). Nuplane admits the compatible runtime asset set in both loading modes
+and resolves assemblies in a dependency graph through the same load context, preserving CLR type
+identity across packages. No forwarding DLL or renamed package contents are required.
+
+Assembly discovery remains deterministic: catalog candidates use path ordering and include only
+the selected framework/RID assets. A single assembly, or a unique assembly whose filename matches
+the package ID, retains its primary-assembly metadata. A multi-assembly library with neither has
+no primary candidate; all of its selected assemblies are available for discovery. The host still
+chooses its feature/module entry points. Missing dependencies fail when their types or code are
+used, incompatible target frameworks remain load failures, and conflicting assembly identities
+are refused rather than resolved by picking a DLL from the graph.
+
 #### Choosing a package load mode
 
 - Use `Collectible` for isolated plugin discovery, scan-only packages, and scenarios where unloadability matters. It is the default to preserve existing loading behavior.

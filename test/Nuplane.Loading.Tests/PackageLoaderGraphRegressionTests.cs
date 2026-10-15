@@ -260,21 +260,22 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
     public async Task EnsureGraphLoadedAsync_NoAssemblyDependencyWithRealPackageFailure_DoesNotFailSkippedDependency()
     {
         var rootInstall = CreatePackageInstall("Plugin.Root", "Plugin.Root.dll");
-        var ambiguousInstall = CreateAmbiguousPackageInstall("Plugin.Ambiguous");
+        var brokenInstall = CreatePackageInstall("Plugin.Broken", "Plugin.Dependency.dll");
+        File.WriteAllText(Path.Combine(brokenInstall, "lib", "net10.0", "Plugin.Dependency.dll"), "invalid managed assembly");
         var facadeInstall = CreateNoAssemblyPackageInstall("Microsoft.Data.Sqlite");
         var loader = new PackageLoader();
 
         var result = await loader.EnsureGraphLoadedAsync(
             [[
                 new ResolvedPackage("Plugin.Root", "1.0.0", "test-feed", rootInstall, DateTimeOffset.UtcNow, "test-source"),
-                new ResolvedPackage("Plugin.Ambiguous", "1.0.0", "test-feed", ambiguousInstall, DateTimeOffset.UtcNow, "test-source"),
+                new ResolvedPackage("Plugin.Broken", "1.0.0", "test-feed", brokenInstall, DateTimeOffset.UtcNow, "test-source"),
                 new ResolvedPackage("Microsoft.Data.Sqlite", "10.0.3", "test-feed", facadeInstall, DateTimeOffset.UtcNow, "test-source")
             ]],
             [],
             CancellationToken.None);
 
         Assert.Empty(result.Loaded);
-        Assert.Equal(["Plugin.Ambiguous", "Plugin.Root"], result.FailedByPackageId.Keys.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(["Plugin.Broken", "Plugin.Root"], result.FailedByPackageId.Keys.Order(StringComparer.OrdinalIgnoreCase));
         Assert.DoesNotContain("Microsoft.Data.Sqlite", loader.Sessions.Keys, StringComparer.OrdinalIgnoreCase);
         Assert.False(loader.TryGetContext("Plugin.Root", "1.0.0", out _));
         Assert.False(loader.TryGetContext("Microsoft.Data.Sqlite", "10.0.3", out _));
@@ -379,16 +380,6 @@ public sealed class PackageLoaderGraphRegressionTests : IDisposable
             File.WriteAllText(Path.Combine(nativePath, "Microsoft.Data.SqlClient.SNI.dll"), "native asset");
         }
 
-        return installPath;
-    }
-
-    private string CreateAmbiguousPackageInstall(string packageId)
-    {
-        var installPath = Path.Combine(_tempRoot, packageId, "1.0.0");
-        var libPath = Path.Combine(installPath, "lib", "net10.0");
-        Directory.CreateDirectory(libPath);
-        File.Copy(FindFixtureAssembly("Plugin.Root.dll"), Path.Combine(libPath, "First.dll"), overwrite: true);
-        File.Copy(FindFixtureAssembly("Plugin.Dependency.dll"), Path.Combine(libPath, "Second.dll"), overwrite: true);
         return installPath;
     }
 
