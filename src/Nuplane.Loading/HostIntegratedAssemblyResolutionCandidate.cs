@@ -8,4 +8,5 @@ internal sealed record HostIntegratedAssemblyResolutionCandidate(
     Version? Version,
     string PackageId,
     string PackageVersion,
-    string GraphKey);
+    string GraphKey,
+    string? CultureName = null);
