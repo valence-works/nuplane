@@ -99,15 +99,23 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         Assembly? retainedAssembly = null;
         AssemblyLoadContext? retainedContext = null;
         var graphKey = PackageLoader.BuildGraphKey(graph.Packages);
+        var rootAssemblyPath = Path.Combine(graph.Packages.Single(package => package.Id == "Root.First").InstallPath,
+            "Root.First.dll");
+        var sharedDependencyPath = Path.Combine(graph.Packages.Single(package => package.Id == "Shared.Dependency").InstallPath,
+            "Shared.Dependency.dll");
         void CapturePackageAssembly(object? _, AssemblyLoadEventArgs args)
         {
-            if (!string.Equals(args.LoadedAssembly.GetName().Name, "Root.First", StringComparison.Ordinal))
+            if (!string.Equals(args.LoadedAssembly.GetName().Name, "Root.First", StringComparison.Ordinal)
+                || !string.Equals(args.LoadedAssembly.Location, rootAssemblyPath, StringComparison.Ordinal))
                 return;
             var context = AssemblyLoadContext.GetLoadContext(args.LoadedAssembly);
             if (string.Equals(context?.Name, graphKey, StringComparison.Ordinal))
             {
                 retainedAssembly = args.LoadedAssembly;
                 retainedContext = context;
+                // Asset/resolver validation now precedes context creation. Fault the next assembly
+                // only after the first real load, preserving this test's post-construction boundary.
+                File.WriteAllBytes(sharedDependencyPath, [0, 1, 2, 3]);
             }
         }
 
@@ -115,8 +123,6 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         try
         {
             owner = await AcquireGraphUseAsync(provider, graph);
-            var sharedDependency = graph.Packages.Single(package => package.Id == "Shared.Dependency");
-            await File.WriteAllBytesAsync(Path.Combine(sharedDependency.InstallPath, "Shared.Dependency.dll"), [0, 1, 2, 3]);
 
             var result = await provider.GetRequiredService<IScopedPackageLoader>().EnsureGraphLoadedAsync(
                 [graph.CreateEnvelope(owner)], [], CancellationToken.None);

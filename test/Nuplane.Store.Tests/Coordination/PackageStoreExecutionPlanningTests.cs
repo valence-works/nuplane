@@ -33,7 +33,9 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
         });
 
         Assert.Equal(42, result);
-        Assert.Equal(12, fixture.Serializer.ReadCalls);
+        // Confirmed execution verifies all four catalog state slots before and after stale-use recovery.
+        // The serializer checks the complete retained lock union on every one of these reads.
+        Assert.Equal(20, fixture.Serializer.ReadCalls);
         Assert.Equal(1, fixture.Inventory.ReadCalls);
         Assert.Equal(1, fixture.Planner.PlanCalls);
         Assert.Throws<PackageStoreAdmissionException>(() => escaped!.Revalidate(CancellationToken.None));
