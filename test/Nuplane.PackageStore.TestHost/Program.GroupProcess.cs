@@ -6,6 +6,7 @@ using Nuplane.Store.Coordination.MembershipRecords;
 using Nuplane.Store.Coordination.PhysicalFiles;
 using Nuplane.Store.Coordination.ProtectionRecords;
 using Nuplane.Store.State;
+using Nuplane.Tests.Shared;
 
 namespace Nuplane.PackageStore.TestHost;
 
