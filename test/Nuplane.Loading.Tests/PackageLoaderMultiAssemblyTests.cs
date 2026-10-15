@@ -3,12 +3,14 @@ using System.Runtime.Loader;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Loading.Tests.Fixtures;
+using Xunit.Abstractions;
 
 namespace Nuplane.Loading.Tests;
 
-public sealed class PackageLoaderMultiAssemblyTests : IDisposable
+public sealed class PackageLoaderMultiAssemblyTests(ITestOutputHelper output) : IDisposable
 {
     private readonly DirectoryInfo _tempDir = Directory.CreateTempSubdirectory("nuplane-multi-assembly-");
+    private readonly List<PackageLoader> _loaders = [];
 
     [Theory]
     [InlineData(PackageLoadMode.Collectible, false, false)]
@@ -41,9 +43,7 @@ public sealed class PackageLoaderMultiAssemblyTests : IDisposable
         }
 
         var catalog = new HostIntegratedAssemblyResolutionCatalog();
-        var loader = new PackageLoader(
-            options: Options.Create(new LoadingOptions { DefaultLoadMode = mode }),
-            hostIntegratedResolutionCatalog: catalog);
+        var loader = CreateLoader(mode, catalog);
         IReadOnlyList<ResolvedPackage> graph = separateFeature ? [feature, library] : [library];
 
         // Act
@@ -83,14 +83,36 @@ public sealed class PackageLoaderMultiAssemblyTests : IDisposable
         var repeated = await loader.EnsureGraphLoadedAsync([graph], [], CancellationToken.None);
         Assert.Empty(repeated.FailedByPackageId);
         Assert.Same(dependencyAssembly, Assert.Single(provider.GetAssemblies(library.Id, library.Version), assembly => assembly.GetName().Name == "Plugin.Dependency"));
-        loader.UnloadContextsNotActive(new Dictionary<string, string>());
+    }
+
+    [Fact]
+    public async Task EnsureLoadedAsync_PrimaryAssemblyWithoutDependencyManifest_ResolvesSiblingBeforeCatalogMaterialization()
+    {
+        // Arrange
+        var package = CreatePackage("Plugin.Root", false, "Plugin.Root.dll", "Plugin.Dependency.dll");
+        var loader = CreateLoader();
+
+        // Act
+        var result = await loader.EnsureLoadedAsync([package], [], CancellationToken.None);
+
+        // Assert: do not materialize the catalog first, which would preload the sibling assembly.
+        Assert.Empty(result.FailedByPackageId);
+        Assert.Single(result.Loaded);
+        var primary = Assert.Single(loader.BuildScanCandidates(package.Id, package.InstallPath), candidate => candidate.CandidateKind == "PrimaryLoadAssembly");
+        Assert.Equal("Plugin.Root.dll", primary.AssemblyFileName);
+        Assert.True(loader.TryGetContext(package.Id, package.Version, out var handle));
+        var context = Assert.IsAssignableFrom<AssemblyLoadContext>(handle!.Context);
+        var root = Assert.Single(context.Assemblies, assembly => assembly.GetName().Name == "Plugin.Root");
+        var type = root.GetType("Plugin.Root.RootMarker", throwOnError: true)!;
+        Assert.Equal("root:dependency", type.GetProperty("Value")!.GetValue(Activator.CreateInstance(type)));
+        Assert.Same(context, AssemblyLoadContext.GetLoadContext(type.BaseType!.Assembly));
     }
 
     [Fact]
     public async Task EnsureLoadedAsync_MultiAssemblyLibrary_LoadsWithoutPrimaryAssembly()
     {
         var package = CreatePackage("Library.Bundle", false, "Plugin.Root.dll", "Plugin.Dependency.dll");
-        var loader = new PackageLoader();
+        var loader = CreateLoader();
 
         var result = await loader.EnsureLoadedAsync([package], [], CancellationToken.None);
 
@@ -99,7 +121,6 @@ public sealed class PackageLoaderMultiAssemblyTests : IDisposable
         var root = Assert.Single(new PackageAssemblyProvider(loader).GetAssemblies(package.Id, package.Version), assembly => assembly.GetName().Name == "Plugin.Root");
         var type = root.GetType("Plugin.Root.RootMarker", throwOnError: true)!;
         Assert.Equal("root:dependency", type.GetProperty("Value")!.GetValue(Activator.CreateInstance(type)));
-        loader.UnloadContextsNotActive(new Dictionary<string, string>());
     }
 
     [Theory]
@@ -109,7 +130,7 @@ public sealed class PackageLoaderMultiAssemblyTests : IDisposable
     {
         var package = CreatePackage("Library.Bundle", false, "Plugin.Root.dll");
         File.Copy(typeof(FixtureMarker).Assembly.Location, Path.Combine(SelectedDirectory(package, false), "Nuplane.Loading.Tests.Fixtures.dll"));
-        var loader = new PackageLoader(options: Options.Create(new LoadingOptions { DefaultLoadMode = mode }));
+        var loader = CreateLoader(mode);
 
         var result = await loader.EnsureGraphLoadedAsync([[package]], [], CancellationToken.None);
 
@@ -117,20 +138,23 @@ public sealed class PackageLoaderMultiAssemblyTests : IDisposable
         var root = Assert.Single(new PackageAssemblyProvider(loader).GetAssemblies(package.Id, package.Version), assembly => assembly.GetName().Name == "Plugin.Root");
         var error = Assert.Throws<FileNotFoundException>(() => root.GetType("Plugin.Root.RootMarker", throwOnError: true));
         Assert.Contains("Plugin.Dependency", error.Message);
-        loader.UnloadContextsNotActive(new Dictionary<string, string>());
     }
 
     [Theory]
-    [InlineData(PackageLoadMode.Collectible)]
-    [InlineData(PackageLoadMode.HostIntegrated)]
-    public async Task EnsureGraphLoadedAsync_MultiAssemblyLibraryWithConflictingIdentity_FailsWithoutPublishing(PackageLoadMode mode)
+    [InlineData(PackageLoadMode.Collectible, false)]
+    [InlineData(PackageLoadMode.HostIntegrated, false)]
+    [InlineData(PackageLoadMode.Collectible, true)]
+    [InlineData(PackageLoadMode.HostIntegrated, true)]
+    public async Task EnsureGraphLoadedAsync_MultiAssemblyLibraryWithConflictingIdentity_FailsWithoutPublishing(PackageLoadMode mode, bool hasPrimaryAssembly)
     {
-        var package = CreatePackage("Library.Bundle", false, "Plugin.Dependency.dll");
+        var package = hasPrimaryAssembly
+            ? CreatePackage("Plugin.Root", false, "Plugin.Root.dll")
+            : CreatePackage("Library.Bundle", false, "Plugin.Dependency.dll");
         var directory = SelectedDirectory(package, false);
         File.Copy(typeof(FixtureMarker).Assembly.Location, Path.Combine(directory, "Nuplane.Loading.Tests.Fixtures.dll"));
         File.Copy(TestFixtureAssemblyPaths.FindProjectAssembly("Nuplane.Loading.Tests.Fixtures.Conflict", "Nuplane.Loading.Tests.Fixtures.dll"), Path.Combine(directory, "Conflicting.dll"));
         var catalog = new HostIntegratedAssemblyResolutionCatalog();
-        var loader = new PackageLoader(options: Options.Create(new LoadingOptions { DefaultLoadMode = mode }), hostIntegratedResolutionCatalog: catalog);
+        var loader = CreateLoader(mode, catalog);
 
         var result = await loader.EnsureGraphLoadedAsync([[package]], [], CancellationToken.None);
 
@@ -142,18 +166,39 @@ public sealed class PackageLoaderMultiAssemblyTests : IDisposable
 
     public void Dispose()
     {
+        var hasHostIntegratedContext = _loaders.SelectMany(loader => loader.Sessions.Values)
+            .Any(session => session.IsLoaded && session.LoadMode == PackageLoadMode.HostIntegrated);
+        foreach (var loader in _loaders)
+        {
+            loader.UnloadContextsNotActive(new Dictionary<string, string>());
+        }
+
+        _loaders.Clear();
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
         try
         {
             _tempDir.Delete(recursive: true);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Loaded assembly files can remain locked on Windows until the context is collected.
+            // HostIntegrated contexts intentionally survive teardown and can retain DLL locks until process exit.
+            var reason = hasHostIntegratedContext
+                ? "HostIntegrated contexts retain their assemblies for the process lifetime."
+                : "A runtime file lock remained after unloading collectible contexts and forcing collection.";
+            output.WriteLine($"Temporary fixture directory retained at '{_tempDir.FullName}': {reason} {ex.Message}");
         }
-        catch (UnauthorizedAccessException)
-        {
-            // Non-collectible contexts keep their assembly files locked for the process lifetime.
-        }
+    }
+
+    private PackageLoader CreateLoader(PackageLoadMode mode = PackageLoadMode.Collectible, HostIntegratedAssemblyResolutionCatalog? catalog = null)
+    {
+        var loader = new PackageLoader(
+            options: Options.Create(new LoadingOptions { DefaultLoadMode = mode }),
+            hostIntegratedResolutionCatalog: catalog);
+        _loaders.Add(loader);
+        return loader;
     }
 
     private ResolvedPackage CreatePackage(string id, bool runtimeSpecific, params string[] assemblyNames)

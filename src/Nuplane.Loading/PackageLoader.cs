@@ -305,9 +305,7 @@ internal sealed class PackageLoader : IPackageLoader
                     continue;
                 }
 
-                AssemblyLoadContext context = selection.MainAssemblyPath is { } mainAssemblyPath
-                    ? new PackageAssemblyLoadContext(mainAssemblyPath, sharedPolicy, _matcher)
-                    : new PackageGraphLoadContext(key, runtimePaths, [package.InstallPath], sharedPolicy, _matcher);
+                var context = new PackageGraphLoadContext(key, runtimePaths, [package.InstallPath], sharedPolicy, _matcher);
                 try
                 {
                     foreach (var path in selection.LoadAssemblyPaths.Where(path => !HostRuntimeAssemblyCatalog.Contains(path)))
