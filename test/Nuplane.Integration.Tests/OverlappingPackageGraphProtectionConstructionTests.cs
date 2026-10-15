@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Loading;
+using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.GraphUseRecords;
 
 namespace Nuplane.Integration.Tests;
