@@ -45,6 +45,10 @@ internal sealed class PackageStoreParticipantProcess : IAsyncDisposable
         string operationId, string requestPath, CancellationToken cancellationToken)
         => StartOperationAsync("--membership-recover", operationId, requestPath, cancellationToken);
 
+    public static Task<PackageStoreParticipantProcess> StartGroupPublisherAsync(
+        string operationId, string requestPath, CancellationToken cancellationToken)
+        => StartOperationAsync("--membership-group-publish", operationId, requestPath, cancellationToken);
+
     public static Task<PackageStoreParticipantProcess> StartMigrationAsync(
         string operationId, string requestPath, CancellationToken cancellationToken)
         => StartOperationAsync("--membership-migrate", operationId, requestPath, cancellationToken);
@@ -76,6 +80,14 @@ internal sealed class PackageStoreParticipantProcess : IAsyncDisposable
     public static Task<PackageStoreParticipantProcess> StartParticipantGraphUseScopedGateAsync(
         string operationId, string requestPath, CancellationToken cancellationToken)
         => StartOperationAsync("--participant-graph-use-scoped-gate", operationId, requestPath, cancellationToken);
+
+    public static Task<PackageStoreParticipantProcess> StartParticipantGraphUseBeforeLoaderInputAsync(
+        string operationId, string requestPath, CancellationToken cancellationToken)
+        => StartOperationAsync("--participant-graph-use-before-loader-input", operationId, requestPath, cancellationToken);
+
+    public static Task<PackageStoreParticipantProcess> StartParticipantGraphUseBeforeFirstPeReadAsync(
+        string operationId, string requestPath, CancellationToken cancellationToken)
+        => StartOperationAsync("--participant-graph-use-before-first-pe-read", operationId, requestPath, cancellationToken);
 
     public static Task<PackageStoreParticipantProcess> StartParticipantGraphUseIdentityMismatchAsync(
         string operationId, string requestPath, CancellationToken cancellationToken)

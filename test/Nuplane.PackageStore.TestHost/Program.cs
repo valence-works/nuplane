@@ -35,6 +35,9 @@ internal static partial class Program
                     : await RunRecoverAsync(request).ConfigureAwait(false);
             }
 
+            if (args.Length == 2 && args[0] == "--membership-group-publish")
+                return await RunGroupPublishAsync(args[1]).ConfigureAwait(false);
+
             if (args.Length == 2 && args[0] == "--membership-migrate")
             {
                 var request = await ReadMigrationRequestAsync(args[1]).ConfigureAwait(false);
@@ -59,13 +62,15 @@ internal static partial class Program
                 "--participant-graph-use-reordered-roster" or
                 "--participant-graph-use-unscoped-gate" or
                 "--participant-graph-use-scoped-gate" or
+                "--participant-graph-use-before-loader-input" or
+                "--participant-graph-use-before-first-pe-read" or
                 "--participant-graph-use-identity-mismatch")
                 return await RunGraphUseIdleAsync(args[1], args[0]).ConfigureAwait(false);
 
             if (args.Length == 2 && args[0] == "--package-store-execute")
                 return await RunPackageStoreExecutionAsync(args[1]).ConfigureAwait(false);
 
-            await WriteDiagnosticAsync("Expected --gate <name>, --membership-publish <request.json>, --membership-recover <request.json>, --membership-migrate <request.json>, --membership-initialize <request.json>, --membership-bind <request.json>, --graph-use-idle <request.json>, --participant-graph-use-idle <request.json>, --participant-graph-use-reordered-roster <request.json>, --participant-graph-use-unscoped-gate <request.json>, --participant-graph-use-scoped-gate <request.json>, --participant-graph-use-identity-mismatch <request.json>, or --package-store-execute <request.json>.")
+            await WriteDiagnosticAsync("Expected --gate <name>, --membership-publish <request.json>, --membership-recover <request.json>, --membership-group-publish <request.json>, --membership-migrate <request.json>, --membership-initialize <request.json>, --membership-bind <request.json>, --graph-use-idle <request.json>, --participant-graph-use-idle <request.json>, --participant-graph-use-reordered-roster <request.json>, --participant-graph-use-unscoped-gate <request.json>, --participant-graph-use-scoped-gate <request.json>, --participant-graph-use-before-loader-input <request.json>, --participant-graph-use-before-first-pe-read <request.json>, --participant-graph-use-identity-mismatch <request.json>, or --package-store-execute <request.json>.")
                 .ConfigureAwait(false);
             return InvalidProtocolExitCode;
         }

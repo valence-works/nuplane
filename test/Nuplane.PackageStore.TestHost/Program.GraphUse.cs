@@ -91,6 +91,65 @@ internal static partial class Program
                     throw new InvalidOperationException("The scoped gate did not observe its committed live graph-use record after the short catalog snapshot was released.");
                 didActivationGateProbeLiveUse = true;
             }
+            else if (mode == "--participant-graph-use-before-loader-input")
+            {
+                using var checkpoint = PackageAssemblyReadCheckpoint.InstallForTesting(checkpointEvent =>
+                {
+                    if (checkpointEvent.Stage != PackageAssemblyReadCheckpointStage.BeforeLoadModeSelection)
+                        throw new InvalidOperationException("A managed assembly read occurred before the loader-input checkpoint.");
+                    var graphSnapshot = checkpointEvent.GraphSnapshot
+                        ?? throw new InvalidOperationException("The loader-input checkpoint had no scoped graph snapshot.");
+                    var useRecord = ReadLiveUseRecordAsync(provider.GetRequiredService<IPackageStoreAdmission>(),
+                        graphSnapshot, CancellationToken.None).GetAwaiter().GetResult();
+                    var matchingContexts = CountPackageGraphContexts();
+                    if (matchingContexts != 0)
+                        throw new InvalidOperationException("A package graph context existed before the first loader input was selected.");
+                    WriteCheckpointMessage(new GraphUseBoundaryMessage(
+                        "before-loader-input", request.OperationId, Environment.ProcessId,
+                        useRecord.UseId.ToString("N"), graphSnapshot.SnapshotId.ToString("N"),
+                        graphSnapshot.GraphId, graphSnapshot.GenerationId, null,
+                        "before-load-mode-selection", ManagedAssemblyReadAttempt: 0,
+                        ActivationGateCompleted: false, MatchingPackageGraphContexts: matchingContexts,
+                        ReadDelegated: false));
+                    new ManualResetEventSlim(initialState: false).Wait();
+                });
+                await NuplaneHostIntegratedLoader.LoadFromParticipantAsync(access).ConfigureAwait(false);
+                throw new InvalidOperationException("The child passed the before-loader-input crash checkpoint unexpectedly.");
+            }
+            else if (mode == "--participant-graph-use-before-first-pe-read")
+            {
+                var gate = new PublishedUseProbeGate(provider.GetRequiredService<IPackageStoreAdmission>());
+                var options = new HostIntegratedLoadOptions();
+                options.ActivationGates.Add(gate);
+                var managedAssemblyReadAttempt = 0;
+                using var checkpoint = PackageAssemblyReadCheckpoint.InstallForTesting(checkpointEvent =>
+                {
+                    if (checkpointEvent.Stage == PackageAssemblyReadCheckpointStage.BeforeLoadModeSelection)
+                        return;
+                    var attempt = Interlocked.Increment(ref managedAssemblyReadAttempt);
+                    if (attempt != 1)
+                        throw new InvalidOperationException("A second managed assembly metadata read began before the first-read checkpoint was released.");
+                    var graphSnapshot = checkpointEvent.GraphSnapshot
+                        ?? throw new InvalidOperationException("The first managed assembly read checkpoint had no scoped graph snapshot.");
+                    if (!gate.Completed || gate.UseId is null)
+                        throw new InvalidOperationException("The first managed assembly read began before the scoped activation gate completed.");
+                    if (checkpointEvent.AssemblyPath is null)
+                        throw new InvalidOperationException("The first managed assembly read checkpoint did not identify its file.");
+                    var matchingContexts = CountPackageGraphContexts();
+                    if (matchingContexts != 0)
+                        throw new InvalidOperationException("A package graph context was published before its first managed assembly metadata read.");
+                    WriteCheckpointMessage(new GraphUseBoundaryMessage(
+                        "before-first-pe-read", request.OperationId, Environment.ProcessId,
+                        gate.UseId.Value.ToString("N"), graphSnapshot.SnapshotId.ToString("N"),
+                        graphSnapshot.GraphId, graphSnapshot.GenerationId, checkpointEvent.AssemblyPath,
+                        "before-assembly-name-get-assembly-name", ManagedAssemblyReadAttempt: attempt,
+                        ActivationGateCompleted: gate.Completed, MatchingPackageGraphContexts: matchingContexts,
+                        ReadDelegated: false));
+                    new ManualResetEventSlim(initialState: false).Wait();
+                });
+                await NuplaneHostIntegratedLoader.LoadFromParticipantAsync(access, options).ConfigureAwait(false);
+                throw new InvalidOperationException("The child passed the first managed assembly read crash checkpoint unexpectedly.");
+            }
             else if (mode == "--participant-graph-use-identity-mismatch")
             {
                 var firstLoad = await NuplaneHostIntegratedLoader.LoadFromParticipantAsync(access).ConfigureAwait(false);
@@ -291,7 +350,7 @@ internal static partial class Program
                     }, cancellationToken).ConfigureAwait(false);
                 if (observed.Entries.Count != 1 ||
                     observed.Entries[0].OwnershipState != GraphUseRecordOwnershipState.Live ||
-                    !SameSnapshot(observed.Entries[0].Record.GraphSnapshot, expected))
+                    !Program.SameSnapshot(observed.Entries[0].Record.GraphSnapshot, expected))
                 {
                     return PackageActivationGateResult.Block("the published graph-use record was not live and identical at activation");
                 }
@@ -304,17 +363,102 @@ internal static partial class Program
             CompletedLiveUseProbe = true;
             return PackageActivationGateResult.Allow;
         }
-
-        private static bool SameSnapshot(ProtectedGraphSnapshot observed, PackageGraphUseSnapshot expected) =>
-            observed.SnapshotId == expected.SnapshotId &&
-            string.Equals(observed.GraphId, expected.GraphId, StringComparison.Ordinal) &&
-            string.Equals(observed.GenerationId, expected.GenerationId, StringComparison.Ordinal) &&
-            observed.Disposition == ProtectedGraphDisposition.Active &&
-            observed.Roots.SequenceEqual(expected.Roots) &&
-            observed.RequestedRoots.SequenceEqual(expected.RequestedRoots) &&
-            observed.Nodes.SequenceEqual(expected.Nodes) &&
-            observed.Edges.SequenceEqual(expected.Edges);
     }
+
+    private sealed class PublishedUseProbeGate(IPackageStoreAdmission admission) : IScopedPackageActivationGate
+    {
+        public Guid? UseId { get; private set; }
+        public bool Completed { get; private set; }
+
+        public async ValueTask<PackageActivationGateResult> EvaluateAsync(
+            PackageActivationContext context,
+            CancellationToken cancellationToken)
+        {
+            if (context.GraphUseLeases.Count != 1)
+                return PackageActivationGateResult.Block("the scoped activation gate received no unique graph-use lease");
+
+            var expected = context.GraphUseLeases[0].Snapshot;
+            if (expected.State != PackageGraphUseSnapshotState.Committed)
+                return PackageActivationGateResult.Block("the scoped activation gate received a noncommitted graph-use snapshot");
+
+            var record = await ReadLiveUseRecordAsync(admission, expected, cancellationToken).ConfigureAwait(false);
+            UseId = record.UseId;
+            Completed = true;
+            return PackageActivationGateResult.Allow;
+        }
+    }
+
+    private static async Task<GraphUseRecord> ReadLiveUseRecordAsync(
+        IPackageStoreAdmission admission,
+        PackageGraphUseSnapshot expected,
+        CancellationToken cancellationToken)
+    {
+        await using var operation = await admission.AcquireConfiguredRootOperationAsync(
+            PackageStoreAdmissionKind.Maintenance, cancellationToken).ConfigureAwait(false);
+        var borrow = operation.Owner?.Borrow()
+            ?? throw new InvalidOperationException("The graph-use probe received no root operation owner.");
+        try
+        {
+            return await PackageStoreOperationAccess.WithValidatedRootAsync(borrow,
+                async (files, root, token) =>
+                {
+                    var members = PackageStoreOperationAccess.GetLockedMemberLocations(borrow);
+                    var inspected = await new PackageGraphUseRecordStore(files)
+                        .InspectAsync(root, borrow.Root, members.Ledger, token).ConfigureAwait(false);
+                    var matches = inspected.Entries.Where(entry =>
+                        entry.Record.GraphSnapshot.SnapshotId == expected.SnapshotId).ToArray();
+                    if (matches.Length != 1 || matches[0].OwnershipState != GraphUseRecordOwnershipState.Live ||
+                        !SameSnapshot(matches[0].Record.GraphSnapshot, expected))
+                    {
+                        throw new InvalidOperationException("The exact committed graph-use record was not live at the crash checkpoint.");
+                    }
+
+                    return matches[0].Record;
+                }, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            borrow.Dispose();
+        }
+    }
+
+    private static bool SameSnapshot(ProtectedGraphSnapshot observed, PackageGraphUseSnapshot expected) =>
+        observed.SnapshotId == expected.SnapshotId &&
+        string.Equals(observed.GraphId, expected.GraphId, StringComparison.Ordinal) &&
+        string.Equals(observed.GenerationId, expected.GenerationId, StringComparison.Ordinal) &&
+        observed.Disposition == ProtectedGraphDisposition.Active &&
+        observed.Roots.SequenceEqual(expected.Roots) &&
+        observed.RequestedRoots.SequenceEqual(expected.RequestedRoots) &&
+        observed.Nodes.SequenceEqual(expected.Nodes) &&
+        observed.Edges.SequenceEqual(expected.Edges);
+
+    private static int CountPackageGraphContexts()
+    {
+        var requiredAssemblies = new[] { "Root.First", "Shared.Dependency" };
+        return AssemblyLoadContext.All.Count(context => requiredAssemblies.All(expected =>
+            context.Assemblies.Any(assembly => string.Equals(assembly.GetName().Name, expected, StringComparison.OrdinalIgnoreCase))));
+    }
+
+    private static void WriteCheckpointMessage(GraphUseBoundaryMessage message)
+    {
+        Console.Out.WriteLine(JsonSerializer.Serialize(message, JsonOptions));
+        Console.Out.Flush();
+    }
+
+    private sealed record GraphUseBoundaryMessage(
+        string Kind,
+        string OperationId,
+        int ProcessId,
+        string UseId,
+        string SnapshotId,
+        string GraphId,
+        string GenerationId,
+        string? AssemblyPath,
+        string CheckpointStage,
+        int ManagedAssemblyReadAttempt,
+        bool ActivationGateCompleted,
+        int MatchingPackageGraphContexts,
+        bool ReadDelegated);
 
     private static async Task<GraphUseProcessRequest> ReadGraphUseRequestAsync(string path)
     {

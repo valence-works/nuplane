@@ -4,7 +4,7 @@ This is the T124 acceptance plan for [Spec 030](../spec.md), not an executed
 release or host-acceptance report. The cross-repository source of truth remains
 [Foundation Program 2500](https://github.com/elsa-workflows/elsa-foundation/issues/2500),
 its [release plan](https://github.com/elsa-workflows/elsa-foundation/blob/main/docs/reports/modular-hosting-release-plan.md),
-and adoption [Feature 2509](https://github.com/elsa-workflows/elsa-foundation/issues/2509).
+and pruning [Epic 2507](https://github.com/elsa-workflows/elsa-foundation/issues/2507).
 Nuplane contains generic graph, store, admission and lifetime mechanisms. Elsa
 readiness/schema policy and CShells generation composition stay in their owning
 repositories; this plan adds no production dependency on either consumer.
@@ -37,8 +37,9 @@ release commit; fail on missing, unexpected or mixed-version internal packages.
 
 For every archive retain its public feed URL, SHA-256, nuspec package identity,
 version, repository commit, dependency groups and framework assets. Download the
-pipeline artifacts from the same successful publication run and compare archive
-bytes. Verify Darwin native shim assets/manifest and Linux/Windows runtime assets
+pipeline artifacts from the same successful publication run and compare every
+entry payload except the NuGet-added `.signature.p7s`. Retain raw archive hashes
+separately: repository signing can legitimately change the public ZIP bytes. Verify Darwin native shim assets/manifest and Linux/Windows runtime assets
 where the Nuplane package advertises them; source-level native tests do not prove
 published runtime asset selection. Do not claim symbol-feed publication from a
 local snupkg or an uploaded workflow artifact.
@@ -62,19 +63,21 @@ three target runtimes. Prove shared host objects/disposal, distinct overlapping
 generation objects, ordered catalog notifications, protected build/provider
 teardown, package add/replace/removal-to-empty and serving generation promotion.
 
-On 2026-10-10 the live GitHub latest releases were Nuplane 0.0.10 and CShells
-0.0.29; development bases intend 0.0.11 and 0.0.30. Refresh tags, releases, NuGet
-and merged version files immediately before selecting releases. Follow the
-existing 0.0.N pattern and never reuse a published version. A GitHub published
-release triggers the publishers; a pushed tag alone does not fulfill delivery.
+On 2026-10-16 the live GitHub latest releases were Nuplane 0.0.11 and CShells
+0.0.30. The pruning targets are 0.0.12 and 0.0.31, following the existing 0.0.N
+stable pattern. Nuplane main previews independently use 1.0.0-preview. Refresh
+tags, releases, NuGet and merged version files immediately before publication;
+never reuse a published version. A GitHub published release triggers the
+publishers; a pushed tag alone does not fulfill delivery.
 
 ## Foundation stable adoption and actual-host proof
 
-Adopt existing preparation PRs
+The original extraction and stable adoption are already delivered through
 [2529](https://github.com/elsa-workflows/elsa-foundation/pull/2529) and
-[2530](https://github.com/elsa-workflows/elsa-foundation/pull/2530); inspect their
-current claims, heads and checks before editing. Their public-preview evidence
-does not establish final stable acceptance. Preserve Foundation's root-owned
+[2530](https://github.com/elsa-workflows/elsa-foundation/pull/2530). Continue the
+pruning adoption on the existing organization branch
+`codex/2500-pruning-stable-adoption`, refreshed from current Foundation main;
+do not reopen the original extraction or duplicate its completed PRs. Preserve Foundation's root-owned
 readability participant, borrowed nondisposable shell source, startup/reload
 defaults, EF refusal interpretation and schema/readiness policy. Complete the
 separately outstanding custom-registry settled-readiness proof using the same
@@ -90,12 +93,12 @@ checkout edits or peer-session work belong in the adoption PR.
 
 Run the affected Foundation test projects at the final adoption head:
 
-- tests/essentials/Modularity/Tests/Elsa.Modularity.Tests.csproj
-- tests/essentials/Workbench/Tests/Elsa.Workbench.Tests.csproj
-- tests/essentials/Cluster/Readability/Tests/Elsa.Cluster.Readability.Tests.csproj
-- tests/essentials/Cluster/Tests/Elsa.Cluster.Tests.csproj
-- tests/essentials/Cluster/EntityFrameworkCore/Tests/Elsa.Cluster.EntityFrameworkCore.Tests.csproj
-- tests/essentials/Architecture/Elsa.Architecture.Tests.csproj
+- Essentials/tests/Modularity/Tests/Elsa.Modularity.Tests.csproj
+- Essentials/tests/Workbench/Tests/Elsa.Workbench.Tests.csproj
+- Essentials/tests/Cluster/Readability/Tests/Elsa.Cluster.Readability.Tests.csproj
+- Essentials/tests/Cluster/Tests/Elsa.Cluster.Tests.csproj
+- Essentials/tests/Cluster/EntityFrameworkCore/Tests/Elsa.Cluster.EntityFrameworkCore.Tests.csproj
+- Essentials/tests/Architecture/Tests/Elsa.Architecture.Tests.csproj
 
 Retain raw results and inspect skips rather than transferring earlier counts.
 Use the normal build-slot wrapper and build the affected graph once before

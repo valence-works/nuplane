@@ -1,0 +1,5 @@
+[
+  "Nuplane.Integration.Tests.RootMembershipNativeGroupPendingAdmissionProcessTests.FreshAddNuplaneAdmission_RecoversOrRefusesActualGroupPublisherChild(checkpointName: \"IntentPublished\")",
+  "Nuplane.Integration.Tests.RootMembershipNativeGroupPendingAdmissionProcessTests.FreshAddNuplaneAdmission_RecoversOrRefusesActualGroupPublisherChild(checkpointName: \"StageFlushed\")",
+  "Nuplane.Integration.Tests.RootMembershipNativeGroupPendingAdmissionProcessTests.FreshAddNuplaneAdmission_RecoversOrRefusesActualGroupPublisherChild(checkpointName: \"StatePublished\")"
+]

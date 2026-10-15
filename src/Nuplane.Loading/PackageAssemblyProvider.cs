@@ -116,7 +116,7 @@ internal sealed class PackageAssemblyProvider : IPackageAssemblyProvider
             return false;
         }
 
-        var assemblyName = AssemblyName.GetAssemblyName(assemblyPath);
+        var assemblyName = PackageAssemblyReadCheckpoint.GetAssemblyName(assemblyPath);
         if (!policyContext.IsSharedAssembly(assemblyName))
         {
             return false;

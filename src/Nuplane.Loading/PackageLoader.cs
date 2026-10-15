@@ -308,6 +308,8 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                 var graphKey = BuildGraphKey(packages);
                 var packageProjections = selected.PackageProjections!;
                 var graphLeases = new[] { graphLease };
+                using var readCheckpointScope = PackageAssemblyReadCheckpoint.EnterGraph(graphLease.Snapshot);
+                PackageAssemblyReadCheckpoint.BeforeLoadModeSelection();
                 var graphDecision = await _loadModeSelector.SelectGraphAsync(
                     packages, _options, graphKey, cancellationToken, graphLeases).ConfigureAwait(false);
                 var selections = graphDecision.Selections;
@@ -686,7 +688,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                 newContext = new PackageGraphLoadContext(key, runtimePaths, resolverPaths, [package.InstallPath], sharedPolicy, _matcher, graphLeaseOwner);
                 foreach (var path in selection.LoadAssemblyPaths.Where(path => !HostRuntimeAssemblyCatalog.Contains(path)))
                 {
-                    newContext.LoadFromAssemblyName(AssemblyName.GetAssemblyName(path));
+                    newContext.LoadFromAssemblyName(PackageAssemblyReadCheckpoint.GetAssemblyName(path));
                 }
 
                 var replaced = new List<AssemblyLoadContext>();
@@ -819,7 +821,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                          .SelectMany(static package => package.Selection.LoadAssemblyPaths)
                          .Where(path => !HostRuntimeAssemblyCatalog.Contains(path)))
             {
-                context.LoadFromAssemblyName(AssemblyName.GetAssemblyName(assemblyPath));
+                context.LoadFromAssemblyName(PackageAssemblyReadCheckpoint.GetAssemblyName(assemblyPath));
             }
 
             var assembliesByPackageKey = graphLoadMode == PackageLoadMode.HostIntegrated
@@ -1339,7 +1341,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
 
                 try
                 {
-                    if (IsProvidedByHost(AssemblyName.GetAssemblyName(candidate.AssemblyPath), package, sharedPolicy))
+                    if (IsProvidedByHost(PackageAssemblyReadCheckpoint.GetAssemblyName(candidate.AssemblyPath), package, sharedPolicy))
                     {
                         continue;
                     }
@@ -1378,7 +1380,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
             {
                 try
                 {
-                    var assemblyName = AssemblyName.GetAssemblyName(candidate.AssemblyPath);
+                    var assemblyName = PackageAssemblyReadCheckpoint.GetAssemblyName(candidate.AssemblyPath);
                     if (IsProvidedByHost(assemblyName, package, sharedPolicy))
                     {
                         continue;
@@ -1721,7 +1723,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
         public IReadOnlyList<string> ResolverAssemblyPaths => AssemblyPaths
             .Where(path => string.Equals(path, MainAssemblyPath, StringComparison.OrdinalIgnoreCase)
                 || File.Exists(Path.ChangeExtension(path, ".deps.json")))
-            .Where(static path => string.IsNullOrEmpty(AssemblyName.GetAssemblyName(path).CultureName))
+            .Where(static path => string.IsNullOrEmpty(PackageAssemblyReadCheckpoint.GetAssemblyName(path).CultureName))
             .ToArray();
     }
 
@@ -1835,7 +1837,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
         {
             try
             {
-                var assemblyName = AssemblyName.GetAssemblyName(assemblyPath).Name;
+                var assemblyName = PackageAssemblyReadCheckpoint.GetAssemblyName(assemblyPath).Name;
                 return !string.IsNullOrWhiteSpace(assemblyName) &&
                     IsHostFrameworkAssemblyName(assemblyName) &&
                     AssemblyNames.Value.Contains(assemblyName);
@@ -1867,7 +1869,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
             {
                 try
                 {
-                    var assemblyName = AssemblyName.GetAssemblyName(path).Name;
+                    var assemblyName = PackageAssemblyReadCheckpoint.GetAssemblyName(path).Name;
                     if (!string.IsNullOrWhiteSpace(assemblyName))
                     {
                         assemblyNames.Add(assemblyName);

@@ -9,6 +9,7 @@
     <InternalsVisibleTo Include="Nuplane.Loading.Tests" />
     <InternalsVisibleTo Include="Nuplane.Integration.Tests" />
     <InternalsVisibleTo Include="Nuplane.Runtime.Tests" />
+    <InternalsVisibleTo Include="Nuplane.PackageStore.TestHost" />
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 

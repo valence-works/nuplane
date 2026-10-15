@@ -826,6 +826,19 @@ jobs:
           python3 build/verify-required-trx.py "$RUNNER_TEMP/retained-loading/retained-loading.trx" \
             build/test-cases/retained-loading.json
 
+      - name: Qualify group publisher process recovery through fresh runtime admission
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~RootMembershipNativeGroupPendingAdmissionProcessTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=pending-group-admission.trx" \
+            --results-directory "$RUNNER_TEMP/pending-group-admission"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/pending-group-admission/pending-group-admission.trx" \
+            build/test-cases/pending-group-admission.json
+
       - name: Qualify actual process partial deletion and explicit recovery
         shell: bash
         run: |

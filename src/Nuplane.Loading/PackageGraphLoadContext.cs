@@ -242,7 +242,7 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
     {
         try
         {
-            return AssemblyName.GetAssemblyName(path);
+            return PackageAssemblyReadCheckpoint.GetAssemblyName(path);
         }
         catch (BadImageFormatException)
         {
