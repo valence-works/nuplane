@@ -58,9 +58,15 @@ public static class NuplaneAdminServiceCollectionExtensions
             sp.GetRequiredService<IStoreStateSerializer>(), sp.GetRequiredService<ITrustedPackageStoreRootCatalog>(),
             sp.GetRequiredService<IPackageStoreRootResolver>(), sp.GetRequiredService<ITrustedPackageStoreMemberDeclarationCatalog>(),
             sp.GetRequiredService<IOptions<FeedResolutionOptions>>().Value));
+        services.TryAddSingleton<PackageStoreMaintenanceOperationalState>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, PackageStoreMaintenanceOperationalState>(
+            static sp => sp.GetRequiredService<PackageStoreMaintenanceOperationalState>()));
+        services.TryAddSingleton<PackageStoreMaintenanceObservability>();
+        services.TryAddSingleton<IPackageStoreMaintenanceObservability>(sp => sp.GetRequiredService<PackageStoreMaintenanceObservability>());
         services.TryAddSingleton<PackageStoreMaintenanceService>(sp => new(
             sp.GetRequiredService<PackageStoreInspectionService>(), sp.GetRequiredService<PackageStoreExecutionService>(),
-            sp.GetRequiredService<IPackageStoreEnrollmentPreviewService>(), sp.GetRequiredService<PackageStoreEnrollmentService>()));
+            sp.GetRequiredService<IPackageStoreEnrollmentPreviewService>(), sp.GetRequiredService<PackageStoreEnrollmentService>(),
+            sp.GetRequiredService<IPackageStoreMaintenanceObservability>()));
         services.TryAddSingleton<INuplanePackageStoreMaintenanceOperations>(sp => sp.GetRequiredService<PackageStoreMaintenanceService>());
         return services;
     }

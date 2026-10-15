@@ -122,3 +122,5 @@ unload or deletion. Noncollectible uses remain protected for process lifetime.
 
 See [API and migration notes](package-store-maintenance-api-migration.md) and the
 [qualification evidence](../specs/030-safe-package-store-pruning/evidence/public-maintenance.md).
+
+For correlated logs, actual physical-outcome metrics and process-local operational health, see [maintenance observability](package-store-maintenance-observability.md).

@@ -26,6 +26,14 @@ internal sealed partial class PackageStoreMaintenanceService
         PackageStoreEnrollmentRequest request, EnrollmentOperation operation, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        var operationName = operation switch
+        {
+            EnrollmentOperation.Enroll => "enroll",
+            EnrollmentOperation.Recover => "recover",
+            EnrollmentOperation.Migrate => "migrate",
+            _ => throw new ArgumentOutOfRangeException(nameof(operation))
+        };
+        var observation = observability.Begin(operationName, request.RootLabel, null);
         var candidate = new PackageStoreEnrollmentOperationRequest(request.RootLabel,
             request.ExpectedPhysicalRootIdentity, request.ExpectedEnrollmentEpoch, request.QuiescentCutoverConfirmed,
             request.IntendedMemberIds, request.ExpectedCurrentMemberIds, request.RetireMemberIds,
@@ -39,14 +47,28 @@ internal sealed partial class PackageStoreMaintenanceService
                 EnrollmentOperation.Migrate => enrollment.MigrateAsync(candidate, cancellationToken),
                 _ => throw new ArgumentOutOfRangeException(nameof(operation))
             }).ConfigureAwait(false);
-            return new(result.RootLabel, result.RootIdentity, result.EnrollmentEpoch, result.Status.ToString(),
+            var projected = new PackageStoreEnrollmentResult(result.RootLabel, result.RootIdentity, result.EnrollmentEpoch, result.Status.ToString(),
                 result.Members.Select(static member => new PackageStoreEnrollmentMemberResult(
                     member.MemberId, member.Disposition.ToString(), member.Diagnostics)).ToArray(),
                 result.Diagnostics.Select(static message => new PackageStoreMaintenanceDiagnostic("Enrollment", message)).ToArray());
+            observability.RecordEnrollment(observation, projected);
+            return projected;
         }
         catch (PackageStoreAdmissionException exception)
         {
-            return new(request.RootLabel, exception.Root, null, "Refused", [], [Diagnostic(exception)]);
+            var refusal = new PackageStoreEnrollmentResult(request.RootLabel, exception.Root, null, "Refused", [], [Diagnostic(exception)]);
+            observability.RecordEnrollment(observation, refusal);
+            return refusal;
+        }
+        catch (OperationCanceledException exception)
+        {
+            observability.RecordFailure(observation, exception, cancelled: true);
+            throw;
+        }
+        catch (Exception exception)
+        {
+            observability.RecordFailure(observation, exception, cancelled: false);
+            throw;
         }
     }
 

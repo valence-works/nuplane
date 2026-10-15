@@ -10,19 +10,37 @@ internal sealed partial class PackageStoreMaintenanceService(
     PackageStoreInspectionService inspection,
     CoreExecutionService execution,
     IPackageStoreEnrollmentPreviewService enrollmentPreview,
-    PackageStoreEnrollmentService enrollment) : INuplanePackageStoreMaintenanceOperations
+    PackageStoreEnrollmentService enrollment,
+    IPackageStoreMaintenanceObservability observability) : INuplanePackageStoreMaintenanceOperations
 {
     public async Task<PackageStoreEnrollmentPreviewResult> PreviewEnrollmentAsync(
         string rootLabel = "default", CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootLabel);
-        var snapshot = await enrollmentPreview.PreviewRootAsync(rootLabel, cancellationToken).ConfigureAwait(false);
-        return new(snapshot.RootLabel, snapshot.RootIdentity, snapshot.Membership?.ToString(), snapshot.EnrollmentEpoch, snapshot.LedgerDigest,
-            snapshot.IsNonQuiescentObservation, snapshot.Members.Select(member => new PackageStoreEnrollmentMemberObservation(
-                member.MemberId, member.BindingKind, member.Observation.ToString(), member.StateBodyDigest, Slot(member.StateSlot), member.StateFileIdentity,
-                member.ActiveVersionById, member.LastKnownGoodById,
-                Closure(member.ActiveClosure), Closure(member.RecoverableClosure), member.Migration.ToString(), member.Diagnostics))
-                .ToArray(), snapshot.Diagnostics, snapshot.CurrentMemberIds);
+        var operation = observability.Begin("enrollment_preview", rootLabel, null);
+        try
+        {
+            var snapshot = await enrollmentPreview.PreviewRootAsync(rootLabel, cancellationToken).ConfigureAwait(false);
+            var result = new PackageStoreEnrollmentPreviewResult(snapshot.RootLabel, snapshot.RootIdentity,
+                snapshot.Membership?.ToString(), snapshot.EnrollmentEpoch, snapshot.LedgerDigest,
+                snapshot.IsNonQuiescentObservation, snapshot.Members.Select(member => new PackageStoreEnrollmentMemberObservation(
+                    member.MemberId, member.BindingKind, member.Observation.ToString(), member.StateBodyDigest, Slot(member.StateSlot), member.StateFileIdentity,
+                    member.ActiveVersionById, member.LastKnownGoodById,
+                    Closure(member.ActiveClosure), Closure(member.RecoverableClosure), member.Migration.ToString(), member.Diagnostics))
+                    .ToArray(), snapshot.Diagnostics, snapshot.CurrentMemberIds);
+            observability.RecordEnrollmentPreview(operation, result);
+            return result;
+        }
+        catch (OperationCanceledException exception)
+        {
+            observability.RecordFailure(operation, exception, cancelled: true);
+            throw;
+        }
+        catch (Exception exception)
+        {
+            observability.RecordFailure(operation, exception, cancelled: false);
+            throw;
+        }
     }
 
     public Task<PackageStoreMaintenanceResult> InspectAsync(
@@ -33,34 +51,52 @@ internal sealed partial class PackageStoreMaintenanceService(
         PackageStorePruneRequest request, CancellationToken cancellationToken = default)
     {
         Validate(request);
+        var operation = observability.Begin(request.Mode == PackageStorePruneMode.Preview ? "preview" : "execute",
+            request.RootLabel, request.CorrelationId);
         try
         {
             if (request.Mode == PackageStorePruneMode.Preview)
             {
                 var snapshot = await inspection.InspectRootAsync(request.RootLabel,
                     request.Retention?.KeepNewestInactiveVersionsPerPackage, cancellationToken).ConfigureAwait(false);
-                return Project(request, snapshot, "Preview", snapshot.RetentionPlan?.Entries.Select(row =>
+                var result = Project(request, snapshot, "Preview", snapshot.RetentionPlan?.Entries.Select(row =>
                     new PackageStoreCandidateResult(row.Install, row.Classification.ToString(),
                         row.Reasons.Select(static reason => reason.ToString()).ToArray(), "NotAttempted", null, null,
                         null, null, null)).ToArray() ?? [], []);
+                observability.RecordPrune(operation, result);
+                return result;
             }
 
             var confirmation = request.Confirmation!;
             var outcome = await execution.ExecuteEligibleCandidatesAsync(request.RootLabel,
                 confirmation.EnrollmentEpoch, request.Retention?.KeepNewestInactiveVersionsPerPackage,
                 cancellationToken, confirmation.RootIdentity).ConfigureAwait(false);
-            return Project(request, outcome.Snapshot, outcome.Status.ToString(), outcome.Candidates.Select(candidate =>
+            var executionResult = Project(request, outcome.Snapshot, outcome.Status.ToString(), outcome.Candidates.Select(candidate =>
                 new PackageStoreCandidateResult(candidate.Install, candidate.Classification.ToString(),
                     candidate.Reasons.Select(static reason => reason.ToString()).ToArray(), candidate.Attempt.ToString(),
                     candidate.PhysicalOutcome?.ToString(), candidate.JournalPhase?.ToString(),
                     candidate.MissingAtStart?.ToArray(), candidate.MissingAtLastObservation?.ToArray(),
                     candidate.Diagnostic is null ? null : Diagnostic(candidate.Diagnostic))).ToArray(),
                 outcome.Diagnostic is null ? [] : [Diagnostic(outcome.Diagnostic)]);
+            observability.RecordPrune(operation, executionResult);
+            return executionResult;
         }
         catch (PackageStoreAdmissionException exception)
         {
-            return new(request.RootLabel, request.Mode, "Refused", exception.Root, null, null, "Unknown", false,
+            var refusal = new PackageStoreMaintenanceResult(request.RootLabel, request.Mode, "Refused", exception.Root, null, null, "Unknown", false,
                 request.Retention, [], [], [], [], [], [Diagnostic(exception)], request.CorrelationId);
+            observability.RecordPrune(operation, refusal);
+            return refusal;
+        }
+        catch (OperationCanceledException exception)
+        {
+            observability.RecordFailure(operation, exception, cancelled: true);
+            throw;
+        }
+        catch (Exception exception)
+        {
+            observability.RecordFailure(operation, exception, cancelled: false);
+            throw;
         }
     }
 

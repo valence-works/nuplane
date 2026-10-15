@@ -1,0 +1,7 @@
+[
+  "Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.PublicMaintenance_PartialFailureOrCancellationIsMeasuredAndHealthClearsAfterResume(cancelAtCheckpoint: False, expectedStatus: \"Failed\", expectedOutcome: \"failed\")",
+  "Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.PublicMaintenance_PartialFailureOrCancellationIsMeasuredAndHealthClearsAfterResume(cancelAtCheckpoint: True, expectedStatus: \"Cancelled\", expectedOutcome: \"cancelled\")",
+  "Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.PublicMaintenance_RecordsCorrelatedOutcomesAndOnlyObservedPhysicalDeletes",
+  "Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.PublicMaintenance_RefusalPersistsThroughPreviewUntilSuccessfulExecution",
+  "Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.PublicMaintenance_ThrowingLoggerCannotMaskCompletedPhysicalFacts"
+]
