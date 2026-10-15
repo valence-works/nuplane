@@ -144,9 +144,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         var borrow = operation.Owner!.Borrow();
         try
         {
-            return await services.GetRequiredService<IResolvedPackageGraphUseLeaseAcquisition>()
-                .AcquireForRootAsync(borrow, graph.Graph, graph.Requests,
-                    PackageGraphUseSnapshotState.Committed, CancellationToken.None);
+            return await AcquireGraphUseAsync(services, graph, borrow);
         }
         finally
         {
@@ -154,6 +152,14 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             await operation.DisposeAsync();
         }
     }
+
+    private static ValueTask<PackageGraphUseLeaseOwner> AcquireGraphUseAsync(
+        IServiceProvider services,
+        ResolvedGraphFixture graph,
+        PackageStoreOperationBorrow borrow)
+        => services.GetRequiredService<IResolvedPackageGraphUseLeaseAcquisition>()
+            .AcquireForRootAsync(borrow, graph.Graph, graph.Requests,
+                PackageGraphUseSnapshotState.Committed, CancellationToken.None);
 
     private static async Task<GraphUseRecordInspectionResult> InspectGraphUseRecordsAsync(
         IPackageStoreAdmission admission,

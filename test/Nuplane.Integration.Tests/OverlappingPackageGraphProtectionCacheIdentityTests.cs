@@ -116,8 +116,22 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             var seededSession = Assert.Single(initialResult.Loaded,
                 session => session.PackageId == "Root.First");
 
-            for (var index = 0; index < 48; index++)
-                owners.Add(await AcquireGraphUseAsync(provider, variants[index % variants.Length]));
+            var admission = provider.GetRequiredService<IPackageStoreAdmission>();
+            await using (var operation = await admission.AcquireConfiguredRootOperationAsync(
+                             PackageStoreAdmissionKind.Loading))
+            {
+                var borrow = operation.Owner!.Borrow();
+                try
+                {
+                    for (var index = 0; index < 48; index++)
+                        owners.Add(await AcquireGraphUseAsync(provider,
+                            variants[index % variants.Length], borrow));
+                }
+                finally
+                {
+                    borrow.Dispose();
+                }
+            }
 
             var start = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var loads = owners.Select((owner, index) => Task.Run(async () =>
