@@ -13,8 +13,8 @@ namespace Nuplane.Loading;
 
 /// <summary>
 /// Loads package assemblies into isolated collectible load contexts, tracking sessions
-/// and providing context removal for unloading. Resolves compatible runtime assets within
-/// each package's install directory without requiring a package entry assembly.
+/// and providing context removal for unloading. Resolves the main assembly within
+/// each package's install directory.
 /// </summary>
 internal sealed class PackageLoader : IPackageLoader
 {
@@ -81,7 +81,11 @@ internal sealed class PackageLoader : IPackageLoader
         ArgumentException.ThrowIfNullOrWhiteSpace(installPath);
 
         var selection = ResolveAssemblySelection(installPath, packageId, _hostTargetFrameworkOverride);
-        return selection.AssemblyPaths
+        var assemblyPaths = EnumerateAssemblyCandidatesExcludingNativeAssets(selection.CandidateSearchRoot, installPath)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return assemblyPaths
             .Select(path => new AssemblyScanCandidate(
                 path,
                 Path.GetFileName(path),
@@ -292,32 +296,21 @@ internal sealed class PackageLoader : IPackageLoader
 
             try
             {
-                var selection = ResolveAssemblySelection(package.InstallPath, package.Id, _hostTargetFrameworkOverride);
-                var runtimePaths = selection.AssemblyPaths.Where(path => !HostRuntimeAssemblyCatalog.Contains(path)).ToArray();
-                if (runtimePaths.Length == 0)
+                var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath, package.Id, _hostTargetFrameworkOverride);
+                if (HostRuntimeAssemblyCatalog.Contains(mainAssemblyPath))
                 {
                     MarkInert(key);
                     _logger.LogInformation(
                         "Skipped package {PackageId}@{Version} because assembly {AssemblyPath} is provided by the host runtime.",
                         package.Id,
                         package.Version,
-                        string.Join(", ", selection.AssemblyPaths));
+                        mainAssemblyPath);
                     continue;
                 }
 
-                var context = new PackageGraphLoadContext(key, runtimePaths, [package.InstallPath], sharedPolicy, _matcher);
-                try
-                {
-                    foreach (var path in selection.LoadAssemblyPaths.Where(path => !HostRuntimeAssemblyCatalog.Contains(path)))
-                    {
-                        context.LoadFromAssemblyName(AssemblyName.GetAssemblyName(path));
-                    }
-                }
-                catch
-                {
-                    context.Unload();
-                    throw;
-                }
+                var context = new PackageAssemblyLoadContext(mainAssemblyPath, sharedPolicy, _matcher);
+                var assemblyName = AssemblyName.GetAssemblyName(mainAssemblyPath);
+                context.LoadFromAssemblyName(assemblyName);
 
                 _contexts[key] = context;
                 ClearInert(key);
@@ -394,11 +387,10 @@ internal sealed class PackageLoader : IPackageLoader
                     $"No loadable assembly found in graph '{graphKey}'. Scanned install paths: {FormatQuotedList(graphPackages.SkippedInstallPaths)}.");
             }
 
-            var runtimeAssemblyPaths = graphPackages.LoadablePackages
+            var mainAssemblyPaths = graphPackages.LoadablePackages
                 .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
-                .SelectMany(static package => package.Selection.AssemblyPaths)
-                .Where(path => !HostRuntimeAssemblyCatalog.Contains(path))
+                .Select(static package => package.MainAssemblyPath)
                 .ToArray();
             if (graphLoadMode == PackageLoadMode.HostIntegrated)
             {
@@ -407,16 +399,12 @@ internal sealed class PackageLoader : IPackageLoader
             }
 
             context = graphLoadMode == PackageLoadMode.HostIntegrated
-                ? new HostIntegratedPackageGraphLoadContext(graphKey, runtimeAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher)
-                : new PackageGraphLoadContext(graphKey, runtimeAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher);
+                ? new HostIntegratedPackageGraphLoadContext(graphKey, mainAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher)
+                : new PackageGraphLoadContext(graphKey, mainAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher);
 
-            foreach (var assemblyPath in graphPackages.LoadablePackages
-                         .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
-                         .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
-                         .SelectMany(static package => package.Selection.LoadAssemblyPaths)
-                         .Where(path => !HostRuntimeAssemblyCatalog.Contains(path)))
+            foreach (var mainAssemblyPath in mainAssemblyPaths)
             {
-                context.LoadFromAssemblyName(AssemblyName.GetAssemblyName(assemblyPath));
+                context.LoadFromAssemblyName(AssemblyName.GetAssemblyName(mainAssemblyPath));
             }
 
             var assembliesByPackageKey = graphLoadMode == PackageLoadMode.HostIntegrated
@@ -629,15 +617,15 @@ internal sealed class PackageLoader : IPackageLoader
         {
             try
             {
-                var selection = ResolveAssemblySelection(package.InstallPath, package.Id, _hostTargetFrameworkOverride);
-                if (selection.AssemblyPaths.All(HostRuntimeAssemblyCatalog.Contains))
+                var mainAssemblyPath = ResolveMainAssemblyPath(package.InstallPath, package.Id, _hostTargetFrameworkOverride);
+                if (HostRuntimeAssemblyCatalog.Contains(mainAssemblyPath))
                 {
                     hostRuntimePackages.Add(new(package.Id, package.Version, package.InstallPath));
                     _logger.LogInformation(
                         "Skipped package {PackageId}@{Version} in graph because assembly {AssemblyPath} is provided by the host runtime.",
                         package.Id,
                         package.Version,
-                        string.Join(", ", selection.AssemblyPaths));
+                        mainAssemblyPath);
                     continue;
                 }
 
@@ -645,7 +633,7 @@ internal sealed class PackageLoader : IPackageLoader
                     package.Id,
                     package.Version,
                     package.InstallPath,
-                    selection));
+                    mainAssemblyPath));
             }
             catch (NoLoadableAssemblyException ex)
             {
@@ -997,6 +985,9 @@ internal sealed class PackageLoader : IPackageLoader
         return null;
     }
 
+    private static string ResolveMainAssemblyPath(string installPath, string packageId, string? hostTargetFrameworkOverride)
+        => ResolveAssemblySelection(installPath, packageId, hostTargetFrameworkOverride).MainAssemblyPath;
+
     private static AssemblyAssetSelection ResolveAssemblySelection(
         string installPath,
         string packageId,
@@ -1019,10 +1010,13 @@ internal sealed class PackageLoader : IPackageLoader
         }
 
         var searchRoot = Directory.Exists(libPath) ? libPath : installPath;
-        return ResolveAssemblyFromCandidates(
+        var mainAssemblyPath = ResolveAssemblyFromCandidates(
             EnumerateAssemblyCandidatesExcludingNativeAssets(searchRoot, installPath),
             installPath,
-            packageId);
+            packageId,
+            selectedFramework: null);
+
+        return new AssemblyAssetSelection(mainAssemblyPath, searchRoot);
     }
 
     private static bool TryResolveRuntimeSpecificAssemblySelection(
@@ -1066,10 +1060,13 @@ internal sealed class PackageLoader : IPackageLoader
                 continue;
             }
 
-            selection = ResolveAssemblyFromCandidates(
+            var mainAssemblyPath = ResolveAssemblyFromCandidates(
                 candidatePaths,
                 installPath,
-                packageId);
+                packageId,
+                selectedDirectory.FolderName);
+
+            selection = new AssemblyAssetSelection(mainAssemblyPath, selectedDirectory.Path);
             return true;
         }
 
@@ -1107,10 +1104,13 @@ internal sealed class PackageLoader : IPackageLoader
                 $"No compatible target framework assets were found under '{installPath}' for host framework '{GetFrameworkDisplayName(hostFramework)}'. Available frameworks: {availableFrameworks}.");
         }
 
-        selection = ResolveAssemblyFromCandidates(
+        var mainAssemblyPath = ResolveAssemblyFromCandidates(
             EnumerateAssemblyCandidatesExcludingNativeAssets(selectedDirectory.Path, installPath),
             installPath,
-            packageId);
+            packageId,
+            selectedDirectory.FolderName);
+
+        selection = new AssemblyAssetSelection(mainAssemblyPath, selectedDirectory.Path);
 
         return true;
     }
@@ -1122,10 +1122,11 @@ internal sealed class PackageLoader : IPackageLoader
         .Cast<FrameworkDirectory>()
         .ToArray();
 
-    private static AssemblyAssetSelection ResolveAssemblyFromCandidates(
+    private static string ResolveAssemblyFromCandidates(
         IEnumerable<string> candidatePaths,
         string installPath,
-        string packageId)
+        string packageId,
+        string? selectedFramework)
     {
         var assemblies = candidatePaths
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
@@ -1138,7 +1139,7 @@ internal sealed class PackageLoader : IPackageLoader
 
         if (assemblies.Length == 1)
         {
-            return new(assemblies, assemblies[0]);
+            return assemblies[0];
         }
 
         var matchingByPackageId = assemblies
@@ -1147,12 +1148,13 @@ internal sealed class PackageLoader : IPackageLoader
 
         if (matchingByPackageId.Length == 1)
         {
-            return new(assemblies, matchingByPackageId[0]);
+            return matchingByPackageId[0];
         }
 
-        // A library package may provide several runtime assemblies and no entry assembly.
-        // Admit the entire selected asset set without assigning an arbitrary primary assembly.
-        return new(assemblies, null);
+        var frameworkSuffix = selectedFramework is null ? string.Empty : $" for target framework '{selectedFramework}'";
+        throw new InvalidOperationException(
+            $"Multiple assemblies were found under '{installPath}'{frameworkSuffix}, and a main assembly could not be determined for package '{packageId}'. " +
+            "Ensure the package contains a single loadable assembly for the selected target framework or that one assembly name matches the package ID.");
     }
 
     private static IEnumerable<string> EnumerateAssemblyCandidatesExcludingNativeAssets(string searchRoot, string installPath) =>
@@ -1265,16 +1267,13 @@ internal sealed class PackageLoader : IPackageLoader
 
     private sealed record FrameworkTarget(FrameworkKind Kind, Version Version, string DisplayName);
 
-    private sealed record AssemblyAssetSelection(IReadOnlyList<string> AssemblyPaths, string? MainAssemblyPath)
-    {
-        public IReadOnlyList<string> LoadAssemblyPaths => MainAssemblyPath is { } path ? [path] : AssemblyPaths;
-    }
+    private sealed record AssemblyAssetSelection(string MainAssemblyPath, string CandidateSearchRoot);
 
     private sealed record LoadableGraphPackage(
         string Id,
         string Version,
         string InstallPath,
-        AssemblyAssetSelection Selection);
+        string MainAssemblyPath);
 
     private sealed record GraphPackage(
         string Id,
