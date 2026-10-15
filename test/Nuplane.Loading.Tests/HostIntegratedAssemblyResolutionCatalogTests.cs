@@ -184,5 +184,38 @@ public sealed class HostIntegratedAssemblyResolutionCatalogTests
         Assert.Equal("success", diagnostic.Outcome);
     }
 
+    [Fact]
+    public void PublishGraph_DifferentCulturesAcrossPackages_PreservesBothAndRejectsSameCultureReplacement()
+    {
+        // Arrange
+        var sut = new HostIntegratedAssemblyResolutionCatalog();
+        var root = typeof(FixtureMarker).Assembly;
+        var french = root.GetSatelliteAssembly(System.Globalization.CultureInfo.GetCultureInfo("fr"));
+        var german = root.GetSatelliteAssembly(System.Globalization.CultureInfo.GetCultureInfo("de"));
+        var frenchName = french.GetName();
+        sut.PublishGraph("graph:fr",
+            [new PackageLoadModeSelection("pkg-fr", "1.0.0", PackageLoadMode.HostIntegrated, "default", "graph:fr")],
+            new Dictionary<string, IReadOnlyList<Assembly>> { ["pkg-fr@1.0.0"] = [french] });
+        sut.ValidateCanPublishGraph("graph:de",
+            [new HostIntegratedAssemblyResolutionCandidate(frenchName.Name!, frenchName.Version, "pkg-de", "1.0.0", "graph:de", "de")]);
+
+        // Act
+        sut.PublishGraph("graph:de",
+            [new PackageLoadModeSelection("pkg-de", "1.0.0", PackageLoadMode.HostIntegrated, "default", "graph:de")],
+            new Dictionary<string, IReadOnlyList<Assembly>> { ["pkg-de@1.0.0"] = [german] });
+        var generation = sut.Generation;
+
+        // Assert: a third owner of the French identity is still ambiguous, including case variations.
+        Assert.Throws<InvalidOperationException>(() => sut.ValidateCanPublishGraph("graph:conflict",
+            [new HostIntegratedAssemblyResolutionCandidate(frenchName.Name!.ToUpperInvariant(), frenchName.Version, "pkg-other", "1.0.0", "graph:conflict", "FR")]));
+        Assert.Throws<InvalidOperationException>(() => sut.PublishGraph("graph:conflict",
+            [new PackageLoadModeSelection("pkg-other", "1.0.0", PackageLoadMode.HostIntegrated, "default", "graph:conflict")],
+            new Dictionary<string, IReadOnlyList<Assembly>> { ["pkg-other@1.0.0"] = [french] }));
+        Assert.Equal(generation, sut.Generation);
+        Assert.True(sut.TryResolve(new AssemblyName { Name = frenchName.Name!.ToUpperInvariant(), CultureName = "FR" }, out var resolvedFrench, out _));
+        Assert.Same(french, resolvedFrench);
+        Assert.True(sut.TryResolve(german.GetName(), out var resolvedGerman, out _));
+        Assert.Same(german, resolvedGerman);
+    }
 
 }

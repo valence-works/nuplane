@@ -14,7 +14,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BASE_VERSION: 0.0.12
+  # Main-branch previews continue the existing 1.0.0 preview line; releases use their tag below.
+  PREVIEW_BASE_VERSION: 1.0.0
 
 jobs:
   darwin-native-shim:
@@ -85,7 +86,7 @@ jobs:
               exit 1
             fi
           else
-            version="${BASE_VERSION}-preview.${GITHUB_RUN_NUMBER}"
+            version="${PREVIEW_BASE_VERSION}-preview.${GITHUB_RUN_NUMBER}"
           fi
 
           echo "package_version=${version}" >> "${GITHUB_OUTPUT}"

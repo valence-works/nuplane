@@ -7,10 +7,11 @@ namespace Nuplane.Loading;
 /// </summary>
 internal sealed class HostIntegratedPackageGraphLoadContext(
     string graphKey,
-    IReadOnlyList<string> mainAssemblyPaths,
+    IReadOnlyList<string> runtimeAssemblyPaths,
+    IReadOnlyList<string> resolverAssemblyPaths,
     IReadOnlyList<string> packageInstallPaths,
     IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
     SharedAssemblyPolicyMatcher matcher,
     PackageGraphUseLeaseOwner? graphLeaseOwner = null)
-    : PackageGraphLoadContext(graphKey, mainAssemblyPaths, packageInstallPaths, sharedPolicy, matcher,
+    : PackageGraphLoadContext(graphKey, runtimeAssemblyPaths, resolverAssemblyPaths, packageInstallPaths, sharedPolicy, matcher,
         isCollectible: false, graphLeaseOwner: graphLeaseOwner);
