@@ -54,6 +54,25 @@ internal sealed class PackageStoreExecutionService(
             var rootHandle = selectedRoot.PrimaryResolution.AuthorityRoot
                 ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
                     "Execution requires a retained native root handle.", selectedRoot.RootIdentity);
+
+            // The exact root and epoch confirmation is checked above. Only this confirmed Execute
+            // path may reclaim stale use-control artifacts; Preview and Inspect remain descriptive.
+            // Verify the complete catalog under the held owner before and after the bounded recovery,
+            // then build the deletion plan from a fresh inspection of the resulting namespace.
+            borrow.RequireOperation(operation, registry);
+            owner.RevalidateRetainedEvidence();
+            await registry.VerifyCatalogMemberProtectionUnderOperationAsync(borrow, operation, cancellationToken)
+                .ConfigureAwait(false);
+            owner.RevalidateRetainedEvidence();
+            await new PackageGraphUseRecordStore(registry.Files)
+                .RecoverAsync(rootHandle, selectedRoot.RootIdentity, selectedRoot.Ledger, cancellationToken)
+                .ConfigureAwait(false);
+            borrow.RequireOperation(operation, registry);
+            owner.RevalidateRetainedEvidence();
+            await registry.VerifyCatalogMemberProtectionUnderOperationAsync(borrow, operation, cancellationToken)
+                .ConfigureAwait(false);
+            owner.RevalidateRetainedEvidence();
+
             using var executionJoin = new PackageStoreDeletionExecutionJoin(
                 journalStore, _candidateBinder, rootHandle, selectedRoot.RootIdentity, expectedEnrollmentEpoch,
                 token =>

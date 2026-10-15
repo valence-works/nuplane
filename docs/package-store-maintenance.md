@@ -82,8 +82,12 @@ var result = await maintenance.PruneAsync(new(preview.RootLabel, policy,
     PackageStorePruneMode.Execute, confirmation), cancellationToken);
 ```
 
-Execution freshly verifies membership, every state, live uses and inventory under
-retained ownership and replans. The preview's candidate list is never execution
+Execution freshly verifies membership, every state, complete catalog protection
+and inventory under retained ownership. After exact root-and-epoch confirmation,
+it runs verified graph-use recovery without waiting, keeps live uses protected,
+revalidates the catalog, then inspects and replans. `InspectAsync` and Preview remain read-only;
+a stale use can therefore make their protection result Unknown until confirmed
+execution performs recovery. The preview's candidate list is never execution
 input. Root or epoch changes refuse the request; newly protected packages survive
 fresh replanning. Unknown/staging/control entries, links and identity replacements
 are preserved or cause conservative refusal.

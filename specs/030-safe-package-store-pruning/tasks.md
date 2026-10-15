@@ -257,10 +257,10 @@ The [coordinated runtime increment](evidence/coordinated-runtime-admission.md) s
 
 **Purpose:** Complete cross-platform, package/API compatibility and operational documentation gates; no task claims stable release or customer-store proof.
 
-- [ ] T119 Add operator enrollment/upgrade/recovery/preview/execute guidance in `docs/package-store-maintenance.md`; state quiescent cutover, unsupported legacy/custom participants, conservative refusal, passive lifetime behavior and partial-result meanings.
+- [x] T119 Add operator enrollment/upgrade/recovery/preview/execute guidance in `docs/package-store-maintenance.md`; state quiescent cutover, unsupported legacy/custom participants, conservative refusal, passive lifetime behavior and partial-result meanings.
 - [ ] T120 Add admission/lifetime/crash/deletion integration jobs on Ubuntu, macOS and Windows in `.github/workflows/validate.yml`; preserve existing state-persistence jobs, build the real test host and run actual platform tests. Unavailable/unsupported providers are explicit refusals, never silently successful destructive acceptance.
-- [ ] T121 Add public API/migration and semantic-version assessment in `docs/package-store-maintenance-api-migration.md`; preserve existing required interfaces and constructor semantics.
-- [ ] T122 Add deterministic concurrency/order examples and phase-by-phase test cadence to `specs/030-safe-package-store-pruning/quickstart.md`; identify which focused tests run per phase and serialize heavy commands through the build-slot wrapper.
+- [x] T121 Add public API/migration and semantic-version assessment in `docs/package-store-maintenance-api-migration.md`; preserve existing required interfaces and constructor semantics.
+- [x] T122 Add deterministic concurrency/order examples and phase-by-phase test cadence to `specs/030-safe-package-store-pruning/quickstart.md`; identify which focused tests run per phase and serialize heavy commands through the build-slot wrapper.
 - [ ] T123 Add Linux/macOS/Windows filesystem and cross-process acceptance results to `specs/030-safe-package-store-pruning/evidence/platform-acceptance.md`; distinguish primitive probes, child-process evidence and actual physical deletion; record unsupported providers as refused.
 - [X] T124 Add [package-family and actual-host integration acceptance plan](evidence/package-and-host-acceptance.md); root and independent source review verified current package enumeration and framework targets. This accepts the plan only: no Elsa/CShells production coupling, user-store mutation, executed package/host acceptance or release claim. Downstream gates remain open.
 - [ ] T125 Run Release builds for every production target framework (`net8.0`, `net9.0`, `net10.0`) for changed Nuplane projects and record exact command/results in `specs/030-safe-package-store-pruning/evidence/builds.md`.
@@ -283,3 +283,7 @@ Deliver reviewable increments: safe identity/admission and complete durable prot
 ## Accepted contract/counting increment
 
 T006–T008, T010, T012–T020 and T035 are accepted for their bounded contract/counting scope; see [evidence](evidence/contracts-and-counted-scope.md). T028/T045 are accepted for native root-before-sorted-member locking and the separate counted-state tests. Operation-cycle integration stays open under later admission/driver tasks. The optional interfaces alone enforce no runtime driver; those tasks remain open.
+
+## Documentation completion, 2026-10-15
+
+T119/T121/T122 are implemented and root-reviewed: operator and API migration guides and the qualification cadence are present, including [post-loading proof](evidence/post-loading-observers.md) and [confirmed stale-use recovery](evidence/stale-use-execution.md). Final source-head platform/build/test/diff acceptance remains tracked separately by T120/T123/T125–T128. Historical partial implementation notes above are not a claim of a newly discovered code gap; final reconciliation of those checkboxes requires the final qualification record.

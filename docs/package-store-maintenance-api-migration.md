@@ -35,6 +35,8 @@ describes successful application, so check loading/catalog results rather than
 assuming every package loaded successfully. This notification is coordinated-only;
 ordinary hosts retain `OnPackagesReconciledAsync` behavior. Existing observer and
 dispatcher interfaces gain no required members.
+Custom dispatchers implement `IPostLoadingObserverEventDispatcher` to deliver the
+optional notification.
 
 Existing state-body construction/deconstruction remains compatible. Missing
 protection in old state is read as unknown, not empty. Ordinary reconciliation does
