@@ -17,16 +17,18 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
     public PackageGraphLoadContext(
         string contextName,
         IReadOnlyList<string> runtimeAssemblyPaths,
+        IReadOnlyList<string> resolverAssemblyPaths,
         IReadOnlyList<string> packageInstallPaths,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         SharedAssemblyPolicyMatcher matcher)
-        : this(contextName, runtimeAssemblyPaths, packageInstallPaths, sharedPolicy, matcher, isCollectible: true)
+        : this(contextName, runtimeAssemblyPaths, resolverAssemblyPaths, packageInstallPaths, sharedPolicy, matcher, isCollectible: true)
     {
     }
 
     protected PackageGraphLoadContext(
         string contextName,
         IReadOnlyList<string> runtimeAssemblyPaths,
+        IReadOnlyList<string> resolverAssemblyPaths,
         IReadOnlyList<string> packageInstallPaths,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         SharedAssemblyPolicyMatcher matcher,
@@ -35,11 +37,12 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(contextName);
         ArgumentNullException.ThrowIfNull(runtimeAssemblyPaths);
+        ArgumentNullException.ThrowIfNull(resolverAssemblyPaths);
 
         _sharedPolicy = sharedPolicy ?? throw new ArgumentNullException(nameof(sharedPolicy));
         _matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
         _packageInstallPaths = packageInstallPaths ?? throw new ArgumentNullException(nameof(packageInstallPaths));
-        _dependencyResolvers = runtimeAssemblyPaths.Select(static path => new AssemblyDependencyResolver(path)).ToArray();
+        _dependencyResolvers = resolverAssemblyPaths.Select(static path => new AssemblyDependencyResolver(path)).ToArray();
         // The loader has already selected the compatible TFM/RID asset set.
         _assemblyPathsByName = runtimeAssemblyPaths
             .Select(static path => new

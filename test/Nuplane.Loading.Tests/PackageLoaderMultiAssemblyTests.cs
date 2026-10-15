@@ -110,6 +110,66 @@ public sealed class PackageLoaderMultiAssemblyTests(ITestOutputHelper output) : 
         Assert.Same(context, AssemblyLoadContext.GetLoadContext(type.BaseType!.Assembly));
     }
 
+    [Theory]
+    [InlineData(PackageLoadMode.Collectible)]
+    [InlineData(PackageLoadMode.HostIntegrated)]
+    public void LoadFromAssemblyName_ComponentManifest_ResolvesManagedAndNativeDependenciesOutsideIndex(PackageLoadMode mode)
+    {
+        // Arrange: only the root is indexed; both dependencies must use the component resolver.
+        var package = CreatePackage("Plugin.Root", false, "Plugin.Root.dll", "Plugin.Dependency.dll");
+        var directory = SelectedDirectory(package, false);
+        var rootPath = Path.Combine(directory, "Plugin.Root.dll");
+        const string nativeName = "NuplaneResolverProbe";
+        var nativeFileName = OperatingSystem.IsWindows() ? $"{nativeName}.dll"
+            : OperatingSystem.IsMacOS() ? $"lib{nativeName}.dylib" : $"lib{nativeName}.so";
+        var nativeSource = Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(), OperatingSystem.IsWindows()
+            ? "System.IO.Compression.Native.dll"
+            : OperatingSystem.IsMacOS() ? "libSystem.Native.dylib" : "libSystem.Native.so");
+        File.Copy(nativeSource, Path.Combine(directory, nativeFileName));
+        File.WriteAllText(Path.ChangeExtension(rootPath, ".deps.json"), $$"""
+            {
+              "runtimeTarget": { "name": ".NETCoreApp,Version=v10.0" },
+              "targets": {
+                ".NETCoreApp,Version=v10.0": {
+                  "Plugin.Root/1.0.0": {
+                    "runtime": { "Plugin.Root.dll": {}, "Plugin.Dependency.dll": {} },
+                    "native": { "{{nativeFileName}}": {} }
+                  }
+                }
+              },
+              "libraries": { "Plugin.Root/1.0.0": { "type": "project", "serviceable": false, "sha512": "" } }
+            }
+            """);
+        PackageGraphLoadContext context = mode == PackageLoadMode.HostIntegrated
+            ? new HostIntegratedPackageGraphLoadContext("resolver-test", [rootPath], [rootPath], [package.InstallPath], [], new SharedAssemblyPolicyMatcher())
+            : new PackageGraphLoadContext("resolver-test", [rootPath], [rootPath], [package.InstallPath], [], new SharedAssemblyPolicyMatcher());
+        try
+        {
+            // Act
+            var root = context.LoadFromAssemblyName(AssemblyName.GetAssemblyName(rootPath));
+            var type = root.GetType("Plugin.Root.RootMarker", throwOnError: true)!;
+            var nativeHandle = NativeLibrary.Load(nativeName, root, null);
+            try
+            {
+                // Assert
+                Assert.Equal("root:dependency", type.GetProperty("Value")!.GetValue(Activator.CreateInstance(type)));
+                Assert.Same(context, AssemblyLoadContext.GetLoadContext(type.BaseType!.Assembly));
+                Assert.NotEqual(IntPtr.Zero, nativeHandle);
+            }
+            finally
+            {
+                NativeLibrary.Free(nativeHandle);
+            }
+        }
+        finally
+        {
+            if (context.IsCollectible)
+            {
+                context.Unload();
+            }
+        }
+    }
+
     [Fact]
     public async Task EnsureLoadedAsync_MultiAssemblyLibrary_LoadsWithoutPrimaryAssembly()
     {

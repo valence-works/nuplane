@@ -305,7 +305,8 @@ internal sealed class PackageLoader : IPackageLoader
                     continue;
                 }
 
-                var context = new PackageGraphLoadContext(key, runtimePaths, [package.InstallPath], sharedPolicy, _matcher);
+                var resolverPaths = selection.ResolverAssemblyPaths.Where(path => !HostRuntimeAssemblyCatalog.Contains(path)).ToArray();
+                var context = new PackageGraphLoadContext(key, runtimePaths, resolverPaths, [package.InstallPath], sharedPolicy, _matcher);
                 try
                 {
                     foreach (var path in selection.LoadAssemblyPaths.Where(path => !HostRuntimeAssemblyCatalog.Contains(path)))
@@ -400,6 +401,12 @@ internal sealed class PackageLoader : IPackageLoader
                 .SelectMany(static package => package.Selection.AssemblyPaths)
                 .Where(path => !HostRuntimeAssemblyCatalog.Contains(path))
                 .ToArray();
+            var resolverAssemblyPaths = graphPackages.LoadablePackages
+                .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
+                .SelectMany(static package => package.Selection.ResolverAssemblyPaths)
+                .Where(path => !HostRuntimeAssemblyCatalog.Contains(path))
+                .ToArray();
             if (graphLoadMode == PackageLoadMode.HostIntegrated)
             {
                 var candidates = BuildHostIntegratedResolutionCandidates(graphKey, graphPackages.LoadablePackages, sharedPolicy);
@@ -407,8 +414,8 @@ internal sealed class PackageLoader : IPackageLoader
             }
 
             context = graphLoadMode == PackageLoadMode.HostIntegrated
-                ? new HostIntegratedPackageGraphLoadContext(graphKey, runtimeAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher)
-                : new PackageGraphLoadContext(graphKey, runtimeAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher);
+                ? new HostIntegratedPackageGraphLoadContext(graphKey, runtimeAssemblyPaths, resolverAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher)
+                : new PackageGraphLoadContext(graphKey, runtimeAssemblyPaths, resolverAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher);
 
             foreach (var assemblyPath in graphPackages.LoadablePackages
                          .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
@@ -1269,6 +1276,14 @@ internal sealed class PackageLoader : IPackageLoader
     private sealed record AssemblyAssetSelection(IReadOnlyList<string> AssemblyPaths, string? MainAssemblyPath)
     {
         public IReadOnlyList<string> LoadAssemblyPaths => MainAssemblyPath is { } path ? [path] : AssemblyPaths;
+
+        // A secondary component can own a dependency manifest even without a package-ID match.
+        // Satellites belong in the culture-aware index, not in the component resolver list.
+        public IReadOnlyList<string> ResolverAssemblyPaths => AssemblyPaths
+            .Where(path => string.Equals(path, MainAssemblyPath, StringComparison.OrdinalIgnoreCase)
+                || File.Exists(Path.ChangeExtension(path, ".deps.json")))
+            .Where(static path => string.IsNullOrEmpty(AssemblyName.GetAssemblyName(path).CultureName))
+            .ToArray();
     }
 
     private sealed record LoadableGraphPackage(

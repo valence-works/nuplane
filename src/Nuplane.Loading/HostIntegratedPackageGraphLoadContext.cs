@@ -6,7 +6,8 @@ namespace Nuplane.Loading;
 internal sealed class HostIntegratedPackageGraphLoadContext(
     string graphKey,
     IReadOnlyList<string> runtimeAssemblyPaths,
+    IReadOnlyList<string> resolverAssemblyPaths,
     IReadOnlyList<string> packageInstallPaths,
     IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
     SharedAssemblyPolicyMatcher matcher)
-    : PackageGraphLoadContext(graphKey, runtimeAssemblyPaths, packageInstallPaths, sharedPolicy, matcher, isCollectible: false);
+    : PackageGraphLoadContext(graphKey, runtimeAssemblyPaths, resolverAssemblyPaths, packageInstallPaths, sharedPolicy, matcher, isCollectible: false);
