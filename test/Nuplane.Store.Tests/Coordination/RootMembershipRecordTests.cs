@@ -76,7 +76,7 @@ public sealed class RootMembershipRecordTests
         Assert.Equal("legacy-body", prior.StateBodyDigest);
         Assert.Equal(1, first.NextProtectionRecord.Revision);
         Assert.Equal(1, migration.NextProtectionRecord.Revision);
-        Assert.Single(Ledger([absent, legacy], ["new", "legacy"], pending: migration).TargetMemberIds.Where(id => id == "legacy"));
+        Assert.Single(Ledger([absent, legacy], ["new", "legacy"], pending: migration).TargetMemberIds, id => id == "legacy");
         Assert.Throws<ArgumentException>(() => Pending(Root(), 1, legacy, Protection("legacy", revision: 2)));
         Assert.Throws<ArgumentException>(() => Pending(Root(), 1, Member("declared", new RootMemberRecord.DeclaredBinding()), Protection("declared")));
     }
