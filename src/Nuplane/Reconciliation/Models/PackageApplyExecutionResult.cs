@@ -11,5 +11,11 @@ namespace Nuplane.Reconciliation.Models;
 public sealed record PackageApplyExecutionResult(
     IReadOnlyList<ResolvedPackage> AppliedPackages,
     IReadOnlyList<string> FailedPackageIds,
-    IReadOnlyDictionary<string, string>? FailureMessages = null);
-
+    IReadOnlyDictionary<string, string>? FailureMessages = null)
+{
+    /// <summary>
+    /// Gets the graph transactions that completed successfully, preserving each graph's exact
+    /// final root requests and applied package projection.
+    /// </summary>
+    public IReadOnlyList<ResolvedPackageGraphSelection> SuccessfulGraphSelections { get; init; } = [];
+}

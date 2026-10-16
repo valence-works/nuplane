@@ -1,5 +1,6 @@
 using Nuplane.Observability;
 using Nuplane.Operational;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
 
@@ -10,38 +11,73 @@ internal sealed class CleanupMiddleware(
     IStoreRegistry storeRegistry,
     IPackageCleanupService packageCleanupService,
     CleanupPolicyOptions cleanupPolicyOptions,
-    ReconciliationMetrics metrics) : IReconciliationMiddleware
+    ReconciliationMetrics metrics,
+    ICoordinatedActiveStateTransitionDriver? transitionDriver = null) : IReconciliationMiddleware
 {
     public async Task InvokeAsync(ReconciliationCycleContext context, Func<Task> next)
     {
-        var appliedVersions = desiredActualDiffEngine.BuildNextActiveVersions(context.ApplyResult!.AppliedPackages);
-        var storeState = await storeRegistry.GetStateAsync(context.CancellationToken);
+        var applyResult = context.ApplyResult!;
+        var appliedVersions = desiredActualDiffEngine.BuildNextActiveVersions(applyResult.AppliedPackages);
         var changeSet = context.ChangeSet ?? new([], [], [], context.CorrelationId, DateTimeOffset.UtcNow);
         var activatedAtUtc = DateTimeOffset.UtcNow;
-        var activePackageDescriptors = ActivePackageCatalogMapper.BuildNextDescriptors(
-            storeState,
-            context.MergedActive!,
-            context.ApplyResult.AppliedPackages,
-            changeSet,
-            context.CorrelationId,
-            activatedAtUtc,
-            context.ResolutionResult?.ResolvedGraphs);
-        var activeGraphRecords = ActivePackageCatalogMapper.BuildActiveGraphRecords(
-            storeState,
-            context.ResolutionResult?.ResolvedGraphs ?? [],
-            context.MergedActive!,
-            context.CorrelationId,
-            activatedAtUtc);
+        var resolvedGraphs = context.ResolutionResult?.ResolvedGraphs ?? [];
+        if (context.PackageStoreOwner is { } owner && transitionDriver is not null)
+        {
+            if (!context.CoordinatedTransitionPreflightPassed)
+                EnrolledReconciliationTransitionGuard.RefuseNonemptyTransition(
+                    context.ResolutionResult!, changeSet, owner);
 
-        await storeRegistry.PersistActiveVersionsAsync(
-            context.MergedActive!,
-            appliedVersions,
-            context.CorrelationId,
-            context.CancellationToken,
-            activePackageDescriptors,
-            activeGraphRecords);
+            var resolution = context.ResolutionResult!;
+            await transitionDriver.PublishAsync(
+                owner,
+                context.MergedActive!,
+                applyResult.AppliedPackages,
+                changeSet,
+                applyResult.SuccessfulGraphSelections,
+                CoordinatedActiveStateTransitionDriver.BuildDesiredRootIds(
+                    context.DesiredRequests, resolvedGraphs, applyResult.SuccessfulGraphSelections),
+                CoordinatedActiveStateTransitionDriver.BuildFailedPackageIds(
+                    resolution.FailedPackageIds, applyResult.FailedPackageIds),
+                context.CorrelationId,
+                context.CancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            var priorState = await storeRegistry.GetStateAsync(context.CancellationToken);
+            var desiredRootPackageIds = context.DesiredRequests
+                .Select(static request => request.Id)
+                .Concat(resolvedGraphs.SelectMany(static graph => graph.Roots).Select(static root => root.PackageId))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var failedPackageIds = CoordinatedActiveStateTransitionDriver.BuildFailedPackageIds(
+                context.ResolutionResult?.FailedPackageIds ?? [], applyResult.FailedPackageIds);
+            var activeGraphRecords = ActivePackageCatalogMapper.BuildActiveGraphRecords(
+                priorState,
+                resolvedGraphs,
+                context.MergedActive!,
+                context.CorrelationId,
+                activatedAtUtc,
+                desiredRootPackageIds,
+                failedPackageIds);
+            var activePackageDescriptors = ActivePackageCatalogMapper.BuildNextDescriptors(
+                priorState,
+                context.MergedActive!,
+                applyResult.AppliedPackages,
+                changeSet,
+                context.CorrelationId,
+                activatedAtUtc,
+                resolvedGraphs,
+                activeGraphRecords);
 
-        storeState = await storeRegistry.GetStateAsync(context.CancellationToken);
+            await storeRegistry.PersistActiveVersionsAsync(
+                context.MergedActive!,
+                appliedVersions,
+                context.CorrelationId,
+                context.CancellationToken,
+                activePackageDescriptors,
+                activeGraphRecords).ConfigureAwait(false);
+        }
+
+        var storeState = await storeRegistry.GetStateAsync(context.CancellationToken).ConfigureAwait(false);
         var cleanupInputs = context.MergedActive!
             .Select(x => new PackageVersionEntry(
                 x.Key,
@@ -55,7 +91,7 @@ internal sealed class CleanupMiddleware(
             cleanupInputs,
             cleanupPolicyOptions,
             context.CorrelationId,
-            triggerOnSuccessfulReconciliation: context.ApplyResult.FailedPackageIds.Count == 0,
+            triggerOnSuccessfulReconciliation: applyResult.FailedPackageIds.Count == 0,
             context.CancellationToken);
         metrics.RecordCleanup(cleanupResults);
         context.CleanupFailureCount = cleanupResults.Count(x => x.Action == CleanupAction.Blocked);
@@ -63,4 +99,3 @@ internal sealed class CleanupMiddleware(
         await next();
     }
 }
-

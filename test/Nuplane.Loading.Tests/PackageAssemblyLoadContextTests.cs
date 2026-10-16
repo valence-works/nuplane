@@ -29,7 +29,7 @@ public sealed class PackageAssemblyLoadContextTests : IDisposable
         var path = CopyFixtureAssembly("alc-collect");
         var weakRef = CreateAndUnload(path);
 
-        CollectUntilGone(weakRef);
+        CollectibleContextTestLifetime.CollectUntilGone(weakRef);
 
         Assert.False(weakRef.IsAlive, "AssemblyLoadContext should be collected after Unload() and forced GC.");
     }
@@ -64,17 +64,6 @@ public sealed class PackageAssemblyLoadContextTests : IDisposable
         var weakRef = new WeakReference(ctx, trackResurrection: true);
         ctx.Unload();
         return weakRef;
-    }
-
-    private static void CollectUntilGone(WeakReference weakRef)
-    {
-        for (var i = 0; i < 20 && weakRef.IsAlive; i++)
-        {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            Thread.Sleep(25);
-        }
     }
 
     private string CopyFixtureAssembly(string subDirName)

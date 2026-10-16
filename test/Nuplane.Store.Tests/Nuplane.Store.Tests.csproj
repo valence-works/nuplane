@@ -1,6 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup Condition="'$(NuplaneProtectionFrameworkMatrix)' == 'true'">
+    <TargetFramework />
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+  </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\Shared\ProtectedReconciliationServices.cs" Link="Shared\ProtectedReconciliationServices.cs" />
     <ProjectReference Include="..\..\src\Nuplane\Nuplane.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\PackageStoreFixture.cs" Link="Shared\PackageStoreFixture.cs" />
+    <Compile Include="..\Shared\InterruptingMemberStateSerializer.cs" Link="Shared\InterruptingMemberStateSerializer.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Native\darwin-stat-layout.c" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
-

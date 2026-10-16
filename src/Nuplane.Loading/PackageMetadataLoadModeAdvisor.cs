@@ -1,9 +1,12 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Store.Coordination;
 
 namespace Nuplane.Loading;
 
-internal sealed class PackageMetadataLoadModeAdvisor : IPackageLoadModeAdvisor
+internal sealed class PackageMetadataLoadModeAdvisor : IScopedPackageLoadModeAdvisor
 {
     private readonly PackageMetadataLoadModeReader _reader;
     private readonly ILogger<PackageMetadataLoadModeAdvisor> _logger;
@@ -33,7 +36,9 @@ internal sealed class PackageMetadataLoadModeAdvisor : IPackageLoadModeAdvisor
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var result = _reader.Read(package.Id, package.Version, package.InstallPath);
+            var result = context.GraphUseLeases.Count == 0
+                ? _reader.Read(package.Id, package.Version, package.InstallPath)
+                : ReadWithLease(context.GraphUseLeases, package);
             if (!result.MetadataFound)
             {
                 continue;
@@ -71,5 +76,22 @@ internal sealed class PackageMetadataLoadModeAdvisor : IPackageLoadModeAdvisor
         }
 
         return ValueTask.FromResult<IReadOnlyList<LoadModeAdvisorResult>>(results);
+    }
+
+    private PackageMetadataLoadModeReadResult ReadWithLease(
+        IReadOnlyList<PackageGraphUseLease> leases,
+        ResolvedPackage package)
+    {
+        var matches = leases.Where(lease => lease.Snapshot.Nodes.Any(node =>
+                string.Equals(node.Install.PackageId, package.Id, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(node.Install.Version, package.Version, StringComparison.Ordinal)))
+            .ToArray();
+        if (matches.Length != 1)
+        {
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                "The package metadata read does not have exactly one matching published graph-use lease.");
+        }
+
+        return _reader.Read(package.Id, package.Version, package.InstallPath, matches[0]);
     }
 }

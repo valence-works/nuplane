@@ -7,6 +7,7 @@ using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Registration;
 using Nuplane.Feeds.Setup;
 using Nuplane.Health;
+using Nuplane.Registration;
 using Nuplane.Reconciliation;
 using Nuplane.Sources.Directory.Builder;
 using Nuplane.Sources.Directory.Hosting;
@@ -82,7 +83,8 @@ public static class DirectorySourceRegistrationServices
                     capturedPatterns,
                     sp.GetService<ILogger<DirectoryNupkgDesiredSource>>(),
                     feedName,
-                    probe);
+                    probe,
+                    sp.GetService<PackageStoreCompositionSnapshot>()?.IsParticipant ?? false);
             });
             services.Add(sourceDescriptor);
             marker.Descriptors.Add(sourceDescriptor);

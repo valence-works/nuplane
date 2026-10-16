@@ -1,4 +1,5 @@
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Capabilities;
 using Nuplane.Feeds;
 using Nuplane.Feeds.Policy;
@@ -103,6 +104,10 @@ public sealed class PackageApplyExecutor(
                 resolvedRootsById[request.Id] = root;
                 rootRequests.Add(request);
             }
+            catch (PackageStoreAdmissionException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 await RecordRootResolutionFailureAsync(request.Id, ex);
@@ -163,9 +168,40 @@ public sealed class PackageApplyExecutor(
             .Select(static group => group.Last())
             .OrderBy(static decision => decision.PackageId, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var resolvedPackagesByKey = deduplicatedResolved.ToDictionary(
+            static package => BuildKey(package.Id, package.Version),
+            StringComparer.OrdinalIgnoreCase);
+        var graphSelections = graphs.Select(graph =>
+        {
+            var graphRootIds = graph.Roots
+                .Select(static root => root.PackageId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var selectedRequests = rootRequests
+                .Where(request => graphRootIds.Contains(request.Id))
+                .ToArray();
+
+            if (selectedRequests.Length == 0 || graphRootIds.Any(rootId =>
+                    !selectedRequests.Any(request => StringComparer.OrdinalIgnoreCase.Equals(request.Id, rootId))))
+            {
+                throw new InvalidOperationException(
+                    $"Resolved graph '{graph.GraphId}' did not retain the exact final request for every root.");
+            }
+
+            var graphPackages = graph.Nodes.Select(node =>
+            {
+                var key = BuildKey(node.PackageId, node.Version);
+                return resolvedPackagesByKey.TryGetValue(key, out var package)
+                    ? package
+                    : throw new InvalidOperationException(
+                        $"Resolved graph '{graph.GraphId}' references missing package projection '{key}'.");
+            }).ToArray();
+
+            return new ResolvedPackageGraphSelection(graph, selectedRequests, graphPackages);
+        }).ToArray();
 
         return new(deduplicatedResolved, failed, deduplicatedDecisions, graphs)
         {
+            GraphSelections = graphSelections,
             LockFileEvaluated = lockFileCoordinator is not null,
             ExpectedArtifactHashes = expectedHashesById
         };
@@ -253,6 +289,9 @@ public sealed class PackageApplyExecutor(
                     if (roundsThatAddedRoots == MaxContributionRounds)
                     {
                         await RefuseContributionLimitAsync(pending, contributedSoFar);
+                        // Refusal removed roots after the last expansion. Rebuild that projection
+                        // from the surviving cached roots before retaining exact graph selections.
+                        await TryExpandGraphAsync();
                         return;
                     }
 
@@ -331,6 +370,10 @@ public sealed class PackageApplyExecutor(
                         rootRequests.Add(request);
                         contributedSoFar.Add(request);
                         changedRootSet = true;
+                    }
+                    catch (PackageStoreAdmissionException)
+                    {
+                        throw;
                     }
                     catch (Exception ex)
                     {
@@ -435,6 +478,10 @@ public sealed class PackageApplyExecutor(
                 }
 
                 return true;
+            }
+            catch (PackageStoreAdmissionException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -568,11 +615,24 @@ public sealed class PackageApplyExecutor(
         ArgumentNullException.ThrowIfNull(resolutionResult);
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
+        var graphSelections = resolutionResult.GraphSelections.ToArray();
+        IReadOnlyList<ResolvedPackage> resolvedPackages = resolutionResult.ResolvedPackages;
+        IReadOnlyList<ResolvedPackageGraph> resolvedGraphs = resolutionResult.ResolvedGraphs;
+        if (graphSelections.Length > 0)
+        {
+            resolvedPackages = resolutionResult.ResolvedPackages.ToArray();
+            resolvedGraphs = ValidateExplicitGraphSelections(
+                resolvedGraphs,
+                graphSelections,
+                resolvedPackages);
+        }
+
         var applied = new List<ResolvedPackage>();
         var failed = new List<string>(resolutionResult.FailedPackageIds);
         var failureMessages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var successfulGraphSelections = new List<ResolvedPackageGraphSelection>();
 
-        if (resolutionResult.ResolvedGraphs.Count == 0)
+        if (resolvedGraphs.Count == 0)
         {
             foreach (var resolved in resolutionResult.ResolvedPackages)
             {
@@ -597,12 +657,14 @@ public sealed class PackageApplyExecutor(
             return new(applied, failed, failureMessages);
         }
 
-        var packagesByKey = resolutionResult.ResolvedPackages
+        var packagesByKey = resolvedPackages
             .ToDictionary(package => BuildKey(package.Id, package.Version), package => package, StringComparer.OrdinalIgnoreCase);
         var appliedByKey = new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var graph in resolutionResult.ResolvedGraphs)
+        for (var graphIndex = 0; graphIndex < resolvedGraphs.Count; graphIndex++)
         {
+            var graph = resolvedGraphs[graphIndex];
+            var resolvedSelection = graphSelections.Length > 0 ? graphSelections[graphIndex] : null;
             var graphApplied = new List<ResolvedPackage>();
             var graphFailures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -644,6 +706,14 @@ public sealed class PackageApplyExecutor(
                     appliedByKey[BuildKey(graphPackage.Id, graphPackage.Version)] = graphPackage;
                 }
 
+                if (resolvedSelection is not null)
+                {
+                    successfulGraphSelections.Add(new(
+                        graph,
+                        resolvedSelection.RootRequests,
+                        graphApplied));
+                }
+
                 continue;
             }
 
@@ -667,8 +737,188 @@ public sealed class PackageApplyExecutor(
                 .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
             failed.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
-            failureMessages);
+            failureMessages)
+        {
+            SuccessfulGraphSelections = successfulGraphSelections
+        };
     }
+
+    private static IReadOnlyList<ResolvedPackageGraph> ValidateExplicitGraphSelections(
+        IReadOnlyList<ResolvedPackageGraph> graphs,
+        IReadOnlyList<ResolvedPackageGraphSelection> selections,
+        IReadOnlyList<ResolvedPackage> resolvedPackages)
+    {
+        if (selections.Count != graphs.Count)
+        {
+            throw new InvalidOperationException(
+                $"Explicit graph selection count ({selections.Count}) does not match resolved graph count ({graphs.Count}).");
+        }
+
+        var resolvedPackagesByKey = new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase);
+        foreach (var package in resolvedPackages)
+        {
+            if (package is null)
+                throw new InvalidOperationException("The flat resolved-package projection contains a null package.");
+
+            var key = BuildKey(package.Id, package.Version);
+            if (!resolvedPackagesByKey.TryAdd(key, package))
+                throw new InvalidOperationException($"The flat resolved-package projection contains duplicate identity '{key}'.");
+        }
+
+        var immutableGraphs = new ResolvedPackageGraph[graphs.Count];
+        for (var index = 0; index < graphs.Count; index++)
+        {
+            var graph = graphs[index]?.CreateImmutableSnapshot()
+                ?? throw new InvalidOperationException($"Resolved graph at index {index} is null.");
+            var selection = selections[index]
+                ?? throw new InvalidOperationException($"Explicit graph selection at index {index} is null.");
+            if (!HasSameCanonicalGraph(graph, selection.Graph) ||
+                !HasMatchingSelectionProjection(graph, selection) ||
+                !HasMatchingFlatPackageProjection(selection, resolvedPackagesByKey))
+            {
+                throw new InvalidOperationException(
+                    $"Explicit graph selection at index {index} does not correspond to resolved graph '{graph.GraphId}'.");
+            }
+
+            immutableGraphs[index] = graph;
+        }
+
+        return Array.AsReadOnly(immutableGraphs);
+    }
+
+    private static bool HasSameCanonicalGraph(ResolvedPackageGraph graph, ResolvedPackageGraph selectedGraph)
+    {
+        if (!HasCanonicalGraphId(graph) || !HasCanonicalGraphId(selectedGraph) ||
+            !string.Equals(graph.GraphId, selectedGraph.GraphId, StringComparison.Ordinal) ||
+            !string.Equals(graph.GenerationId, selectedGraph.GenerationId, StringComparison.Ordinal) ||
+            !string.Equals(graph.TargetFramework, selectedGraph.TargetFramework, StringComparison.Ordinal) ||
+            graph.CreatedAtUtc != selectedGraph.CreatedAtUtc ||
+            graph.Roots.Count != selectedGraph.Roots.Count || graph.Nodes.Count != selectedGraph.Nodes.Count ||
+            graph.Edges.Count != selectedGraph.Edges.Count || graph.SourceDecisions.Count != selectedGraph.SourceDecisions.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < graph.Roots.Count; index++)
+        {
+            if (!HasSameNodeContent(graph.Roots[index], selectedGraph.Roots[index]))
+                return false;
+        }
+
+        for (var index = 0; index < graph.Nodes.Count; index++)
+        {
+            if (!HasSameNodeContent(graph.Nodes[index], selectedGraph.Nodes[index]))
+                return false;
+        }
+
+        for (var index = 0; index < graph.Edges.Count; index++)
+        {
+            if (graph.Edges[index] != selectedGraph.Edges[index])
+                return false;
+        }
+
+        for (var index = 0; index < graph.SourceDecisions.Count; index++)
+        {
+            if (!HasSameDecisionContent(graph.SourceDecisions[index], selectedGraph.SourceDecisions[index]))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool HasCanonicalGraphId(ResolvedPackageGraph graph)
+        => !string.IsNullOrWhiteSpace(graph.GraphId) &&
+            !string.IsNullOrWhiteSpace(graph.GenerationId) &&
+            !string.IsNullOrWhiteSpace(graph.TargetFramework) &&
+            string.Equals(graph.GraphId, ResolvedPackageGraph.CreateGraphId(
+                graph.TargetFramework, graph.Roots, graph.Nodes, graph.Edges, graph.SourceDecisions), StringComparison.Ordinal);
+
+    private static bool HasSameNodeContent(ResolvedPackageNode left, ResolvedPackageNode right)
+        => string.Equals(left.PackageId, right.PackageId, StringComparison.Ordinal) &&
+            string.Equals(left.Version, right.Version, StringComparison.Ordinal) &&
+            left.Role == right.Role &&
+            string.Equals(left.InstallPath, right.InstallPath, StringComparison.Ordinal) &&
+            left.SourceKind == right.SourceKind &&
+            string.Equals(left.SourceName, right.SourceName, StringComparison.Ordinal) &&
+            string.Equals(left.PackageContentHash, right.PackageContentHash, StringComparison.Ordinal) &&
+            left.RuntimeAssets.SequenceEqual(right.RuntimeAssets, StringComparer.Ordinal) &&
+            left.DiscoverableAssets.SequenceEqual(right.DiscoverableAssets, StringComparer.Ordinal) &&
+            left.SupportAssets.SequenceEqual(right.SupportAssets, StringComparer.Ordinal);
+
+    private static bool HasSameDecisionContent(FeedResolutionDecision left, FeedResolutionDecision right)
+        => string.Equals(left.PackageId, right.PackageId, StringComparison.Ordinal) &&
+            string.Equals(left.RequestedFeed, right.RequestedFeed, StringComparison.Ordinal) &&
+            left.CandidateFeeds.SequenceEqual(right.CandidateFeeds, StringComparer.Ordinal) &&
+            string.Equals(left.SelectedFeed, right.SelectedFeed, StringComparison.Ordinal) &&
+            string.Equals(left.SelectedVersion, right.SelectedVersion, StringComparison.Ordinal) &&
+            string.Equals(left.DecisionPath, right.DecisionPath, StringComparison.Ordinal) &&
+            string.Equals(left.CorrelationId, right.CorrelationId, StringComparison.Ordinal) &&
+            left.FeedUnavailable == right.FeedUnavailable &&
+            string.Equals(left.FailureReason, right.FailureReason, StringComparison.Ordinal) &&
+            left.EnumeratedVersionCount == right.EnumeratedVersionCount &&
+            left.CacheHit == right.CacheHit;
+
+    private static bool HasMatchingSelectionProjection(
+        ResolvedPackageGraph graph,
+        ResolvedPackageGraphSelection selection)
+    {
+        var graphRootIds = graph.Roots.Select(static root => root.PackageId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (graphRootIds.Count == 0 || selection.RootRequests.Count == 0 ||
+            selection.RootRequests.Any(request => request is null || !graphRootIds.Contains(request.Id)) ||
+            graphRootIds.Any(rootId => !selection.RootRequests.Any(request =>
+                StringComparer.OrdinalIgnoreCase.Equals(request.Id, rootId))) ||
+            selection.Packages.Count != graph.Nodes.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < graph.Nodes.Count; index++)
+        {
+            var node = graph.Nodes[index];
+            var package = selection.Packages[index];
+            if (package is null)
+                return false;
+
+            var sourceName = string.IsNullOrWhiteSpace(package.SourceName) ? package.FeedName : package.SourceName;
+            if (!StringComparer.OrdinalIgnoreCase.Equals(node.PackageId, package.Id) ||
+                !StringComparer.OrdinalIgnoreCase.Equals(node.Version, package.Version) ||
+                !string.Equals(node.InstallPath, package.InstallPath, StringComparison.Ordinal) ||
+                !string.Equals(node.SourceName, sourceName, StringComparison.Ordinal) ||
+                !string.Equals(node.PackageContentHash, package.PackageContentHash, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HasMatchingFlatPackageProjection(
+        ResolvedPackageGraphSelection selection,
+        IReadOnlyDictionary<string, ResolvedPackage> resolvedPackagesByKey)
+    {
+        foreach (var selectedPackage in selection.Packages)
+        {
+            var key = BuildKey(selectedPackage.Id, selectedPackage.Version);
+            if (!resolvedPackagesByKey.TryGetValue(key, out var resolvedPackage) ||
+                !HasSameResolvedPackageContent(selectedPackage, resolvedPackage))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HasSameResolvedPackageContent(ResolvedPackage selectedPackage, ResolvedPackage resolvedPackage)
+        => StringComparer.OrdinalIgnoreCase.Equals(selectedPackage.Id, resolvedPackage.Id) &&
+            StringComparer.OrdinalIgnoreCase.Equals(selectedPackage.Version, resolvedPackage.Version) &&
+            string.Equals(selectedPackage.FeedName, resolvedPackage.FeedName, StringComparison.Ordinal) &&
+            string.Equals(selectedPackage.InstallPath, resolvedPackage.InstallPath, StringComparison.Ordinal) &&
+            selectedPackage.InstalledAt == resolvedPackage.InstalledAt &&
+            string.Equals(selectedPackage.SourceName, resolvedPackage.SourceName, StringComparison.Ordinal) &&
+            string.Equals(selectedPackage.PackageContentHash, resolvedPackage.PackageContentHash, StringComparison.Ordinal);
 
     /// <inheritdoc />
     public async Task RecordLoadingFailureNonMutatingAsync(

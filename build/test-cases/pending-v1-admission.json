@@ -1,0 +1,5 @@
+[
+  "Nuplane.Integration.Tests.RootMembershipRegistryProcessTests.FreshConfiguredAdmission_ResolvesOrRefusesActualPendingV1ChildPublication(checkpointName: \"PendingPublished\", expectRefusal: False)",
+  "Nuplane.Integration.Tests.RootMembershipRegistryProcessTests.FreshConfiguredAdmission_ResolvesOrRefusesActualPendingV1ChildPublication(checkpointName: \"StageFlushed\", expectRefusal: True)",
+  "Nuplane.Integration.Tests.RootMembershipRegistryProcessTests.FreshConfiguredAdmission_ResolvesOrRefusesActualPendingV1ChildPublication(checkpointName: \"StatePublished\", expectRefusal: False)"
+]

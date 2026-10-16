@@ -11,6 +11,8 @@ public sealed class DryRunPlanner(IDesiredActualDiffEngine diffEngine) : IDryRun
 {
     private readonly IDesiredActualDiffEngine _diffEngine = diffEngine ?? throw new ArgumentNullException(nameof(diffEngine));
 
+    internal IDesiredActualDiffEngine DiffEngine => _diffEngine;
+
     /// <inheritdoc />
     public Task<DryRunPlan> BuildPlanAsync(
         IReadOnlyCollection<ResolvedPackage> desired,

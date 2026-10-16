@@ -26,6 +26,20 @@ public sealed class LoadingRegistrationDeterminismTests
     }
 
     [Fact]
+    public void Register_CalledTwice_ScopedLoaderSharesConcreteRuntime()
+    {
+        var services = new ServiceCollection();
+
+        LoadingRegistrationServices.Register(services);
+        LoadingRegistrationServices.Register(services);
+
+        Assert.Single(services, d => d.ServiceType == typeof(IScopedPackageLoader));
+        using var provider = services.BuildServiceProvider();
+        Assert.Same(provider.GetRequiredService<PackageLoader>(),
+            Assert.Single(provider.GetServices<IScopedPackageLoader>()));
+    }
+
+    [Fact]
     public void Register_CalledTwice_DoesNotDuplicateModuleOwnedContributor()
     {
         var services = new ServiceCollection();

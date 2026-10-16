@@ -1,0 +1,6 @@
+[
+  "Nuplane.Loading.Tests.NativeLibraryHandlePoolTests.DisposeAsync_WhenFreeFails_KeepsFailureStickyAndDoesNotRetry",
+  "Nuplane.Loading.Tests.NativeLibraryHandlePoolTests.Load_CachesExactPathAndDisposeFreesEachHandleOnce",
+  "Nuplane.Loading.Tests.NativeLibraryHandlePoolTests.UnleasedCollectibleLifetime_ReleasesNativeHandlesAfterLongWeakDeath",
+  "Nuplane.Loading.Tests.NativeLibraryHandlePoolTests.UnleasedCollectibleLifetime_RetainsNativeHandlesUntilFinalizationCompletes"
+]

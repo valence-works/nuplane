@@ -15,6 +15,7 @@ public sealed class AdminRegistrationSeparationTests
         using var provider = services.BuildServiceProvider();
 
         Assert.Null(provider.GetService<INuplaneAdminOperations>());
+        Assert.Null(provider.GetService<INuplanePackageStoreMaintenanceOperations>());
     }
 
     [Fact]
@@ -28,5 +29,23 @@ public sealed class AdminRegistrationSeparationTests
         using var provider = services.BuildServiceProvider();
 
         Assert.NotNull(provider.GetRequiredService<INuplaneAdminOperations>());
+        Assert.Null(provider.GetService<INuplanePackageStoreMaintenanceOperations>());
+    }
+
+    [Fact]
+    public void AddNuplanePackageStoreMaintenance_IsExplicitAndDoesNotReplaceLegacyAdmin()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(_ => { });
+        services.AddNuplaneAdmin();
+        services.AddNuplanePackageStoreMaintenance();
+        services.AddNuplanePackageStoreMaintenance();
+        using var provider = services.BuildServiceProvider();
+
+        Assert.NotNull(provider.GetRequiredService<INuplaneAdminOperations>());
+        Assert.Same(provider.GetRequiredService<INuplanePackageStoreMaintenanceOperations>(),
+            provider.GetRequiredService<INuplanePackageStoreMaintenanceOperations>());
+        Assert.Single(services, static descriptor => descriptor.ServiceType == typeof(INuplanePackageStoreMaintenanceOperations));
     }
 }

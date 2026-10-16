@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Builder;
 using Nuplane.Registration;
+using Nuplane.Store.Coordination;
 
 namespace Nuplane;
 
@@ -93,6 +94,13 @@ public static class NuplaneServiceCollectionExtensions
 
         var builder = new NuplaneBuilder(services);
         configure(builder);
+        var roots = builder.FreezePackageStoreRoots();
+        TrustedPackageStoreRootCatalogRegistration.Register(services, roots);
+        var members = builder.FreezePackageStoreMembers();
+        var composition = builder.FreezeComposition(roots);
+        if (composition.IsParticipant)
+            TrustedPackageStoreMemberDeclarationRegistration.Register(services, members);
+        PackageStoreCompositionSnapshot.Register(services, composition);
 
         return services;
     }

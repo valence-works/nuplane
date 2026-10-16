@@ -1,4 +1,5 @@
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Loading;
 
@@ -27,4 +28,22 @@ namespace Nuplane.Loading;
 public sealed record PackageActivationContext(
     string GraphKey,
     PackageLoadMode LoadMode,
-    IReadOnlyList<ResolvedPackage> Packages);
+    IReadOnlyList<ResolvedPackage> Packages)
+{
+    private IReadOnlyList<PackageGraphUseLease> _graphUseLeases = Array.Empty<PackageGraphUseLease>();
+
+    /// <summary>Gets the published graph-use lease views for enrolled package roots, or an empty list for legacy observations.</summary>
+    /// <remarks>The collection is copied on initialization. Raw package paths never grant admission.</remarks>
+    public IReadOnlyList<PackageGraphUseLease> GraphUseLeases
+    {
+        get => _graphUseLeases;
+        init
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            var leases = value.ToArray();
+            if (leases.Any(static lease => lease is null))
+                throw new ArgumentException("Graph-use leases cannot contain null.", nameof(value));
+            _graphUseLeases = Array.AsReadOnly(leases);
+        }
+    }
+}

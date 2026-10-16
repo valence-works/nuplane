@@ -1,0 +1,7 @@
+[
+  "Nuplane.Runtime.Tests.Configuration.TrustedPackageStoreRootCatalogTests.AddNuplane_AnchorsAdditionalRootsAtFinalBaseAndResolvesDefaultFromFinalOptions",
+  "Nuplane.Runtime.Tests.Configuration.TrustedPackageStoreRootCatalogTests.AddNuplane_FinalizesImmutableCatalogAndRetainsRootsAcrossRepeatedCalls",
+  "Nuplane.Runtime.Tests.Configuration.TrustedPackageStoreRootCatalogTests.AddNuplane_RejectsInvalidLabelsAndDuplicatesAcrossCalls",
+  "Nuplane.Runtime.Tests.Configuration.TrustedPackageStoreRootCatalogTests.AddNuplane_WithoutBasePathFreezesCurrentDirectoryAndKeepsDefaultFallback",
+  "Nuplane.Runtime.Tests.Configuration.TrustedPackageStoreRootCatalogTests.RestoreComposition_UsesLateResolvedDefaultAndAnchorsBuilderRootToRestoreBase"
+]

@@ -5,10 +5,15 @@ namespace Nuplane.Reconciliation.Middleware;
 internal sealed class TransactionExecutionMiddleware(
     IPackageApplyExecutor applyExecutor,
     IDesiredActualDiffEngine desiredActualDiffEngine,
-    IObserverEventDispatcher observerEventDispatcher) : IReconciliationMiddleware
+    IObserverEventDispatcher observerEventDispatcher,
+    ICoordinatedActiveStateTransitionDriver? transitionDriver = null) : IReconciliationMiddleware
 {
     public async Task InvokeAsync(ReconciliationCycleContext context, Func<Task> next)
     {
+        if (context.PackageStoreOwner is { } owner && !context.CoordinatedTransitionPreflightPassed)
+            EnrolledReconciliationTransitionGuard.RefuseNonemptyTransition(
+                context.ResolutionResult!, context.ChangeSet, owner);
+
         // Phase 2: Execute transactions for resolved packages
         var applyResult = await applyExecutor.ExecuteTransactionsAsync(
             context.ResolutionResult!,
@@ -57,6 +62,21 @@ internal sealed class TransactionExecutionMiddleware(
         foreach (var (id, version) in activeResolvedVersions)
         {
             mergedActive[id] = version;
+        }
+
+        if (context.PackageStoreOwner is { } operationOwner && transitionDriver is not null &&
+            (context.ResolutionResult!.FailedPackageIds.Count > 0 || applyResult.FailedPackageIds.Count > 0))
+        {
+            var resolution = context.ResolutionResult!;
+            var restored = await transitionDriver.RestoreFailedRootSubclosureVersionsAsync(
+                operationOwner,
+                mergedActive,
+                CoordinatedActiveStateTransitionDriver.BuildDesiredRootIds(
+                    context.DesiredRequests, resolution.ResolvedGraphs, resolution.GraphSelections),
+                CoordinatedActiveStateTransitionDriver.BuildFailedPackageIds(
+                    resolution.FailedPackageIds, applyResult.FailedPackageIds),
+                context.CancellationToken).ConfigureAwait(false);
+            mergedActive = new Dictionary<string, string>(restored, StringComparer.OrdinalIgnoreCase);
         }
 
         context.MergedActive = mergedActive;

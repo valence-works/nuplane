@@ -5,13 +5,13 @@ using Nuplane.Store.State;
 namespace Nuplane.Loading;
 
 /// <summary>
-/// Offline, dependency-injection-free entry point that loads an already-resolved active package set
-/// into assemblies exactly the way <see cref="PackageLoadMode.HostIntegrated"/> loading does inside a
-/// running Nuplane host — with no host, no hosted services, no reconciliation, and no feed or network
-/// access.
-/// <see cref="LoadFromStateAsync(string, HostIntegratedLoadOptions, CancellationToken)"/> is the primary
-/// entry point: it reads a <c>store-state.json</c> offline and loads what it records, grouping packages
-/// into graphs exactly as the host that wrote the state does.
+/// Offline, dependency-injection-free entry points load an already-resolved active package set or
+/// persisted state into assemblies the way <see cref="PackageLoadMode.HostIntegrated"/> loading does,
+/// without host services, reconciliation, feeds, or network access. For a running enrolled participant,
+/// use <see cref="LoadFromParticipantAsync(NuplaneStoreSnapshotAccess, HostIntegratedLoadOptions, CancellationToken)"/>
+/// to load through its complete native catalog admission and retain process-lifetime graph protection.
+/// <see cref="LoadFromStateAsync(string, HostIntegratedLoadOptions, CancellationToken)"/> is the preferred
+/// ordinary offline state-file entry point.
 /// <see cref="LoadActivePackagesAsync(IReadOnlyList{ActivePackage}, HostIntegratedLoadOptions, CancellationToken)"/>
 /// takes an already-assembled package set instead, and groups by graph generation identity because that
 /// is all such a set carries.
@@ -32,8 +32,10 @@ namespace Nuplane.Loading;
 /// after doing their work, not from a long-running process that expects to reload a package set.
 /// </para>
 /// <para>
-/// The entry point never writes: it does not touch the store, the state file, completion markers, or
-/// the install directories it reads.
+/// The ordinary offline entry points never write: they do not touch the store, the state file,
+/// completion markers, or the install directories they read. The participant-bound entry point also
+/// publishes graph-use records in the native store control area so package bytes remain protected for
+/// the process lifetime.
 /// </para>
 /// <para>
 /// A load is not re-entrant. It holds a process-wide lock for its duration, so calling it again from
@@ -120,10 +122,39 @@ public static class NuplaneHostIntegratedLoader
         LoadAsync(packages, state: null, options, cancellationToken);
 
     /// <summary>
-    /// Reads the persisted store state at <paramref name="stateFilePath"/> and loads the package set it
-    /// records into this process the way a running host's <see cref="PackageLoadMode.HostIntegrated"/>
-    /// loading would. This is the entry point to prefer: it is the only one that can group packages into
-    /// graphs exactly as the host does, because grouping needs the state's graph activation records.
+    /// Loads the selected participant composition's persisted active graphs after complete native
+    /// catalog admission and publishes one process-lifetime graph-use owner for every loaded graph.
+    /// </summary>
+    /// <remarks>
+    /// The access object is created only by a validated coordinated participant composition. This
+    /// method acquires the process-wide load gate before opening its short native snapshot, validates
+    /// every active graph before package reads, publishes all graph-use owners before the first load,
+    /// then releases snapshot/member ownership before metadata, gates, and assembly reads. Ordinary
+    /// path and state-file entry points retain their released-compatible behavior and do not infer
+    /// participant authority.
+    /// </remarks>
+    /// <param name="access">The registered access for the selected coordinated participant composition.</param>
+    /// <param name="options">The load options, or <see langword="null"/> for the default host-integrated configuration.</param>
+    /// <param name="cancellationToken">Cancels admission or loading before an irreversible load context is created.</param>
+    /// <returns>The per-package load state and any ordinary load failures.</returns>
+    public static Task<HostIntegratedLoadResult> LoadFromParticipantAsync(
+        NuplaneStoreSnapshotAccess access,
+        HostIntegratedLoadOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(access);
+        options ??= new HostIntegratedLoadOptions();
+        ValidateOptions(options);
+        return HostIntegratedLoadComposition.LoadParticipantAsync(access, options, cancellationToken);
+    }
+
+    /// <summary>
+    /// Reads the persisted store state at <paramref name="stateFilePath"/> offline and loads the package
+    /// set it records into this process the way a running host's <see cref="PackageLoadMode.HostIntegrated"/>
+    /// loading would. This is the preferred ordinary offline entry point because it groups packages
+    /// using the state's graph activation records. Enrolled participants should use
+    /// <see cref="LoadFromParticipantAsync(NuplaneStoreSnapshotAccess, HostIntegratedLoadOptions, CancellationToken)"/>
+    /// instead.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -164,7 +195,8 @@ public static class NuplaneHostIntegratedLoader
     /// Reads the persisted store state from the state file resolved from <paramref name="storeOptions"/>
     /// the same way a running host resolves it, and loads the package set it records. See
     /// <see cref="LoadFromStateAsync(string, HostIntegratedLoadOptions, CancellationToken)"/>, which
-    /// this delegates to.
+    /// this delegates to. This is an ordinary offline read; enrolled participants should instead use
+    /// <see cref="LoadFromParticipantAsync(NuplaneStoreSnapshotAccess, HostIntegratedLoadOptions, CancellationToken)"/>.
     /// </summary>
     /// <param name="storeOptions">The store registry options to resolve the effective state file path from.</param>
     /// <param name="options">The load options, or <see langword="null"/> to load exactly as a host with default host-integrated configuration does.</param>

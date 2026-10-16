@@ -14,7 +14,7 @@ public sealed class PackageLoaderHostIntegratedConflictTests : IDisposable
     public async Task EnsureGraphLoadedAsync_HostIntegratedVersionConflict_FailsBeforePublishingVisibility()
     {
         var firstPath = CreateInstallDir("pkg-a", typeof(FixtureMarker).Assembly.Location);
-        var secondPath = CreateInstallDir("pkg-b", GetConflictAssemblyPath());
+        var secondPath = CreateInstallDir("pkg-b", TestFixtureAssemblyPaths.FindProjectAssembly("Nuplane.Loading.Tests.Fixtures.Conflict", "Nuplane.Loading.Tests.Fixtures.dll"));
         var catalog = new HostIntegratedAssemblyResolutionCatalog();
         var options = Options.Create(new LoadingOptions { DefaultLoadMode = PackageLoadMode.HostIntegrated });
         var loader = new PackageLoader(options: options, hostIntegratedResolutionCatalog: catalog);
@@ -40,23 +40,7 @@ public sealed class PackageLoaderHostIntegratedConflictTests : IDisposable
         return dir.FullName;
     }
 
-    private static string GetConflictAssemblyPath()
-    {
-        var path = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            "..",
-            "Nuplane.Loading.Tests.Fixtures.Conflict",
-            "bin",
-            "Debug",
-            "net10.0",
-            "Nuplane.Loading.Tests.Fixtures.dll"));
 
-        Assert.True(File.Exists(path), $"Expected conflict fixture at '{path}'.");
-        return path;
-    }
 
     private static ResolvedPackage Pkg(string id, string version, string installPath) =>
         new(id, version, "feed-a", installPath, DateTimeOffset.UtcNow, id);

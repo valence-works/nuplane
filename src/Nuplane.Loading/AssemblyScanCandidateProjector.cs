@@ -15,10 +15,7 @@ internal sealed class AssemblyScanCandidateProjector(PackageLoader packageLoader
     public IReadOnlyList<PackageAssemblyReference> Project(ActivePackageDescriptor package)
     {
         ArgumentNullException.ThrowIfNull(package);
-        return _packageLoader
-            .BuildScanCandidates(package.PackageId, package.InstallPath)
-            .Select(static candidate => PackageAssemblyReference.FromCandidate(candidate))
-            .ToArray();
+        return ProjectCandidates(_packageLoader.BuildScanCandidates(package.PackageId, package.InstallPath));
     }
 
     /// <summary>
@@ -27,10 +24,19 @@ internal sealed class AssemblyScanCandidateProjector(PackageLoader packageLoader
     public IReadOnlyList<PackageAssemblyReference> Project(ActivePackage package)
     {
         ArgumentNullException.ThrowIfNull(package);
-        return _packageLoader
-            .BuildScanCandidates(package.PackageId, package.InstallPath)
-            .Select(static candidate => PackageAssemblyReference.FromCandidate(candidate))
-            .ToArray();
+        return ProjectCandidates(_packageLoader.BuildScanCandidates(package.PackageId, package.InstallPath));
     }
+
+    /// <summary>Projects candidates while the exact current session's graph-use lease pins enumeration.</summary>
+    internal IReadOnlyList<PackageAssemblyReference> Project(ActivePackage package, PackageLoadSession session)
+    {
+        ArgumentNullException.ThrowIfNull(package);
+        ArgumentNullException.ThrowIfNull(session);
+        return ProjectCandidates(_packageLoader.BuildScanCandidates(package, session));
+    }
+
+    private static IReadOnlyList<PackageAssemblyReference> ProjectCandidates(
+        IReadOnlyList<AssemblyScanCandidate> candidates) =>
+        candidates.Select(static candidate => PackageAssemblyReference.FromCandidate(candidate)).ToArray();
 }
 

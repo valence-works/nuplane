@@ -1,0 +1,15 @@
+# Ordinary content-reader compatibility
+
+The answered [support policy](pruning-support-policy.md) preserves released ordinary Nuplane behavior outside explicit participation. The existing two-argument `PackageContent.TryReadFile` and `TryFindByExtension` methods use ordinary BCL directory/archive reads; they neither create a native provider nor claim Unenrolled status. Borrow and graph-use overloads retain mandatory native identity/authority validation. The explicit internal guarded provider seams remain available for protected unscoped refusal tests.
+
+This corrects unreleased mandatory-native behavior against released Nuplane 0.0.11 (`32776c18`). Ordinary requests retain rooted/traversal rejection, separator normalization, dot/empty extracted-path components, first normalized case-insensitive archive match, and platform directory-glob semantics. Protected readers retain strict unsafe/duplicate archive-member refusal and detached byte ownership. Clients sharing a pruning-enabled store must use the protected forms throughout; calling an ordinary static method is outside that coordination contract. This is not fallback after a failed participant probe.
+
+## Qualification
+
+The new directory/archive cases exercise ordinary reads beside unverifiable coordination metadata. A separate real-native test exercises both ordinary methods inside a Complete enrolled root. The guarded-refusal/borrow-lock-lifetime test is renamed from `LegacyReadRefuses...` to `GuardedReadRefuses...` to reflect its actual scope. Exact manifests contain 12 Runtime cases, 17 Unix Store cases, and 15 Windows Store cases; the Store manifests add both the enrollment-compatibility fact and protected archive-refusal coverage. No protected refusal or borrow assertion is removed.
+
+Independent source review found no blocking selection or ownership issue. Root accepts the shared bounded archive reader and conversion of malformed-input `ArgumentException` to `null`: valid released package selection remains unchanged, and these defensive handling details do not infer participation or grant pruning authority. Final hash-pinned focused qualification passes all12 Runtime and17 native Store cases without skips; every exact required case is verified against its manifest. Windows execution remains pending.
+
+A compiled replacement of the ordinary read method with the former mandatory-native guarded route makes both new directory/archive compatibility cases fail at their expected ordinary-byte assertion (`null` was returned). Restoring the final reviewed source byte-exact makes both cases pass. All six reviewed source/test/manifest hashes remain unchanged after this experiment. Earlier pre-review results remain separate and are not credited to this final revision.
+
+Host-wide default/participant composition selection, standalone metadata-reader compatibility and remaining driver routing are separate unfinished work. No public pruning activation, complete T101 or full-pruning acceptance follows from this slice.

@@ -48,6 +48,7 @@ public static class LoadingRegistrationServices
         services.TryAddSingleton<HostIntegratedAssemblyResolutionCatalog>();
         services.TryAddSingleton<HostIntegratedAssemblyResolver>();
         services.TryAddSingleton<PackageLoader>();
+        services.TryAddSingleton<IScopedPackageLoader>(sp => sp.GetRequiredService<PackageLoader>());
         services.TryAddSingleton<AssemblyScanCandidateProjector>();
         services.TryAddSingleton<PackageAssemblyProvider>();
         services.TryAddSingleton<PackageAssemblyCatalog>(sp =>

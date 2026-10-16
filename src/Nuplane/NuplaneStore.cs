@@ -70,6 +70,28 @@ public static class NuplaneStore
         GetActivePackages(await ReadStateAsync(stateFilePath, cancellationToken).ConfigureAwait(false));
 
     /// <summary>
+    /// Opens an immutable active-package snapshot while retaining the selected coordinated store's
+    /// verified root ownership. Dispose the returned scope after any graph-use lease has been
+    /// acquired for the packages that will remain loaded.
+    /// </summary>
+    /// <remarks>
+    /// This is an explicit participant-only operation. Existing <see cref="ReadStateAsync(string, CancellationToken)"/>
+    /// and <see cref="ReadActivePackagesAsync(string, CancellationToken)"/> remain descriptive,
+    /// unscoped reads. The access object must come from the same AddNuplane participant composition
+    /// as the selected store registry; callers cannot provide a state path or mint that object.
+    /// </remarks>
+    /// <param name="access">The access object resolved from the validated participant host.</param>
+    /// <param name="cancellationToken">Cancels observation or admission.</param>
+    /// <returns>An immutable projection and its retained, path-limited admission scope.</returns>
+    public static Task<AdmittedActivePackageSnapshot> OpenActivePackageSnapshotAsync(
+        NuplaneStoreSnapshotAccess access,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(access);
+        return access.OpenActivePackageSnapshotAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// Reads the whole persisted store state at <paramref name="stateFilePath"/>, for callers that need
     /// more than the active package set — for example the graph activation records that decide which
     /// packages were activated together.

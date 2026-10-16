@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.Loader;
+using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Loading;
 
@@ -8,11 +9,14 @@ namespace Nuplane.Loading;
 /// and shared assembly policy support. Assemblies matching the shared policy are loaded from
 /// the host's default context to avoid version conflicts.
 /// </summary>
-public sealed class PackageAssemblyLoadContext : AssemblyLoadContext, ISharedAssemblyPolicyLoadContext
+public sealed class PackageAssemblyLoadContext : AssemblyLoadContext, ISharedAssemblyPolicyLoadContext, IGraphUseLeaseBoundLoadContext
 {
     private readonly AssemblyDependencyResolver _dependencyResolver;
     private readonly IReadOnlyList<SharedAssemblyPolicyEntry> _sharedPolicy;
     private readonly SharedAssemblyPolicyMatcher _matcher;
+    private readonly PackageGraphUseLease? _graphUseLease;
+
+    PackageGraphUseLease? IGraphUseLeaseBoundLoadContext.GraphUseLease => _graphUseLease;
 
     /// <summary>
     /// Initializes a new instance of <see cref="PackageAssemblyLoadContext"/> for the specified package assembly.
@@ -24,13 +28,26 @@ public sealed class PackageAssemblyLoadContext : AssemblyLoadContext, ISharedAss
         string packageMainAssemblyPath,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         SharedAssemblyPolicyMatcher matcher)
+        : this(packageMainAssemblyPath, sharedPolicy, matcher, graphLeaseOwner: null)
+    {
+    }
+
+    internal PackageAssemblyLoadContext(
+        string packageMainAssemblyPath,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        SharedAssemblyPolicyMatcher matcher,
+        PackageGraphUseLeaseOwner? graphLeaseOwner)
         : base($"nuplane:{Path.GetFileNameWithoutExtension(packageMainAssemblyPath)}", isCollectible: true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packageMainAssemblyPath);
+        ArgumentNullException.ThrowIfNull(sharedPolicy);
+        ArgumentNullException.ThrowIfNull(matcher);
 
+        _graphUseLease = graphLeaseOwner?.Lease;
+        graphLeaseOwner?.TransferToLifetime(this, isCollectible: true);
         _dependencyResolver = new(packageMainAssemblyPath);
-        _sharedPolicy = sharedPolicy ?? throw new ArgumentNullException(nameof(sharedPolicy));
-        _matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
+        _sharedPolicy = sharedPolicy;
+        _matcher = matcher;
     }
 
     /// <inheritdoc />

@@ -42,20 +42,17 @@ internal static class LocalDirectoryFeedIndex
             return [];
         }
 
-        var prefix = packageId + ".";
         var matches = new List<LocalDirectoryPackageFile>();
 
         foreach (var filePath in Directory.EnumerateFiles(directoryPath, "*.nupkg", NupkgEnumerationOptions))
         {
-            var fileName = Path.GetFileNameWithoutExtension(filePath);
-            if (fileName.Length <= prefix.Length
-                || !fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                || !NuGetVersion.TryParse(fileName[prefix.Length..], out var version))
+            var fileName = Path.GetFileName(filePath);
+            if (!TryParsePackageFileName(fileName, packageId, out var parsedPackageId, out var version))
             {
                 continue;
             }
 
-            matches.Add(new(filePath, fileName[..packageId.Length], version));
+            matches.Add(new(filePath, parsedPackageId, version));
         }
 
         return matches
@@ -98,5 +95,27 @@ internal static class LocalDirectoryFeedIndex
         }
 
         return null;
+    }
+
+    internal static bool TryParsePackageFileName(
+        string fileName,
+        string packageId,
+        out string parsedPackageId,
+        out NuGetVersion version)
+    {
+        var nameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
+        var prefix = packageId + ".";
+        if (nameWithoutExtension.Length > prefix.Length
+            && nameWithoutExtension.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            && NuGetVersion.TryParse(nameWithoutExtension[prefix.Length..], out var parsedVersion))
+        {
+            parsedPackageId = nameWithoutExtension[..packageId.Length];
+            version = parsedVersion;
+            return true;
+        }
+
+        parsedPackageId = string.Empty;
+        version = null!;
+        return false;
     }
 }

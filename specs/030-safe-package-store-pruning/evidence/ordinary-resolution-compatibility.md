@@ -1,0 +1,11 @@
+# Ordinary resolution reader compatibility
+
+The [selected support policy](pruning-support-policy.md) preserves Nuplane 0.0.11 ordinary behavior. The [admission contract](../contracts/admission.md#support-boundary) defines the separate participant route; these compatibility changes do not establish participant isolation or accept T100/T101.
+
+The default completion-marker and archive-hash reads use the released BCL behavior. Canonical SHA-512 validation is shared with the existing native hash reader. Explicit guarded unscoped seams retain the previous native authority/refusal checks, and admitted borrow overloads retain their native access. Existing hardlink, symbolic-link, wrong-root and expired-borrow cases remain in the strict native gate.
+
+The dependency resolver uses an ordinary file reader only when neither an explicit reader nor the resolver's own graph-file reader was supplied. Its first top-level nuspec selection, recursive platform DLL matching and case-insensitive asset ordering follow 0.0.11. The native reader and the owned coordinated resolver remain unchanged. Ordinary reads tolerate incidental malformed coordination data; they do not establish Unenrolled authority or pruning eligibility.
+
+Root and independent source/result review found no remaining actionable issue. Local net10 qualification passed all 42 affected Runtime cases and all 32 exact native resolution cases without skips; the native manifest retains all 31 previous scenarios, with two renamed to identify their guarded unscoped calls, and adds one ordinary complete-root case. Temporarily compiling the former mandatory-native default routes makes both ordinary marker/hash and public graph-resolution regressions fail with admission refusal. Byte-exact source restoration makes both pass, and the two-case ordinary manifest verifies their names and outcomes exactly. All nine implementation/test/workflow/manifest hashes and all four TRX hashes match the reviewed qualification artifacts.
+
+Hosted Windows and other native-lane qualification of this correction is pending publication. The previously accepted `04dcfd4` result does not qualify changed source. No recursive deletion or public maintenance execution is enabled.

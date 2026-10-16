@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -39,7 +40,8 @@ internal static class EndpointRouteTestHarness
                 string.Equals(endpoint.RoutePattern.RawText, pattern, StringComparison.Ordinal)
                 && endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods.Contains(method, StringComparer.OrdinalIgnoreCase) == true);
 
-    public static async Task<EndpointInvocationResult> InvokeAsync(WebApplication app, string pattern, string method)
+    public static async Task<EndpointInvocationResult> InvokeAsync(
+        WebApplication app, string pattern, string method, string? body = null, string? queryString = null)
     {
         var endpoint = GetRoute(app, pattern, method);
         var httpContext = new DefaultHttpContext
@@ -48,15 +50,27 @@ internal static class EndpointRouteTestHarness
         };
         httpContext.Request.Method = method;
         httpContext.Request.Path = pattern;
+        if (queryString is not null)
+            httpContext.Request.QueryString = new QueryString(queryString);
+        using var requestBody = new MemoryStream(Encoding.UTF8.GetBytes(body ?? string.Empty));
+        httpContext.Request.Body = requestBody;
+        httpContext.Features.Set<IHttpRequestBodyDetectionFeature>(new RequestBodyDetection(body is not null));
+        if (body is not null)
+        {
+            httpContext.Request.ContentType = "application/json";
+            httpContext.Request.ContentLength = requestBody.Length;
+        }
         httpContext.Response.Body = new MemoryStream();
 
         await endpoint.RequestDelegate!(httpContext);
 
         httpContext.Response.Body.Position = 0;
         using var reader = new StreamReader(httpContext.Response.Body, Encoding.UTF8, leaveOpen: true);
-        var body = await reader.ReadToEndAsync();
-        return new EndpointInvocationResult(httpContext.Response.StatusCode, body);
+        var responseBody = await reader.ReadToEndAsync();
+        return new EndpointInvocationResult(httpContext.Response.StatusCode, responseBody);
     }
+
+    private sealed record RequestBodyDetection(bool CanHaveBody) : IHttpRequestBodyDetectionFeature;
 }
 
 internal sealed record EndpointInvocationResult(int StatusCode, string Body);

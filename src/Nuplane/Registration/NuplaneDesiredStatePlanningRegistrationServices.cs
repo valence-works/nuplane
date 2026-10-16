@@ -14,7 +14,8 @@ internal static class NuplaneDesiredStatePlanningRegistrationServices
 {
     internal static void RegisterDesiredStateAggregationAndDryRunPlanning(this IServiceCollection services)
     {
-        services.AddSingleton<DesiredManifestReader>();
+        services.AddSingleton(sp => new DesiredManifestReader(
+            sp.GetRequiredService<PackageStoreCompositionSnapshot>().IsParticipant));
         services.AddSingleton(sp => new DesiredManifestPackageSource(
             sp.GetRequiredService<DesiredManifestReader>(),
             sp.GetRequiredService<IOptions<ConvergenceOptions>>().Value,
@@ -25,7 +26,8 @@ internal static class NuplaneDesiredStatePlanningRegistrationServices
         // host wants before anything is resolved, a contributor says what the resolved packages
         // additionally require. Registered concrete-first so the ledger it writes — the only channel
         // that carries a refused unpinned contribution out of a cycle — can be resolved on its own.
-        services.AddSingleton<NuplanePackageMetadataReader>();
+        services.AddSingleton(sp => new NuplanePackageMetadataReader(
+            sp.GetRequiredService<PackageStoreCompositionSnapshot>()));
         services.AddSingleton<IPackageMetadataReader>(sp => sp.GetRequiredService<NuplanePackageMetadataReader>());
         services.AddSingleton<CapabilityContributionLedger>();
         services.AddSingleton<CapabilityDesiredStateContributor>();
@@ -39,4 +41,3 @@ internal static class NuplaneDesiredStatePlanningRegistrationServices
         services.AddSingleton<IDryRunPlanner>(sp => sp.GetRequiredService<DryRunPlanner>());
     }
 }
-

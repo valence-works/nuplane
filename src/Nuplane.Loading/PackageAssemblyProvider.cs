@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.Loader;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Loading;
 
@@ -42,10 +43,13 @@ internal sealed class PackageAssemblyProvider : IPackageAssemblyProvider
             return OrderAssemblies(loadContext.Assemblies.ToArray());
         }
 
+        var lease = _packageLoader.GetGraphUseLease(loadContext);
+        using var read = lease?.AcquireRead(installPath);
+
         IReadOnlyList<AssemblyScanCandidate> candidates;
         try
         {
-            candidates = _packageLoader.BuildScanCandidates(packageId, installPath);
+            candidates = _packageLoader.BuildScanCandidates(packageId, installPath, lease);
         }
         catch (Exception ex) when (IsSkippableCandidateProjectionException(ex))
         {
@@ -112,7 +116,7 @@ internal sealed class PackageAssemblyProvider : IPackageAssemblyProvider
             return false;
         }
 
-        var assemblyName = AssemblyName.GetAssemblyName(assemblyPath);
+        var assemblyName = PackageAssemblyReadCheckpoint.GetAssemblyName(assemblyPath);
         if (!policyContext.IsSharedAssembly(assemblyName))
         {
             return false;
@@ -156,14 +160,14 @@ internal sealed class PackageAssemblyProvider : IPackageAssemblyProvider
             : assembly.Location;
 
     private static bool IsSkippableCandidateProjectionException(Exception ex) =>
-        ex is DirectoryNotFoundException
+        ex is not PackageStoreAdmissionException && (ex is DirectoryNotFoundException
             or FileNotFoundException
-            or InvalidOperationException;
+            or InvalidOperationException);
 
     private static bool IsSkippableAssemblyMaterializationException(Exception ex) =>
-        ex is FileNotFoundException
+        ex is not PackageStoreAdmissionException && (ex is FileNotFoundException
             or FileLoadException
             or BadImageFormatException
-            or InvalidOperationException;
+            or InvalidOperationException);
 }
 

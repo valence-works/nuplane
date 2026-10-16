@@ -36,6 +36,22 @@ public sealed class CapabilityDesiredStateContributorTests : IDisposable
     public void Dispose() => _packages.Dispose();
 
     [Fact]
+    public async Task ContributeAsync_WithoutBorrowRetainsOrdinaryCompatibilityWithIncidentalControlData()
+    {
+        Select("PostgreSql");
+        var module = DeclaringModule();
+        var control = Directory.CreateDirectory(Path.Combine(module.InstallPath, ".nuplane-store"));
+        File.WriteAllText(Path.Combine(control.FullName, "membership.json"), "{");
+
+        var contribution = await ContributeAsync([module]);
+
+        Assert.Equal(EnginePackageId, Assert.Single(contribution.Requests).Request.Id);
+        Assert.Empty(contribution.Refusals);
+        Assert.Equal(1, _reader.CountFor(module.Id));
+        Assert.Single(_logger.Selected);
+    }
+
+    [Fact]
     public async Task ContributeAsync_WhenTheSelectedOptionIsDeclared_ContributesItAsARootForItsDeclaringPackage()
     {
         Select("PostgreSql");

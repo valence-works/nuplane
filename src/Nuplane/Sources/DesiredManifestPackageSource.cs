@@ -1,4 +1,5 @@
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Observability;
 using Nuplane.Reconciliation.Convergence;
 
@@ -9,7 +10,7 @@ namespace Nuplane.Sources;
 /// manifest file. Projects manifest entries into <see cref="PackageRequest"/> instances with
 /// <see cref="PackageUpdatePolicy.Exact"/> to ensure deterministic convergence.
 /// </summary>
-public sealed class DesiredManifestPackageSource : IDesiredPackageSource
+public sealed class DesiredManifestPackageSource : IScopedDesiredPackageSource
 {
     private readonly DesiredManifestReader _reader;
     private readonly ConvergenceOptions _options;
@@ -25,7 +26,7 @@ public sealed class DesiredManifestPackageSource : IDesiredPackageSource
     /// <summary>
     /// Gets a value indicating whether the manifest source is enabled, i.e. manifest convergence
     /// is turned on and a manifest path has been configured. This is the single definition of
-    /// "enabled" shared between <see cref="GetDesiredAsync"/> and consumers that need to decide
+    /// "enabled" shared between <see cref="GetDesiredAsync(CancellationToken)"/> and consumers that need to decide
     /// whether this source should participate in a reconciliation cycle.
     /// </summary>
     internal bool IsEnabled => _options.Manifest.Enabled && !string.IsNullOrWhiteSpace(_options.Manifest.Path);
@@ -47,7 +48,19 @@ public sealed class DesiredManifestPackageSource : IDesiredPackageSource
     public override string ToString() => $"manifest:{_options.Manifest.Path}";
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
+    public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
+        => GetDesiredAsyncCore(borrow: null, ct);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(PackageStoreOperationBorrow borrow, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(borrow);
+        return GetDesiredAsyncCore(borrow, ct);
+    }
+
+    private async Task<IReadOnlyList<PackageRequest>> GetDesiredAsyncCore(
+        PackageStoreOperationBorrow? borrow,
+        CancellationToken ct)
     {
         if (!IsEnabled)
         {
@@ -58,11 +71,18 @@ public sealed class DesiredManifestPackageSource : IDesiredPackageSource
             ? Guid.NewGuid().ToString("N")
             : CorrelationContext.Current;
 
-        var result = await _reader.ReadAsync(
-            _options.Manifest.Path!,
-            correlationId,
-            ct,
-            _options.Manifest.SchemaVersion);
+        var result = borrow is null
+            ? await _reader.ReadAsync(
+                _options.Manifest.Path!,
+                correlationId,
+                ct,
+                _options.Manifest.SchemaVersion).ConfigureAwait(false)
+            : await _reader.ReadAsync(
+                borrow,
+                _options.Manifest.Path!,
+                correlationId,
+                ct,
+                _options.Manifest.SchemaVersion).ConfigureAwait(false);
         _lastReadResult = result;
 
         if (result.Status != ManifestReadStatus.Succeeded || result.Manifest is null)
@@ -85,4 +105,3 @@ public sealed class DesiredManifestPackageSource : IDesiredPackageSource
             .ToList();
     }
 }
-

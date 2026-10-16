@@ -10,6 +10,7 @@ using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Validation;
 using Nuplane.Setup;
 using Nuplane.Store.Cleanup;
+using Nuplane.Store.Maintenance;
 using Nuplane.Store.State;
 using Nuplane.Store.Validation;
 using Nuplane.Sources.Configuration;
@@ -23,6 +24,7 @@ internal static class NuplaneOptionsRegistrationServices
     private const string FeedResolutionSectionName = "FeedResolution";
     private const string LockFileSectionName = "LockFile";
     private const string CleanupPolicySectionName = "CleanupPolicy";
+    private const string PackageStoreMaintenanceSectionName = "PackageStoreMaintenance";
     private const string ConvergenceSectionName = "Convergence";
     private const string DesiredStateSectionName = "DesiredState";
     internal const string StoreRegistrySectionName = "StoreRegistry";
@@ -36,6 +38,7 @@ internal static class NuplaneOptionsRegistrationServices
         static (services, configuration) => ConfigureBoundOptions<FeedResolutionOptions>(services, configuration, FeedResolutionSectionName),
         static (services, configuration) => ConfigureBoundOptions<LockFileOptions>(services, configuration, LockFileSectionName),
         static (services, configuration) => ConfigureBoundOptions<CleanupPolicyOptions>(services, configuration, CleanupPolicySectionName),
+        static (services, configuration) => ConfigureBoundOptions<PackageStoreMaintenanceOptions>(services, configuration, PackageStoreMaintenanceSectionName),
         static (services, configuration) => ConfigureBoundOptions<ConvergenceOptions>(services, configuration, ConvergenceSectionName),
         static (services, configuration) => ConfigureBoundOptions<DesiredStateOptions>(services, configuration, DesiredStateSectionName),
         static (services, configuration) => ConfigureBoundOptions<StoreRegistryOptions>(services, configuration, StoreRegistrySectionName),

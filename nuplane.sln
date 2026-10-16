@@ -72,6 +72,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{
 		.github\workflows\publish-wiki.yml = .github\workflows\publish-wiki.yml
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nuplane.PackageStore.TestHost", "test\Nuplane.PackageStore.TestHost\Nuplane.PackageStore.TestHost.csproj", "{00CDE6FF-B00A-4461-BB63-301BD822DFCB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -322,6 +324,18 @@ Global
 		{10EF093C-D02A-494A-B966-795D369DCC70}.Release|x64.Build.0 = Release|Any CPU
 		{10EF093C-D02A-494A-B966-795D369DCC70}.Release|x86.ActiveCfg = Release|Any CPU
 		{10EF093C-D02A-494A-B966-795D369DCC70}.Release|x86.Build.0 = Release|Any CPU
+		{00CDE6FF-B00A-4461-BB63-301BD822DFCB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00CDE6FF-B00A-4461-BB63-301BD822DFCB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00CDE6FF-B00A-4461-BB63-301BD822DFCB}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{00CDE6FF-B00A-4461-BB63-301BD822DFCB}.Debug|x64.Build.0 = Debug|Any CPU
+		{00CDE6FF-B00A-4461-BB63-301BD822DFCB}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{00CDE6FF-B00A-4461-BB63-301BD822DFCB}.Debug|x86.Build.0 = Debug|Any CPU
+		{00CDE6FF-B00A-4461-BB63-301BD822DFCB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00CDE6FF-B00A-4461-BB63-301BD822DFCB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{00CDE6FF-B00A-4461-BB63-301BD822DFCB}.Release|x64.ActiveCfg = Release|Any CPU
+		{00CDE6FF-B00A-4461-BB63-301BD822DFCB}.Release|x64.Build.0 = Release|Any CPU
+		{00CDE6FF-B00A-4461-BB63-301BD822DFCB}.Release|x86.ActiveCfg = Release|Any CPU
+		{00CDE6FF-B00A-4461-BB63-301BD822DFCB}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -348,5 +362,6 @@ Global
 		{2E0629B3-C1FB-479F-B444-DFF1FA8F5F89} = {0C88DD14-F956-CE84-757C-A364CCF449FC}
 		{10EF093C-D02A-494A-B966-795D369DCC70} = {0C88DD14-F956-CE84-757C-A364CCF449FC}
 		{512DF290-0AB1-442F-AA22-8ECCD694B269} = {5C5BFC1D-AF5B-4663-AD0F-013A2A15BD7B}
+		{00CDE6FF-B00A-4461-BB63-301BD822DFCB} = {0C88DD14-F956-CE84-757C-A364CCF449FC}
 	EndGlobalSection
 EndGlobal

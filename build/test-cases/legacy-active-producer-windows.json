@@ -1,0 +1,20 @@
+[
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.CreateAsync_ReconstructsRealOverlappingActiveGraphAndPublishesThroughIncompleteOwner",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.CreateAsync_UnknownLegacyEvidencePreservesStateLedgerAndEveryPresentInstallIdentity(scenario: \"active-outside-lkg\")",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.CreateAsync_UnknownLegacyEvidencePreservesStateLedgerAndEveryPresentInstallIdentity(scenario: \"ambiguous-requests\")",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.CreateAsync_UnknownLegacyEvidencePreservesStateLedgerAndEveryPresentInstallIdentity(scenario: \"malformed-requests\")",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.CreateAsync_UnknownLegacyEvidencePreservesStateLedgerAndEveryPresentInstallIdentity(scenario: \"missing-descriptor\")",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.CreateAsync_UnknownLegacyEvidencePreservesStateLedgerAndEveryPresentInstallIdentity(scenario: \"missing-install\")",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.CreateAsync_UnknownLegacyEvidencePreservesStateLedgerAndEveryPresentInstallIdentity(scenario: \"missing-node-versions\")",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.CreateAsync_UnknownLegacyEvidencePreservesStateLedgerAndEveryPresentInstallIdentity(scenario: \"missing-requests\")",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.CreateAsync_UnknownLegacyEvidencePreservesStateLedgerAndEveryPresentInstallIdentity(scenario: \"node-coverage\")",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.CreateAsync_UnknownLegacyEvidencePreservesStateLedgerAndEveryPresentInstallIdentity(scenario: \"node-version\")",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.CreateAsync_UnknownLegacyEvidencePreservesStateLedgerAndEveryPresentInstallIdentity(scenario: \"range-mismatch\")",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.CreateAsync_UnknownLegacyEvidencePreservesStateLedgerAndEveryPresentInstallIdentity(scenario: \"root-mismatch\")",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.CreateAsync_UnknownLegacyEvidencePreservesStateLedgerAndEveryPresentInstallIdentity(scenario: \"source-mismatch\")",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.CreateAsync_UnknownLegacyEvidencePreservesStateLedgerAndEveryPresentInstallIdentity(scenario: \"unknown-feed\")",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.RevalidateSourceStateAsync_RefusesInstallNamespaceMutationBeforeAnyPublication",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.WithBoundIncompleteRootAsync_DisposesReturnedResultWhenFinalCancellationPreventsTransfer",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.WithBoundIncompleteRootAsync_DisposesReturnedResultWhenFinalLocatorReplayRefuses",
+  "Nuplane.Store.Tests.Coordination.LegacyActiveGraphCandidateProducerTests.WithBoundIncompleteRootAsync_PreservesCancellationAndDisposeFailures"
+]

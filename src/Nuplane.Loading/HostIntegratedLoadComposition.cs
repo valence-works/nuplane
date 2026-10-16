@@ -3,6 +3,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Store.State;
+using Nuplane.Registration;
+using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Store.Coordination.ProtectionRecords;
 
 namespace Nuplane.Loading;
 
@@ -109,6 +112,161 @@ internal sealed class HostIntegratedLoadComposition
         }
     }
 
+    public static async Task<HostIntegratedLoadResult> LoadParticipantAsync(
+        NuplaneStoreSnapshotAccess access,
+        HostIntegratedLoadOptions options,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(access);
+        if (IsLoadInProgress.Value)
+        {
+            throw new InvalidOperationException(
+                $"A {nameof(NuplaneHostIntegratedLoader)} load is already in progress on this call chain. " +
+                "A nested participant load would wait forever on the process-wide load gate.");
+        }
+
+        // Match the ordinary process-composition ordering: acquire the process gate before opening
+        // any native snapshot scope, so this flow never waits for that gate while retaining a root.
+        await CompositionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        IsLoadInProgress.Value = true;
+        try
+        {
+            Current ??= new HostIntegratedLoadComposition(options.LoggerFactory);
+            return await Current.LoadParticipantCoreAsync(access, options, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            IsLoadInProgress.Value = false;
+            CompositionGate.Release();
+        }
+    }
+
+    private async Task<HostIntegratedLoadResult> LoadParticipantCoreAsync(
+        NuplaneStoreSnapshotAccess access,
+        HostIntegratedLoadOptions options,
+        CancellationToken cancellationToken)
+    {
+        AdmittedActivePackageSnapshot? snapshot = null;
+        var acquiredOwners = new List<PackageGraphUseLeaseOwner>();
+        var handedToLoader = false;
+        Exception? primaryFailure = null;
+        try
+        {
+            snapshot = await access.OpenActivePackageSnapshotForLoadingAsync(cancellationToken).ConfigureAwait(false);
+            var selections = ParticipantActiveGraphSelectionBuilder.Build(snapshot.Snapshot, snapshot.State);
+            var packages = snapshot.Snapshot.Packages;
+            if (packages.Count == 0)
+            {
+                await snapshot.DisposeAsync().ConfigureAwait(false);
+                snapshot = null;
+                return new HostIntegratedLoadResult([], new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+            }
+
+            var targetFramework = NormalizeTargetFramework(options.TargetFrameworkOverride);
+            var prepared = selections.Select(selection =>
+            {
+                var key = PackageLoader.BuildGraphKey(selection.Packages);
+                return (Selection: selection, Key: key);
+            }).ToArray();
+            GuardAgainstTargetFrameworkChange(prepared.Select(static entry => entry.Key), targetFramework);
+
+            var ownerByPackageKey = new Dictionary<string, GraphOwner>(StringComparer.OrdinalIgnoreCase);
+            var toLoad = new List<LeasedProtectedActiveGraphSelection>();
+            foreach (var (selection, key) in prepared)
+            {
+                if (_ownersByGraphKey.TryGetValue(key, out var existingOwner))
+                {
+                    ValidateExistingParticipantOwner(existingOwner, key, selection, access.Composition);
+                    AssignOwner(ownerByPackageKey, selection.Packages, existingOwner);
+                    continue;
+                }
+
+                var firstPath = selection.Packages[0].InstallPath;
+                using var borrow = snapshot.BorrowRootFor(firstPath);
+                var leaseOwner = await access.AcquireProtectedActiveGraphAsync(
+                    borrow, selection.Graph, selection.ExactPathsByNode, cancellationToken).ConfigureAwait(false);
+                acquiredOwners.Add(leaseOwner);
+                toLoad.Add(new LeasedProtectedActiveGraphSelection(
+                    selection.Graph, selection.Packages, selection.ExactPathsByNode, leaseOwner));
+            }
+
+            // The published graph-use owners now protect the package bytes. Release the short
+            // complete-catalog snapshot before metadata, activation callbacks, or assembly reads.
+            await snapshot.DisposeAsync().ConfigureAwait(false);
+            snapshot = null;
+
+            if (toLoad.Count > 0)
+            {
+                var loader = CreateLoader(options, targetFramework, access.Composition);
+                var graphOwner = new GraphOwner(loader, new AssemblyScanCandidateProjector(loader), targetFramework,
+                    ParticipantComposition: access.Composition,
+                    ParticipantGraphs: toLoad.ToDictionary(
+                        selection => PackageLoader.BuildGraphKey(selection.Packages),
+                        selection => new ParticipantProtectedGraphBinding(
+                            selection.Graph,
+                            selection.ExactPathsByNode,
+                            selection.LeaseOwner.Lease),
+                        StringComparer.OrdinalIgnoreCase));
+                var graphKeys = new List<string>(toLoad.Count);
+                foreach (var selection in toLoad)
+                {
+                    var key = PackageLoader.BuildGraphKey(selection.Packages);
+                    _ownersByGraphKey.Add(key, graphOwner);
+                    graphKeys.Add(key);
+                    AssignOwner(ownerByPackageKey, selection.Packages, graphOwner);
+                }
+
+                var sharedPolicy = options.SharedAssemblies
+                    .Select(static identity => new SharedAssemblyPolicyEntry(identity.Name, identity.PublicKeyToken, identity.MajorVersion))
+                    .ToArray();
+                try
+                {
+                    handedToLoader = true;
+                    await ((IScopedPackageLoader)loader).EnsureProtectedActiveGraphsLoadedAsync(
+                        toLoad, sharedPolicy, cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    ReleaseGraphsThatLoadedNothing(graphKeys);
+                }
+            }
+
+            return Project(packages, ownerByPackageKey);
+        }
+        catch (Exception exception)
+        {
+            primaryFailure = exception;
+            throw;
+        }
+        finally
+        {
+            var cleanupFailures = new List<Exception>();
+            if (snapshot is not null)
+            {
+                try { await snapshot.DisposeAsync().ConfigureAwait(false); }
+                catch (Exception cleanupFailure) { cleanupFailures.Add(cleanupFailure); }
+            }
+
+            if (!handedToLoader)
+            {
+                for (var index = acquiredOwners.Count - 1; index >= 0; index--)
+                {
+                    try { await acquiredOwners[index].DisposeAsync().ConfigureAwait(false); }
+                    catch (Exception cleanupFailure) { cleanupFailures.Add(cleanupFailure); }
+                }
+            }
+
+            if (cleanupFailures.Count > 0)
+            {
+                if (primaryFailure is not null)
+                    cleanupFailures.Insert(0, primaryFailure);
+                throw new AggregateException(
+                    "Participant loading failed or completed and one or more admitted owners did not close cleanly.",
+                    cleanupFailures);
+            }
+        }
+    }
+
     private async Task<HostIntegratedLoadResult> LoadCoreAsync(
         IReadOnlyList<ActivePackage> packages,
         StoreStateRecord? state,
@@ -187,7 +345,10 @@ internal sealed class HostIntegratedLoadComposition
     /// is for such a host, and the load-mode diagnostics a caller reads are the ones the host would
     /// report. Every graph therefore loads host-integrated, which is the purpose of this entry point.
     /// </remarks>
-    private PackageLoader CreateLoader(HostIntegratedLoadOptions options, string? targetFramework)
+    private PackageLoader CreateLoader(
+        HostIntegratedLoadOptions options,
+        string? targetFramework,
+        PackageStoreCompositionSnapshot? composition = null)
     {
         var loggerFactory = options.LoggerFactory;
         var loadingOptions = new LoadingOptions
@@ -202,15 +363,18 @@ internal sealed class HostIntegratedLoadComposition
             loadModeSelector: new PackageLoadModeSelector(
                 [
                     new PackageMetadataLoadModeAdvisor(
-                        new PackageMetadataLoadModeReader(),
+                        new PackageMetadataLoadModeReader(composition is null
+                            ? null
+                            : new Nuplane.Metadata.NuplanePackageMetadataReader(composition)),
                         loggerFactory?.CreateLogger<PackageMetadataLoadModeAdvisor>())
                 ],
-                loggerFactory?.CreateLogger<PackageLoadModeSelector>()),
+                loggerFactory?.CreateLogger<PackageLoadModeSelector>(), composition: composition),
             options: Options.Create(loadingOptions),
             logger: loggerFactory?.CreateLogger<PackageLoader>(),
             hostIntegratedAssemblyResolver: _resolver,
             activationGates: [new ForeignGraphLoadGate(), .. options.ActivationGates],
-            hostTargetFrameworkOverride: targetFramework);
+            hostTargetFrameworkOverride: targetFramework,
+            composition: composition);
     }
 
     /// <summary>
@@ -321,10 +485,102 @@ internal sealed class HostIntegratedLoadComposition
         AssemblyLoadContext.All.Any(context =>
             !context.IsCollectible && string.Equals(context.Name, graphKey, StringComparison.Ordinal));
 
+    private static void ValidateExistingParticipantOwner(
+        GraphOwner owner,
+        string graphKey,
+        ParticipantActiveGraphSelectionBuilder.Selection selection,
+        PackageStoreCompositionSnapshot composition)
+    {
+        if (owner.ParticipantComposition is null || owner.ParticipantGraphs is null ||
+            !SameComposition(owner.ParticipantComposition, composition) ||
+            !owner.ParticipantGraphs.TryGetValue(graphKey, out var binding) ||
+            !SameGraph(binding.Graph, selection.Graph) ||
+            binding.ExactPathsByNode.Count != selection.ExactPathsByNode.Count ||
+            selection.ExactPathsByNode.Any(pair =>
+                !binding.ExactPathsByNode.TryGetValue(pair.Key, out var path) ||
+                !string.Equals(path, pair.Value, StringComparison.Ordinal)))
+        {
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
+                $"Package graph '{graphKey}' was loaded under a different participant composition or persisted graph identity.");
+        }
+
+        AssemblyLoadContext? retainedContext = null;
+        foreach (var package in selection.Packages)
+        {
+            if (!owner.Loader.TryGetContext(package.Id, package.Version, out var contextHandle) ||
+                contextHandle?.Context is not AssemblyLoadContext context || context.IsCollectible ||
+                context is not IGraphUseLeaseBoundLoadContext leaseBound ||
+                !ReferenceEquals(leaseBound.GraphUseLease, binding.Lease))
+            {
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
+                    $"Package graph '{graphKey}' no longer has the exact retained participant load context and graph-use lease.");
+            }
+
+            if (retainedContext is not null && !ReferenceEquals(retainedContext, context))
+            {
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                    $"Package graph '{graphKey}' is split across multiple process-retained load contexts.");
+            }
+
+            retainedContext = context;
+            var node = selection.Graph.Nodes.SingleOrDefault(node =>
+                string.Equals(node.Install.PackageId, package.Id, StringComparison.OrdinalIgnoreCase));
+            if (node is null ||
+                !string.Equals(package.PackageContentHash, node.Install.VerifiedArchiveHash, StringComparison.Ordinal) ||
+                !string.Equals(binding.ExactPathsByNode[node.NodeId], package.InstallPath, StringComparison.Ordinal) ||
+                binding.Lease.GetInstallIdentityForExactPath(package.InstallPath) != node.Install)
+            {
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                    $"Package graph '{graphKey}' no longer matches its retained exact install-path lease.");
+            }
+        }
+
+        if (retainedContext is null)
+        {
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.ExpiredScope,
+                $"Package graph '{graphKey}' has no retained process load context.");
+        }
+    }
+
+    private static bool SameComposition(
+        PackageStoreCompositionSnapshot left,
+        PackageStoreCompositionSnapshot right)
+    {
+        if (left.Mode != right.Mode || left.AllClientsParticipate != right.AllClientsParticipate ||
+            left.Roots.Count != right.Roots.Count || left.Members.Count != right.Members.Count)
+            return false;
+
+        var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return left.Roots.All(existing => right.Roots.Any(candidate =>
+                   string.Equals(existing.Label, candidate.Label, StringComparison.OrdinalIgnoreCase) &&
+                   string.Equals(existing.RootLocator, candidate.RootLocator, pathComparison))) &&
+               left.Members.All(existing => right.Members.Any(candidate =>
+                   string.Equals(existing.RootLabel, candidate.RootLabel, StringComparison.OrdinalIgnoreCase) &&
+                   string.Equals(existing.MemberId, candidate.MemberId, StringComparison.Ordinal) &&
+                   string.Equals(existing.StateFileLocator, candidate.StateFileLocator, pathComparison)));
+    }
+
+    private static bool SameGraph(ProtectedGraphSnapshot left, ProtectedGraphSnapshot right) =>
+        left.SnapshotId == right.SnapshotId &&
+        string.Equals(left.GraphId, right.GraphId, StringComparison.Ordinal) &&
+        string.Equals(left.GenerationId, right.GenerationId, StringComparison.Ordinal) &&
+        left.Disposition == right.Disposition &&
+        left.Roots.SequenceEqual(right.Roots) &&
+        left.RequestedRoots.SequenceEqual(right.RequestedRoots) &&
+        left.Nodes.SequenceEqual(right.Nodes) &&
+        left.Edges.SequenceEqual(right.Edges);
+
+    private sealed record ParticipantProtectedGraphBinding(
+        ProtectedGraphSnapshot Graph,
+        IReadOnlyDictionary<Guid, string> ExactPathsByNode,
+        PackageGraphUseLease Lease);
+
     private sealed record GraphOwner(
         PackageLoader Loader,
         AssemblyScanCandidateProjector Projector,
-        string? TargetFramework);
+        string? TargetFramework,
+        PackageStoreCompositionSnapshot? ParticipantComposition = null,
+        IReadOnlyDictionary<string, ParticipantProtectedGraphBinding>? ParticipantGraphs = null);
 
     /// <summary>
     /// Refuses a graph that another Nuplane composition in this process — a composed host, most likely —
@@ -337,7 +593,7 @@ internal sealed class HostIntegratedLoadComposition
     /// Graphs this composition already owns never reach the gate, so an existing context at this point
     /// is always a foreign one.
     /// </remarks>
-    private sealed class ForeignGraphLoadGate : IPackageActivationGate
+    private sealed class ForeignGraphLoadGate : IPackagePathIndependentActivationGate
     {
         public ValueTask<PackageActivationGateResult> EvaluateAsync(
             PackageActivationContext context,

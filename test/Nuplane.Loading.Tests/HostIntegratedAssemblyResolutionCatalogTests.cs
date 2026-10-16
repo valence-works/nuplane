@@ -29,7 +29,7 @@ public sealed class HostIntegratedAssemblyResolutionCatalogTests
             new Dictionary<string, IReadOnlyList<Assembly>>(StringComparer.OrdinalIgnoreCase)
             {
                 ["pkg-a@1.0.0"] = [assembly],
-                ["pkg-b@2.0.0"] = [Assembly.LoadFile(GetConflictAssemblyPath())]
+                ["pkg-b@2.0.0"] = [Assembly.LoadFile(TestFixtureAssemblyPaths.FindProjectAssembly("Nuplane.Loading.Tests.Fixtures.Conflict", "Nuplane.Loading.Tests.Fixtures.dll"))]
             }));
 
         Assert.Contains("Host-integrated assembly conflict", ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -218,21 +218,4 @@ public sealed class HostIntegratedAssemblyResolutionCatalogTests
         Assert.Same(german, resolvedGerman);
     }
 
-    private static string GetConflictAssemblyPath()
-    {
-        var path = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            "..",
-            "Nuplane.Loading.Tests.Fixtures.Conflict",
-            "bin",
-            "Debug",
-            "net10.0",
-            "Nuplane.Loading.Tests.Fixtures.dll"));
-
-        Assert.True(File.Exists(path), $"Expected conflict fixture at '{path}'.");
-        return path;
-    }
 }

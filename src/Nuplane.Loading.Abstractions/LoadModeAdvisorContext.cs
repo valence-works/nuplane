@@ -1,4 +1,5 @@
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Loading;
 
@@ -15,4 +16,22 @@ public sealed record LoadModeAdvisorContext(
     IReadOnlyList<ResolvedPackage> Packages,
     PackageLoadModeSelectionPolicy SelectionPolicy,
     PackageLoadMode DefaultLoadMode,
-    IReadOnlyDictionary<string, PackageLoadMode> PackageOverrides);
+    IReadOnlyDictionary<string, PackageLoadMode> PackageOverrides)
+{
+    private IReadOnlyList<PackageGraphUseLease> _graphUseLeases = Array.Empty<PackageGraphUseLease>();
+
+    /// <summary>Gets published graph-use lease views supplied before advisor evaluation.</summary>
+    /// <remarks>The collection is copied on initialization; an empty list grants no enrolled package access.</remarks>
+    public IReadOnlyList<PackageGraphUseLease> GraphUseLeases
+    {
+        get => _graphUseLeases;
+        init
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            var leases = value.ToArray();
+            if (leases.Any(static lease => lease is null))
+                throw new ArgumentException("Graph-use leases cannot contain null.", nameof(value));
+            _graphUseLeases = Array.AsReadOnly(leases);
+        }
+    }
+}

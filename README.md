@@ -30,6 +30,7 @@ If you are evaluating or onboarding to Nuplane, start with the repository-owned 
 - [`Usage Guide`](docs/wiki/Usage-Guide.md) — core-runtime vs optional-loading usage guidance
 - [`Architecture Guide`](docs/wiki/Architecture-Guide.md) — module map and repository-to-concept view
 - [`Concepts and Glossary`](docs/wiki/Concepts-and-Glossary.md) — normalized terminology
+- [`Manual package-store maintenance`](docs/package-store-maintenance.md) — optional coordinated enrollment, migration, inspection and pruning
 
 The wiki follows a **hybrid-hub** model: it is self-sufficient for evaluation and onboarding, while deeper validation details, roadmap history, sample mechanics, and other fast-moving reference material remain repository-owned.
 

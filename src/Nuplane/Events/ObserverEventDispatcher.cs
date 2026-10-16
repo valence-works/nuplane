@@ -7,10 +7,14 @@ namespace Nuplane.Events;
 /// Dispatches package lifecycle events to all registered observers, catching and logging
 /// observer callback errors to prevent individual observer failures from interrupting reconciliation.
 /// </summary>
-public sealed class ObserverEventDispatcher(IEnumerable<INuplaneObserver> observers, IReconciliationLogger? logger = null) : IObserverEventDispatcher
+public sealed partial class ObserverEventDispatcher(IEnumerable<INuplaneObserver> observers, IReconciliationLogger? logger = null)
+    : IScopedObserverEventDispatcher, IPostLoadingObserverEventDispatcher
 {
     private readonly IReadOnlyList<INuplaneObserver> _observers = (observers ?? throw new ArgumentNullException(nameof(observers))).ToArray();
     private readonly IReconciliationLogger _logger = logger ?? new ReconciliationLogger();
+
+    /// <inheritdoc />
+    public bool HasPostLoadingObservers => _observers.Any(static observer => observer is IPostLoadingNuplaneObserver);
 
     /// <inheritdoc />
     public async Task PublishChangingAsync(PackageChangeSet changeSet, CancellationToken cancellationToken)

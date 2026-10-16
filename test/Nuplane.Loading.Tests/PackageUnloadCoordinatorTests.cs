@@ -50,6 +50,16 @@ public sealed class PackageUnloadCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task AttemptUnloadAsync_UnloadedOutcomeMeansContextFinalizationCompleted()
+    {
+        var (unload, contextWeakReference) = await UnloadAndDropContext();
+
+        Assert.Equal(UnloadOutcome.Unloaded, unload.Outcome);
+        Assert.False(contextWeakReference.IsAlive,
+            "An unload cannot be reported complete while the collectible context is finalizing.");
+    }
+
+    [Fact]
     public async Task AttemptUnloadAsync_CalledTwiceWithSameHandle_SecondCallDoesNotThrow()
     {
         var (handle, _) = CreateHandle("my-pkg");
@@ -69,6 +79,20 @@ public sealed class PackageUnloadCoordinatorTests : IDisposable
         var ctx = CreateContext(assemblyPath);
         var handle = new PackageLoadContextHandle($"{packageId}@1.0.0", ctx);
         return (handle, ctx);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private async Task<(UnloadOutcomeRecord Outcome, WeakReference Context)> UnloadAndDropContext()
+    {
+        var (handle, context) = CreateHandle("completion-contract");
+        var contextWeakReference = new WeakReference(context, trackResurrection: true);
+        var unloadTask = _sut.AttemptUnloadAsync(
+            "completion-contract", handle, TimeSpan.FromMilliseconds(25), "test", CancellationToken.None);
+
+        handle = null!;
+        context = null!;
+        var (_, unload) = await unloadTask;
+        return (unload, contextWeakReference);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

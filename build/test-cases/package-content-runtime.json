@@ -1,0 +1,14 @@
+[
+  "Nuplane.Runtime.Tests.PackageContentTests.OrdinaryReadersRemainAvailableBesideUnverifiableCoordinationMetadata(archive: False)",
+  "Nuplane.Runtime.Tests.PackageContentTests.OrdinaryReadersRemainAvailableBesideUnverifiableCoordinationMetadata(archive: True)",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryFindByExtension_FindsRootEntryInNupkgArchive",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryFindByExtension_FindsRootFileInDirectory",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryFindByExtension_PreservesFirstRootArchiveMatch",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryReadFile_PreservesFirstCaseInsensitiveArchiveMatch",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryReadFile_PreservesReleasedArchiveNormalizationAndRequestValidation",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryReadFile_ReadsEntryFromNupkgArchive",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryReadFile_ReadsNestedFileUsingForwardOrBackSlashes",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryReadFile_ReadsRootFileFromExtractedDirectory",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryReadFile_RejectsPathTraversalAndAbsolutePaths",
+  "Nuplane.Runtime.Tests.PackageContentTests.TryReadFile_ReturnsNullForMissingFileOrPath"
+]

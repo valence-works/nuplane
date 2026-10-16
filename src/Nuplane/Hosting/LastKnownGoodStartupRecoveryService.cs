@@ -1,7 +1,11 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Events;
+using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Configuration;
+using Nuplane.Store.Coordination;
+using Nuplane.Store.Coordination.ProtectionRecords;
 using Nuplane.Store.State;
 
 namespace Nuplane.Hosting;
@@ -40,6 +44,15 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
     private readonly StartupRecoveryState _startupRecoveryState;
     private readonly IReadOnlyList<ICycleFailureContributor> _cycleFailureContributors;
     private readonly IStoreLock? _storeLock;
+    private readonly IPackageStoreAdmission? _installPathAdmission;
+    private readonly IPackageStoreAdmission? _configuredRootAdmission;
+    private readonly bool _coordinatedParticipantMode;
+    private readonly ICoordinatedStoreRegistry? _coordinatedStoreRegistry;
+    private readonly PackageGraphUseLeaseAcquisition? _graphUseLeaseAcquisition;
+    private readonly ITrustedPackageStoreRootCatalog? _trustedRootCatalog;
+    private readonly IScopedObserverEventDispatcher? _scopedObserverEventDispatcher;
+    private readonly ILeasedPackageGraphRecoveryLoadingObserver? _recoveryLoadingObserver;
+    private readonly bool _leasedLoadingObserverConfigured;
     private readonly TimeSpan _storeLockTimeout;
 
     /// <summary>
@@ -73,7 +86,8 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
             startupRecoveryState,
             cycleFailureContributors,
             reconciliationOptions,
-            storeLock: null)
+            storeLock: null,
+            packageStoreAdmission: null)
     {
     }
 
@@ -93,13 +107,33 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
     /// directly and so names no resolved state file. Recovery then runs exactly as it did before the
     /// store lock existed.
     /// </param>
+    /// <param name="packageStoreAdmission">
+    /// Configured-root membership admission acquired before state reads by dependency injection.
+    /// Explicitly supplied admissions also enable protected install-path classification in a
+    /// low-level composition.
+    /// </param>
+    /// <param name="coordinatedParticipantMode">Whether this composition requires coordinated participant admission and must refuse the unscoped recovery path.</param>
+    /// <param name="coordinatedStoreRegistry">The selected registry's coordinated state reader.</param>
+    /// <param name="graphUseLeaseAcquisition">The built-in native graph-use publisher for recovered installs.</param>
+    /// <param name="trustedRootCatalog">The immutable configured-root catalog used to derive exact install candidates.</param>
+    /// <param name="scopedObserverEventDispatcher">The validated dispatcher that invokes observers under the live root owner.</param>
+    /// <param name="recoveryLoadingObserver">The selected Loading bridge for persisted recovery graphs, when Loading is installed.</param>
+    /// <param name="leasedLoadingObserverConfigured">Whether a leased loader is selected and therefore must support recovery handoff.</param>
     internal LastKnownGoodStartupRecoveryService(
         IStoreRegistry storeRegistry,
         IObserverEventDispatcher observerEventDispatcher,
         StartupRecoveryState startupRecoveryState,
         IEnumerable<ICycleFailureContributor>? cycleFailureContributors,
         IOptions<ReconciliationOptions>? reconciliationOptions,
-        IStoreLock? storeLock)
+        IStoreLock? storeLock,
+        IPackageStoreAdmission? packageStoreAdmission = null,
+        bool coordinatedParticipantMode = false,
+        ICoordinatedStoreRegistry? coordinatedStoreRegistry = null,
+        PackageGraphUseLeaseAcquisition? graphUseLeaseAcquisition = null,
+        ITrustedPackageStoreRootCatalog? trustedRootCatalog = null,
+        IScopedObserverEventDispatcher? scopedObserverEventDispatcher = null,
+        ILeasedPackageGraphRecoveryLoadingObserver? recoveryLoadingObserver = null,
+        bool leasedLoadingObserverConfigured = false)
     {
         _storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
         _observerEventDispatcher = observerEventDispatcher ?? throw new ArgumentNullException(nameof(observerEventDispatcher));
@@ -107,6 +141,15 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
         _cycleFailureContributors = cycleFailureContributors?.ToArray() ?? [];
         _storeLockTimeout = (reconciliationOptions?.Value ?? new ReconciliationOptions()).StartupRecoveryStoreLockTimeout;
         _storeLock = storeLock;
+        _configuredRootAdmission = packageStoreAdmission;
+        _installPathAdmission = packageStoreAdmission;
+        _coordinatedParticipantMode = coordinatedParticipantMode;
+        _coordinatedStoreRegistry = coordinatedStoreRegistry;
+        _graphUseLeaseAcquisition = graphUseLeaseAcquisition;
+        _trustedRootCatalog = trustedRootCatalog;
+        _scopedObserverEventDispatcher = scopedObserverEventDispatcher;
+        _recoveryLoadingObserver = recoveryLoadingObserver;
+        _leasedLoadingObserverConfigured = leasedLoadingObserverConfigured;
     }
 
     public async Task<LastKnownGoodStartupRecoveryResult> TryRecoverAsync(
@@ -115,6 +158,210 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
+        if (_coordinatedParticipantMode)
+            return await TryRecoverCoordinatedParticipantAsync(correlationId, cancellationToken).ConfigureAwait(false);
+
+        if (_configuredRootAdmission is null)
+            return await TryRecoverAfterRootAdmissionAsync(correlationId, cancellationToken).ConfigureAwait(false);
+
+        await using var rootAdmission = await _configuredRootAdmission.AcquireConfiguredRootOperationAsync(
+            PackageStoreAdmissionKind.StartupRecovery, cancellationToken).ConfigureAwait(false);
+        if (rootAdmission.Status == PackageStoreAdmissionStatus.Enrolled)
+            throw RefuseEnrolled(rootAdmission.Root);
+
+        return await TryRecoverAfterRootAdmissionAsync(correlationId, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<LastKnownGoodStartupRecoveryResult> TryRecoverCoordinatedParticipantAsync(
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        var admission = _configuredRootAdmission
+            ?? throw RefuseEnrolled(root: null);
+        var coordinatedRegistry = _coordinatedStoreRegistry
+            ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "Participant startup recovery requires coordinated native state reads.");
+        var graphAcquisition = _graphUseLeaseAcquisition
+            ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "Participant startup recovery requires native graph-use publication.");
+        var rootCatalog = _trustedRootCatalog
+            ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "Participant startup recovery requires the frozen trusted-root catalog.");
+        var scopedDispatcher = _scopedObserverEventDispatcher
+            ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "Participant startup recovery requires a scope-aware observer dispatcher.");
+        if (_leasedLoadingObserverConfigured && _recoveryLoadingObserver is null)
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "The configured leased loader does not support persisted recovery-graph handoff.");
+
+        scopedDispatcher.ValidateCoordinatedParticipants();
+
+        var configuredDefaultRoots = rootCatalog.Roots.Where(static root =>
+            string.Equals(root.Label, "default", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (configuredDefaultRoots.Length != 1 || !Path.IsPathFullyQualified(configuredDefaultRoots[0].RootPath))
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "Participant startup recovery requires exactly one fully qualified frozen default install root.");
+        var configuredInstallRoot = configuredDefaultRoots[0].RootPath;
+
+        var graphUseOwners = new List<PackageGraphUseLeaseOwner>();
+        Exception? operationFailure = null;
+        try
+        {
+            LeasedPackageGraphRecoveryLoadingHandoff? loadingHandoff = null;
+            ResolvedPackage[] recoveredPackages = [];
+            await using (var rootAdmission = await admission.AcquireConfiguredRootOperationAsync(
+                PackageStoreAdmissionKind.StartupRecovery, cancellationToken).ConfigureAwait(false))
+            {
+                if (rootAdmission.Status != PackageStoreAdmissionStatus.Enrolled || rootAdmission.Owner is null ||
+                    rootAdmission.Root is null || rootAdmission.Root != rootAdmission.Owner.Root)
+                {
+                    throw RefuseEnrolled(rootAdmission.Root);
+                }
+
+                var owner = rootAdmission.Owner;
+                using var storeLockHandle = await AcquireStoreLockAsync(cancellationToken).ConfigureAwait(false);
+                if (!storeLockHandle.CanProceed)
+                {
+                    var skipped = LastKnownGoodStartupRecoveryResult.Failed([], LastKnownGoodStartupRecoveryResult.StoreLockUnavailableReason);
+                    _startupRecoveryState.MarkFailed(correlationId, skipped.Reason);
+                    return skipped;
+                }
+
+                IReadOnlyDictionary<string, string> activeVersions;
+                using (var borrow = owner.Borrow())
+                {
+                    var state = await coordinatedRegistry.ReadCoordinatedStateAsync(borrow, cancellationToken)
+                        .ConfigureAwait(false);
+                    var protection = state.ProtectionRecord
+                        ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
+                            "Participant startup recovery requires a known protected store-state graph.", owner.Root);
+                    if (protection.RootIdentity != owner.Root || protection.EnrollmentEpoch != owner.Epoch)
+                    {
+                        throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                            "The coordinated startup-recovery state differs from its exact admitted root and epoch.", owner.Root);
+                    }
+
+                    if (state.ActiveVersionById.Count == 0)
+                    {
+                        _startupRecoveryState.MarkFailed(correlationId, "no-active-packages");
+                        return LastKnownGoodStartupRecoveryResult.Failed([], "no-active-packages");
+                    }
+
+                    var verified = PersistedStoreStateGraphVerifier.SelectUseLastKnownGood(state);
+                    if (verified.RecoverableGraphs.Count == 0)
+                    {
+                        throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                            "The verified startup-recovery selection contains no complete graph.", owner.Root);
+                    }
+
+                    var descriptors = state.ActivePackageDescriptorsByIdNormalized;
+                    var selections = new List<LeasedProtectedRecoveryGraphSelection>(verified.RecoverableGraphs.Count);
+                    var packagesById = new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var graph in verified.RecoverableGraphs)
+                    {
+                        var graphOwner = await graphAcquisition.AcquireProtectedRecoveryForRootAsync(
+                            borrow, graph, configuredInstallRoot, cancellationToken).ConfigureAwait(false);
+                        graphUseOwners.Add(graphOwner);
+
+                        var graphPackages = new List<ResolvedPackage>(graph.Nodes.Count);
+                        foreach (var node in graph.Nodes)
+                        {
+                            var install = node.Install;
+                            if (!descriptors.TryGetValue(install.PackageId, out var descriptor) ||
+                                !string.Equals(descriptor.PackageId, install.PackageId, StringComparison.OrdinalIgnoreCase) ||
+                                !string.Equals(descriptor.Version, install.Version, StringComparison.OrdinalIgnoreCase) ||
+                                !state.ActiveVersionById.TryGetValue(install.PackageId, out var activeVersion) ||
+                                !string.Equals(activeVersion, install.Version, StringComparison.OrdinalIgnoreCase) ||
+                                !state.LastKnownGoodById.TryGetValue(install.PackageId, out var lastKnownGoodVersion) ||
+                                !string.Equals(lastKnownGoodVersion, install.Version, StringComparison.OrdinalIgnoreCase))
+                            {
+                                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                                    "The verified recovery graph does not exactly cover the current active, last-known-good descriptor set.", owner.Root);
+                            }
+
+                            var exactPath = PackageGraphUseProtectedInstallBinding.GetExactCandidatePath(
+                                configuredInstallRoot, install);
+                            var package = new ResolvedPackage(install.PackageId, install.Version,
+                                descriptor.FeedName ?? string.Empty, exactPath, descriptor.ActivatedAtUtc,
+                                descriptor.SourceName ?? string.Empty)
+                            {
+                                PackageContentHash = install.VerifiedArchiveHash
+                            };
+                            graphPackages.Add(package);
+                            packagesById.TryAdd(package.Id, package);
+                        }
+                        selections.Add(new LeasedProtectedRecoveryGraphSelection(graph, graphPackages, graphOwner));
+                    }
+
+                    recoveredPackages = packagesById.Values
+                        .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                    activeVersions = state.ActiveVersionById.ToDictionary(
+                        static item => item.Key,
+                        static item => item.Value,
+                        StringComparer.OrdinalIgnoreCase);
+                    loadingHandoff = new LeasedPackageGraphRecoveryLoadingHandoff(
+                        correlationId, activeVersions, selections);
+
+                    var changeSet = new PackageChangeSet([], [], [], correlationId, DateTimeOffset.UtcNow);
+                    await scopedDispatcher.PublishReconciledAsync(changeSet, recoveredPackages, owner, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+
+            var loadingResult = _recoveryLoadingObserver is null
+                ? new LeasedPackageGraphLoadingResult([])
+                : await _recoveryLoadingObserver.LoadRecoveryAsync(
+                    loadingHandoff ?? throw new InvalidOperationException("Participant recovery did not create a Loading handoff."),
+                    cancellationToken).ConfigureAwait(false);
+            if (loadingResult is null)
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "The participant recovery loader returned no result.");
+
+            var failedPackageIds = loadingResult.Failures.Select(static failure => failure.PackageId)
+                .Concat(TakeLoadFailedPackageIds(correlationId))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static packageId => packageId, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (failedPackageIds.Length > 0)
+            {
+                _startupRecoveryState.MarkFailed(correlationId, "last-known-good-load-failed");
+                return LastKnownGoodStartupRecoveryResult.Failed(failedPackageIds, "last-known-good-load-failed");
+            }
+
+            _startupRecoveryState.MarkRecovered(correlationId, recoveredPackages.Length);
+            return new(true, recoveredPackages, [], "last-known-good-recovered");
+        }
+        catch (Exception exception)
+        {
+            operationFailure = exception;
+            throw;
+        }
+        finally
+        {
+            var cleanupFailures = new List<Exception>();
+            for (var index = graphUseOwners.Count - 1; index >= 0; index--)
+            {
+                try { await graphUseOwners[index].DisposeAsync().ConfigureAwait(false); }
+                catch (Exception exception) { cleanupFailures.Add(exception); }
+            }
+
+            if (cleanupFailures.Count > 0)
+            {
+                if (operationFailure is not null)
+                    cleanupFailures.Insert(0, operationFailure);
+                throw new AggregateException(
+                    "Participant startup recovery completed or failed and one or more graph-use owners did not drain cleanly.",
+                    cleanupFailures);
+            }
+        }
+    }
+
+    private async Task<LastKnownGoodStartupRecoveryResult> TryRecoverAfterRootAdmissionAsync(
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
         // The store lock spans the whole read-then-act cycle below, for the same reason it spans a
         // reconciliation cycle: everything between the read and the republish is part of it. Unlike a
         // reconciliation cycle, recovery waits for a store already owned elsewhere — see
@@ -133,6 +380,24 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
         }
 
         var state = await _storeRegistry.GetStateAsync(cancellationToken);
+        var activeDescriptors = state.ActivePackageDescriptorsByIdNormalized.Values
+            .Where(descriptor => state.ActiveVersionById.ContainsKey(descriptor.PackageId))
+            .ToArray();
+
+        // Manual compositions have no configured root to classify. Their selected registry is
+        // allowed to provide descriptive state, after which every exact active descriptor path is
+        // checked through the ledger-only metadata path before Directory.Exists or an observer.
+        if (_installPathAdmission is not null)
+        {
+            await using var pathAdmission = await _installPathAdmission.AcquireForInstallPathsAsync(
+                activeDescriptors.Select(static descriptor => descriptor.InstallPath).ToArray(),
+                PackageStoreAdmissionKind.StartupRecovery, cancellationToken).ConfigureAwait(false);
+            var enrolledPath = pathAdmission.Entries.FirstOrDefault(static entry =>
+                entry.Status == PackageStoreAdmissionStatus.Enrolled);
+            if (enrolledPath is not null)
+                throw RefuseEnrolled(enrolledPath.Root);
+        }
+
         var validation = Validate(state);
         if (!validation.Succeeded)
         {
@@ -140,7 +405,7 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
             return validation;
         }
 
-        var recoveredPackages = state.ActivePackageDescriptorsByIdNormalized.Values
+        var recoveredPackages = activeDescriptors
             .Where(descriptor => state.ActiveVersionById.TryGetValue(descriptor.PackageId, out var activeVersion)
                 && string.Equals(activeVersion, descriptor.Version, StringComparison.OrdinalIgnoreCase))
             .OrderBy(descriptor => descriptor.PackageId, StringComparer.OrdinalIgnoreCase)
@@ -168,6 +433,11 @@ internal sealed class LastKnownGoodStartupRecoveryService : ILastKnownGoodStartu
 
         return new(true, recoveredPackages, [], "last-known-good-recovered");
     }
+
+    private static PackageStoreAdmissionException RefuseEnrolled(PhysicalRootIdentity? root)
+        => new(PackageStoreAdmissionReason.UnsupportedParticipant,
+            "Startup LKG recovery requires a live enrolled-root operation and refuses descriptor-path or unscoped-callback fallback.",
+            root);
 
     /// <summary>
     /// Tries once, without waiting, to take the store lock; if that finds it held elsewhere, polls

@@ -3,32 +3,55 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Credentials;
+using Nuplane.Registration;
 
 namespace Nuplane.Feeds;
 
 /// <inheritdoc />
 /// <remarks>
 /// A feed that declares <c>Credentials</c> is authenticated per request through
-/// <paramref name="secretReferenceResolver"/>; one whose reference no registered provider resolves is
+/// <c>secretReferenceResolver</c>; one whose reference no registered provider resolves is
 /// refused by name rather than contacted anonymously. The resolver parameter is optional so that a
 /// hand-composed acquirer still works — with no resolver, every credentialed feed is refused, which
 /// is what such a feed did before credentials could be resolved at all.
 /// </remarks>
-public sealed class NuGetRemotePackageAcquirer(
-    IOptions<FeedResolutionOptions> options,
-    ISecretReferenceResolver? secretReferenceResolver = null) : IRemotePackageAcquirer
+public sealed class NuGetRemotePackageAcquirer : IScopedRemotePackageAcquirer
 {
     private static readonly HttpClient HttpClient = new();
     private readonly ConcurrentDictionary<string, Lazy<Task<CachedPackageBaseAddress>>> _packageBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly FeedResolutionOptions _options = (options ?? throw new ArgumentNullException(nameof(options))).Value;
-    private readonly ISecretReferenceResolver? _secretReferenceResolver = secretReferenceResolver;
+    private readonly FeedResolutionOptions _options;
+    private readonly ISecretReferenceResolver? _secretReferenceResolver;
+    private readonly bool _refuseUnscopedAcquisition;
+    internal bool IsParticipantGuarded => _refuseUnscopedAcquisition;
+
+    /// <summary>Initializes an acquirer with its feed options and optional credential resolver.</summary>
+    /// <param name="options">The feed-resolution options.</param>
+    /// <param name="secretReferenceResolver">Resolves configured feed credentials, when provided.</param>
+    public NuGetRemotePackageAcquirer(
+        IOptions<FeedResolutionOptions> options,
+        ISecretReferenceResolver? secretReferenceResolver = null)
+        : this(options, secretReferenceResolver, PackageStoreCompositionSnapshot.Ordinary)
+    {
+    }
+
+    internal NuGetRemotePackageAcquirer(
+        IOptions<FeedResolutionOptions> options,
+        ISecretReferenceResolver? secretReferenceResolver,
+        PackageStoreCompositionSnapshot composition)
+    {
+        _options = (options ?? throw new ArgumentNullException(nameof(options))).Value;
+        _secretReferenceResolver = secretReferenceResolver;
+        _refuseUnscopedAcquisition = (composition ?? throw new ArgumentNullException(nameof(composition))).IsParticipant;
+    }
 
     /// <inheritdoc />
     /// <exception cref="FeedCredentialUnavailableException">Thrown when the feed declares credentials that could not be resolved. The feed is refused before anything is read from the install store or the network, so a package already installed from it is not served either.</exception>
     public async Task<string> AcquireAsync(FeedDefinition feed, string packageId, string version, CancellationToken cancellationToken)
     {
+        RefuseUnscopedAcquisition();
         ArgumentNullException.ThrowIfNull(feed);
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(version);
@@ -37,11 +60,7 @@ public sealed class NuGetRemotePackageAcquirer(
         // Ahead of the install-store short-circuit on purpose: a refused feed must not serve even a
         // package an earlier, authenticated run left on disk, because the refusal is about the feed's
         // eligibility, not about this one download.
-        var credentials = await FeedCredentials.ResolveAsync(_secretReferenceResolver, feed, cancellationToken).ConfigureAwait(false);
-        if (credentials.IsRefused)
-        {
-            throw new FeedCredentialUnavailableException(feed.Name);
-        }
+        var credential = await ResolveEligibleCredentialAsync(feed, cancellationToken).ConfigureAwait(false);
 
         var installRoot = PackageInstallStore.ResolveInstallRoot(_options);
         var installDirectory = PackageInstallStore.GetInstallDirectory(installRoot, feed.Name, packageId, version);
@@ -59,9 +78,14 @@ public sealed class NuGetRemotePackageAcquirer(
                 feed,
                 packageId,
                 version,
+                async (source, token) =>
+                {
+                    await using var destination = File.Create(stagedNupkgPath);
+                    await source.CopyToAsync(destination, token);
+                },
                 stagedNupkgPath,
                 _options.PackageBaseAddressCacheTtl,
-                credentials.Credential,
+                credential,
                 cancellationToken);
 
             await PackageInstallStore.InstallAsync(installRoot, installDirectory, stagedNupkgPath, cancellationToken);
@@ -77,11 +101,57 @@ public sealed class NuGetRemotePackageAcquirer(
         }
     }
 
+    /// <inheritdoc />
+    /// <exception cref="FeedCredentialUnavailableException">The feed declares credentials that could not be resolved. Eligibility is checked before native cache access or network requests.</exception>
+    public async Task<string> AcquireAsync(FeedDefinition feed, string packageId, string version,
+        PackageStoreOperationBorrow borrow, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(feed);
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+        ArgumentNullException.ThrowIfNull(borrow);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var credential = await ResolveEligibleCredentialAsync(feed, cancellationToken).ConfigureAwait(false);
+        var installRoot = PackageInstallStore.ResolveInstallRoot(_options);
+        var installDirectory = PackageInstallStore.GetInstallDirectory(installRoot, feed.Name, packageId, version);
+        return await NativePackageInstallSession.AcquireAsync(
+            installRoot,
+            installDirectory,
+            borrow,
+            (destination, token) => DownloadPackageAsync(
+                feed,
+                packageId,
+                version,
+                (source, copyToken) => source.CopyToAsync(destination, copyToken),
+                destinationPath: null,
+                _options.PackageBaseAddressCacheTtl,
+                credential,
+                token),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<FeedCredential?> ResolveEligibleCredentialAsync(FeedDefinition feed, CancellationToken cancellationToken)
+    {
+        var credentials = await FeedCredentials.ResolveAsync(_secretReferenceResolver, feed, cancellationToken).ConfigureAwait(false);
+        if (credentials.IsRefused)
+            throw new FeedCredentialUnavailableException(feed.Name);
+        return credentials.Credential;
+    }
+
+    private void RefuseUnscopedAcquisition()
+    {
+        if (_refuseUnscopedAcquisition)
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "Unscoped remote package acquisition is unavailable in coordinated participant composition; use a live operation borrow.");
+    }
+
     private async Task DownloadPackageAsync(
         FeedDefinition feed,
         string packageId,
         string version,
-        string destinationPath,
+        Func<Stream, CancellationToken, Task> consumeArchive,
+        string? destinationPath,
         TimeSpan packageBaseAddressCacheTtl,
         FeedCredential? credential,
         CancellationToken cancellationToken)
@@ -107,8 +177,7 @@ public sealed class NuGetRemotePackageAcquirer(
         response.EnsureSuccessStatusCode();
 
         await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await using var destination = File.Create(destinationPath);
-        await source.CopyToAsync(destination, cancellationToken);
+        await consumeArchive(source, cancellationToken);
     }
 
     private async Task<Uri> GetPackageBaseAddressAsync(

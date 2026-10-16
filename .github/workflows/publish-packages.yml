@@ -18,7 +18,32 @@ env:
   PREVIEW_BASE_VERSION: 1.0.0
 
 jobs:
+  darwin-native-shim:
+    name: Build universal Darwin store shim
+    runs-on: macos-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and verify universal native shim
+        shell: bash
+        run: bash native/nuplane-store/build-darwin.sh "$RUNNER_TEMP/nuplane-darwin-native"
+
+      - name: Upload verified native shim
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuplane-darwin-native
+          path: |
+            ${{ runner.temp }}/nuplane-darwin-native/libnuplane_store_native.dylib
+            ${{ runner.temp }}/nuplane-darwin-native/nuplane-store-native.manifest.json
+          if-no-files-found: error
+
   build-test-pack:
+    needs:
+      - darwin-native-shim
     runs-on: ubuntu-latest
     outputs:
       package_version: ${{ steps.version.outputs.package_version }}
@@ -30,6 +55,16 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+
+      - name: Download verified Darwin native shim
+        uses: actions/download-artifact@v4
+        with:
+          name: nuplane-darwin-native
+          path: ${{ github.workspace }}/artifacts/nuplane-darwin-native
+
+      - name: Set Darwin native shim directory for project-reference builds
+        shell: bash
+        run: echo "NuplaneDarwinNativeDirectory=$GITHUB_WORKSPACE/artifacts/nuplane-darwin-native" >> "$GITHUB_ENV"
 
       - name: Determine package version
         id: version
@@ -63,8 +98,18 @@ jobs:
       - name: Build
         run: dotnet build nuplane.sln --configuration Release --no-restore
 
-      - name: Run tests
-        run: dotnet test nuplane.sln --configuration Release --no-restore --no-build
+      - name: Run test projects serially and preserve crash diagnostics
+        shell: bash
+        run: bash build/test-projects.sh "$RUNNER_TEMP/full-suite-results"
+
+      - name: Preserve full-suite results and crash diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-suite-results-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/full-suite-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Pack source projects
         shell: bash

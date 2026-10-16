@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nuplane.Abstractions;
 using Nuplane.Builder;
 using Nuplane.Loading.Registration;
+using Nuplane.Reconciliation;
 
 namespace Nuplane.Loading.Hosting.Builder;
 
@@ -76,6 +77,10 @@ public static class NuplaneBuilderLoadingExtensions
 
         // ── Loading observer (bridges reconciliation and loading) ─────────────────
         services.TryAddEnumerable(ServiceDescriptor.Singleton<INuplaneObserver, PackageAutoLoadingObserver>());
+        services.TryAddSingleton<ILeasedPackageGraphLoadingObserver>(sp =>
+            sp.GetServices<INuplaneObserver>().OfType<PackageAutoLoadingObserver>().Single());
+        services.TryAddSingleton<ILeasedPackageGraphRecoveryLoadingObserver>(sp =>
+            sp.GetServices<INuplaneObserver>().OfType<PackageAutoLoadingObserver>().Single());
 
         var loadingBuilder = new NuplaneLoadingBuilder(services);
         if (enableByDefault)

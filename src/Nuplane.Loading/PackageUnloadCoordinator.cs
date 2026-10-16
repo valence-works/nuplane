@@ -98,7 +98,9 @@ internal sealed class PackageUnloadCoordinator : IPackageUnloadCoordinator
 
         try
         {
-            var weakReference = new WeakReference(loadContext);
+            // A short weak reference clears as soon as finalization begins. The outcome contract
+            // calls this complete only after the collectible context has finished unloading.
+            var weakReference = new WeakReference(loadContext, trackResurrection: true);
 
             loadContext.Unload();
             loadContext = null!;

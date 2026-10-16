@@ -21,6 +21,12 @@ public sealed record PackageResolutionResult(
     /// </summary>
     public IReadOnlyList<ResolvedPackageGraph> ResolvedGraphs { get; init; } = ResolvedGraphs ?? [];
 
+    /// <summary>
+    /// Gets the exact request association for every resolved graph, captured after desired-state
+    /// contributors have reached their final fixpoint.
+    /// </summary>
+    public IReadOnlyList<ResolvedPackageGraphSelection> GraphSelections { get; init; } = [];
+
     internal bool LockFileEvaluated { get; init; }
 
     internal IReadOnlyDictionary<string, string> ExpectedArtifactHashes { get; init; } =

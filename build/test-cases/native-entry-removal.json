@@ -1,0 +1,14 @@
+[
+  "Nuplane.Store.Tests.Coordination.PhysicalStoreDeletionTests.Remove_DeletesExactFileAndEmptyDirectoryAndPreservesSibling",
+  "Nuplane.Store.Tests.Coordination.PhysicalStoreDeletionTests.RemoveFile_RefusesReplacedIdentityAndPreservesBothFiles",
+  "Nuplane.Store.Tests.Coordination.PhysicalStoreDeletionTests.RemoveDirectory_RefusesReplacedIdentityAndPreservesBothDirectories",
+  "Nuplane.Store.Tests.Coordination.PhysicalStoreDeletionTests.RemoveDirectory_RefusesNonemptyDirectoryAndPreservesNestedPayload",
+  "Nuplane.Store.Tests.Coordination.PhysicalStoreDeletionTests.Remove_RefusesWrongEntryKindsWithoutMutation",
+  "Nuplane.Store.Tests.Coordination.PhysicalStoreDeletionTests.Remove_RefusesMissingEntriesInsteadOfCreditingRemoval",
+  "Nuplane.Store.Tests.Coordination.PhysicalStoreDeletionTests.Remove_RejectsTraversalAndRootedNamesBeforeMutation",
+  "Nuplane.Store.Tests.Coordination.PhysicalStoreDeletionTests.Remove_RefusesSymbolicLinksAndPreservesTargetsOutsideHeldParent",
+  "Nuplane.Store.Tests.Coordination.PhysicalStoreDeletionTests.RemoveFile_RefusesHardLinkAmbiguityAndPreservesBothNames",
+  "Nuplane.Store.Tests.Coordination.PhysicalStoreDeletionTests.Remove_RefusesAliasSpellingWithoutMutation",
+  "Nuplane.Store.Tests.Coordination.PhysicalStoreDeletionTests.Remove_RefusesForeignAndDisposedParentsWithoutMutation",
+  "Nuplane.Store.Tests.Coordination.PhysicalStoreDeletionTests.Remove_UsesHeldParentAfterTextualRenameAttempt"
+]

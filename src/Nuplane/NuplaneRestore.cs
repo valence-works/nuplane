@@ -40,11 +40,11 @@ namespace Nuplane;
 /// <see cref="NuplaneRestoreOptions.BasePath"/>.
 /// </description></item>
 /// <item><description>
-/// <b>Failures are reported, not thrown.</b> A degraded cycle, a package that could not be
-/// acquired, a feed whose credential reference could not be resolved, and a store another process is
-/// already reconciling are all fields on <see cref="NuplaneRestoreResult"/>. Only a malformed request — a
-/// null argument, a relative override, a path nothing pins, in-memory persistence, invalid
-/// configuration — throws.
+/// <b>Cycle outcomes are reported.</b> A degraded cycle, a package that could not be acquired, a
+/// feed whose credential reference could not be resolved, and a store another process is already
+/// reconciling are fields on <see cref="NuplaneRestoreResult"/>. Unknown or incomplete enrolled
+/// package-store authority, or an enrolled desired source without a scoped or path-independent
+/// contract, throws a typed package-store admission refusal before source callbacks.
 /// </description></item>
 /// <item><description>
 /// <b>Module feeds come from the caller.</b> Core <c>AddNuplane</c> skips every configured feed that
@@ -118,6 +118,13 @@ public static class NuplaneRestore
     /// Calling this twice over an unchanged configuration is idempotent: the second cycle finds
     /// every package already installed, adds nothing, and persists the same active set.
     /// </para>
+    /// <para>
+    /// When <see cref="NuplaneRestoreOptions.RequirePinnedVersions"/> is enabled, its desired-state
+    /// preflight acquires and retains configured-root admission while all awaited source reads drain,
+    /// then releases it before the reconciliation cycle acquires a fresh owner. Unknown or incomplete
+    /// enrolled authority and unsupported enrolled sources are typed admission refusals, not degraded
+    /// cycle results.
+    /// </para>
     /// </remarks>
     /// <param name="configuration">
     /// The host's configuration root — the one that nests Nuplane's own keys under a <c>Nuplane</c>
@@ -132,6 +139,7 @@ public static class NuplaneRestore
     /// <exception cref="ArgumentException">Thrown when an absolute override in <paramref name="options"/> is not an absolute path.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the configuration selects in-memory persistence, when the install root or state file is neither configured absolutely, nor overridden, nor resolvable against <see cref="NuplaneRestoreOptions.BasePath"/>, or when the resolved configuration names no feed and no desired package source at all.</exception>
     /// <exception cref="Microsoft.Extensions.Options.OptionsValidationException">Thrown when the configuration fails Nuplane's own options validation, exactly as it would when a host starts.</exception>
+    /// <exception cref="Nuplane.Abstractions.PackageStoreProtection.PackageStoreAdmissionException">Thrown when configured-root authority is unknown or incomplete, or an enrolled source cannot be read under the scoped contract.</exception>
     /// <exception cref="IOException">Thrown when the state file written by the cycle cannot be read back, for example while another process holds it mid-write.</exception>
     /// <exception cref="System.Text.Json.JsonException">Thrown when the state file read back after the cycle is torn or otherwise not valid JSON.</exception>
     public static async Task<NuplaneRestoreResult> RestoreAsync(
@@ -194,21 +202,25 @@ public static class NuplaneRestore
     /// It composes the same provider a restore composes — so the same refusals apply, and the
     /// resolved paths it reports are the ones a restore would write — and then reads the desired
     /// requests through the same sources and the same aggregator a reconciliation cycle reads them
-    /// with. It does not resolve versions, contact feeds, acquire packages, read the store, or
-    /// persist a source snapshot; a cycle's desired-state middleware does persist snapshots, which
-    /// is why this reads the sources directly instead.
+    /// with. It acquires configured-root admission before reading sources and retains an enrolled
+    /// Complete root owner until awaited source reads drain. It does not resolve versions, contact
+    /// feeds, acquire packages, read installed package payloads, or persist a source snapshot; a
+    /// cycle's desired-state middleware does persist snapshots, which is why this reads sources
+    /// directly instead. Unknown or incomplete enrolled authority and unsupported enrolled sources
+    /// are typed refusals before any source callback.
     /// </para>
     /// <para>
-    /// <b>What it touches.</b> Local disk only, and only where a desired source already lives: a
-    /// directory-backed feed enumerates its own <c>.nupkg</c> files, and a convergence manifest
-    /// source reads its manifest file. A remote feed's requests come from its configured include
-    /// patterns alone — those sources run in direct mode and perform no I/O at all — so no service
-    /// index, version list, or package is ever fetched.
+    /// <b>What it touches.</b> It observes the configured store's membership authority and, on an
+    /// unenrolled root, preserves the existing desired-source reads. A source may read its own local
+    /// input, such as a directory feed's <c>.nupkg</c> files or a convergence manifest. Remote feed
+    /// requests come from configured include patterns alone, so no service index, version list, or
+    /// package is fetched. It never reads installed package payloads.
     /// </para>
     /// <para>
-    /// A source that throws while being read contributes no requests and is reported in
+    /// Ordinary source exceptions contribute no requests and are reported in
     /// <see cref="NuplaneDesiredDescription.SourceErrors"/> rather than propagating, so an empty
-    /// request list with an error in it means "could not tell", not "nothing is desired".
+    /// request list with an error in it means "could not tell", not "nothing is desired". Typed
+    /// package-store admission refusals propagate and are not converted to source-error text.
     /// </para>
     /// <para>
     /// <see cref="NuplaneDesiredDescription.CapabilitySelections"/> reports the host's configured
@@ -230,6 +242,7 @@ public static class NuplaneRestore
     /// <exception cref="ArgumentException">Thrown when an absolute override in <paramref name="options"/> is not an absolute path.</exception>
     /// <exception cref="InvalidOperationException">Thrown for the same unresolvable-path, in-memory-persistence, and empty-composition reasons as <see cref="RestoreAsync"/>, so a pre-flight catches them before the restore does.</exception>
     /// <exception cref="Microsoft.Extensions.Options.OptionsValidationException">Thrown when the configuration fails Nuplane's own options validation.</exception>
+    /// <exception cref="Nuplane.Abstractions.PackageStoreProtection.PackageStoreAdmissionException">Thrown when configured-root authority is unknown or incomplete, or an enrolled source or aggregator has no scoped contract.</exception>
     public static async Task<NuplaneDesiredDescription> DescribeDesiredAsync(
         IConfiguration configuration,
         NuplaneRestoreOptions? options = null,

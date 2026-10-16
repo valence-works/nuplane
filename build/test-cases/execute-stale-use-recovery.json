@@ -1,0 +1,5 @@
+[
+  "Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.PublicMaintenance_ConfirmedExecuteRecoversStaleUseAndDeletesFreshlyEligibleInstall",
+  "Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.PublicMaintenance_ConfirmedExecuteRefusesUnknownUseNamespaceBeforeDeleting",
+  "Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.PublicMaintenance_ExecuteRecoversStaleUseAndPreservesLiveOldGraph"
+]

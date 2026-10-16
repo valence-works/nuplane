@@ -1,17 +1,22 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
+using Nuplane.Abstractions.PackageStoreProtection;
 using NuGet.RuntimeModel;
 
 namespace Nuplane.Loading;
 
-internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPolicyLoadContext
+internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPolicyLoadContext, IGraphUseLeaseBoundLoadContext
 {
     private readonly IReadOnlyDictionary<AssemblyNameCultureKey, string> _assemblyPathsByName;
     private readonly IReadOnlyList<AssemblyDependencyResolver> _dependencyResolvers;
     private readonly IReadOnlyList<string> _packageInstallPaths;
     private readonly IReadOnlyList<SharedAssemblyPolicyEntry> _sharedPolicy;
     private readonly SharedAssemblyPolicyMatcher _matcher;
+    private readonly PackageGraphUseLease? _graphUseLease;
+    private readonly NativeLibraryHandlePool _nativeLibraryHandles = new();
+
+    PackageGraphUseLease? IGraphUseLeaseBoundLoadContext.GraphUseLease => _graphUseLease;
     private static readonly Lazy<RuntimeGraph> RuntimeGraphProvider = new(LoadRuntimeGraph);
 
     public PackageGraphLoadContext(
@@ -25,6 +30,18 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
     {
     }
 
+    internal PackageGraphLoadContext(
+        string contextName,
+        IReadOnlyList<string> runtimeAssemblyPaths,
+        IReadOnlyList<string> resolverAssemblyPaths,
+        IReadOnlyList<string> packageInstallPaths,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        SharedAssemblyPolicyMatcher matcher,
+        PackageGraphUseLeaseOwner? graphLeaseOwner)
+        : this(contextName, runtimeAssemblyPaths, resolverAssemblyPaths, packageInstallPaths, sharedPolicy, matcher, isCollectible: true, graphLeaseOwner: graphLeaseOwner)
+    {
+    }
+
     protected PackageGraphLoadContext(
         string contextName,
         IReadOnlyList<string> runtimeAssemblyPaths,
@@ -32,7 +49,8 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
         IReadOnlyList<string> packageInstallPaths,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         SharedAssemblyPolicyMatcher matcher,
-        bool isCollectible)
+        bool isCollectible,
+        PackageGraphUseLeaseOwner? graphLeaseOwner = null)
         : base(contextName, isCollectible)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(contextName);
@@ -62,6 +80,14 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
 
                 return group.OrderBy(static candidate => candidate.Path, StringComparer.OrdinalIgnoreCase).First().Path;
             });
+
+        // Validation can fail without loading an assembly. Keep ownership with the caller until
+        // construction succeeds, especially for noncollectible contexts retained until process exit.
+        _graphUseLease = graphLeaseOwner?.Lease;
+        if (graphLeaseOwner is null)
+            PackageNativeLibraryLifetimeRetention.Retain(this, _nativeLibraryHandles, isCollectible);
+        else
+            graphLeaseOwner.TransferToLifetime(this, isCollectible, _nativeLibraryHandles);
     }
 
     /// <inheritdoc />
@@ -105,12 +131,12 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
             var resolvedPath = resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
             if (!string.IsNullOrWhiteSpace(resolvedPath))
             {
-                return LoadUnmanagedDllFromPath(resolvedPath);
+                return _nativeLibraryHandles.Load(resolvedPath);
             }
         }
 
         var nativePath = ResolveNativeLibraryPath(_packageInstallPaths, unmanagedDllName, RuntimeInformation.RuntimeIdentifier);
-        return nativePath is null ? IntPtr.Zero : LoadUnmanagedDllFromPath(nativePath);
+        return nativePath is null ? IntPtr.Zero : _nativeLibraryHandles.Load(nativePath);
     }
 
     internal static string? ResolveNativeLibraryPath(
@@ -216,7 +242,7 @@ internal class PackageGraphLoadContext : AssemblyLoadContext, ISharedAssemblyPol
     {
         try
         {
-            return AssemblyName.GetAssemblyName(path);
+            return PackageAssemblyReadCheckpoint.GetAssemblyName(path);
         }
         catch (BadImageFormatException)
         {

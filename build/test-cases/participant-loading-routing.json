@@ -1,0 +1,10 @@
+[
+  "Nuplane.Loading.Tests.PackageStoreCompositionLoadingTests.OrdinaryDiLoaderAndAssemblyQuery_RetainCompatibilityWithIncidentalControlData",
+  "Nuplane.Loading.Tests.PackageStoreCompositionLoadingTests.ParticipantLoadModeSelection_RequiresLeaseBeforePolicyOrAdvisor(policy: Automatic)",
+  "Nuplane.Loading.Tests.PackageStoreCompositionLoadingTests.ParticipantLoadModeSelection_RequiresLeaseBeforePolicyOrAdvisor(policy: ExplicitOnly)",
+  "Nuplane.Loading.Tests.PackageStoreCompositionLoadingTests.ParticipantMetadataAdapter_UsesSharedGuardBeforeMissingFileShortcut",
+  "Nuplane.Loading.Tests.PackageStoreCompositionLoadingTests.ParticipantRawAssemblyScan_RefusesBeforeMissingDirectoryIsInspected",
+  "Nuplane.Loading.Tests.PackageStoreCompositionLoadingTests.ParticipantRawLoader_RefusesBeforeAdvisorOrPackageRead(graph: False)",
+  "Nuplane.Loading.Tests.PackageStoreCompositionLoadingTests.ParticipantRawLoader_RefusesBeforeAdvisorOrPackageRead(graph: True)",
+  "Nuplane.Loading.Tests.PackageStoreCompositionLoadingTests.ParticipantUnscopedObserver_RefusesBeforeLoadingDisabledShortcut"
+]

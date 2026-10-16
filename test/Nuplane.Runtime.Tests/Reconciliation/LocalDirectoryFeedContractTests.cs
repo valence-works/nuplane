@@ -301,12 +301,16 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
     public async Task Resolve_FromLocalFeed_ConcurrentResolvesOfSamePackageShareOneCompleteInstall()
     {
         NupkgTestBuilder.Create("MyPlugin", "1.0.0").BuildTo(_tempDir);
-        var resolver = CreateResolver(CreateLocalFeedOptions());
+        var resolvers = new[]
+        {
+            CreateResolver(CreateLocalFeedOptions()),
+            CreateResolver(CreateLocalFeedOptions())
+        };
         var request = new PackageRequest("MyPlugin", "1.0.0", "local-drop", PackageUpdatePolicy.Exact, "local-source");
 
         var results = await Task.WhenAll(Enumerable
             .Range(0, 8)
-            .Select(_ => Task.Run(() => resolver.ResolveAsync(request, CancellationToken.None))));
+            .Select(index => Task.Run(() => resolvers[index % resolvers.Length].ResolveAsync(request, CancellationToken.None))));
 
         var installPath = Assert.Single(results.Select(result => result.InstallPath).Distinct(StringComparer.Ordinal));
         Assert.True(File.Exists(Path.Combine(installPath, "MyPlugin.nuspec")));

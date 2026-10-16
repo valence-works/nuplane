@@ -9,6 +9,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Nuplane" />
     <InternalsVisibleTo Include="Nuplane.Sources.Directory.Tests" />
+    <InternalsVisibleTo Include="Nuplane.Runtime.Tests" />
   </ItemGroup>
 
   <ItemGroup>

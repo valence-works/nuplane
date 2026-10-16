@@ -13,13 +13,14 @@ public sealed class OperationalStateContributorIntegrationTests
     public async Task LoadingContributor_RegisteredThroughDi_EnrichesOperationalStateWhenLoadingIsStale()
     {
         var tempRoot = Path.Combine(Path.GetTempPath(), "nuplane-operational-contributor", Guid.NewGuid().ToString("N"));
+        var stateFilePath = Path.Combine(tempRoot, "store-state.json");
         Directory.CreateDirectory(tempRoot);
 
         try
         {
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddNuplane(_ => { });
+            services.AddNuplane(nuplane => nuplane.WithStateFile(stateFilePath));
             services.AddNuplaneLoading(options => options.Enabled = true);
             services.AddNuplaneAdmin();
 
@@ -40,6 +41,8 @@ public sealed class OperationalStateContributorIntegrationTests
                 descriptor.ActivationCorrelationId,
                 CancellationToken.None,
                 new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase) { [descriptor.PackageId] = descriptor });
+
+            Assert.True(File.Exists(stateFilePath));
 
             var projector = provider.GetRequiredService<OperationalSnapshotProjector>();
             var snapshot = await projector.ProjectAsync("corr-state-read", CancellationToken.None);

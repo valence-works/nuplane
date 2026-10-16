@@ -1,0 +1,4 @@
+[
+  "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.OrdinaryProbeAndHashRead_IncidentalControlDataRetainsReleasedCompatibility",
+  "Nuplane.Runtime.Tests.Feeds.PackageDependencyGraphResolverTests.ResolveAsync_OrdinaryGraphReadsIgnoreIncidentalCoordinationData"
+]

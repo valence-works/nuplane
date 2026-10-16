@@ -21,6 +21,44 @@ public sealed record ResolvedPackageGraph(
     IReadOnlyList<FeedResolutionDecision> SourceDecisions,
     DateTimeOffset CreatedAtUtc)
 {
+    /// <summary>Creates a graph snapshot whose nested collections cannot be changed by their original owners.</summary>
+    /// <returns>A value-equivalent graph with read-only copies of every nested collection.</returns>
+    public ResolvedPackageGraph CreateImmutableSnapshot()
+    {
+        ArgumentNullException.ThrowIfNull(Roots);
+        ArgumentNullException.ThrowIfNull(Nodes);
+        ArgumentNullException.ThrowIfNull(Edges);
+        ArgumentNullException.ThrowIfNull(SourceDecisions);
+
+        var copiedNodes = new Dictionary<ResolvedPackageNode, ResolvedPackageNode>(ReferenceEqualityComparer.Instance);
+        ResolvedPackageNode CopyNode(ResolvedPackageNode node)
+        {
+            ArgumentNullException.ThrowIfNull(node);
+            if (copiedNodes.TryGetValue(node, out var copied))
+                return copied;
+
+            copied = node with
+            {
+                RuntimeAssets = Array.AsReadOnly(node.RuntimeAssets.ToArray()),
+                DiscoverableAssets = Array.AsReadOnly(node.DiscoverableAssets.ToArray()),
+                SupportAssets = Array.AsReadOnly(node.SupportAssets.ToArray())
+            };
+            copiedNodes.Add(node, copied);
+            return copied;
+        }
+
+        return this with
+        {
+            Roots = Array.AsReadOnly(Roots.Select(CopyNode).ToArray()),
+            Nodes = Array.AsReadOnly(Nodes.Select(CopyNode).ToArray()),
+            Edges = Array.AsReadOnly(Edges.Select(static edge => edge with { }).ToArray()),
+            SourceDecisions = Array.AsReadOnly(SourceDecisions.Select(static decision => decision with
+            {
+                CandidateFeeds = Array.AsReadOnly(decision.CandidateFeeds.ToArray())
+            }).ToArray())
+        };
+    }
+
     /// <summary>
     /// Creates a deterministic graph identity from sorted graph content.
     /// </summary>

@@ -29,7 +29,7 @@ internal static class PackageLoadStateProjection
         if (loader.Sessions.TryGetValue($"{package.PackageId}@{package.Version}", out var session))
         {
             return session.IsLoaded
-                ? Create(package, PackageLoadStatus.Loaded, session.LoadedAt, [], candidateProjector.Project(package), session)
+                ? Create(package, PackageLoadStatus.Loaded, session.LoadedAt, [], candidateProjector.Project(package, session), session)
                 : Create(package, PackageLoadStatus.Failed, session.LoadedAt, BuildDiagnostics(session.LastError), [], session);
         }
 

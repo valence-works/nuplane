@@ -1,0 +1,5 @@
+[
+  "Nuplane.Store.Tests.Coordination.PhysicalStorePackageStreamTests.BoundedStream_PartialWriteCancellationStopsBeforeRetrying",
+  "Nuplane.Store.Tests.Coordination.PhysicalStorePackageStreamTests.WindowsReadStream_RefusesWrongCaseAliasForTheSameFile",
+  "Nuplane.Store.Tests.Coordination.PhysicalStorePackageStreamTests.WindowsStreams_AreBoundedSeekableAndCreationOnly"
+]

@@ -3,11 +3,14 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Policy;
 using Nuplane.Feeds.Versioning;
 using Nuplane.Observability;
 using Nuplane.Reconciliation.Models;
+using Nuplane.Registration;
+using Nuplane.Store.Coordination;
 using Nuplane.Versioning;
 using NuGet.Versioning;
 
@@ -17,7 +20,7 @@ namespace Nuplane.Feeds;
 /// Resolves packages across multiple feeds using priority ordering and feed availability
 /// tracking, recording resolution decisions for observability.
 /// </summary>
-public sealed class MultiFeedPackageResolver : IPackageResolver
+public sealed class MultiFeedPackageResolver : IScopedPackageResolver
 {
     private readonly FeedResolutionOptions _options;
     private readonly FeedResolutionPolicy _policy;
@@ -26,6 +29,9 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     private readonly IVersionRangeEvaluator _versionRangeEvaluator;
     private readonly ILogger<MultiFeedPackageResolver> _logger;
     private readonly ReconciliationMetrics? _metrics;
+    private readonly bool _refuseUnscopedResolution;
+    internal bool IsParticipantGuarded => _refuseUnscopedResolution;
+    internal IRemotePackageAcquirer RemotePackageAcquirer => _remotePackageAcquirer;
     private readonly ConcurrentDictionary<string, FeedResolutionDecision> _decisions = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, int> _attempts = new(StringComparer.OrdinalIgnoreCase);
 
@@ -47,6 +53,20 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         IVersionRangeEvaluator versionRangeEvaluator,
         ILogger<MultiFeedPackageResolver> logger,
         ReconciliationMetrics? metrics = null)
+        : this(options, policy, remotePackageAcquirer, versionEnumerator, versionRangeEvaluator, logger, metrics,
+            PackageStoreCompositionSnapshot.Ordinary)
+    {
+    }
+
+    internal MultiFeedPackageResolver(
+        IOptions<FeedResolutionOptions> options,
+        FeedResolutionPolicy policy,
+        IRemotePackageAcquirer remotePackageAcquirer,
+        IFeedVersionEnumerator versionEnumerator,
+        IVersionRangeEvaluator versionRangeEvaluator,
+        ILogger<MultiFeedPackageResolver> logger,
+        ReconciliationMetrics? metrics,
+        PackageStoreCompositionSnapshot composition)
     {
         ArgumentNullException.ThrowIfNull(options);
         _options = options.Value;
@@ -56,10 +76,34 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         _versionRangeEvaluator = versionRangeEvaluator ?? throw new ArgumentNullException(nameof(versionRangeEvaluator));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _metrics = metrics;
+        _refuseUnscopedResolution = (composition ?? throw new ArgumentNullException(nameof(composition))).IsParticipant;
     }
 
     /// <inheritdoc />
-    public async Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)
+    public Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)
+        => _refuseUnscopedResolution
+            ? Task.FromException<ResolvedPackage>(new PackageStoreAdmissionException(
+                PackageStoreAdmissionReason.UnsupportedParticipant,
+                "Unscoped package resolution is unavailable in coordinated participant composition; use a live operation borrow."))
+            : ResolveCoreAsync(request, borrow: null, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<ResolvedPackage> ResolveAsync(
+        PackageRequest request,
+        PackageStoreOperationBorrow borrow,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(borrow);
+        _ = PackageStoreOperationAccess.GetOwner(borrow);
+        return ResolveCoreAsync(request, borrow, cancellationToken);
+    }
+
+    private async Task<ResolvedPackage> ResolveCoreAsync(
+        PackageRequest request,
+        PackageStoreOperationBorrow? borrow,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
@@ -99,7 +143,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                 continue;
             }
 
-            var selectedVersion = await ResolveVersionAsync(candidate, request, cancellationToken);
+            var selectedVersion = await ResolveVersionAsync(candidate, request, borrow, cancellationToken);
             if (!selectedVersion.Success)
             {
                 lastFailure = Accumulate(lastFailure, FeedResolutionDecision.Failed(
@@ -130,7 +174,13 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     request.Id,
                     selectedVersion.Version!,
                     selectedVersion.LocalPackageFile,
+                    selectedVersion.NativeLocalPackageFile,
+                    borrow,
                     cancellationToken);
+            }
+            catch (PackageStoreAdmissionException)
+            {
+                throw;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -153,6 +203,15 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
 
                 continue;
             }
+
+            if (borrow is not null && !PackageInstallStore.IsInstalled(installPath, borrow))
+            {
+                throw new PackageStoreAdmissionException(
+                    PackageStoreAdmissionReason.StateMismatch,
+                    "The scoped package acquirer did not produce a completed install under the admitted root.",
+                    borrow.Root);
+            }
+
             var resolved = new ResolvedPackage(
                 request.Id,
                 selectedVersion.Version!,
@@ -161,7 +220,9 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                 DateTimeOffset.UtcNow,
                 request.SourceName)
             {
-                PackageContentHash = await PackageInstallStore.ReadContentHashAsync(installPath, cancellationToken)
+                PackageContentHash = borrow is null
+                    ? await PackageInstallStore.ReadContentHashAsync(installPath, cancellationToken)
+                    : await PackageInstallStore.ReadContentHashAsync(installPath, borrow, cancellationToken)
             };
 
             _decisions[request.Id] = FeedResolutionDecision.Resolved(
@@ -202,6 +263,7 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     private async Task<VersionSelection> ResolveVersionAsync(
         FeedDefinition feed,
         PackageRequest request,
+        PackageStoreOperationBorrow? borrow,
         CancellationToken cancellationToken)
     {
         var versionRequest = NuGetVersionRequestClassifier.Classify(request.VersionRange);
@@ -217,47 +279,30 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
                     $"Local directory feed '{feed.Name}' requires an explicit version for package '{request.Id}'; empty or whitespace version ranges are not supported.");
             }
 
+            if (borrow is not null)
+            {
+                return await ResolveScopedLocalDirectoryVersionAsync(
+                    feed, request, versionRequest, borrow, cancellationToken).ConfigureAwait(false);
+            }
+
             var feedDirectoryPath = feed.ServiceIndex.LocalPath;
             var packageFiles = LocalDirectoryFeedIndex.FindPackageFiles(feedDirectoryPath, request.Id);
-
-            if (versionRequest.IsExact)
-            {
-                var exactMatch = LocalDirectoryFeedIndex.SelectVersion(packageFiles, versionRequest.ExactVersion!);
-                if (exactMatch is null)
-                {
-                    return VersionSelection.Failed(
-                        "exact-local-cache-miss",
-                        $"Exact package '{request.Id}' version '{versionRequest.ExactVersion}' was not found in local directory feed '{feed.Name}' at '{feedDirectoryPath}'.",
-                        packageFiles.Count);
-                }
-
-                return VersionSelection.Succeeded(
-                    exactMatch.Value.Version.ToNormalizedString(),
-                    packageFiles.Count,
-                    cacheHit: true,
-                    "exact-local-cache-hit",
-                    exactMatch);
-            }
-
             var localVersions = packageFiles.Select(static file => file.Version.ToNormalizedString()).ToArray();
-            var localResult = IsDependencyRequest(request)
-                ? SelectLowestDependencyMatch(request.VersionRange, localVersions)
-                : _versionRangeEvaluator.SelectBestMatch(request.VersionRange, localVersions);
-
-            if (!localResult.Success)
-            {
-                return VersionSelection.Failed(
-                    "local-directory-version-no-match",
-                    $"No version of package '{request.Id}' matching '{request.VersionRange}' was found in local directory feed '{feed.Name}' at '{feedDirectoryPath}': {localResult.FailureReason}",
-                    localResult.CandidateCount);
-            }
+            var exactMatch = versionRequest.IsExact
+                ? LocalDirectoryFeedIndex.SelectVersion(packageFiles, versionRequest.ExactVersion!)
+                : null;
+            var localSelection = SelectLocalVersion(request, feed, versionRequest, localVersions,
+                exactMatch?.Version.ToNormalizedString());
+            if (!localSelection.Success)
+                return VersionSelection.Failed(localSelection.DecisionPath, localSelection.FailureReason,
+                    localSelection.CandidateCount);
 
             return VersionSelection.Succeeded(
-                localResult.SelectedVersion!,
-                localResult.CandidateCount,
+                localSelection.Version!,
+                localSelection.CandidateCount,
                 cacheHit: true,
-                "local-directory-version-match",
-                LocalDirectoryFeedIndex.SelectVersion(packageFiles, localResult.SelectedVersion!));
+                localSelection.DecisionPath,
+                LocalDirectoryFeedIndex.SelectVersion(packageFiles, localSelection.Version!));
         }
 
         if (versionRequest.IsExact)
@@ -311,6 +356,12 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
             _metrics?.RecordVersionResolution(feed.Name, "cancelled", cacheHit: false, stopwatch.Elapsed);
             throw;
         }
+        catch (PackageStoreAdmissionException)
+        {
+            stopwatch.Stop();
+            _metrics?.RecordVersionResolution(feed.Name, "error", cacheHit: false, stopwatch.Elapsed);
+            throw;
+        }
         catch (Exception ex)
         {
             stopwatch.Stop();
@@ -327,6 +378,80 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         }
     }
 
+    private async Task<VersionSelection> ResolveScopedLocalDirectoryVersionAsync(
+        FeedDefinition feed,
+        PackageRequest request,
+        NuGetVersionRequest versionRequest,
+        PackageStoreOperationBorrow borrow,
+        CancellationToken cancellationToken)
+    {
+        var feedDirectoryPath = feed.ServiceIndex.LocalPath;
+        var packageFiles = await NativeLocalDirectoryFeedIndex.FindPackageFilesAsync(
+            feedDirectoryPath, request.Id, borrow, cancellationToken).ConfigureAwait(false);
+        var localVersions = packageFiles.Select(static file => file.Version.ToNormalizedString()).ToArray();
+        var exactMatch = versionRequest.IsExact
+            ? NativeLocalDirectoryFeedIndex.SelectVersion(packageFiles, versionRequest.ExactVersion!)
+            : null;
+        var localSelection = SelectLocalVersion(request, feed, versionRequest, localVersions,
+            exactMatch?.Version.ToNormalizedString());
+        if (!localSelection.Success)
+            return VersionSelection.Failed(localSelection.DecisionPath, localSelection.FailureReason,
+                localSelection.CandidateCount);
+
+        var selectedFile = NativeLocalDirectoryFeedIndex.SelectVersion(packageFiles, localSelection.Version!);
+        if (selectedFile is null)
+        {
+            throw new PackageStoreAdmissionException(
+                PackageStoreAdmissionReason.UnknownAuthority,
+                "The selected local package version no longer has its exact native candidate.",
+                borrow.Root);
+        }
+
+        return VersionSelection.Succeeded(
+            localSelection.Version!,
+            localSelection.CandidateCount,
+            cacheHit: true,
+            localSelection.DecisionPath,
+            nativeLocalPackageFile: selectedFile);
+    }
+
+    private LocalVersionSelection SelectLocalVersion(
+        PackageRequest request,
+        FeedDefinition feed,
+        NuGetVersionRequest versionRequest,
+        IReadOnlyList<string> availableVersions,
+        string? exactMatchVersion)
+    {
+        var feedDirectoryPath = feed.ServiceIndex.LocalPath;
+        if (versionRequest.IsExact)
+        {
+            return exactMatchVersion is null
+                ? new(false, null, availableVersions.Count,
+                    $"Exact package '{request.Id}' version '{versionRequest.ExactVersion}' was not found in local directory feed '{feed.Name}' at '{feedDirectoryPath}'.",
+                    "exact-local-cache-miss")
+                : new(true, exactMatchVersion, availableVersions.Count, null, "exact-local-cache-hit");
+        }
+
+        var result = IsDependencyRequest(request)
+            ? SelectLowestDependencyMatch(request.VersionRange, availableVersions)
+            : _versionRangeEvaluator.SelectBestMatch(request.VersionRange, availableVersions);
+        if (!result.Success)
+        {
+            return new(false, null, result.CandidateCount,
+                $"No version of package '{request.Id}' matching '{request.VersionRange}' was found in local directory feed '{feed.Name}' at '{feedDirectoryPath}': {result.FailureReason}",
+                "local-directory-version-no-match");
+        }
+
+        return new(true, result.SelectedVersion, result.CandidateCount, null, "local-directory-version-match");
+    }
+
+    private readonly record struct LocalVersionSelection(
+        bool Success,
+        string? Version,
+        int CandidateCount,
+        string? FailureReason,
+        string DecisionPath);
+
     internal readonly record struct VersionSelection(
         bool Success,
         string? Version,
@@ -334,15 +459,17 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
         bool CacheHit,
         string? FailureReason,
         string DecisionPath,
-        LocalDirectoryPackageFile? LocalPackageFile = null)
+        LocalDirectoryPackageFile? LocalPackageFile = null,
+        NativeLocalDirectoryPackageFile? NativeLocalPackageFile = null)
     {
         public static VersionSelection Succeeded(
             string version,
             int enumeratedCount,
             bool cacheHit,
             string decisionPath = "ordered-candidate-success",
-            LocalDirectoryPackageFile? localPackageFile = null) =>
-            new(true, version, enumeratedCount, cacheHit, null, decisionPath, localPackageFile);
+            LocalDirectoryPackageFile? localPackageFile = null,
+            NativeLocalDirectoryPackageFile? nativeLocalPackageFile = null) =>
+            new(true, version, enumeratedCount, cacheHit, null, decisionPath, localPackageFile, nativeLocalPackageFile);
 
         public static VersionSelection Failed(string decisionPath, string? failureReason, int enumeratedCount = 0, bool cacheHit = false) =>
             new(false, null, enumeratedCount, cacheHit, failureReason, decisionPath);
@@ -360,17 +487,59 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
     /// <param name="packageId">The requested package identifier.</param>
     /// <param name="version">The resolved concrete version.</param>
     /// <param name="localPackageFile">The package file already located during version selection, when the feed is a local directory.</param>
+    /// <param name="nativeLocalPackageFile">The exact native local-feed candidate selected under an operation borrow.</param>
+    /// <param name="borrow">The existing enrolled operation borrow, or null for unenrolled resolution.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     private async Task<string> ResolveInstallPathAsync(
         FeedDefinition feed,
         string packageId,
         string version,
         LocalDirectoryPackageFile? localPackageFile,
+        NativeLocalDirectoryPackageFile? nativeLocalPackageFile,
+        PackageStoreOperationBorrow? borrow,
         CancellationToken cancellationToken)
     {
         if (!IsLocalDirectoryFeed(feed))
         {
-            return await _remotePackageAcquirer.AcquireAsync(feed, packageId, version, cancellationToken);
+            if (borrow is null)
+                return await _remotePackageAcquirer.AcquireAsync(feed, packageId, version, cancellationToken);
+
+            if (_remotePackageAcquirer is not IScopedRemotePackageAcquirer scopedAcquirer)
+            {
+                throw new PackageStoreAdmissionException(
+                    PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "The configured remote acquirer does not support the caller's admitted package-store operation.",
+                    borrow.Root);
+            }
+
+            return await scopedAcquirer.AcquireAsync(feed, packageId, version, borrow, cancellationToken);
+        }
+
+        if (borrow is not null)
+        {
+            var nativePackageFile = nativeLocalPackageFile
+                ?? throw new PackageStoreAdmissionException(
+                    PackageStoreAdmissionReason.UnsupportedParticipant,
+                    "The selected local package does not carry native feed authority.",
+                    borrow.Root);
+            var nativeFeedDirectoryPath = feed.ServiceIndex.LocalPath;
+            var nativeInstallRoot = PackageInstallStore.ResolveInstallRoot(_options);
+            var nativeInstallDirectory = PackageInstallStore.GetInstallDirectory(
+                nativeInstallRoot,
+                feed.Name,
+                nativePackageFile.PackageId,
+                version);
+
+            await NativeLocalDirectoryFeedIndex.RevalidateSelectedPackageFileAsync(
+                nativeFeedDirectoryPath, nativePackageFile, borrow, cancellationToken).ConfigureAwait(false);
+
+            return await NativePackageInstallSession.AcquireAsync(
+                nativeInstallRoot,
+                nativeInstallDirectory,
+                borrow,
+                (files, root, destination, token) => NativeLocalDirectoryFeedIndex.CopySelectedPackageArchiveAsync(
+                    nativeFeedDirectoryPath, nativePackageFile, borrow, files, root, destination, token),
+                cancellationToken).ConfigureAwait(false);
         }
 
         var feedDirectoryPath = feed.ServiceIndex.LocalPath;
@@ -394,14 +563,11 @@ public sealed class MultiFeedPackageResolver : IPackageResolver
             packageFile.Value.PackageId,
             version);
 
-        if (!PackageInstallStore.IsInstalled(installDirectory))
-        {
-            await PackageInstallStore.InstallAsync(
-                installRoot,
-                installDirectory,
-                packageFile.Value.FilePath,
-                cancellationToken);
-        }
+        await PackageInstallStore.EnsureLocalInstalledAsync(
+            installRoot,
+            installDirectory,
+            packageFile.Value.FilePath,
+            cancellationToken);
 
         return installDirectory;
     }

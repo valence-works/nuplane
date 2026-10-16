@@ -45,6 +45,9 @@ public sealed class EffectiveStorePersistenceSettings
     /// </summary>
     public string? ConfiguredStateFilePath { get; }
 
+    /// <summary>Gets the fully qualified replay locator with the configured raw components preserved.</summary>
+    internal string? CoordinatedStateFileLocator { get; }
+
     /// <summary>
     /// Gets whether the operator explicitly opted into in-memory mode.
     /// </summary>
@@ -54,11 +57,13 @@ public sealed class EffectiveStorePersistenceSettings
         StorePersistenceMode mode,
         string? resolvedStateFilePath,
         string? configuredStateFilePath,
+        string? coordinatedStateFileLocator,
         bool useInMemoryStore)
     {
         Mode = mode;
         ResolvedStateFilePath = resolvedStateFilePath;
         ConfiguredStateFilePath = configuredStateFilePath;
+        CoordinatedStateFileLocator = coordinatedStateFileLocator;
         UseInMemoryStore = useInMemoryStore;
     }
 
@@ -77,15 +82,23 @@ public sealed class EffectiveStorePersistenceSettings
                 StorePersistenceMode.InMemory,
                 resolvedStateFilePath: null,
                 configuredStateFilePath: options.StateFilePath,
+                coordinatedStateFileLocator: null,
                 useInMemoryStore: true);
         }
 
         if (!string.IsNullOrWhiteSpace(options.StateFilePath))
         {
+            var pathBase = Path.IsPathFullyQualified(options.StateFilePath)
+                ? null
+                : Directory.GetCurrentDirectory();
+            var replayLocator = pathBase is null
+                ? options.StateFilePath
+                : Path.Combine(pathBase, options.StateFilePath);
             return new EffectiveStorePersistenceSettings(
                 StorePersistenceMode.ConfiguredPath,
                 resolvedStateFilePath: Path.GetFullPath(options.StateFilePath),
                 configuredStateFilePath: options.StateFilePath,
+                coordinatedStateFileLocator: replayLocator,
                 useInMemoryStore: false);
         }
 
@@ -93,6 +106,7 @@ public sealed class EffectiveStorePersistenceSettings
             StorePersistenceMode.DefaultPath,
             resolvedStateFilePath: Path.Combine(AppContext.BaseDirectory, ".nuplane", "store-state.json"),
             configuredStateFilePath: null,
+            coordinatedStateFileLocator: Path.Combine(AppContext.BaseDirectory, ".nuplane", "store-state.json"),
             useInMemoryStore: false);
     }
 }

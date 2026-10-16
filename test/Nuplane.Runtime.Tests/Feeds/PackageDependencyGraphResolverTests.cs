@@ -14,6 +14,36 @@ public sealed class PackageDependencyGraphResolverTests : IDisposable
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"nuplane-graph-resolver-{Guid.NewGuid():N}");
 
     [Fact]
+    public async Task ResolveAsync_OrdinaryGraphReadsIgnoreIncidentalCoordinationData()
+    {
+        var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Plugin.Dependency", dependencyVersionRange: "[1.0.0]");
+        var dependency = CreateInstalledPackage("Plugin.Dependency", "1.0.0");
+        var control = Directory.CreateDirectory(Path.Combine(root.InstallPath, ".nuplane-store"));
+        File.WriteAllText(Path.Combine(control.FullName, "membership.json"), "malformed incidental data");
+        var assets = new[] { Path.Combine("lib", "net10.0", "z.dll"), Path.Combine("runtimes", "linux-x64", "native", "a.dll") };
+        foreach (var asset in assets)
+        {
+            var path = Path.Combine(root.InstallPath, asset);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, "ordinary graph asset");
+        }
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase)
+        {
+            [dependency.Id] = dependency
+        });
+        var sut = new PackageDependencyGraphResolver(resolver, new PassthroughRetryPolicy());
+
+        var result = await sut.ResolveAsync(
+            [new PackageRequest(root.Id, "[1.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source")],
+            (_, _) => Task.FromResult(root), CancellationToken.None);
+
+        Assert.Equal(dependency.Id, Assert.Single(resolver.Requests).Id);
+        var graph = Assert.Single(result.ResolvedGraphs);
+        Assert.Contains(graph.Nodes, node => node.PackageId == dependency.Id);
+        Assert.Equal(assets, Assert.Single(graph.Roots).RuntimeAssets);
+    }
+
+    [Fact]
     public async Task ResolveAsync_RootOnlyDesiredInput_ResolvesRootAndDependencyGraph()
     {
         var root = CreateInstalledPackage("Plugin.Root", "1.0.0", dependencyId: "Plugin.Dependency", dependencyVersionRange: "[1.0.0]")

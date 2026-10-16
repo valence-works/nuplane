@@ -1,0 +1,6 @@
+[
+  "Nuplane.Store.Tests.Coordination.PackageStoreAdmissionTests.CatalogRecoveryRefusalPreservesPrimaryAndDistinctCleanupFailures(pathAdmission: False, failRelease: False)",
+  "Nuplane.Store.Tests.Coordination.PackageStoreAdmissionTests.CatalogRecoveryRefusalPreservesPrimaryAndDistinctCleanupFailures(pathAdmission: False, failRelease: True)",
+  "Nuplane.Store.Tests.Coordination.PackageStoreAdmissionTests.CatalogRecoveryRefusalPreservesPrimaryAndDistinctCleanupFailures(pathAdmission: True, failRelease: False)",
+  "Nuplane.Store.Tests.Coordination.PackageStoreAdmissionTests.CatalogRecoveryRefusalPreservesPrimaryAndDistinctCleanupFailures(pathAdmission: True, failRelease: True)"
+]
