@@ -54,6 +54,12 @@ the enrollment epoch. An interrupted migration is recovered explicitly, using
 the persisted current roster rather than guessing it from the new configuration.
 Keep prior state locations available until recovery or migration completes.
 
+The current `UseLastKnownGood` startup policy selects the exact persisted active
+graph snapshots. Unused `LastKnownGoodById` entries alone do not prove a selected
+historical graph. Unsupported or inconsistent historical protection refuses
+execution; an ordinary successful update cannot manufacture verified recovery
+closure for legacy state.
+
 Recovery evidence is descriptive input, never a filesystem capability. Nuplane
 independently verifies its source slot, state file identity, body digest, graph
 selection and native install identities while holding ownership. Do not edit the

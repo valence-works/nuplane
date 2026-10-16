@@ -35,6 +35,40 @@ public sealed partial class PackageStoreEnrollmentServiceTests
     }
 
     [SupportedPhysicalStoreFact]
+    public async Task EnrollAsync_OrdinarySuccessfulLegacyUpdateDoesNotVerifyUnknownRecovery()
+    {
+        using var fixture = await LegacyActiveGraphCandidateProducerTests.CandidateFixture.CreateAsync(
+            "extra-lkg", initializeMembership: false);
+        var ordinaryRegistry = new StoreRegistry(fixture.Serializer, fixture.StatePath);
+        await ordinaryRegistry.PersistActiveVersionsAsync(fixture.State.ActiveVersionById,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Root.First"] = "1.0.0"
+            }, "ordinary-success", CancellationToken.None);
+
+        var updated = await fixture.Serializer.LoadAsync(fixture.StatePath, CancellationToken.None);
+        Assert.True(updated.UpdatedAt > fixture.State.UpdatedAt);
+        Assert.Equal("9.9.9", updated.LastKnownGoodById["Legacy.Recovery"]);
+        Assert.Null(updated.ProtectionRecord);
+        var updatedBytes = File.ReadAllBytes(fixture.StatePath);
+        var service = CreateService(fixture.Files, fixture.Serializer, fixture.Fixture.PackageInstallRoot,
+            SingleMemberDeclarations(fixture.StatePath));
+        var request = new PackageStoreEnrollmentOperationRequest("default", fixture.RootIdentity, 1,
+            true, ["legacy-member"], []);
+
+        var refusal = await Assert.ThrowsAsync<PackageStoreAdmissionException>(() =>
+            service.EnrollAsync(request, CancellationToken.None));
+
+        Assert.Equal(PackageStoreAdmissionReason.UnknownAuthority, refusal.Reason);
+        var ledger = fixture.Registry.ReadCandidate(fixture.Root);
+        Assert.Equal(RootMembershipStatus.Incomplete, ledger.Status);
+        Assert.Equal(updatedBytes, File.ReadAllBytes(fixture.StatePath));
+        var unchanged = await fixture.Serializer.LoadAsync(fixture.StatePath, CancellationToken.None);
+        Assert.Equal("9.9.9", unchanged.LastKnownGoodById["Legacy.Recovery"]);
+        Assert.Null(unchanged.ProtectionRecord);
+    }
+
+    [SupportedPhysicalStoreFact]
     public async Task RecoverEnrollmentAsync_RetiresLegacyLkgWithDurableSourceBoundEvidence()
     {
         using var fixture = await LegacyActiveGraphCandidateProducerTests.CandidateFixture.CreateAsync("extra-lkg");

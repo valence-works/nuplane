@@ -135,80 +135,41 @@ public sealed class PackageStorePartialExecutionRecoveryTests
     }
 
     [Fact]
-    public async Task ExecuteEligibleCandidatesAsync_WhenOfflineMemberHasHistoricalLkgOnlyGraph_RecoversDeletionAndPreservesHistory()
+    public async Task ExecuteEligibleCandidatesAsync_WhenOfflineMemberDeclaresUnselectedHistoricalGraph_RefusesWithoutMutation()
     {
         using var fixture = await OverlappingPackageGraphProtectionTests.GraphUseFixture.CreateAsync(
             PackageLoadMode.HostIntegrated);
+        var preflight = await InspectAsync(fixture);
+        Assert.NotEmpty(EligibleRows(preflight));
+        await AssertOfflineMemberProtectionAsync(fixture, preflight);
         var serializer = new StoreStateSerializer();
         var memberBState = await serializer.LoadAsync(fixture.StatePaths["member-b"], CancellationToken.None);
-        var historicalState = CreateHistoricalLkgOnlyMemberState(fixture, memberBState);
-        await fixture.PublishProtectedStateAsync("member-b", historicalState);
+        var unsupportedState = CreateUnselectedHistoricalRecoveryState(fixture, memberBState);
+        var invalidSelection = Assert.Throws<PackageStoreAdmissionException>(() =>
+            PersistedStoreStateGraphVerifier.Verify(unsupportedState));
+        Assert.Equal(PackageStoreAdmissionReason.StateMismatch, invalidSelection.Reason);
+        Assert.Contains("exact graph set", invalidSelection.Message, StringComparison.Ordinal);
 
-        var publishedState = await serializer.LoadAsync(fixture.StatePaths["member-b"], CancellationToken.None);
-        Assert.Equal(ProtectionDigest.StateBody(publishedState), publishedState.ProtectionRecord!.StateBodyDigest);
-        Assert.Equal(ProtectionDigest.Protection(publishedState.ProtectionRecord),
-            publishedState.ProtectionRecord.ProtectionDigest);
-
-        var preflight = await InspectAsync(fixture);
-        var historicalRoot = await AssertOfflineHistoricalLkgOnlyProtectionAsync(fixture, preflight);
-        var historicalGraphPackages = fixture.Graphs["member-b"].Packages;
-        var historicalGraphEvidence = CapturePackageEvidence(fixture, historicalGraphPackages);
-        var protectedPackages = await PersistedProtectedPackagesAsync(fixture, preflight);
-        var protectedEvidence = CapturePackageEvidence(fixture, protectedPackages);
+        // Each graph and its version-map bindings are structurally valid, but the extra historical
+        // graph is not selected by the current versioned UseLastKnownGood policy. Persisted invalid
+        // evidence must deny the entire operation, rather than discarding history and pruning.
+        await fixture.PublishProtectedStateAsync("member-b", unsupportedState);
+        var packages = AllFixturePackages(fixture);
+        var packageEvidence = CapturePackageEvidence(fixture, packages);
         var stateEvidence = await CaptureStateEvidenceAsync(fixture);
 
-        var eligible = EligibleRows(preflight).ToArray();
-        var unrelated = Assert.Single(eligible);
-        Assert.Equal("Unrelated.Package", unrelated.Install.PackageId);
-        Assert.Equal("0.1.0", unrelated.Install.Version);
-
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(90));
-        await using var interrupted = await StartPausedExecutionAsync(fixture,
-            stopAtDeletionPoint: "AfterPayloadEntryRemoved", cancellationToken: deadline.Token);
-        Assert.Equal("Unrelated.Package", String(interrupted.Checkpoint, "packageId"));
-        Assert.Equal("0.1.0", String(interrupted.Checkpoint, "version"));
-        Assert.NotEqual(0, (await interrupted.Process.TerminateAsync(deadline.Token)).ExitCode);
-
-        var journal = DiscoverSingleJournal(fixture);
-        Assert.Equal(PackageStoreDeletionPhase.Deleting, journal.Journal.Phase);
-        AssertCheckpointNamespace(fixture, journal.Journal, "AfterPayloadEntryRemoved");
-        AssertStateEvidenceEqual(stateEvidence, await CaptureStateEvidenceAsync(fixture));
-        AssertPackageEvidenceEqual(protectedEvidence, CapturePackageEvidence(fixture, protectedPackages));
-        AssertPackageEvidenceEqual(historicalGraphEvidence,
-            CapturePackageEvidence(fixture, historicalGraphPackages));
-        AssertInstallIdentityPresent(fixture, historicalRoot);
-
-        // A new owned child recovers the partial deletion, then another fresh child proves the
-        // completed candidate is AlreadyAbsent while the offline historical graph remains protected.
-        var resumed = await RunExecutionAsync(fixture, cancellationToken: deadline.Token);
-        Assert.Equal("execution-result", resumed.Kind);
-        Assert.Equal("Completed", String(resumed.Message, "status"));
-        var deleted = Candidate(resumed.Message, "Unrelated.Package", "0.1.0");
-        Assert.Equal("Eligible", String(deleted, "classification"));
-        Assert.Equal("Completed", String(deleted, "attempt"));
-        Assert.Equal("Deleted", String(deleted, "physicalOutcome"));
-        AssertHistoricalOfflineMemberOutcome(resumed.Message);
-        AssertInstallAbsent(fixture, "Unrelated.Package", "0.1.0");
-
-        var afterRecovery = await InspectAsync(fixture);
-        var retainedHistoricalRoot = await AssertOfflineHistoricalLkgOnlyProtectionAsync(fixture, afterRecovery);
-        Assert.Equal(historicalRoot, retainedHistoricalRoot);
-        AssertPackageEvidenceEqual(protectedEvidence, CapturePackageEvidence(fixture, protectedPackages));
-        AssertPackageEvidenceEqual(historicalGraphEvidence,
-            CapturePackageEvidence(fixture, historicalGraphPackages));
-        AssertStateEvidenceEqual(stateEvidence, await CaptureStateEvidenceAsync(fixture));
-
-        var repeated = await RunExecutionAsync(fixture, cancellationToken: deadline.Token);
-        Assert.Equal("execution-result", repeated.Kind);
-        Assert.Equal("Completed", String(repeated.Message, "status"));
-        Assert.Equal("AlreadyAbsent",
-            String(Candidate(repeated.Message, "Unrelated.Package", "0.1.0"), "physicalOutcome"));
-        AssertHistoricalOfflineMemberOutcome(repeated.Message);
-        AssertInstallIdentityPresent(fixture, historicalRoot);
-        AssertPackageEvidenceEqual(protectedEvidence, CapturePackageEvidence(fixture, protectedPackages));
-        AssertPackageEvidenceEqual(historicalGraphEvidence,
-            CapturePackageEvidence(fixture, historicalGraphPackages));
-        AssertStateEvidenceEqual(stateEvidence, await CaptureStateEvidenceAsync(fixture));
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var refusal = await RunExecutionAsync(fixture, cancellationToken: deadline.Token);
+            Assert.Equal("refused", refusal.Kind);
+            Assert.Equal("StateMismatch", String(refusal.Message, "reason"));
+            AssertNoDeletionJournals(fixture);
+            AssertStateEvidenceEqual(stateEvidence, await CaptureStateEvidenceAsync(fixture));
+            AssertPackageEvidenceEqual(packageEvidence, CapturePackageEvidence(fixture, packages));
+            AssertInstallPresent(fixture, "Root.Second", "1.0.0");
+            AssertInstallPresent(fixture, "Unrelated.Package", "0.1.0");
+        }
     }
 
     [Fact]
@@ -441,27 +402,29 @@ public sealed class PackageStorePartialExecutionRecoveryTests
         Assert.Equal(ProtectionDigest.Protection(reread.ProtectionRecord), reread.ProtectionRecord.ProtectionDigest);
     }
 
-    private static StoreStateRecord CreateHistoricalLkgOnlyMemberState(
+    private static StoreStateRecord CreateUnselectedHistoricalRecoveryState(
         OverlappingPackageGraphProtectionTests.GraphUseFixture fixture,
         StoreStateRecord currentState)
     {
         var currentProtection = Assert.IsType<PackageProtectionRecord>(currentState.ProtectionRecord);
-        var activeState = fixture.BuildProtectedState("member-b", fixture.Graphs["member-b-v2"], currentState,
+        var activeState = fixture.BuildProtectedState("member-b", fixture.Graphs["member-a"], currentState,
             revision: currentProtection.Revision + 1, isUpdate: true);
         var activeProtection = Assert.IsType<PackageProtectionRecord>(activeState.ProtectionRecord);
-        var stateBody = activeState with
-        {
-            LastKnownGoodById = new Dictionary<string, string>(currentState.LastKnownGoodById,
-                StringComparer.OrdinalIgnoreCase),
-            ProtectionRecord = null
-        };
-        Assert.Equal("2.0.0", stateBody.ActiveVersionById["Root.Second"]);
+        var lastKnownGood = new Dictionary<string, string>(currentState.LastKnownGoodById,
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var (id, version) in activeState.LastKnownGoodById)
+            lastKnownGood[id] = version;
+        var stateBody = activeState with { LastKnownGoodById = lastKnownGood, ProtectionRecord = null };
+        Assert.Equal("1.0.0", stateBody.ActiveVersionById["Root.First"]);
+        Assert.False(stateBody.ActiveVersionById.ContainsKey("Root.Second"));
         Assert.Equal("1.0.0", stateBody.LastKnownGoodById["Root.Second"]);
+        var recoverableClosure = new PackageProtectionClosure(PackageProtectionClosureKnowledge.Known, null,
+            activeProtection.RecoverableClosure.Graphs!.Concat(currentProtection.RecoverableClosure.Graphs!).ToArray());
 
         PackageProtectionRecord CreateProtectionRecord(string protectionDigest)
             => new(activeProtection.SchemaVersion, activeProtection.RootIdentity, activeProtection.EnrollmentEpoch,
                 activeProtection.MemberId, activeProtection.Revision, ProtectionDigest.StateBody(stateBody),
-                protectionDigest, activeProtection.ActiveClosure, currentProtection.RecoverableClosure,
+                protectionDigest, activeProtection.ActiveClosure, recoverableClosure,
                 activeProtection.RetiredGraphs, activeProtection.LegacyUnknownRecovery);
 
         var digestInput = CreateProtectionRecord(new string('0', 64));
@@ -510,36 +473,6 @@ public sealed class PackageStorePartialExecutionRecoveryTests
         Assert.DoesNotContain(PackageStoreRetentionReason.ProtectedLiveUse, offline.Reasons);
     }
 
-    private static async Task<PackageInstallIdentity> AssertOfflineHistoricalLkgOnlyProtectionAsync(
-        OverlappingPackageGraphProtectionTests.GraphUseFixture fixture,
-        PackageStoreInspectionSnapshot inspection)
-    {
-        Assert.Equal(PackageStoreRetentionProtectionKnowledge.Known, inspection.ProtectionKnowledge);
-        Assert.Empty(inspection.Uses);
-        var state = await new StoreStateSerializer().LoadAsync(fixture.StatePaths["member-b"], CancellationToken.None);
-        var protection = Assert.IsType<PackageProtectionRecord>(state.ProtectionRecord);
-        Assert.Equal("2.0.0", state.ActiveVersionById["Root.Second"]);
-        Assert.Equal("1.0.0", state.LastKnownGoodById["Root.Second"]);
-
-        var activeGraph = Assert.Single(protection.ActiveClosure.Graphs!);
-        var historicalGraph = Assert.Single(protection.RecoverableClosure.Graphs!);
-        Assert.Equal(fixture.Graphs["member-b-v2"].Graph.GenerationId, activeGraph.GenerationId);
-        Assert.Equal(fixture.Graphs["member-b"].Graph.GenerationId, historicalGraph.GenerationId);
-        Assert.NotEqual(activeGraph.GenerationId, historicalGraph.GenerationId);
-
-        var historicalRoot = Assert.Single(historicalGraph.Nodes,
-            static node => node.Install.PackageId == "Root.Second").Install;
-        Assert.Equal("1.0.0", historicalRoot.Version);
-        Assert.DoesNotContain(activeGraph.Nodes, node => node.Install == historicalRoot);
-        var entry = Assert.Single(inspection.RetentionPlan!.Entries,
-            candidate => candidate.Install == historicalRoot);
-        Assert.Equal(PackageStoreRetentionClassification.Retained, entry.Classification);
-        Assert.Contains(PackageStoreRetentionReason.ProtectedRecoverableLastKnownGood, entry.Reasons);
-        Assert.DoesNotContain(PackageStoreRetentionReason.ProtectedActive, entry.Reasons);
-        Assert.DoesNotContain(PackageStoreRetentionReason.ProtectedLiveUse, entry.Reasons);
-        return historicalRoot;
-    }
-
     private static void AssertOfflineMemberOutcome(JsonElement result)
         => AssertOfflineMemberOutcome(result, "1.0.0");
 
@@ -554,18 +487,6 @@ public sealed class PackageStorePartialExecutionRecoveryTests
             offlineMember.GetProperty("reasons").EnumerateArray().Select(static reason => reason.GetString()));
         Assert.DoesNotContain("ProtectedLiveUse",
             offlineMember.GetProperty("reasons").EnumerateArray().Select(static reason => reason.GetString()));
-    }
-
-    private static void AssertHistoricalOfflineMemberOutcome(JsonElement result)
-    {
-        var offlineMember = Candidate(result, "Root.Second", "1.0.0");
-        Assert.Equal("Retained", String(offlineMember, "classification"));
-        Assert.Equal("Retained", String(offlineMember, "physicalOutcome"));
-        var reasons = offlineMember.GetProperty("reasons").EnumerateArray()
-            .Select(static reason => reason.GetString()).ToArray();
-        Assert.Contains("ProtectedRecoverableLastKnownGood", reasons);
-        Assert.DoesNotContain("ProtectedActive", reasons);
-        Assert.DoesNotContain("ProtectedLiveUse", reasons);
     }
 
     private static async Task<PausedExecution> StartPausedExecutionAsync(

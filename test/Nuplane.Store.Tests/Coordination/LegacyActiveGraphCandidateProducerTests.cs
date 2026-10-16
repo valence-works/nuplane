@@ -353,7 +353,9 @@ public sealed partial class LegacyActiveGraphCandidateProducerTests
                     ?? throw new InvalidOperationException("The fixture state file is missing.")).Identity;
         }
 
-        internal static async Task<CandidateFixture> CreateAsync(string? refusalScenario = null)
+        internal static async Task<CandidateFixture> CreateAsync(
+            string? refusalScenario = null,
+            bool initializeMembership = true)
         {
             var result = new CandidateFixture();
             try
@@ -376,15 +378,18 @@ public sealed partial class LegacyActiveGraphCandidateProducerTests
 
                 result.Root = PhysicalStoreTestDirectory.Open(result.Files, result.Fixture.PackageInstallRoot);
                 result.RootIdentity = new PhysicalRootIdentity(result.Files.InspectHandle(result.Root).Identity);
-                var declaration = new RootMemberRecord(MemberId, result.StatePath, new RootMemberRecord.DeclaredBinding());
-                result.Registry.InitializeIncomplete(result.Root, result.RootIdentity, EnrollmentEpoch,
-                    [declaration], true, CancellationToken.None);
-                using var parent = PhysicalStoreTestDirectory.Open(result.Files, Path.GetDirectoryName(result.StatePath)!);
-                await result.Registry.BindDeclaredMembersAsync(result.Root, result.RootIdentity, EnrollmentEpoch,
-                    [declaration], new Dictionary<string, (PhysicalStoreDirectoryHandle Parent, string RequestedBasename)>
-                    {
-                        [MemberId] = (parent, Path.GetFileName(result.StatePath))
-                    }, true, CancellationToken.None);
+                if (initializeMembership)
+                {
+                    var declaration = new RootMemberRecord(MemberId, result.StatePath, new RootMemberRecord.DeclaredBinding());
+                    result.Registry.InitializeIncomplete(result.Root, result.RootIdentity, EnrollmentEpoch,
+                        [declaration], true, CancellationToken.None);
+                    using var parent = PhysicalStoreTestDirectory.Open(result.Files, Path.GetDirectoryName(result.StatePath)!);
+                    await result.Registry.BindDeclaredMembersAsync(result.Root, result.RootIdentity, EnrollmentEpoch,
+                        [declaration], new Dictionary<string, (PhysicalStoreDirectoryHandle Parent, string RequestedBasename)>
+                        {
+                            [MemberId] = (parent, Path.GetFileName(result.StatePath))
+                        }, true, CancellationToken.None);
+                }
                 return result;
             }
             catch
