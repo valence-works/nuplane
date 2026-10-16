@@ -2,7 +2,9 @@
 
 **Branch**: `108-safe-package-store-pruning` | **Date**: 2026-10-09 | **Spec**: [spec.md](spec.md)
 
-**Status**: Design accepted after independent review and root verification on 2026-10-09. The 128-artifact implementation checklist is independently reviewed and root-accepted in [tasks.md](tasks.md). Implementation is in progress; the current accepted rows and per-increment evidence are maintained in [tasks.md](tasks.md), including bounded prerequisites and the T124 package/host acceptance plan. Full runtime admission, graph lifetimes and package-deletion acceptance remain outstanding.
+**Status**: Design and all 128 implementation/qualification tasks are accepted. Validate 38835166221 passed all seven jobs on `3f8f2842060423420f26587aef62bacefbf71898`; merged `main` commit `80f74d02bef70a0410f9dd21064692bc088bb87c` has the same qualified tree. Nuplane 0.0.12 is published. See [build evidence](evidence/builds.md), [test evidence](evidence/tests.md), [platform acceptance](evidence/platform-acceptance.md), and the [task checklist](tasks.md). The separate package-family/host and Foundation adoption gates remain outside this feature acceptance. Dated bounded-increment notes below preserve their historical scope; they do not describe current implementation gaps.
+
+The detailed plan and implementation-checkpoint sections below preserve their original context. Any statement there that a gate or implementation step remains pending records that earlier checkpoint; current feature acceptance is defined by the exact-source evidence linked above.
 
 ## Summary
 
@@ -13,9 +15,9 @@ The root engineering selection is recorded in [Nuplane #108](https://github.com/
 ## Technical Context
 
 **Language/Version**: C# SDK projects; source `net8.0;net9.0;net10.0`, tests `net10.0`.
-**Primary Dependencies**: Existing Microsoft.Extensions DI/Options/Logging, NuGet libraries, System.Runtime.Loader in the optional Loading module, xUnit/NSubstitute. An internal per-platform native filesystem adapter is selected; no new package dependency is selected. Runtime platform qualification remains an implementation gate.
+**Primary Dependencies**: Existing Microsoft.Extensions DI/Options/Logging, NuGet libraries, System.Runtime.Loader in the optional Loading module, xUnit/NSubstitute. An internal per-platform native filesystem adapter is selected; no new package dependency is selected. Runtime platform qualification is accepted for the five profiles in [platform evidence](evidence/platform-acceptance.md).
 **Storage**: Existing atomic JSON state files; additive complete protection metadata; root-relative coordination/membership and immutable use records with OS-held sentinels. Root coordination must not derive from one state-file path.
-**Testing**: Focused existing runtime/store/loading suites, new filesystem and real-composition boundary tests, then isolated physical deletion and Windows/Linux/macOS runtime acceptance. All heavy commands are serial through the machine build-slot wrapper.
+**Testing**: Focused runtime/store/loading suites, filesystem and real-composition boundary tests, isolated physical deletion and Windows/Linux/macOS runtime acceptance are recorded in the linked final evidence. All heavy commands are serial through the machine build-slot wrapper.
 **Target Platform**: Local supported Windows/Linux/macOS filesystems whose identity/locking/no-follow operations are established by tests. Unsupported providers refuse destructive operations.
 **Project Type**: Host-neutral libraries with an optional admin capability, no automatic prune timer or new host-specific policy.
 **Performance Goals**: Short operation ownership with nonblocking live-use probes; no wait for a lifetime sentinel while holding root/state locks. No unmeasured throughput or timing target is invented.
@@ -24,7 +26,7 @@ The root engineering selection is recorded in [Nuplane #108](https://github.com/
 
 ## Constitution Check
 
-**Pre-research:** passed. **Post-design gate:** passed after independent review and root verification of research, data model, contracts and validation guide. Three findings were corrected: component-wise alias authority, optional serializer participation/round-trip checks, and an idle-process weak-death observer. FR-016 explicitly distinguishes passive lifetime observation from automatic pruning. Task decomposition and all implementation acceptance gates remain required.
+**Pre-research:** passed. **Post-design gate:** passed after independent review and root verification of research, data model, contracts and validation guide. Three findings were corrected: component-wise alias authority, optional serializer participation/round-trip checks, and an idle-process weak-death observer. FR-016 explicitly distinguishes passive lifetime observation from automatic pruning. The 128 implementation and qualification tasks are accepted by the exact-source evidence linked above.
 
 | Principle | Planned evidence / current constraint |
 |---|---|
@@ -63,9 +65,9 @@ These responsibilities are selected in the generated contracts; independent/root
 
 ## Selected Engineering Decisions
 
-[research.md](research.md) records decisions, rationale, rejected alternatives, primary references and limited native-probe evidence. [data-model.md](data-model.md) defines identity/publication/lifetime transitions. [Admission contracts](contracts/admission.md) define opaque capabilities, compatibility and each driver obligation; [maintenance contracts](contracts/maintenance.md) define the optional public entry point and real execute semantics. [quickstart.md](quickstart.md) defines pending reproducible product/platform gates.
+[research.md](research.md) records decisions, rationale, rejected alternatives, primary references and limited native-probe evidence. [data-model.md](data-model.md) defines identity/publication/lifetime transitions. [Admission contracts](contracts/admission.md) define opaque capabilities, compatibility and each driver obligation; [maintenance contracts](contracts/maintenance.md) define the optional public entry point and real execute semantics. [quickstart.md](quickstart.md) links the reproducible product/platform instructions and final qualification evidence.
 
-The maintainer resolved the compatibility decision on 2026-10-11: preserve ordinary Nuplane compatibility and restrict pruning to verified filesystem environments where every client sharing the store participates in coordination. [The recorded decision](evidence/pruning-support-policy.md) defines the support boundary and its remaining implementation proof. This replaces the pending owner-answer hold; it does not activate enrollment or execution.
+The maintainer resolved the compatibility decision on 2026-10-11: preserve ordinary Nuplane compatibility and restrict pruning to verified filesystem environments where every client sharing the store participates in coordination. [The recorded decision](evidence/pruning-support-policy.md) defines the support boundary; its implementation is qualified by the final evidence linked above. This replaced the pending owner-answer hold without expanding the supported-client boundary.
 
 - Root membership is multi-state and epoch-bound. Complete authority requires complete known active and recoverable LKG closure for every member. Unknown legacy promises keep enrollment incomplete; no partial-active admission is selected.
 - State membership binds parent directory identity plus basename, surviving verified atomic replacement. Current state file identity is a revision/race observation. Every enrolled state write uses a pending prior/next publication and verified acknowledgement.
@@ -75,7 +77,7 @@ The maintainer resolved the compatibility decision on 2026-10-11: preserve ordin
 - Explicit optional companions carry root scopes through every participating driver and awaited observer callback. Existing required interfaces/positional constructors and released legacy static-reader compatibility remain. Participant compositions require protected readers and never retry through legacy calls; pure state observation remains available. The explicit mode boundary is defined in [admission contracts](contracts/admission.md#support-boundary).
 - Manual execution confirms root epoch/retention and replans under root/all-state ownership. Preview IDs correlate only. Absent retention keeps all; actual quarantine/partial/deleted outcomes remain distinct.
 
-These are engineering selections under existing authorization, not pending owner permission or grounds to pause the Codex goal. All real component, process-termination, physical deletion and supported-platform gates remain required implementation work.
+These are engineering selections under existing authorization, not pending owner permission. The real component, process-termination, physical-deletion and supported-platform gates are accepted for the exact source and profiles recorded above; the separately stated downstream adoption gates remain outside this plan's acceptance.
 
 ## Project Structure
 
@@ -87,7 +89,7 @@ specs/030-safe-package-store-pruning/
   research.md                 # selected design decisions and evidence limits
   data-model.md               # enrollment/protection/use/report transitions
   contracts/                  # additive public/scoped contracts
-  quickstart.md               # pending owned-store/platform acceptance guide
+  quickstart.md               # owned-store/platform validation and final evidence guide
   tasks.md                    # after plan acceptance: one artifact per task
 src/Nuplane/Store/            # core coordination/protection; preserve module direction
 src/Nuplane/Feeds/            # explicit resolver/acquisition admission
@@ -124,6 +126,6 @@ This companion has no registration or public Execute caller. The executor must l
 [Exact quarantine and recovery](contracts/quarantine-recovery.md) records the source-grounded T106–T113/T118 engineering contract. A full bounded exact-entry manifest is durable in Prepared before the first quarantine move; every later phase retains it. Marker-last deletion and exact surviving-subset checks preserve partial facts while fresh complete owner/planner admission decides every resume. Detached journal data is never mutation authority. This contract supersedes the earlier count-only recovery draft; implementation and native/process qualification remain required. No public activation or new owner-policy choice is introduced.
 
 
-### Internal fresh execution planning
+### Earlier internal fresh execution planning checkpoint (historical)
 
 The [bounded planning increment](evidence/fresh-execution-planning.md) factors inspection ownership/cleanup and projection for internal execution reuse. An exact operation token spans full-catalog verification, graph-use inventory, native install inventory, fresh retention planning, replay and the awaited candidate callback. It requires current enrollment/epoch and explicit retention, and refuses uncertain plans before candidate work. Ordinary inspection preserves its wrapper semantics. This boundary has no public caller or deletion implementation; exact Eligible-row/native binding and the verified quarantine-journal/inventory join remain required before recursive execution or recovery acceptance.
