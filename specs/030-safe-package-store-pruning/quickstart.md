@@ -6,7 +6,7 @@ Use unique owned temporary stores and state directories for every run. Never poi
 
 ## Prerequisites and enrollment
 
-Use .NET 10 for tests; source builds must retain net8/net9/net10. Prepare actual local package feeds with v1/v2 roots, a shared dependency, a historical-only dependency, a support package, and lazy managed/native resolution fixtures. Configure two real Nuplane compositions with the same physical install root and different state slots outside it. Use additional child processes for crash/lock scenarios. Keep all users stopped during enrollment and supply the complete state list.
+Use .NET 10 for tests; source builds must retain net8/net9/net10. Prepare actual local package feeds with v1/v2 roots, a shared dependency, an unused completed package, a support package, and lazy managed/native resolution fixtures. Preserve the exact offline active/recoverable selection accepted by the current `UseLastKnownGood` policy. Include an unselected historical-only recoverable graph as an explicit refusal case; extra LKG-map entries do not select additional graphs. Configure two real Nuplane compositions with the same physical install root and different state slots outside it. Use additional child processes for crash/lock scenarios. Keep all users stopped during enrollment and supply the complete state list.
 
 Preview enrollment, then explicitly enroll under the quiescent confirmation. Verify Incomplete appears before member writes and Complete only after every active/LKG snapshot is known and verified. Resume upgraded clients with optional Admin absent or pruning disabled locally and prove admission still applies. Legacy unknown LKG must refuse completion until verified migration or explicit retirement; ordinary access cannot erase it.
 
@@ -26,7 +26,7 @@ Exercise every driver in [admission contracts](contracts/admission.md), includin
 
 ## Physical deletion gate
 
-Only after the preceding real-component gate passes, use the optional maintenance API with explicit retention and execute confirmation in an owned fixture. Default Preview and omitted retention delete nothing. Retain active, offline historical LKG, shared dependencies and real live leases. Delete an actual unused completed package directory; verify every payload is gone and every protected graph can still materialize. Staging/control/state files remain untouched.
+Only after the preceding real-component gate passes, use the optional maintenance API with explicit retention and execute confirmation in an owned fixture. Default Preview and omitted retention delete nothing. Retain active graphs, offline recoverable graphs selected by the current `UseLastKnownGood` policy, shared dependencies and real live leases. Delete an actual unused completed package directory; verify every payload is gone and every protected graph can still materialize. Staging/control/state files remain untouched.
 
 Preview, then protect an earlier candidate in another state before Execute; the fresh plan retains it. Race candidate identity/link replacement, symlinked root aliases and Windows junction/reparse entries. A relative quarantine/deletion walker must not traverse into outside sentinels. Compare actual disk results with every Deleted/Partial/Failed outcome. Inject denial, cancellation after an earlier deletion, and a repeated execute. Retain meaningful mutation controls for before-read admission, protection completeness, identity/no-follow and fresh replanning.
 
