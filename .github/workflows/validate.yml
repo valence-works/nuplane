@@ -43,7 +43,7 @@ jobs:
   state-persistence-platform:
     name: State persistence (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 45 || matrix.os == 'windows-latest' && 45 || 20 }}
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 60 || matrix.os == 'macos-15-intel' && 45 || 20 }}
     strategy:
       fail-fast: false
       matrix:
