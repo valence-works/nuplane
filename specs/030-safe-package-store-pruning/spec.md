@@ -2,10 +2,10 @@
 
 **Feature Branch**: `108-safe-package-store-pruning`
 **Created**: 2026-10-09
-**Status**: Draft — requirements prepared; design and implementation acceptance pending
+**Status**: Design, implementation and five-profile platform qualification accepted at source `3f8f2842060423420f26587aef62bacefbf71898`; Nuplane 0.0.12 published. Downstream package-family and host adoption remain separately gated.
 **Input**: Deliver Nuplane #108 end to end: inventory, retention planning and explicit safe deletion, protecting active, last-known-good and in-use package graphs across hosts sharing a physical install root.
 
-Program: [Foundation #2500](https://github.com/elsa-workflows/elsa-foundation/issues/2500). Owning feature: [Nuplane #108](https://github.com/valence-works/nuplane/issues/108). The [root decision checkpoint](https://github.com/valence-works/nuplane/issues/108#issuecomment-6076600594) selects coordinated multi-state enrollment within existing delivery authorization. It supersedes the earlier owner-answer hold without waiving safety proof. This spec defines acceptance, not achieved behavior.
+Program: [Foundation #2500](https://github.com/elsa-workflows/elsa-foundation/issues/2500). Owning feature: [Nuplane #108](https://github.com/valence-works/nuplane/issues/108). The [root decision checkpoint](https://github.com/valence-works/nuplane/issues/108#issuecomment-6076600594) selects coordinated multi-state enrollment within existing delivery authorization. It supersedes the earlier owner-answer hold without waiving safety proof. Final acceptance is recorded in [the task checklist](tasks.md) and [five-profile platform evidence](evidence/platform-acceptance.md); downstream host/package adoption is separate.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -145,7 +145,7 @@ The constitution requires prescriptive architectural requirements. Names below d
 
 ## Assumptions and Boundaries
 
-- Root engineering selected multi-state coordination within standing user authorization; no additional human decision is a prerequisite to design. Complete implementation and safety proof remain required before readiness.
+- Root engineering selected multi-state coordination within standing user authorization; no additional human decision was a prerequisite to design. The implementation and safety proof are accepted for Nuplane 0.0.12 as recorded in [platform acceptance](evidence/platform-acceptance.md); this does not extend acceptance to downstream host adoption.
 - An operator can stop all users and identify every persistent state for existing-root enrollment. This is a fully quiescent cutover, not a rolling marker-publication race: no user resumes until membership is durably complete. Ordinary root checks do not establish that already running unenrolled readers have stopped. Nuplane cannot discover a legacy or external process that ignores the protocol; such users must not share an enrolled store during maintenance. This is an explicit supported-client limitation, not a claim that the runtime detects them.
 - Custom implementations without required optional protection capability remain supported for ordinary non-enrolled operation; their use cannot silently authorize deletion from an enrolled root.
 - Manual inventory/preview is useful independently, but report-only, always-refused, single-state-only or offline-only pruning does not satisfy this feature's agreed end-to-end outcome.

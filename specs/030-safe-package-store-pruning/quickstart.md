@@ -1,6 +1,6 @@
 # Validation guide
 
-**Qualification guide:** the product APIs and suites below are implemented. Use [manual package-store maintenance](../../docs/package-store-maintenance.md) for configuration and public operations, and [public boundary evidence](evidence/public-maintenance.md) for the bounded results recorded so far. Final-head hosted qualification, stable package publication and downstream adoption remain required; this guide alone is not acceptance evidence. The artifact-only native probes described in [research.md](research.md) remain separate design evidence.
+**Qualification guide:** the product APIs, suites, and supported native gates are implemented and qualified for Nuplane 0.0.12. Use [manual package-store maintenance](../../docs/package-store-maintenance.md) for configuration and public operations. Exact-source [build](evidence/builds.md), [serial test](evidence/tests.md), and [five-profile platform acceptance](evidence/platform-acceptance.md) records cover Validate 38835166221 at `3f8f2842060423420f26587aef62bacefbf71898`; the merged `main` tree is identical. The artifact-only native probes described in [research.md](research.md) remain separate design evidence. Downstream package-family/host qualification and Foundation adoption remain separate program gates.
 
 Use unique owned temporary stores and state directories for every run. Never point the harness at an existing user/customer store. All local heavy commands use the machine's normal build-slot wrapper; do not bypass a queued slot. Build only affected projects until the final cross-cutting gate.
 
@@ -40,7 +40,7 @@ Run the implemented `.github/workflows/validate.yml` admission/deletion suites o
 
 ## Final delivery evidence
 
-Independent self-review and root review accompany automated/behavioral gates; Copilot and Greptile are waived for this delivery. Record implementation and platform evidence on Nuplane #108/its PR. Then follow the parent program's ordered Nuplane release, CShells integration release and Foundation stable-pin/actual-host regression gates. Refresh live versions before selecting tags; do not overwrite existing releases. This work unit alone does not accept stable downstream delivery.
+Independent source and root acceptance reviews accompany the automated/behavioral gates. The hosted evidence is linked above and bound to the exact candidate source tree. Nuplane 0.0.12 has been published. The parent program still requires the separate package-family consumer, CShells serving-generation promotion/drain, Foundation stable-pin, and actual-host regression gates. This work unit does not accept downstream adoption.
 
 Earlier increment reports retain their historical acceptance limits. They do not describe the complete current implementation:
 
