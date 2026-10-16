@@ -149,17 +149,13 @@ public sealed class PackageLoaderMultiAssemblyTests(ITestOutputHelper output) : 
             var root = context.LoadFromAssemblyName(AssemblyName.GetAssemblyName(rootPath));
             var type = root.GetType("Plugin.Root.RootMarker", throwOnError: true)!;
             var nativeHandle = NativeLibrary.Load(nativeName, root, null);
-            try
-            {
-                // Assert
-                Assert.Equal("root:dependency", type.GetProperty("Value")!.GetValue(Activator.CreateInstance(type)));
-                Assert.Same(context, AssemblyLoadContext.GetLoadContext(type.BaseType!.Assembly));
-                Assert.NotEqual(IntPtr.Zero, nativeHandle);
-            }
-            finally
-            {
-                NativeLibrary.Free(nativeHandle);
-            }
+
+            // Assert. The ALC callback returns its pool-owned handle without acquiring another
+            // native reference. Its lifetime owner releases it after collectible context death;
+            // freeing this borrowed handle here would make that later release a double free.
+            Assert.Equal("root:dependency", type.GetProperty("Value")!.GetValue(Activator.CreateInstance(type)));
+            Assert.Same(context, AssemblyLoadContext.GetLoadContext(type.BaseType!.Assembly));
+            Assert.NotEqual(IntPtr.Zero, nativeHandle);
         }
         finally
         {

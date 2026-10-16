@@ -1493,8 +1493,18 @@ jobs:
       - name: Build
         run: dotnet build nuplane.sln --configuration Release --no-restore
 
-      - name: Run tests
-        run: dotnet test nuplane.sln --configuration Release --no-restore --no-build
+      - name: Run test projects serially and preserve crash diagnostics
+        shell: bash
+        run: bash build/test-projects.sh "$RUNNER_TEMP/full-suite-results"
+
+      - name: Preserve full-suite results and crash diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-suite-results-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/full-suite-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Verify Darwin assets survive Linux packaging
         shell: bash
