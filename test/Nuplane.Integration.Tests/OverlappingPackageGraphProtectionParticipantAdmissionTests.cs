@@ -8,6 +8,7 @@ using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Feeds;
 using Nuplane.Loading;
 using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Models;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.GraphUseRecords;
 using Nuplane.Store.Coordination.PhysicalFiles;
@@ -58,14 +59,14 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         await using (var snapshotA = await NuplaneStore.OpenActivePackageSnapshotAsync(
                          providerA.GetRequiredService<NuplaneStoreSnapshotAccess>()))
         {
-            Assert.Contains(snapshotA.Snapshot.Packages, static package => package.Id == "Root.First");
-            Assert.Contains(snapshotA.Snapshot.Packages, static package => package.Id == "Shared.Dependency");
+            Assert.Contains(snapshotA.Snapshot.Packages, static package => package.PackageId == "Root.First");
+            Assert.Contains(snapshotA.Snapshot.Packages, static package => package.PackageId == "Shared.Dependency");
         }
         await using (var snapshotB = await NuplaneStore.OpenActivePackageSnapshotAsync(
                          providerB.GetRequiredService<NuplaneStoreSnapshotAccess>()))
         {
-            Assert.Contains(snapshotB.Snapshot.Packages, static package => package.Id == "Root.Second");
-            Assert.Contains(snapshotB.Snapshot.Packages, static package => package.Id == "Shared.Dependency");
+            Assert.Contains(snapshotB.Snapshot.Packages, static package => package.PackageId == "Root.Second");
+            Assert.Contains(snapshotB.Snapshot.Packages, static package => package.PackageId == "Shared.Dependency");
         }
 
         AssertOfflineActiveAndRecovery(await serializer.LoadAsync(pathA, CancellationToken.None), "Root.First");
