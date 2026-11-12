@@ -259,6 +259,89 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
         AssertExecutionLocksReleased(fixture.Context);
     }
 
+    [SupportedPhysicalStoreFact]
+    public async Task ExecuteEligibleCandidates_InstallReusingADeletedInstallsNativeIdentitiesIsStillPruned()
+    {
+        const string packageId = "executor-reused-identity";
+        using var fixture = await ExecutionFixture.CreateAsync();
+        var deletedPath = CreateInactiveInstall(fixture.Context.RootAPath, packageId, "1.0.0");
+        Assert.Equal(PackageStoreDeletionExecutionStatus.Deleted, await DeleteOneAsync(fixture, packageId));
+        var tombstone = ReadCandidateJournal(fixture.Context.RootAPath, packageId);
+        Assert.Equal(PackageStoreDeletionPhase.Finalizing, tombstone.Phase);
+
+        // Simulate the filesystem reusing the deleted install's directory and marker inodes for the next install:
+        // rewrite the Finalizing journal so it names the later install's exact native identities.
+        var laterPath = CreateInactiveInstall(fixture.Context.RootAPath, packageId, "2.0.0");
+        var later = await fixture.Service.PlanAndRunAsync("root-0", 1, 0, (scope, token) =>
+        {
+            var row = Assert.Single(scope.Snapshot.RetentionPlan!.Entries,
+                entry => entry.Install.PackageId == packageId && entry.Install.Version == "2.0.0");
+            var candidate = scope.BindEligibleCandidate(row, token);
+            return Task.FromResult(candidate.CreatePreparedJournal(scope.Snapshot.Root!, 1, Guid.NewGuid(),
+                Guid.NewGuid(), 0, token));
+        });
+        var original = tombstone.OriginalInstall;
+        var reused = new PackageStoreDeletionJournal(tombstone.SchemaVersion, tombstone.StoreRoot,
+            tombstone.EnrollmentEpoch, tombstone.OperationId, tombstone.CandidateId,
+            new PackageInstallIdentity(original.Root, original.PackageId, original.Version,
+                original.RootRelativeInstallPath, later.OriginalInstall.DirectoryIdentity,
+                later.OriginalInstall.CompletionIdentity),
+            tombstone.PackageParentRelativeComponents, tombstone.PackageParentIdentity,
+            tombstone.PackageParentSemantics, tombstone.OriginalBasename, tombstone.QuarantineBasename,
+            later.CompletionMarkerIdentity, tombstone.KeepNewestInactiveVersionsPerPackage,
+            PackageStoreDeletionPhase.Finalizing, later.Manifest);
+        var tombstonePath = Path.Combine(fixture.Context.RootAPath, RootMembershipRegistry.ControlDirectoryName,
+            $"prune-{tombstone.CandidateId:N}.json");
+        File.WriteAllBytes(tombstonePath, new PackageStoreDeletionJournalSerializer().Serialize(reused));
+
+        var outcome = await fixture.Service.ExecuteEligibleCandidatesAsync("root-0", 1, 0);
+
+        Assert.Equal(PackageStoreExecutionRequestStatus.Completed, outcome.Status);
+        Assert.Equal(PackageStoreExecutionPhysicalOutcome.Deleted, Assert.Single(outcome.Candidates,
+            candidate => candidate.Install.PackageId == packageId && candidate.Install.Version == "2.0.0").PhysicalOutcome);
+        Assert.Equal(PackageStoreExecutionPhysicalOutcome.AlreadyAbsent, Assert.Single(outcome.Candidates,
+            candidate => candidate.Install.PackageId == packageId && candidate.Install.Version == "1.0.0").PhysicalOutcome);
+        Assert.False(Directory.Exists(deletedPath));
+        Assert.False(Directory.Exists(laterPath));
+
+        // Both Finalizing journals now name the same directory identity; discovery must still accept them.
+        var again = await fixture.Service.ExecuteEligibleCandidatesAsync("root-0", 1, 0);
+        Assert.Equal(PackageStoreExecutionRequestStatus.Completed, again.Status);
+        var tombstones = again.Candidates.Where(candidate => candidate.Install.PackageId == packageId).ToArray();
+        Assert.Equal(2, tombstones.Length);
+        Assert.All(tombstones, candidate =>
+            Assert.Equal(PackageStoreExecutionPhysicalOutcome.AlreadyAbsent, candidate.PhysicalOutcome));
+        AssertExecutionLocksReleased(fixture.Context);
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task QuarantineInventoryJoin_DeletedInstallJoinsAsPositivelyAbsentTombstone()
+    {
+        const string packageId = "executor-tombstone";
+        using var fixture = await ExecutionFixture.CreateAsync();
+        var originalPath = CreateInactiveInstall(fixture.Context.RootAPath, packageId);
+        File.WriteAllText(Path.Combine(originalPath, "payload.txt"), "payload");
+
+        Assert.Equal(PackageStoreDeletionExecutionStatus.Deleted, await DeleteOneAsync(fixture, packageId));
+        var journal = ReadCandidateJournal(fixture.Context.RootAPath, packageId);
+        Assert.Equal(PackageStoreDeletionPhase.Finalizing, journal.Phase);
+
+        // The Finalizing journal still names the deleted directory and marker identities. The planner must treat
+        // them as tombstones the filesystem may reuse, so the join reports exactly this row as positively absent.
+        using var root = PhysicalStoreTestDirectory.Open(fixture.Context.Files, fixture.Context.RootAPath);
+        using var join = new PackageStoreDeletionExecutionJoin(
+            new PackageStoreDeletionJournalStore(fixture.Context.Files),
+            new PackageStoreDeletionCandidateBinder(fixture.Context.Files), root,
+            fixture.Context.RootAIdentity, 1, _ => { }, CancellationToken.None);
+        var inventory = await new PackageStoreInventory(fixture.Context.Files)
+            .ReadUnderCatalogOwnershipAsync(root, fixture.Context.RootAIdentity, 1, CancellationToken.None);
+
+        var overlay = join.BuildOverlay(inventory, CancellationToken.None);
+
+        Assert.Equal(journal.OriginalInstall, Assert.Single(overlay));
+        Assert.Equal(journal.OriginalInstall, Assert.Single(join.PositivelyAbsentOriginals));
+    }
+
     [SupportedPhysicalStoreTheory]
     [InlineData("before-deleting")]
     [InlineData("after-deleting")]

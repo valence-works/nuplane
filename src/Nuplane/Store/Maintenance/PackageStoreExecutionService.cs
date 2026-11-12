@@ -83,7 +83,11 @@ internal sealed class PackageStoreExecutionService(
                 }, cancellationToken);
             var snapshot = await inspection.InspectUnderCatalogOwnershipAsync(owner, borrow, configuredRoot,
                 keepNewestInactiveVersionsPerPackage, cancellationToken, operation,
-                executionOnlyInstallOverlay: inventory => executionJoin.BuildOverlay(inventory, cancellationToken)).ConfigureAwait(false);
+                executionOnlyInstallOverlay: inventory =>
+                {
+                    var installs = executionJoin.BuildOverlay(inventory, cancellationToken);
+                    return new PackageStoreExecutionInstallOverlay(installs, executionJoin.PositivelyAbsentOriginals);
+                }).ConfigureAwait(false);
             var plan = snapshot.RetentionPlan
                 ?? throw new InvalidOperationException("An enrolled execution plan is required.");
             if (plan.Root != selectedRoot.RootIdentity || plan.EnrollmentEpoch != expectedEnrollmentEpoch ||
@@ -744,7 +748,8 @@ internal sealed class PackageStoreExecutionService(
             var journalStore = _journalStore.Value;
             var result = journalStore.PublishPrepared(root, Snapshot.Root!, journal,
                 token => RequireOwnedCandidate(candidate, requireUnprepared: true, token),
-                token => candidate.RequireCurrentBaseline(token), cancellationToken);
+                token => candidate.RequireCurrentBaseline(token), cancellationToken,
+                _executionJoin.PositivelyAbsentCandidateIds);
 
             RequireOwnedCandidate(candidate, requireUnprepared: false, cancellationToken);
             return result;

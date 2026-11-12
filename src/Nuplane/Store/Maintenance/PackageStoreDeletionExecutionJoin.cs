@@ -148,8 +148,40 @@ internal sealed class PackageStoreDeletionExecutionJoin : IDisposable
         if (matchedQuarantinePaths.Count != quarantineEntriesByPath.Count)
             throw Refuse("An inventoried quarantine prefix has no exact canonical journal and remains untouched.");
 
+        // Discovery skips directory-identity aliasing checks for Finalizing journals, because a journal whose
+        // quarantine is positively absent names a tombstone identity. Every other journal still owns its identity.
+        if (_bindings.Where(static binding => !binding.QuarantinePositivelyAbsent)
+            .GroupBy(static binding => binding.Discovered.Journal.OriginalInstall.DirectoryIdentity)
+            .Any(static group => group.Skip(1).Any()))
+            throw Refuse("Multiple prune journals that are not proven absent describe one native install directory.");
+
         EnsureLive(cancellationToken);
         return overlays;
+    }
+
+    /// <summary>Overlay rows whose Finalizing journal proved the original install and its quarantine absent.</summary>
+    /// <remarks>Their native identities are tombstones that the filesystem may already have reused.</remarks>
+    internal IReadOnlyList<PackageInstallIdentity> PositivelyAbsentOriginals
+    {
+        get
+        {
+            EnsureLive(CancellationToken.None);
+            return _bindings.Where(static binding => binding.QuarantinePositivelyAbsent)
+                .Select(static binding => binding.Discovered.Journal.OriginalInstall)
+                .ToArray();
+        }
+    }
+
+    /// <summary>Candidate IDs of the Finalizing journals whose original install and quarantine were proven absent.</summary>
+    internal IReadOnlySet<Guid> PositivelyAbsentCandidateIds
+    {
+        get
+        {
+            EnsureLive(CancellationToken.None);
+            return _bindings.Where(static binding => binding.QuarantinePositivelyAbsent)
+                .Select(static binding => binding.Discovered.Journal.CandidateId)
+                .ToHashSet();
+        }
     }
 
     internal bool TryFind(PackageInstallIdentity install, out JournalBinding binding)
@@ -189,7 +221,8 @@ internal sealed class PackageStoreDeletionExecutionJoin : IDisposable
         if (journal.Phase != PackageStoreDeletionPhase.Prepared || journal.StoreRoot != _root ||
             journal.EnrollmentEpoch != _epoch || journal.OriginalInstall != candidate.InstallIdentity ||
             _bindings.Any(binding => binding.Discovered.Journal.CandidateId == journal.CandidateId ||
-                                     binding.Discovered.Journal.OriginalInstall.DirectoryIdentity == journal.OriginalInstall.DirectoryIdentity))
+                                     (!binding.QuarantinePositivelyAbsent &&
+                                      binding.Discovered.Journal.OriginalInstall.DirectoryIdentity == journal.OriginalInstall.DirectoryIdentity)))
             throw Refuse("The newly published Prepared journal does not uniquely bind this exact current candidate.");
 
         var discovered = new PackageStoreDeletionJournalStore.DiscoveredJournal(

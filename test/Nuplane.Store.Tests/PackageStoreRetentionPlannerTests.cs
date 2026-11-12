@@ -224,6 +224,79 @@ public sealed class PackageStoreRetentionPlannerTests
     }
 
     [Fact]
+    public void Plan_PositivelyAbsentOriginalDoesNotConflictWithAnInstallThatReusedItsNativeIdentities()
+    {
+        // A deleted install's Finalizing journal keeps its directory and marker identities. The filesystem may
+        // reuse both for a later install, which must stay Retained instead of refusing every later Execute.
+        var deleted = Install("Widget", "0.5.0", "feed-a", directoryId: "reused-dir", completion: "reused-marker");
+        var replacement = Install("Widget", "2.0.0", "feed-a", directoryId: "reused-dir", completion: "reused-marker");
+        var retained = Install("Widget", "1.0.0", "feed-a");
+        var plan = Plan(Snapshot(
+            [deleted, retained, replacement],
+            keepNewest: 0,
+            protectedInstalls:
+            [
+                Protect(replacement, PackageStoreRetentionProtectionReason.Active),
+                Protect(retained, PackageStoreRetentionProtectionReason.LiveUse)
+            ],
+            positivelyAbsent: [deleted]));
+
+        Assert.Equal(PackageStoreRetentionClassification.Retained, EntryAt(plan, replacement).Classification);
+        Assert.Equal(PackageStoreRetentionClassification.Retained, EntryAt(plan, retained).Classification);
+        Assert.Equal(PackageStoreRetentionClassification.Eligible, EntryAt(plan, deleted).Classification);
+        Assert.DoesNotContain(plan.Entries, entry => entry.Reasons.Contains(PackageStoreRetentionReason.IdentityConflict));
+        Assert.False(plan.HasUnresolvedEvidence);
+    }
+
+    [Fact]
+    public void Plan_PresentInstallsSharingNativeIdentitiesStillConflictBesideAPositivelyAbsentOriginal()
+    {
+        var deleted = Install("Widget", "0.5.0", "feed-a", directoryId: "shared-dir", completion: "shared-marker");
+        var first = Install("Widget", "1.0.0", "feed-a", directoryId: "shared-dir", completion: "first-marker");
+        var second = Install("Widget", "2.0.0", "feed-a", directoryId: "shared-dir", completion: "second-marker");
+        var plan = Plan(Snapshot([deleted, first, second], keepNewest: 0, positivelyAbsent: [deleted]));
+
+        Assert.Equal(PackageStoreRetentionClassification.Refused, EntryAt(plan, first).Classification);
+        Assert.Equal(PackageStoreRetentionClassification.Refused, EntryAt(plan, second).Classification);
+        Assert.Contains(PackageStoreRetentionReason.IdentityConflict, EntryAt(plan, first).Reasons);
+        Assert.DoesNotContain(PackageStoreRetentionReason.IdentityConflict, EntryAt(plan, deleted).Reasons);
+        Assert.True(plan.HasUnresolvedEvidence);
+    }
+
+    [Fact]
+    public void Plan_WithoutAbsenceEvidenceReusedNativeIdentitiesStillRefuse()
+    {
+        var earlier = Install("Widget", "0.5.0", "feed-a", directoryId: "reused-dir", completion: "reused-marker");
+        var later = Install("Widget", "2.0.0", "feed-a", directoryId: "reused-dir", completion: "reused-marker");
+        var plan = Plan(Snapshot([earlier, later], keepNewest: 0));
+
+        Assert.All(plan.Entries, entry =>
+        {
+            Assert.Equal(PackageStoreRetentionClassification.Refused, entry.Classification);
+            Assert.Contains(PackageStoreRetentionReason.IdentityConflict, entry.Reasons);
+        });
+    }
+
+    [Fact]
+    public void Plan_PositivelyAbsentOriginalDoesNotConsumeTheInactiveBudget()
+    {
+        var deleted = Install("Widget", "2.0.0", "feed-a");
+        var inactive = Install("Widget", "1.0.0", "feed-a");
+        var plan = Plan(Snapshot([deleted, inactive], keepNewest: 1, positivelyAbsent: [deleted]));
+
+        Assert.Equal(PackageStoreRetentionClassification.Retained, EntryAt(plan, inactive).Classification);
+        Assert.Contains(PackageStoreRetentionReason.WithinInactiveRetentionBudget, EntryAt(plan, inactive).Reasons);
+        Assert.Equal(PackageStoreRetentionClassification.Eligible, EntryAt(plan, deleted).Classification);
+    }
+
+    [Fact]
+    public void Snapshot_RejectsPositivelyAbsentInstallsOutsideTheCompletedRows()
+    {
+        var install = Install("Widget", "1.0.0", "feed-a");
+        Assert.Throws<ArgumentException>(() => Snapshot([], keepNewest: 0, positivelyAbsent: [install]));
+    }
+
+    [Fact]
     public void Plan_ProtectionRequiresExactInstallIdentityBeyondPackageAndVersion()
     {
         var inventoried = Install("Widget", "1.0.0", "feed-a");
@@ -365,7 +438,8 @@ public sealed class PackageStoreRetentionPlannerTests
         IReadOnlyList<PackageStoreRetentionProtectedInstall>? protectedInstalls = null,
         PackageStoreRetentionInventoryStatus inventoryStatus = PackageStoreRetentionInventoryStatus.Complete,
         PackageStoreRetentionProtectionKnowledge protectionKnowledge = PackageStoreRetentionProtectionKnowledge.Known,
-        PhysicalRootIdentity? root = null)
+        PhysicalRootIdentity? root = null,
+        IReadOnlyCollection<PackageInstallIdentity>? positivelyAbsent = null)
         => new(
             root ?? Root,
             enrollmentEpoch: 3,
@@ -373,7 +447,8 @@ public sealed class PackageStoreRetentionPlannerTests
             installs,
             protectionKnowledge,
             protectedInstalls ?? [],
-            keepNewest);
+            keepNewest,
+            positivelyAbsent);
 
     private static PackageInstallIdentity Install(
         string packageId,
@@ -401,6 +476,10 @@ public sealed class PackageStoreRetentionPlannerTests
                                                      string.Equals(entry.Install.CompletionIdentity,
                                                          install.CompletionIdentity,
                                                          StringComparison.Ordinal)));
+
+    private static PackageStoreRetentionPlanEntry EntryAt(PackageStoreRetentionPlan plan, PackageInstallIdentity install)
+        => Assert.Single(plan.Entries.Where(entry => string.Equals(entry.Install.RootRelativeInstallPath,
+            install.RootRelativeInstallPath, StringComparison.Ordinal)));
 
     private static string Signature(PackageStoreRetentionPlan plan)
         => string.Join(Environment.NewLine, plan.Entries.Select(entry =>
