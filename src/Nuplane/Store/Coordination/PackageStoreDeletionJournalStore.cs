@@ -120,7 +120,8 @@ internal sealed class PackageStoreDeletionJournalStore
         PackageStoreDeletionJournal journal,
         Action<CancellationToken> requireCurrentCandidate,
         Action<CancellationToken> requireCurrentBaseline,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlySet<Guid>? positivelyAbsentCandidateIds = null)
     {
         ArgumentNullException.ThrowIfNull(heldRoot);
         ArgumentNullException.ThrowIfNull(expectedRoot);
@@ -161,7 +162,8 @@ internal sealed class PackageStoreDeletionJournalStore
         if (artifacts.Any(static item => item.IsStage))
             throw Refuse("An existing prune publication stage is unresolved; it is preserved for explicit recovery.", expectedRoot);
 
-        ValidateExistingJournals(control, controlIdentity, controlSemantics, artifacts, expectedRoot, journal);
+        ValidateExistingJournals(control, controlIdentity, controlSemantics, artifacts, expectedRoot, journal,
+            positivelyAbsentCandidateIds ?? new HashSet<Guid>());
         if (existingNames.Contains(canonicalName, StringComparer.Ordinal) ||
             existingNames.Contains(stagedName, StringComparer.Ordinal))
         {
@@ -487,7 +489,8 @@ internal sealed class PackageStoreDeletionJournalStore
         PhysicalStoreNameSemantics controlSemantics,
         IReadOnlyList<PruneArtifact> artifacts,
         PhysicalRootIdentity expectedRoot,
-        PackageStoreDeletionJournal requested)
+        PackageStoreDeletionJournal requested,
+        IReadOnlySet<Guid> positivelyAbsentCandidateIds)
     {
         foreach (var artifact in artifacts)
         {
@@ -511,8 +514,12 @@ internal sealed class PackageStoreDeletionJournalStore
                 throw Refuse("An existing prune journal is unknown to this publisher and was preserved.", expectedRoot);
             }
 
+            // A Finalizing journal whose quarantine this operation proved absent names a directory identity
+            // the filesystem may have reused for the requested install; its path and slot still must not alias.
+            var tombstone = existing.Phase == PackageStoreDeletionPhase.Finalizing &&
+                            positivelyAbsentCandidateIds.Contains(existing.CandidateId);
             if (existing.CandidateId == requested.CandidateId ||
-                existing.OriginalInstall.DirectoryIdentity == requested.OriginalInstall.DirectoryIdentity ||
+                !tombstone && existing.OriginalInstall.DirectoryIdentity == requested.OriginalInstall.DirectoryIdentity ||
                 existing.PackageParentIdentity == requested.PackageParentIdentity &&
                 string.Equals(existing.OriginalBasename, requested.OriginalBasename, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(existing.OriginalInstall.RootRelativeInstallPath,
@@ -535,8 +542,12 @@ internal sealed class PackageStoreDeletionJournalStore
             for (var rightIndex = leftIndex + 1; rightIndex < journals.Count; rightIndex++)
             {
                 var right = journals[rightIndex].Journal;
+                // A Finalizing journal may name a reused directory identity. Discovery cannot yet prove its quarantine
+                // absent, so the execution join repeats this comparison after it verifies every journal.
+                var mayBeTombstone = left.Phase == PackageStoreDeletionPhase.Finalizing ||
+                                     right.Phase == PackageStoreDeletionPhase.Finalizing;
                 if (left.CandidateId == right.CandidateId ||
-                    left.OriginalInstall.DirectoryIdentity == right.OriginalInstall.DirectoryIdentity ||
+                    !mayBeTombstone && left.OriginalInstall.DirectoryIdentity == right.OriginalInstall.DirectoryIdentity ||
                     left.PackageParentIdentity == right.PackageParentIdentity &&
                     string.Equals(left.OriginalBasename, right.OriginalBasename, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(left.OriginalInstall.RootRelativeInstallPath,

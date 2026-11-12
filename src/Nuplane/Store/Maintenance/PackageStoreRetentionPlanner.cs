@@ -252,7 +252,8 @@ internal sealed class PackageStoreRetentionPlanner : IPackageStoreRetentionPlann
             return selected;
 
         var inactive = analyses
-            .Where(static analysis => analysis.Version is not null &&
+            // A positively absent original is no longer an install, so it occupies no retained-version slot.
+            .Where(static analysis => !analysis.IsPositivelyAbsent && analysis.Version is not null &&
                                       !analysis.Reasons.Contains(PackageStoreRetentionReason.RootMismatch) &&
                                       !analysis.Reasons.Contains(PackageStoreRetentionReason.MalformedVersion) &&
                                       !analysis.Reasons.Contains(PackageStoreRetentionReason.MalformedInstallPath))

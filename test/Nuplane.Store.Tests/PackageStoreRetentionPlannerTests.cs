@@ -278,6 +278,18 @@ public sealed class PackageStoreRetentionPlannerTests
     }
 
     [Fact]
+    public void Plan_PositivelyAbsentOriginalDoesNotConsumeTheInactiveBudget()
+    {
+        var deleted = Install("Widget", "2.0.0", "feed-a");
+        var inactive = Install("Widget", "1.0.0", "feed-a");
+        var plan = Plan(Snapshot([deleted, inactive], keepNewest: 1, positivelyAbsent: [deleted]));
+
+        Assert.Equal(PackageStoreRetentionClassification.Retained, EntryAt(plan, inactive).Classification);
+        Assert.Contains(PackageStoreRetentionReason.WithinInactiveRetentionBudget, EntryAt(plan, inactive).Reasons);
+        Assert.Equal(PackageStoreRetentionClassification.Eligible, EntryAt(plan, deleted).Classification);
+    }
+
+    [Fact]
     public void Snapshot_RejectsPositivelyAbsentInstallsOutsideTheCompletedRows()
     {
         var install = Install("Widget", "1.0.0", "feed-a");

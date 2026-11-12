@@ -148,6 +148,13 @@ internal sealed class PackageStoreDeletionExecutionJoin : IDisposable
         if (matchedQuarantinePaths.Count != quarantineEntriesByPath.Count)
             throw Refuse("An inventoried quarantine prefix has no exact canonical journal and remains untouched.");
 
+        // Discovery skips directory-identity aliasing checks for Finalizing journals, because a journal whose
+        // quarantine is positively absent names a tombstone identity. Every other journal still owns its identity.
+        if (_bindings.Where(static binding => !binding.QuarantinePositivelyAbsent)
+            .GroupBy(static binding => binding.Discovered.Journal.OriginalInstall.DirectoryIdentity)
+            .Any(static group => group.Skip(1).Any()))
+            throw Refuse("Multiple prune journals that are not proven absent describe one native install directory.");
+
         EnsureLive(cancellationToken);
         return overlays;
     }
@@ -162,6 +169,18 @@ internal sealed class PackageStoreDeletionExecutionJoin : IDisposable
             return _bindings.Where(static binding => binding.QuarantinePositivelyAbsent)
                 .Select(static binding => binding.Discovered.Journal.OriginalInstall)
                 .ToArray();
+        }
+    }
+
+    /// <summary>Candidate IDs of the Finalizing journals whose original install and quarantine were proven absent.</summary>
+    internal IReadOnlySet<Guid> PositivelyAbsentCandidateIds
+    {
+        get
+        {
+            EnsureLive(CancellationToken.None);
+            return _bindings.Where(static binding => binding.QuarantinePositivelyAbsent)
+                .Select(static binding => binding.Discovered.Journal.CandidateId)
+                .ToHashSet();
         }
     }
 

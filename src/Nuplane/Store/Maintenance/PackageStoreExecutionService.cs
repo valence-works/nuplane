@@ -748,7 +748,8 @@ internal sealed class PackageStoreExecutionService(
             var journalStore = _journalStore.Value;
             var result = journalStore.PublishPrepared(root, Snapshot.Root!, journal,
                 token => RequireOwnedCandidate(candidate, requireUnprepared: true, token),
-                token => candidate.RequireCurrentBaseline(token), cancellationToken);
+                token => candidate.RequireCurrentBaseline(token), cancellationToken,
+                _executionJoin.PositivelyAbsentCandidateIds);
 
             RequireOwnedCandidate(candidate, requireUnprepared: false, cancellationToken);
             return result;
