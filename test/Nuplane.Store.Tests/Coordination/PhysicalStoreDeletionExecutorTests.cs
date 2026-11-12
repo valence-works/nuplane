@@ -259,6 +259,34 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
         AssertExecutionLocksReleased(fixture.Context);
     }
 
+    [SupportedPhysicalStoreFact]
+    public async Task QuarantineInventoryJoin_DeletedInstallJoinsAsPositivelyAbsentTombstone()
+    {
+        const string packageId = "executor-tombstone";
+        using var fixture = await ExecutionFixture.CreateAsync();
+        var originalPath = CreateInactiveInstall(fixture.Context.RootAPath, packageId);
+        File.WriteAllText(Path.Combine(originalPath, "payload.txt"), "payload");
+
+        Assert.Equal(PackageStoreDeletionExecutionStatus.Deleted, await DeleteOneAsync(fixture, packageId));
+        var journal = ReadCandidateJournal(fixture.Context.RootAPath, packageId);
+        Assert.Equal(PackageStoreDeletionPhase.Finalizing, journal.Phase);
+
+        // The Finalizing journal still names the deleted directory and marker identities. The planner must treat
+        // them as tombstones the filesystem may reuse, so the join reports exactly this row as positively absent.
+        using var root = PhysicalStoreTestDirectory.Open(fixture.Context.Files, fixture.Context.RootAPath);
+        using var join = new PackageStoreDeletionExecutionJoin(
+            new PackageStoreDeletionJournalStore(fixture.Context.Files),
+            new PackageStoreDeletionCandidateBinder(fixture.Context.Files), root,
+            fixture.Context.RootAIdentity, 1, _ => { }, CancellationToken.None);
+        var inventory = await new PackageStoreInventory(fixture.Context.Files)
+            .ReadUnderCatalogOwnershipAsync(root, fixture.Context.RootAIdentity, 1, CancellationToken.None);
+
+        var overlay = join.BuildOverlay(inventory, CancellationToken.None);
+
+        Assert.Equal(journal.OriginalInstall, Assert.Single(overlay));
+        Assert.Equal(journal.OriginalInstall, Assert.Single(join.PositivelyAbsentOriginals));
+    }
+
     [SupportedPhysicalStoreTheory]
     [InlineData("before-deleting")]
     [InlineData("after-deleting")]

@@ -36,7 +36,10 @@ internal sealed class PackageStoreRetentionPlanner : IPackageStoreRetentionPlann
         if (snapshot.ProtectionKnowledge == PackageStoreRetentionProtectionKnowledge.Unknown)
             globalReasons.Add(PackageStoreRetentionReason.ProtectionUnknown);
 
-        var analyses = snapshot.CompletedInstalls.Select(static install => new InstallAnalysis(install)).ToArray();
+        var analyses = snapshot.CompletedInstalls.Select(install => new InstallAnalysis(install)
+        {
+            IsPositivelyAbsent = snapshot.PositivelyAbsentInstalls.Contains(install)
+        }).ToArray();
         var protectedReasonsByInstall = BuildProtectionIndex(snapshot, analyses, globalReasons);
 
         foreach (var analysis in analyses)
@@ -174,10 +177,13 @@ internal sealed class PackageStoreRetentionPlanner : IPackageStoreRetentionPlann
             RootPathKeyComparer.Instance);
         MarkConflictingGroups(paths.Values);
 
-        var directories = Group(analyses, static analysis => analysis.Install.DirectoryIdentity, EqualityComparer<PhysicalFileIdentity>.Default);
+        // A positively absent original no longer owns its directory or completion-marker native identity, and the
+        // filesystem may reuse either for a later object. Comparing those tombstones would refuse a legitimate install.
+        var present = analyses.Where(static analysis => !analysis.IsPositivelyAbsent).ToArray();
+        var directories = Group(present, static analysis => analysis.Install.DirectoryIdentity, EqualityComparer<PhysicalFileIdentity>.Default);
         MarkConflictingGroups(directories.Values);
 
-        var completions = Group(analyses, static analysis => analysis.Install.CompletionIdentity, StringComparer.Ordinal);
+        var completions = Group(present, static analysis => analysis.Install.CompletionIdentity, StringComparer.Ordinal);
         MarkConflictingGroups(completions.Values);
     }
 
@@ -296,6 +302,7 @@ internal sealed class PackageStoreRetentionPlanner : IPackageStoreRetentionPlann
         internal NuGetVersion? Version { get; set; }
         internal HashSet<PackageStoreRetentionReason> Reasons { get; } = [];
         internal bool IsProtected { get; set; }
+        internal bool IsPositivelyAbsent { get; init; }
     }
 
     private readonly record struct RetentionGroupKey(string PackageId, NuGetVersion Version);

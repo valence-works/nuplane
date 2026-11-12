@@ -17,7 +17,8 @@ internal sealed class PackageStoreRetentionSnapshot
         IReadOnlyList<PackageInstallIdentity> completedInstalls,
         PackageStoreRetentionProtectionKnowledge protectionKnowledge,
         IReadOnlyList<PackageStoreRetentionProtectedInstall> protectedInstalls,
-        int? keepNewestInactiveVersionsPerPackage)
+        int? keepNewestInactiveVersionsPerPackage,
+        IReadOnlyCollection<PackageInstallIdentity>? positivelyAbsentInstalls = null)
     {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(completedInstalls);
@@ -42,6 +43,13 @@ internal sealed class PackageStoreRetentionSnapshot
             install ?? throw new ArgumentException("Protection entries cannot contain null entries.", nameof(protectedInstalls)))
             .ToImmutableArray();
         KeepNewestInactiveVersionsPerPackage = keepNewestInactiveVersionsPerPackage;
+        PositivelyAbsentInstalls = (positivelyAbsentInstalls ?? []).Select(install =>
+                install is null
+                    ? throw new ArgumentException("Positively absent installs cannot contain null entries.", nameof(positivelyAbsentInstalls))
+                    : CompletedInstalls.Contains(install)
+                        ? install
+                        : throw new ArgumentException("Every positively absent install must also be a completed install row.", nameof(positivelyAbsentInstalls)))
+            .ToImmutableHashSet();
     }
 
     internal PhysicalRootIdentity Root { get; }
@@ -57,4 +65,11 @@ internal sealed class PackageStoreRetentionSnapshot
     internal ImmutableArray<PackageStoreRetentionProtectedInstall> ProtectedInstalls { get; }
 
     internal int? KeepNewestInactiveVersionsPerPackage { get; }
+
+    /// <summary>Execution-only rows whose journal proved the original install and its quarantine absent.</summary>
+    /// <remarks>
+    /// Their directory and completion-marker identities are tombstones: the native objects no longer exist, so the
+    /// filesystem may assign those identities to new objects. Such rows still occupy their exact logical path.
+    /// </remarks>
+    internal ImmutableHashSet<PackageInstallIdentity> PositivelyAbsentInstalls { get; }
 }

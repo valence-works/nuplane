@@ -120,7 +120,7 @@ internal sealed class PackageStoreInspectionService : IPackageStoreInspectionSer
         int? keepNewestInactiveVersionsPerPackage,
         CancellationToken cancellationToken,
         RootMembershipRegistry.NativeCatalogOwnerBorrow.Operation? operation = null,
-        Func<PackageStoreInventorySnapshot, IReadOnlyList<PackageInstallIdentity>>? executionOnlyInstallOverlay = null)
+        Func<PackageStoreInventorySnapshot, PackageStoreExecutionInstallOverlay>? executionOnlyInstallOverlay = null)
     {
         if (operation is not null)
             borrow.RequireOperation(operation, _catalogRegistry);
@@ -207,8 +207,13 @@ internal sealed class PackageStoreInspectionService : IPackageStoreInspectionSer
             .Select(static entry => entry.InstallIdentity
                 ?? throw new InvalidOperationException("A completed inventory candidate omitted its install identity."))
             .ToList();
+        IReadOnlyCollection<PackageInstallIdentity> positivelyAbsentInstalls = [];
         if (executionOnlyInstallOverlay is not null)
-            completedInstalls.AddRange(executionOnlyInstallOverlay(inventory));
+        {
+            var overlay = executionOnlyInstallOverlay(inventory);
+            completedInstalls.AddRange(overlay.Installs);
+            positivelyAbsentInstalls = overlay.PositivelyAbsent;
+        }
         var retentionSnapshot = new PackageStoreRetentionSnapshot(
             root,
             epoch,
@@ -216,7 +221,8 @@ internal sealed class PackageStoreInspectionService : IPackageStoreInspectionSer
             completedInstalls,
             protectionKnowledge,
             protectedInstalls,
-            keepNewestInactiveVersionsPerPackage);
+            keepNewestInactiveVersionsPerPackage,
+            positivelyAbsentInstalls);
         var retentionPlan = _planner.Plan(retentionSnapshot);
 
         cancellationToken.ThrowIfCancellationRequested();
