@@ -17,6 +17,7 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
     private readonly object _sync = new();
     private readonly Dictionary<CacheKey, LinkedListNode<CacheEntry>> _cache = new();
     private readonly LinkedList<CacheEntry> _recency = new();
+    private readonly Dictionary<CacheKey, Task<PackageArchive>> _loading = new();
     private long _cachedBytes;
 
     public PackageArchiveReader(IOptions<PackageArchiveReaderOptions> options, ILogger<PackageArchiveReader> logger)
@@ -40,40 +41,86 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
 
         var archivePath = ResolveArchivePath(package.InstallPath);
         var key = new CacheKey(package.PackageId.ToUpperInvariant(), package.Version.ToUpperInvariant(), archivePath, recordedHash);
-        if (TryGetCached(key) is { } cached)
-            return cached;
-
-        var bytes = await ReadArchiveAsync(package, archivePath, cancellationToken).ConfigureAwait(false);
-        var actualHash = "sha512:" + Convert.ToBase64String(SHA512.HashData(bytes));
-        if (!string.Equals(actualHash, recordedHash, StringComparison.Ordinal))
-            throw Refuse(package, PackageArchiveFailureReason.HashMismatch,
-                $"'{archivePath}' does not match the sha512 recorded at acquisition; it was modified or replaced.");
-
-        PackageArchive archive;
-        try
+        Task<PackageArchive> load;
+        lock (_sync)
         {
-            archive = PackageArchive.Load(package.PackageId, package.Version, recordedHash, bytes);
-        }
-        catch (InvalidDataException exception)
-        {
-            throw Refuse(package, PackageArchiveFailureReason.InvalidArchive,
-                $"'{archivePath}' matches its recorded hash but is not a readable zip archive.", exception);
+            if (_cache.TryGetValue(key, out var node))
+            {
+                _recency.Remove(node);
+                _recency.AddFirst(node);
+                return node.Value.Archive;
+            }
+
+            // Concurrent opens of one archive share a single read and verification. The shared load does not
+            // take any caller's token, so one caller cancelling cannot fail the others.
+            if (!_loading.TryGetValue(key, out load!))
+            {
+                load = LoadAsync(package, archivePath, recordedHash, key);
+                _loading[key] = load;
+            }
         }
 
-        ArchiveVerified(_logger, package.PackageId, package.Version, bytes.LongLength);
-        AddToCache(key, archive);
-        return archive;
+        return await load.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static string ResolveArchivePath(string installPath) =>
         Path.GetFullPath(PackageInstallStore.GetArchivePath(installPath));
 
-    private async Task<byte[]> ReadArchiveAsync(ActivePackage package, string archivePath, CancellationToken cancellationToken)
+    private async Task<PackageArchive> LoadAsync(ActivePackage package, string archivePath, string recordedHash, CacheKey key)
     {
         try
         {
+            await Task.Yield();
+            var bytes = await ReadArchiveAsync(package, archivePath).ConfigureAwait(false);
+            var actualHash = "sha512:" + Convert.ToBase64String(SHA512.HashData(bytes));
+            if (!string.Equals(actualHash, recordedHash, StringComparison.Ordinal))
+                throw Refuse(package, PackageArchiveFailureReason.HashMismatch,
+                    $"'{archivePath}' does not match the sha512 recorded at acquisition; it was modified or replaced.");
+
+            PackageArchive archive;
+            try
+            {
+                archive = PackageArchive.Load(package.PackageId, package.Version, recordedHash, bytes);
+            }
+            catch (InvalidDataException exception)
+            {
+                throw Refuse(package, PackageArchiveFailureReason.InvalidArchive,
+                    $"'{archivePath}' matches its recorded hash but is not a readable zip archive.", exception);
+            }
+
+            ArchiveVerified(_logger, package.PackageId, package.Version, bytes.LongLength);
+            AddToCache(key, archive);
+            return archive;
+        }
+        finally
+        {
+            lock (_sync)
+                _loading.Remove(key);
+        }
+    }
+
+    private async Task<byte[]> ReadArchiveAsync(ActivePackage package, string archivePath)
+    {
+        try
+        {
+            // Opening a FIFO or device blocks or never ends. A kept archive is a non-empty regular file, so
+            // refuse anything else before opening it, and again from the opened handle.
+            if (Directory.Exists(archivePath))
+                throw Refuse(package, PackageArchiveFailureReason.ArchiveUnreadable,
+                    $"'{archivePath}' is a directory, not an archive file.");
+            var info = new FileInfo(archivePath);
+            if (!info.Exists)
+                throw new FileNotFoundException("The kept package archive does not exist.", archivePath);
+            if (info.Length == 0)
+                throw Refuse(package, PackageArchiveFailureReason.ArchiveUnreadable,
+                    $"'{archivePath}' is empty or is not a regular file.");
+
             await using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.Read,
                 FileShare.Read | FileShare.Delete, 81920, useAsync: true);
+            if (!stream.CanSeek || stream.Length == 0)
+                throw Refuse(package, PackageArchiveFailureReason.ArchiveUnreadable,
+                    $"'{archivePath}' is empty or is not a regular file.");
+
             var length = stream.Length;
             if (length > _options.MaximumArchiveBytes)
                 throw Refuse(package, PackageArchiveFailureReason.ArchiveTooLarge,
@@ -82,7 +129,7 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
             var bytes = new byte[length];
             try
             {
-                await stream.ReadExactlyAsync(bytes, cancellationToken).ConfigureAwait(false);
+                await stream.ReadExactlyAsync(bytes).ConfigureAwait(false);
             }
             catch (EndOfStreamException exception)
             {
@@ -102,18 +149,6 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
         {
             throw Refuse(package, PackageArchiveFailureReason.ArchiveUnreadable,
                 $"'{archivePath}' could not be read: {exception.Message}", exception);
-        }
-    }
-
-    private PackageArchive? TryGetCached(CacheKey key)
-    {
-        lock (_sync)
-        {
-            if (!_cache.TryGetValue(key, out var node))
-                return null;
-            _recency.Remove(node);
-            _recency.AddFirst(node);
-            return node.Value.Archive;
         }
     }
 

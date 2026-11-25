@@ -6,6 +6,11 @@ set -euo pipefail
 
 results_directory=${1:?Usage: qualify-package-archives.sh RESULTS_DIRECTORY}
 if [[ "${RUNNER_OS:-}" == Windows ]]; then python=python; else python=python3; fi
+# Unit tests use the temporary directory, so put it on the filesystem under test too.
+if [[ -n "${NUPLANE_ARCHIVE_TEST_ROOT:-}" ]]; then
+  export TMPDIR="$NUPLANE_ARCHIVE_TEST_ROOT/tmp"
+  mkdir -p "$TMPDIR"
+fi
 
 dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
   --configuration Release --framework net10.0 \

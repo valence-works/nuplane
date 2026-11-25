@@ -196,7 +196,10 @@ internal static class LegacyActiveGraphCandidateProducer
                 CopySourceSnapshots(legacyState.LastSuccessfulSourceSnapshots),
                 activatedAt,
                 new Dictionary<string, ActivePackageDescriptor>(descriptorsNext, StringComparer.OrdinalIgnoreCase),
-                new Dictionary<string, GraphActivationRecord>(records, StringComparer.OrdinalIgnoreCase));
+                new Dictionary<string, GraphActivationRecord>(records, StringComparer.OrdinalIgnoreCase))
+            {
+                ArchiveHashesByInstallPath = legacyState.NextArchiveHashes(descriptorsNext.Values)
+            };
             next = WithInitialProtection(next, ledger.RootIdentity, ledger.EnrollmentEpoch, memberId, closure);
             next = await RoundTripAsync(serializer, next, cancellationToken).ConfigureAwait(false);
             _ = PersistedStoreStateGraphVerifier.Verify(next);

@@ -197,7 +197,10 @@ internal static class CoordinatedActiveStateTransitionProducer
                     new Dictionary<string, SourceSnapshotRef>(current.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
                     activatedAtUtc,
                     new Dictionary<string, ActivePackageDescriptor>(descriptors, StringComparer.OrdinalIgnoreCase),
-                    new Dictionary<string, GraphActivationRecord>(records, StringComparer.OrdinalIgnoreCase));
+                    new Dictionary<string, GraphActivationRecord>(records, StringComparer.OrdinalIgnoreCase))
+                {
+                    ArchiveHashesByInstallPath = current.NextArchiveHashes(descriptors.Values)
+                };
 
                 var nextRevision = checked(priorProtection.Revision + 1);
                 var activeClosure = new PackageProtectionClosure(PackageProtectionClosureKnowledge.Known, null, snapshots);
@@ -453,7 +456,6 @@ internal static class CoordinatedActiveStateTransitionProducer
                 FeedName = projection.Lineage.FeedName,
                 SourceName = projection.Lineage.SourceName,
                 InstallPath = projection.Lineage.InstallPath,
-                ArchiveHash = projection.Install.VerifiedArchiveHash,
                 GraphId = chosen.GraphId,
                 GraphGenerationId = chosen.GenerationId,
                 PackageRole = projection.Role,

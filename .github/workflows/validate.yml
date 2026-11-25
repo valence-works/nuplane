@@ -220,7 +220,7 @@ jobs:
           legacy_classes = {
               'Nuplane.Store.Tests.State.ProtectionStateSerializationTests': 29,
               'Nuplane.Store.Tests.State.ProtectionStatePayloadSerializerTests': 7,
-              'Nuplane.Store.Tests.Coordination.ProtectionDigestTests': 28,
+              'Nuplane.Store.Tests.Coordination.ProtectionDigestTests': 29,
               'Nuplane.Store.Tests.Coordination.RootMembershipPayloadSerializerTests': 28,
               'Nuplane.Store.Tests.Coordination.PersistedStoreStateGraphVerifierTests': 10,
           }
@@ -241,9 +241,9 @@ jobs:
               expected = 'Nuplane.Store.Tests.Coordination.RootMembershipPayloadSerializerTests.' + name
               if sum(row.attrib['testName'] == expected for row in rows) != 1:
                   raise SystemExit('Missing required group membership scenario: ' + name)
-          if len(rows) != 128 or any(row.attrib.get('outcome') != 'Passed' for row in rows):
-              raise SystemExit('All 26 graph-use codec, 97 existing and five group membership cases must pass without skips.')
-          print('Qualified all 128 serialization/digest cases with no skips.')
+          if len(rows) != 129 or any(row.attrib.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('All 26 graph-use codec, 98 existing and five group membership cases must pass without skips.')
+          print('Qualified all 129 serialization/digest cases with no skips.')
           GRAPHUSE
           done
 

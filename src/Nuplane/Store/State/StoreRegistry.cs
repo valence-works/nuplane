@@ -114,6 +114,7 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
                 new(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase),
                 new(_currentState.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase))
             {
+                ArchiveHashesByInstallPath = _currentState.CopyArchiveHashes(),
                 ProtectionRecord = _currentState.ProtectionRecord,
                 ProtectionBundle = _currentState.ProtectionBundle?.Copy()
             };
@@ -235,7 +236,8 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
                 LastKnownGoodById = nextLkg,
                 UpdatedAt = now,
                 ActivePackageDescriptorsById = nextDescriptors,
-                ActiveGraphsById = nextGraphs
+                ActiveGraphsById = nextGraphs,
+                ArchiveHashesByInstallPath = currentState.NextArchiveHashes(nextDescriptors.Values)
             };
 
             await CommitStateUnderLockAsync(nextState, currentState, cancellationToken);

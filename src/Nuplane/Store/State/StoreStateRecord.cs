@@ -39,6 +39,18 @@ public sealed record StoreStateRecord(
     public PackageProtectionBundle? ProtectionBundle { get; init; }
 
     /// <summary>
+    /// Gets or initializes the archive hash recorded for each install path this state has activated.
+    /// </summary>
+    /// <remarks>
+    /// An entry is written the first time an install becomes active and is kept after it is deactivated, so a
+    /// later rollback to that install is verified against the same record instead of the hash file beside its
+    /// archive. A null value is legacy absence.
+    /// </remarks>
+    [JsonPropertyName("archiveHashesByInstallPath")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, string>? ArchiveHashesByInstallPath { get; init; }
+
+    /// <summary>
     /// Creates an empty store state record with the current timestamp.
     /// </summary>
     public static StoreStateRecord Empty() =>
@@ -62,4 +74,24 @@ public sealed record StoreStateRecord(
     /// </summary>
     public Dictionary<string, GraphActivationRecord> ActiveGraphsByIdNormalized =>
         ActiveGraphsById ?? new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Copies the recorded archive hashes, or returns <see langword="null"/> when none are recorded.</summary>
+    internal Dictionary<string, string>? CopyArchiveHashes() =>
+        ArchiveHashesByInstallPath is { Count: > 0 } hashes
+            ? new Dictionary<string, string>(hashes, StringComparer.OrdinalIgnoreCase)
+            : null;
+
+    /// <summary>Records the archive hash of every active descriptor, keeping entries for deactivated installs.</summary>
+    internal Dictionary<string, string>? NextArchiveHashes(IEnumerable<ActivePackageDescriptor> activeDescriptors)
+    {
+        ArgumentNullException.ThrowIfNull(activeDescriptors);
+        var next = CopyArchiveHashes() ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var descriptor in activeDescriptors)
+        {
+            if (descriptor.ArchiveHash is { } hash)
+                next[descriptor.InstallPath] = hash;
+        }
+
+        return next.Count == 0 ? null : next;
+    }
 }

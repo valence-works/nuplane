@@ -56,7 +56,7 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
         Assert.Equal(ModuleScript, Encoding.UTF8.GetString(archive.GetEntry("staticwebassets/module.js")!.ReadAllBytes()));
         Assert.NotNull(archive.Entries.SingleOrDefault(entry => entry.Path == $"{PackageId}.nuspec"));
 
-        // The feed may drop the version while it stays active; the kept archive still serves it.
+        // Opening reads only the kept archive: a restarted host serves it with the feed copy gone.
         File.Delete(feed);
         using var restarted = CreateHost(Path.GetDirectoryName(feed)!, createFeedPackage: false);
         var restartedPackage = await GetActivePackageAsync(restarted);
@@ -119,6 +119,42 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
             Assert.Equal(PackageId, error.PackageId);
             Assert.Contains(PackageId, error.Message, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public async Task OpenAsync_RollbackToForgedRetainedInstall_RefusesWithTheHashRecordedAtFirstActivation()
+    {
+        AssertExpectedFilesystem(_root);
+        WritePackage("1.0.0");
+        var feedDirectory = Path.Combine(_root, "feed");
+        ActivePackage original;
+        using (var host = CreateHost(feedDirectory, createFeedPackage: false))
+        {
+            await ReconcileAsync(host);
+            original = await GetActivePackageAsync(host);
+            var newer = WritePackage("2.0.0");
+            await ReconcileAsync(host);
+            Assert.Equal("2.0.0", (await GetActivePackageAsync(host)).Version);
+
+            // Forge the retained 1.0.0 install: its archive and the acquisition hash file beside it.
+            var forged = BuildPackage("1.0.0", "export const addon = 'forged';");
+            await File.WriteAllBytesAsync(PackageInstallStore.GetArchivePath(original.InstallPath), forged);
+            await File.WriteAllTextAsync(Path.Combine(original.InstallPath, PackageInstallStore.ContentHashFileName),
+                "sha512:" + Convert.ToBase64String(System.Security.Cryptography.SHA512.HashData(forged)));
+            File.Delete(newer);
+        }
+
+        // A restarted host rolls back to 1.0.0, which is reused from disk.
+        using var restarted = CreateHost(feedDirectory, createFeedPackage: false);
+        await ReconcileAsync(restarted);
+        var rolledBack = await GetActivePackageAsync(restarted);
+
+        Assert.Equal("1.0.0", rolledBack.Version);
+        Assert.Equal(original.InstallPath, rolledBack.InstallPath);
+        Assert.Equal(original.ArchiveHash, rolledBack.ArchiveHash);
+        var error = await Assert.ThrowsAsync<PackageArchiveException>(() =>
+            restarted.Services.GetRequiredService<IPackageArchiveReader>().OpenAsync(rolledBack).AsTask());
+        Assert.Equal(PackageArchiveFailureReason.HashMismatch, error.Reason);
     }
 
     private static string PackageArchiveHash(ActivePackage package) =>

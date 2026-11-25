@@ -43,6 +43,9 @@ internal static partial class ProtectionDigest
             writer.Field(5, EncodeTimestamp(normalized.UpdatedAt));
             writer.Field(6, EncodeMap(normalized.ActivePackageDescriptorsByIdNormalized, EncodeDescriptor));
             writer.Field(7, EncodeMap(normalized.ActiveGraphsByIdNormalized, EncodeActivationGraph));
+            // Optional so state bodies without recorded archive hashes keep their existing digest.
+            if (normalized.ArchiveHashesByInstallPath is { Count: > 0 } archiveHashes)
+                writer.Field(8, EncodeMap(archiveHashes, EncodeString));
         });
     }
 
@@ -482,6 +485,9 @@ internal static partial class ProtectionDigest
             writer.Field(11, EncodeSequence(value.RootPackageIds, item => EncodeString(FoldIdentifier(item))));
             writer.Field(12, EncodeSequence(value.DependencyOfPackageIds, item => EncodeString(FoldIdentifier(item))));
             writer.Field(13, EncodeBoolean(value.Discoverable));
+            // Optional so state bodies without an archive hash keep their existing digest.
+            if (value.ArchiveHash is not null)
+                writer.Field(14, EncodeString(value.ArchiveHash));
         });
     }
 

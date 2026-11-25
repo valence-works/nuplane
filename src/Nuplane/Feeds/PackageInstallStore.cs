@@ -179,7 +179,7 @@ internal static class PackageInstallStore
                 using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read, leaveOpen: true);
                 foreach (var entry in archive.Entries)
                 {
-                    if (IsReservedRootEntry(entry.FullName))
+                    if (ExtractsOntoKeptArchive(stagingDirectory, archivePath, entry.FullName))
                         throw new InvalidDataException(
                             $"The package archive contains the reserved install entry '{entry.FullName}'.");
                 }
@@ -574,9 +574,25 @@ internal static class PackageInstallStore
         => new(PackageStoreAdmissionReason.UnknownAuthority, message, root);
 
     // The marker and hash files are written after extraction and overwrite package entries of the same
-    // name (released behavior). The kept archive is written before extraction, so its name is refused.
-    private static bool IsReservedRootEntry(string entryName) =>
-        string.Equals(entryName.Replace('\\', '/').TrimStart('/'), ArchiveFileName, StringComparison.OrdinalIgnoreCase);
+    // name (released behavior). The kept archive is written before extraction, so any entry that would
+    // extract onto it is refused. The target is resolved the way extraction resolves it.
+    private static bool ExtractsOntoKeptArchive(string stagingDirectory, string archivePath, string entryName)
+    {
+        string target;
+        try
+        {
+            target = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(stagingDirectory, entryName)));
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+
+        var comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return string.Equals(target, Path.GetFullPath(archivePath), comparison);
+    }
 
     /// <summary>
     /// Renames a completed staging directory onto the final install path.

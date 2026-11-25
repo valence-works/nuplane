@@ -101,15 +101,18 @@ public sealed class PackageInstallStoreTests
             await File.ReadAllTextAsync(Path.Combine(installDirectory, PackageInstallStore.ContentHashFileName)));
     }
 
-    [Fact]
-    public async Task InstallAsync_ArchiveShipsTheKeptArchiveName_RefusesWithoutPublishing()
+    [Theory]
+    [InlineData(".nuplane-archive")]
+    [InlineData("./.nuplane-archive")]
+    [InlineData("lib/../.nuplane-archive")]
+    public async Task InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(string entryName)
     {
         using var packages = new TempDirectory();
         using var installRoot = new TempDirectory();
         var archivePath = NupkgTestBuilder.Create("Plugin", "1.0.0").BuildTo(packages.Path);
         using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Update))
         {
-            using var writer = new StreamWriter(archive.CreateEntry(PackageInstallStore.ArchiveFileName).Open());
+            using var writer = new StreamWriter(archive.CreateEntry(entryName).Open());
             await writer.WriteAsync("forged");
         }
         var installDirectory = Path.Combine(installRoot.Path, "installed");

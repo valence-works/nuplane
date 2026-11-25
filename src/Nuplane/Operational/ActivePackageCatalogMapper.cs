@@ -389,15 +389,22 @@ internal static class ActivePackageCatalogMapper
             resolvedGraphs ?? [],
             selectedActiveGraphs);
 
-        // The archive hash is recorded when an install becomes active and kept while that exact install stays
-        // active. Re-resolution re-reads the acquisition hash file beside the archive, which must not replace it.
-        string? ArchiveHashFor(ResolvedPackage package) =>
-            currentState.ActivePackageDescriptorsByIdNormalized.TryGetValue(package.Id, out var current) &&
-            current.ArchiveHash is { } recorded &&
-            string.Equals(current.Version, package.Version, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(current.InstallPath, package.InstallPath, StringComparison.Ordinal)
+        // The state records an install's archive hash the first time that install becomes active and keeps it,
+        // also after deactivation. Re-resolution re-reads the hash file beside the archive; that value is used
+        // only for an install the state has never recorded.
+        var recordedByInstallPath = currentState.ArchiveHashesByInstallPath;
+        string? ArchiveHashFor(ResolvedPackage package)
+        {
+            if (currentState.ActivePackageDescriptorsByIdNormalized.TryGetValue(package.Id, out var current) &&
+                current.ArchiveHash is { } active &&
+                string.Equals(current.Version, package.Version, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(current.InstallPath, package.InstallPath, StringComparison.Ordinal))
+                return active;
+            return recordedByInstallPath is not null &&
+                   recordedByInstallPath.TryGetValue(package.InstallPath, out var recorded)
                 ? recorded
                 : package.PackageContentHash;
+        }
 
         foreach (var package in appliedPackages.OrderBy(pkg => pkg.Id, StringComparer.OrdinalIgnoreCase))
         {

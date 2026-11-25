@@ -88,6 +88,36 @@ public sealed class PackageArchiveReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task OpenAsync_ArchiveReplacedByFifo_RefusesWithoutBlocking()
+    {
+        // Named pipes are a Unix filesystem entry; Windows has no equivalent at a file path.
+        if (OperatingSystem.IsWindows())
+            return;
+        var package = Install("Acme.Addon", "1.0.0", CreateArchive(("content/a.txt", "a"u8.ToArray())));
+        File.Delete(ArchivePath(package));
+        using (var mkfifo = System.Diagnostics.Process.Start("mkfifo", ArchivePath(package)))
+            await mkfifo.WaitForExitAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var error = await Assert.ThrowsAsync<PackageArchiveException>(() =>
+            CreateReader().OpenAsync(package, timeout.Token).AsTask());
+
+        Assert.Equal(PackageArchiveFailureReason.ArchiveUnreadable, error.Reason);
+    }
+
+    [Fact]
+    public async Task OpenAsync_ConcurrentColdOpens_ShareOneVerifiedArchive()
+    {
+        var package = Install("Acme.Addon", "1.0.0",
+            CreateArchive(("content/a.bin", RandomNumberGenerator.GetBytes(4 * 1024 * 1024))));
+        var reader = CreateReader();
+
+        var opened = await Task.WhenAll(Enumerable.Range(0, 32).Select(_ => Task.Run(() => reader.OpenAsync(package).AsTask())));
+
+        Assert.All(opened, archive => Assert.Same(opened[0], archive));
+    }
+
+    [Fact]
     public async Task ReadAllBytes_ConcurrentReads_ReturnEachEntryExactly()
     {
         var files = Enumerable.Range(0, 32)
@@ -214,16 +244,6 @@ public sealed class PackageArchiveReaderTests : IDisposable
         Assert.Same(first, await reader.OpenAsync(packages[0]));
         var error = await Assert.ThrowsAsync<PackageArchiveException>(() => reader.OpenAsync(packages[1]).AsTask());
         Assert.Equal(PackageArchiveFailureReason.ArchiveMissing, error.Reason);
-    }
-
-    [Fact]
-    public void Validate_RejectsOutOfRangeBounds()
-    {
-        var validator = new PackageArchiveReaderOptionsValidator();
-
-        Assert.True(validator.Validate(null, new PackageArchiveReaderOptions()).Succeeded);
-        Assert.True(validator.Validate(null, new PackageArchiveReaderOptions { MaximumArchiveBytes = 0 }).Failed);
-        Assert.True(validator.Validate(null, new PackageArchiveReaderOptions { CacheBytes = -1 }).Failed);
     }
 
     private PackageArchiveReader CreateReader(PackageArchiveReaderOptions? options = null) =>

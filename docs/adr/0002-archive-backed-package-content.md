@@ -40,16 +40,21 @@ The archive is published with the install and shares its protection and pruning 
 
 Rejected: reading the archive from the feed while it still matches. Remote downloads are deleted after extraction, and a directory feed may replace or drop a version while it stays active.
 
-### The active package record is the trust anchor
+### The state file is the trust anchor
 
-`ActivePackageDescriptor.ArchiveHash`, projected as `ActivePackage.ArchiveHash`, records the archive hash in the state file.
+The state file records each install's archive hash in two places:
 
-- **When it is set:** when an install becomes active. The value is the hash computed from the archive when it was acquired.
-- **While the same install stays active:** the recorded value is kept. Re-resolving that install re-reads `.nuplane-content-hash`, and that value does not replace the record. So replacing the archive and its hash file together is still refused after a restart and reconciliation.
-- **Coordinated compositions:** the value comes from the protected install identity, `PackageInstallIdentity.VerifiedArchiveHash`, which the protection digest covers.
-- **Switching to an install that is already on disk:** for example, rolling back to an earlier version. The recorded value is then that install's acquisition record. Enforce or Strict lock files pin this value through ADR-0001.
+- `ActivePackageDescriptor.ArchiveHash`, projected as `ActivePackage.ArchiveHash`, for the active install of each package;
+- `StoreStateRecord.ArchiveHashesByInstallPath`, for every install the state has activated, active or not.
 
-The reader compares the archive bytes against the recorded value. It never compares them against `.nuplane-content-hash`.
+The rules:
+
+- **First activation:** the first time an install becomes active, its hash comes from its acquisition record, `.nuplane-content-hash`. That record was computed from the archive bytes when the archive was acquired. The value is written to both places.
+- **Later activations:** the recorded value is kept from then on. This covers re-resolution of the active install, restarts, and a rollback to a retained install. Re-reading the hash file beside the archive never replaces a recorded value. So replacing an install's archive and its hash file together is refused, whether the install is active or is reactivated later.
+- **Digests:** the protection digest covers both places in coordinated compositions. Each field is written only when present, so states without recorded hashes keep their existing digests.
+- **Re-acquired with different bytes:** an install deleted and acquired again at the same path with different bytes stays refused (`HashMismatch`). This happens only when a version is republished with new bytes, which ADR-0001 already treats as an artifact change.
+
+The reader compares the archive bytes against the active descriptor's value. It never compares them against `.nuplane-content-hash`.
 
 ### Verify the exact bytes that are served
 
@@ -93,13 +98,14 @@ Verified archives stay in an in-memory LRU cache keyed by package, version, arch
 
 - Each install stores its archive as well as its extracted files, so it uses roughly twice the disk space.
 - A verified archive is held in memory while it is cached or in use.
-- Installs made, and packages activated, before this change have no kept archive or recorded hash. They are refused until they are reinstalled. Before GA, no backfill is provided.
+- Installs made before this change have no kept archive and are refused with `ArchiveMissing` until they are reinstalled. Before GA, no backfill of archives is provided.
+- A package activated before this change gets its recorded hash at its next reconciliation, from its acquisition record (first activation rule).
 - The reader trusts the state file. A writer who can change the state file can also change which packages are active, so this matches the existing trust boundary.
 
 ## Validation
 
 - Unit tests cover verification, each refusal reason, path normalization and the cache.
-- `AddNuplane` acceptance tests with a directory feed and no enrolled store cover serving content and refusing modified, replaced and missing archives. Replacing the archive and its hash file together is still refused, including after a restart and reconciliation.
+- `AddNuplane` acceptance tests with a directory feed and no enrolled store cover serving content and refusing modified, replaced and missing archives. Replacing the archive and its hash file together is still refused, including after a restart and reconciliation, and after a rollback to a forged retained install.
 - A coordinated-install test checks that the archive is kept and served by the reader, and that the reserved name is refused during entry planning.
 - Registration tests resolve the reader in ordinary and coordinated compositions and bind `Nuplane:PackageArchives`.
 - A pruning test checks that protected installs keep their archive bytes and that pruned installs lose theirs with the directory.

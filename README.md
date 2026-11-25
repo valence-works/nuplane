@@ -567,7 +567,7 @@ Every feed kind installs under the one writable `PackageInstallRoot`:
 ```
 
 The persisted state file (`Nuplane:StoreRegistry:StateFilePath`) records the active version and
-descriptor of each package, including the archive hash.
+descriptor of each package. It also records the archive hash of every install it has activated.
 
 Updates are atomic:
 
@@ -594,8 +594,11 @@ if (archive.GetEntry("staticwebassets/module.js") is { Length: <= MaxBytes } ent
 ```
 
 * The reader reads the archive into memory, computes its sha512 and compares it with
-  `ActivePackage.ArchiveHash`. Nuplane records that hash in the state file when the install becomes
-  active and keeps it while that install stays active. Only bytes that match are served.
+  `ActivePackage.ArchiveHash`. Only bytes that match are served.
+* Nuplane records an install's hash in the state file the first time that install becomes active, from
+  the hash computed when its archive was acquired, and keeps it, including after the install is
+  deactivated. A restart, a reconciliation or a rollback to a retained install is verified against that
+  record, so replacing an archive together with the hash file beside it is refused.
 * A modified, replaced, truncated or missing archive is refused with `PackageArchiveException`, which
   names the package, the version and a `Reason` (`HashNotRecorded`, `ArchiveMissing`, `ArchiveUnreadable`,
   `ArchiveTooLarge`, `HashMismatch` or `InvalidArchive`). Each refusal is logged as a warning.
@@ -608,8 +611,8 @@ if (archive.GetEntry("staticwebassets/module.js") is { Length: <= MaxBytes } ent
 * Verified archives stay in a bounded in-memory cache, so each archive is verified once until it is
   evicted. Configure the bounds under `Nuplane:PackageArchives`: `CacheBytes` (64 MiB by default, 0 turns
   the cache off) and `MaximumArchiveBytes` (256 MiB by default).
-* Packages installed or activated by a Nuplane version without archive retention have no kept archive
-  or recorded hash. Reinstall them, for example by removing the install root and state file.
+* Installs made by a Nuplane version without archive retention have no kept archive. Reinstall them,
+  for example by removing the install root and state file.
 
 The extracted-store reader, `PackageContent` with an operation borrow or graph-use lease, stays
 available for hosts that enroll the coordinated package store (see
