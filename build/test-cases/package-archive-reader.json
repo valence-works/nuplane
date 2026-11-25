@@ -7,6 +7,7 @@
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(entryName: \".nuplane-archive/nested.txt\")",
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(entryName: \"lib/../.nuplane-archive\")",
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(entryName: \"x\\0/../.nuplane-archive\")",
+  "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveEntryNameWithNul_ExtractsLikeTheReleasedInstaller",
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveSuppliesHashMetadata_OverwritesWithActualArchiveHash",
   "Nuplane.Runtime.Tests.Operational.ActivePackageCatalogMapperTests.BuildNextDescriptors_RecordedVersion_UsesTheRecordOverTheHashReadFromDisk(feedName: \"feed\", installPath: \"/packages/feed/Acme.Addon/1.0.0\")",
   "Nuplane.Runtime.Tests.Operational.ActivePackageCatalogMapperTests.BuildNextDescriptors_RecordedVersion_UsesTheRecordOverTheHashReadFromDisk(feedName: \"mirror\", installPath: \"/packages/mirror/Acme.Addon/1.0.0\")",

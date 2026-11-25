@@ -97,6 +97,7 @@ Verified archives stay in an in-memory LRU cache keyed by package, version, arch
 ### Negative and accepted trade-offs
 
 - Each install stores its archive as well as its extracted files, so it uses roughly twice the disk space.
+- The kept archive is one more root entry. A coordinated install whose package has 1,022 or more root entries exceeds the deletion manifest's 1,024 children per directory and is kept by pruning (refused as a candidate) instead of deleted.
 - A verified archive is held in memory while it is cached or in use.
 - `ArchiveHashesByPackage` keeps one entry per package version the state has activated and never removes entries, so it grows by one line for each version a host activates.
 - The first activation of a package version trusts that install's acquisition record, as loading its assemblies trusts its extracted files. An install planted in the install root for a version this state has never activated is outside what the reader can detect; Enforce and Strict lock files (ADR-0001) pin that version's hash against the feed.

@@ -102,7 +102,7 @@ public sealed class PackageInstallStoreTests
     }
 
     [Fact]
-    public async Task InstallAsync_EntryNameWithNul_ExtractsLikeTheReleasedInstaller()
+    public async Task InstallAsync_ArchiveEntryNameWithNul_ExtractsLikeTheReleasedInstaller()
     {
         using var packages = new TempDirectory();
         using var installRoot = new TempDirectory();

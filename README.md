@@ -603,7 +603,8 @@ if (archive.GetEntry("staticwebassets/module.js") is { Length: <= MaxBytes } ent
   The same version with different bytes from any feed is refused; publish a new version instead.
 * A modified, replaced, truncated or missing archive is refused with `PackageArchiveException`, which
   names the package, the version and a `Reason` (`HashNotRecorded`, `ArchiveMissing`, `ArchiveUnreadable`,
-  `ArchiveTooLarge`, `HashMismatch` or `InvalidArchive`). A refusal is logged as a warning when it is made; repeats within the five seconds it is remembered are not logged again.
+  `ArchiveTooLarge`, `HashMismatch` or `InvalidArchive`). A refusal is logged as a warning when it is
+  made; repeats within the five seconds it is remembered are not logged again.
 * It works on any filesystem that can store a file. CI qualifies it on Linux overlayfs (a container's
   writable layer), xfs, btrfs, tmpfs and ext4, macOS, and Windows x64 and arm64, all without an enrolled
   store.
@@ -612,9 +613,10 @@ if (archive.GetEntry("staticwebassets/module.js") is { Length: <= MaxBytes } ent
   path after normalization, neither is exposed.
 * Verified archives stay in a bounded in-memory cache, so each archive is verified once until it is
   evicted. An archive larger than `CacheBytes` is never cached, so every open reads and verifies it
-  again; size `CacheBytes` to the archives a host serves, or verified archives are evicted and re-read.
-  Each archive being read holds up to `MaximumArchiveBytes` in memory until it is verified. Configure the bounds under `Nuplane:PackageArchives`: `CacheBytes` (64 MiB by default, 0 turns
-  the cache off) and `MaximumArchiveBytes` (256 MiB by default).
+  again. Size `CacheBytes` to the archives a host serves, or verified archives are evicted and
+  re-read. Each archive being read holds up to `MaximumArchiveBytes` in memory until it is verified.
+  Configure the bounds under `Nuplane:PackageArchives`: `CacheBytes` (64 MiB by default, 0 turns the
+  cache off) and `MaximumArchiveBytes` (256 MiB by default).
 * Installs made by a Nuplane version without archive retention have no kept archive. Reinstall them,
   for example by removing the install root and state file.
 
