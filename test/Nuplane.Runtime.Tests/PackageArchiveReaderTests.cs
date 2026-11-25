@@ -92,10 +92,10 @@ public sealed class PackageArchiveReaderTests : IDisposable
     [InlineData("fifo")]
     [InlineData("link-to-fifo")]
     [InlineData("link-to-file")]
-    public async Task OpenAsync_OnUnixArchiveReplacedByFifoOrLink_RefusesWithoutBlocking(string replacement)
+    public async Task OpenAsync_ArchiveReplacedByFifoOrLink_RefusesWithoutBlocking(string replacement)
     {
-        // Named pipes are a Unix filesystem entry and links need a privilege on Windows.
-        if (OperatingSystem.IsWindows())
+        // Named pipes are a Unix filesystem entry; the link rows also run on Windows where links can be created.
+        if (OperatingSystem.IsWindows() && replacement != "link-to-file")
             return;
         var archive = CreateArchive(("content/a.txt", "a"u8.ToArray()));
         var package = Install("Acme.Addon", "1.0.0", archive);
@@ -114,7 +114,20 @@ public sealed class PackageArchiveReaderTests : IDisposable
         }
 
         if (replacement != "fifo")
-            File.CreateSymbolicLink(ArchivePath(package), target);
+        {
+            try
+            {
+                File.CreateSymbolicLink(ArchivePath(package), target);
+            }
+            catch (IOException) when (OperatingSystem.IsWindows())
+            {
+                return; // Creating links needs Developer Mode or an elevated process on Windows.
+            }
+            catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows())
+            {
+                return;
+            }
+        }
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
         var error = await Assert.ThrowsAsync<PackageArchiveException>(() =>
