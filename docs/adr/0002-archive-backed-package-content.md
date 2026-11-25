@@ -83,7 +83,7 @@ The reader is a separate service that `AddNuplane` registers in every compositio
 
 Verified archives stay in an in-memory LRU cache keyed by package, version, archive path and hash.
 
-- `Nuplane:PackageArchives:CacheBytes` bounds the cache: 64 MiB by default, and 0 turns it off.
+- `Nuplane:PackageArchives:CacheBytes` bounds the cache: 64 MiB by default, and 0 turns it off. An archive larger than the cache is read and verified on every open; raise `CacheBytes` for hosts that serve such archives often.
 - Nothing is cached on disk, so the cache adds no filesystem requirement.
 
 ## Consequences
@@ -98,6 +98,8 @@ Verified archives stay in an in-memory LRU cache keyed by package, version, arch
 
 - Each install stores its archive as well as its extracted files, so it uses roughly twice the disk space.
 - A verified archive is held in memory while it is cached or in use.
+- `ArchiveHashesByInstallPath` keeps one entry per install the state has activated and never removes entries, so it grows by one line for each version a host activates.
+- A refusal is remembered for five seconds, so a repaired archive is served again after that delay.
 - Installs made before this change have no kept archive and are refused with `ArchiveMissing` until they are reinstalled. Before GA, no backfill of archives is provided.
 - A package activated before this change gets its recorded hash at its next reconciliation, from its acquisition record (first activation rule).
 - The reader trusts the state file. A writer who can change the state file can also change which packages are active, so this matches the existing trust boundary.

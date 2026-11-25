@@ -87,22 +87,43 @@ public sealed class PackageArchiveReaderTests : IDisposable
         Assert.Equal("Acme.Addon", error.PackageId);
     }
 
-    [Fact]
-    public async Task OpenAsync_ArchiveReplacedByFifo_RefusesWithoutBlocking()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OpenAsync_ArchiveReplacedByFifoOrLinkToFifo_RefusesWithoutBlocking(bool throughLink)
     {
         // Named pipes are a Unix filesystem entry; Windows has no equivalent at a file path.
         if (OperatingSystem.IsWindows())
             return;
         var package = Install("Acme.Addon", "1.0.0", CreateArchive(("content/a.txt", "a"u8.ToArray())));
         File.Delete(ArchivePath(package));
-        using (var mkfifo = System.Diagnostics.Process.Start("mkfifo", ArchivePath(package)))
+        var fifo = throughLink ? Path.Combine(package.InstallPath, "pipe") : ArchivePath(package);
+        using (var mkfifo = System.Diagnostics.Process.Start("mkfifo", fifo))
             await mkfifo.WaitForExitAsync();
+        if (throughLink)
+            File.CreateSymbolicLink(ArchivePath(package), fifo);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
         var error = await Assert.ThrowsAsync<PackageArchiveException>(() =>
             CreateReader().OpenAsync(package, timeout.Token).AsTask());
 
         Assert.Equal(PackageArchiveFailureReason.ArchiveUnreadable, error.Reason);
+    }
+
+    [Fact]
+    public async Task OpenAsync_RecentlyRefusedArchive_RefusesAgainWithoutRereading()
+    {
+        var archive = CreateArchive(("content/a.txt", "a"u8.ToArray()));
+        var package = Install("Acme.Addon", "1.0.0", archive);
+        File.Delete(ArchivePath(package));
+        var reader = CreateReader();
+        var first = await Assert.ThrowsAsync<PackageArchiveException>(() => reader.OpenAsync(package).AsTask());
+        await File.WriteAllBytesAsync(ArchivePath(package), archive);
+
+        var second = await Assert.ThrowsAsync<PackageArchiveException>(() => reader.OpenAsync(package).AsTask());
+
+        Assert.Equal(PackageArchiveFailureReason.ArchiveMissing, first.Reason);
+        Assert.Same(first, second);
     }
 
     [Fact]

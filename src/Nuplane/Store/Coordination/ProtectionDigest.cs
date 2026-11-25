@@ -45,7 +45,7 @@ internal static partial class ProtectionDigest
             writer.Field(7, EncodeMap(normalized.ActiveGraphsByIdNormalized, EncodeActivationGraph));
             // Optional so state bodies without recorded archive hashes keep their existing digest.
             if (normalized.ArchiveHashesByInstallPath is { Count: > 0 } archiveHashes)
-                writer.Field(8, EncodeMap(archiveHashes, EncodeString));
+                writer.Field(8, EncodeExactKeyMap(archiveHashes, EncodeString));
         });
     }
 
@@ -393,6 +393,25 @@ internal static partial class ProtectionDigest
             using var encodedEntry = new CanonicalWriter();
             encodedEntry.String(entry.Key);
             encodedEntry.LengthPrefixed(valueEncoder(entry.Value));
+            writer.LengthPrefixed(encodedEntry.ToArray());
+        }
+
+        return writer.ToArray();
+    }
+
+    /// <summary>Encodes a map whose keys are exact strings, such as install paths, in ordinal key order.</summary>
+    private static byte[] EncodeExactKeyMap<TValue>(IReadOnlyDictionary<string, TValue> map, Func<TValue, byte[]> valueEncoder)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(valueEncoder);
+        var entries = map.OrderBy(static pair => pair.Key, StringComparer.Ordinal).ToArray();
+        using var writer = new CanonicalWriter();
+        writer.Count(entries.Length);
+        foreach (var (key, value) in entries)
+        {
+            using var encodedEntry = new CanonicalWriter();
+            encodedEntry.String(key);
+            encodedEntry.LengthPrefixed(valueEncoder(value));
             writer.LengthPrefixed(encodedEntry.ToArray());
         }
 

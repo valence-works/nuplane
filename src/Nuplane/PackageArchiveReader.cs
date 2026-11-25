@@ -18,6 +18,9 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
     private readonly Dictionary<CacheKey, LinkedListNode<CacheEntry>> _cache = new();
     private readonly LinkedList<CacheEntry> _recency = new();
     private readonly Dictionary<CacheKey, Task<PackageArchive>> _loading = new();
+    private readonly Dictionary<CacheKey, (PackageArchiveException Error, long ExpiresAt)> _refusals = new();
+    private static readonly TimeSpan RefusalRetention = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan OpenTimeout = TimeSpan.FromSeconds(30);
     private long _cachedBytes;
 
     public PackageArchiveReader(IOptions<PackageArchiveReaderOptions> options, ILogger<PackageArchiveReader> logger)
@@ -49,6 +52,14 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
                 _recency.Remove(node);
                 _recency.AddFirst(node);
                 return node.Value.Archive;
+            }
+
+            // A refused archive is not read, hashed or logged again for a few seconds.
+            if (_refusals.TryGetValue(key, out var refusal))
+            {
+                if (Environment.TickCount64 < refusal.ExpiresAt)
+                    throw refusal.Error;
+                _refusals.Remove(key);
             }
 
             // Concurrent opens of one archive share a single read and verification. The shared load does not
@@ -92,6 +103,12 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
             AddToCache(key, archive);
             return archive;
         }
+        catch (PackageArchiveException refusal)
+        {
+            lock (_sync)
+                _refusals[key] = (refusal, Environment.TickCount64 + (long)RefusalRetention.TotalMilliseconds);
+            throw;
+        }
         finally
         {
             lock (_sync)
@@ -109,14 +126,16 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
                 throw Refuse(package, PackageArchiveFailureReason.ArchiveUnreadable,
                     $"'{archivePath}' is a directory, not an archive file.");
             var info = new FileInfo(archivePath);
+            if (info.LinkTarget is not null)
+                throw Refuse(package, PackageArchiveFailureReason.ArchiveUnreadable,
+                    $"'{archivePath}' is a link; a kept archive is a regular file.");
             if (!info.Exists)
                 throw new FileNotFoundException("The kept package archive does not exist.", archivePath);
             if (info.Length == 0)
                 throw Refuse(package, PackageArchiveFailureReason.ArchiveUnreadable,
                     $"'{archivePath}' is empty or is not a regular file.");
 
-            await using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.Read,
-                FileShare.Read | FileShare.Delete, 81920, useAsync: true);
+            await using var stream = await OpenBoundedAsync(package, archivePath).ConfigureAwait(false);
             if (!stream.CanSeek || stream.Length == 0)
                 throw Refuse(package, PackageArchiveFailureReason.ArchiveUnreadable,
                     $"'{archivePath}' is empty or is not a regular file.");
@@ -171,6 +190,25 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
 
             _cache[key] = _recency.AddFirst(new CacheEntry(key, archive));
             _cachedBytes += archive.Length;
+        }
+    }
+
+    // The checks above cannot stop a file from being swapped for a FIFO just before it is opened, and opening a
+    // FIFO blocks until a writer appears. Bound the open so such a swap is refused instead of hanging the load.
+    private async Task<FileStream> OpenBoundedAsync(ActivePackage package, string archivePath)
+    {
+        var open = Task.Run(() => new FileStream(archivePath, FileMode.Open, FileAccess.Read,
+            FileShare.Read | FileShare.Delete, 81920, useAsync: true));
+        try
+        {
+            return await open.WaitAsync(OpenTimeout).ConfigureAwait(false);
+        }
+        catch (TimeoutException exception)
+        {
+            _ = open.ContinueWith(static task => task.Result.Dispose(), CancellationToken.None,
+                TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+            throw Refuse(package, PackageArchiveFailureReason.ArchiveUnreadable,
+                $"'{archivePath}' did not open within {OpenTimeout.TotalSeconds:0} seconds; it is not a regular file.", exception);
         }
     }
 

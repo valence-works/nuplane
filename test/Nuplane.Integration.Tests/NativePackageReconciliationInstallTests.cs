@@ -101,6 +101,15 @@ public sealed partial class OverlappingPackageGraphProtectionTests
                 Assert.Equal(expectedHash,
                     await PackageInstallStore.ReadContentHashAsync(installPath, borrow, CancellationToken.None));
 
+                // The protected state records the archive hash for the active install and per install path,
+                // and the archive reader serves the coordinated install from its kept archive.
+                var descriptor = state.ActivePackageDescriptorsByIdNormalized["Root.Second"];
+                Assert.Equal(expectedHash, descriptor.ArchiveHash);
+                Assert.Equal(expectedHash, state.ArchiveHashesByInstallPath![descriptor.InstallPath]);
+                var archive = await provider.GetRequiredService<IPackageArchiveReader>()
+                    .OpenAsync(descriptor.ToActivePackage());
+                Assert.NotNull(archive.GetEntry("lib/net10.0/Root.Second.dll"));
+
                 var activeRecord = Assert.Single(state.ActiveGraphsByIdNormalized.Values);
                 Assert.Equal(GraphActivationStatus.Active, activeRecord.Status);
                 Assert.Equal("3.0.0", activeRecord.NodeVersionsByPackageId!["Root.Second"]);

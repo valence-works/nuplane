@@ -8,7 +8,7 @@ namespace Nuplane.Runtime.Tests;
 public sealed class PackageArchiveReaderRegistrationTests
 {
     [Fact]
-    public void AddNuplane_Configuration_BindsArchiveReaderOptionsAndRegistersOneReader()
+    public void AddNuplane_Configuration_BindsArchiveReaderOptionsAndRegistersOneSingletonReader()
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -18,6 +18,7 @@ public sealed class PackageArchiveReaderRegistrationTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddNuplane(configuration.GetSection("Nuplane"), _ => { });
+        Assert.Single(services, static descriptor => descriptor.ServiceType == typeof(IPackageArchiveReader));
         using var provider = services.BuildServiceProvider();
 
         var options = provider.GetRequiredService<IOptions<PackageArchiveReaderOptions>>().Value;

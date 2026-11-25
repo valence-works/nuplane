@@ -591,7 +591,9 @@ internal static class PackageInstallStore
         var comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
-        return string.Equals(target, Path.GetFullPath(archivePath), comparison);
+        var kept = Path.GetFullPath(archivePath);
+        return string.Equals(target, kept, comparison) ||
+               target.StartsWith(kept + Path.DirectorySeparatorChar, comparison);
     }
 
     /// <summary>

@@ -78,14 +78,14 @@ public sealed record StoreStateRecord(
     /// <summary>Copies the recorded archive hashes, or returns <see langword="null"/> when none are recorded.</summary>
     internal Dictionary<string, string>? CopyArchiveHashes() =>
         ArchiveHashesByInstallPath is { Count: > 0 } hashes
-            ? new Dictionary<string, string>(hashes, StringComparer.OrdinalIgnoreCase)
+            ? new Dictionary<string, string>(hashes, StringComparer.Ordinal)
             : null;
 
     /// <summary>Records the archive hash of every active descriptor, keeping entries for deactivated installs.</summary>
     internal Dictionary<string, string>? NextArchiveHashes(IEnumerable<ActivePackageDescriptor> activeDescriptors)
     {
         ArgumentNullException.ThrowIfNull(activeDescriptors);
-        var next = CopyArchiveHashes() ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var next = CopyArchiveHashes() ?? new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var descriptor in activeDescriptors)
         {
             if (descriptor.ArchiveHash is { } hash)

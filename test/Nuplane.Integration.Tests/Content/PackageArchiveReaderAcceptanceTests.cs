@@ -157,6 +157,40 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
         Assert.Equal(PackageArchiveFailureReason.HashMismatch, error.Reason);
     }
 
+    [Fact]
+    public async Task OpenAsync_StateWithoutRecordedHashes_RefusesUntilTheNextReconciliationRecordsThem()
+    {
+        AssertExpectedFilesystem(_root);
+        var feed = WritePackage("1.0.0");
+        var statePath = Path.Combine(_root, "store-state.json");
+        string recordedHash;
+        using (var host = CreateHost(feed))
+        {
+            await ReconcileAsync(host);
+            recordedHash = (await GetActivePackageAsync(host)).ArchiveHash!;
+        }
+
+        // A state written by a Nuplane version without archive hashes.
+        var state = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(statePath))!.AsObject();
+        Assert.True(state.Remove("archiveHashesByInstallPath"));
+        foreach (var descriptor in state["activePackageDescriptorsById"]!.AsObject())
+            Assert.True(descriptor.Value!.AsObject().Remove("archiveHash"));
+        await File.WriteAllTextAsync(statePath, state.ToJsonString());
+
+        using var upgraded = CreateHost(Path.GetDirectoryName(feed)!, createFeedPackage: false);
+        var unrecorded = await GetActivePackageAsync(upgraded);
+        Assert.Null(unrecorded.ArchiveHash);
+        var error = await Assert.ThrowsAsync<PackageArchiveException>(() =>
+            upgraded.Services.GetRequiredService<IPackageArchiveReader>().OpenAsync(unrecorded).AsTask());
+        Assert.Equal(PackageArchiveFailureReason.HashNotRecorded, error.Reason);
+
+        await ReconcileAsync(upgraded);
+        var recorded = await GetActivePackageAsync(upgraded);
+        Assert.Equal(recordedHash, recorded.ArchiveHash);
+        var archive = await upgraded.Services.GetRequiredService<IPackageArchiveReader>().OpenAsync(recorded);
+        Assert.Equal(ModuleScript, Encoding.UTF8.GetString(archive.GetEntry("staticwebassets/module.js")!.ReadAllBytes()));
+    }
+
     private static string PackageArchiveHash(ActivePackage package) =>
         "sha512:" + Convert.ToBase64String(System.Security.Cryptography.SHA512.HashData(
             File.ReadAllBytes(PackageInstallStore.GetArchivePath(package.InstallPath))));

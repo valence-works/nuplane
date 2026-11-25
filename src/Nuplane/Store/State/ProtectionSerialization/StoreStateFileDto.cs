@@ -86,7 +86,7 @@ internal sealed class StoreStateFileDto
         {
             ArchiveHashesByInstallPath = ArchiveHashesByInstallPath is null
                 ? null
-                : new Dictionary<string, string>(ArchiveHashesByInstallPath, StringComparer.OrdinalIgnoreCase),
+                : new Dictionary<string, string>(ArchiveHashesByInstallPath, StringComparer.Ordinal),
             ProtectionRecord = ProtectionRecord,
             ProtectionBundle = ProtectionBundle
         };
