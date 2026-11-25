@@ -83,7 +83,7 @@ The reader is a separate service that `AddNuplane` registers in every compositio
 
 Verified archives stay in an in-memory LRU cache keyed by package, version, archive path and hash.
 
-- `Nuplane:PackageArchives:CacheBytes` bounds the cache: 64 MiB by default, and 0 turns it off. An archive larger than the cache is read and verified on every open, and a cache smaller than the archives a host serves evicts and re-reads them; size `CacheBytes` for the working set. At most four archives are read and verified at once, which bounds the bytes held by loads in progress.
+- `Nuplane:PackageArchives:CacheBytes` bounds the cache: 64 MiB by default, and 0 turns it off. An archive larger than the cache is read and verified on every open, and a cache smaller than the archives a host serves evicts and re-reads them; size `CacheBytes` for the working set. Loads of different archives run concurrently, and each holds up to `MaximumArchiveBytes` until it is verified; a limit on concurrent loads was tried and removed, because a stalled read would hold its slot and block healthy packages.
 - Nothing is cached on disk, so the cache adds no filesystem requirement.
 
 ## Consequences

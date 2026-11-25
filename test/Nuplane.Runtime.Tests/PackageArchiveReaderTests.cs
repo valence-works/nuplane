@@ -282,10 +282,12 @@ public sealed class PackageArchiveReaderTests : IDisposable
         var package = Install("Acme.Addon", "1.0.0", archive);
         var reader = CreateReader(new PackageArchiveReaderOptions { CacheBytes = archive.Length - 1 });
 
-        var first = await reader.OpenAsync(package);
-        var second = await reader.OpenAsync(package);
+        _ = await reader.OpenAsync(package);
+        await File.WriteAllBytesAsync(ArchivePath(package), CreateArchive(("content/a.txt", "tampered"u8.ToArray())));
 
-        Assert.NotSame(first, second);
+        var error = await Assert.ThrowsAsync<PackageArchiveException>(() => reader.OpenAsync(package).AsTask());
+
+        Assert.Equal(PackageArchiveFailureReason.HashMismatch, error.Reason);
     }
 
     [Fact]

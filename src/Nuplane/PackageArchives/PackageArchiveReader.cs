@@ -22,9 +22,6 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
     private readonly TimeSpan _refusalRetention;
     private readonly TimeSpan _openTimeout;
     private readonly Func<string, FileStream> _openArchive;
-    // Bounds the archive bytes held by loads in progress: at most this many archives are read at once.
-    private readonly SemaphoreSlim _loadSlots = new(MaximumConcurrentLoads, MaximumConcurrentLoads);
-    private const int MaximumConcurrentLoads = 4;
     private long _cachedBytes;
 
     public PackageArchiveReader(IOptions<PackageArchiveReaderOptions> options, ILogger<PackageArchiveReader> logger)
@@ -113,18 +110,8 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
     {
         try
         {
-            byte[] bytes;
-            string actualHash;
-            await _loadSlots.WaitAsync().ConfigureAwait(false);
-            try
-            {
-                bytes = await ReadArchiveAsync(package, archivePath).ConfigureAwait(false);
-                actualHash = "sha512:" + Convert.ToBase64String(SHA512.HashData(bytes));
-            }
-            finally
-            {
-                _loadSlots.Release();
-            }
+            var bytes = await ReadArchiveAsync(package, archivePath).ConfigureAwait(false);
+            var actualHash = "sha512:" + Convert.ToBase64String(SHA512.HashData(bytes));
 
             if (!string.Equals(actualHash, recordedHash, StringComparison.Ordinal))
                 throw Refuse(package, PackageArchiveFailureReason.HashMismatch,
@@ -245,8 +232,13 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
         }
         catch (TimeoutException exception)
         {
-            _ = open.ContinueWith(static task => task.Result.Dispose(), CancellationToken.None,
-                TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+            _ = open.ContinueWith(static task =>
+            {
+                if (task.IsCompletedSuccessfully)
+                    task.Result.Dispose();
+                else
+                    _ = task.Exception;
+            }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
             throw Refuse(package, PackageArchiveFailureReason.ArchiveUnreadable,
                 $"'{archivePath}' did not open within {_openTimeout.TotalSeconds:0} seconds; it is not a regular file.", exception);
         }

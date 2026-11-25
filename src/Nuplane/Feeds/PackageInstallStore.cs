@@ -581,11 +581,12 @@ internal static class PackageInstallStore
         string target;
         try
         {
-            target = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(stagingDirectory, entryName)));
+            target = Path.TrimEndingDirectorySeparator(Path.GetFullPath(
+                Path.Combine(stagingDirectory, SanitizeLikeExtraction(entryName))));
         }
         catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
         {
-            // A name the path API rejects (NUL, for example) may still be sanitized onto the kept archive.
+            // A name that still cannot be resolved cannot be proven to stay away from the kept archive.
             return true;
         }
 
@@ -594,6 +595,21 @@ internal static class PackageInstallStore
         var kept = Path.GetFullPath(archivePath);
         return string.Equals(target, kept, comparison) ||
                target.StartsWith(kept + Path.DirectorySeparatorChar, comparison);
+    }
+
+    // ZipArchive extraction replaces NUL (and on Windows the other characters a file name cannot hold) with '_'.
+    private static string SanitizeLikeExtraction(string entryName)
+    {
+        var characters = entryName.ToCharArray();
+        for (var index = 0; index < characters.Length; index++)
+        {
+            var character = characters[index];
+            if (character == '\0' ||
+                (OperatingSystem.IsWindows() && (character < 32 || "\"*:<>?|".Contains(character))))
+                characters[index] = '_';
+        }
+
+        return new string(characters);
     }
 
     /// <summary>
