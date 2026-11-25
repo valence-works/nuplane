@@ -112,6 +112,7 @@ public sealed class PackageArchiveReaderTests : IDisposable
             using var mkfifo = System.Diagnostics.Process.Start("mkfifo",
                 replacement == "fifo" ? ArchivePath(package) : target);
             await mkfifo.WaitForExitAsync();
+            Assert.Equal(0, mkfifo.ExitCode);
         }
 
         if (replacement != "fifo")

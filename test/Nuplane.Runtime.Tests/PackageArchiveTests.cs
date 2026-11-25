@@ -44,6 +44,7 @@ public sealed class PackageArchiveTests : IDisposable
             ("content/dup.txt", "first"u8.ToArray()),
             ("content/DUP.txt", "second"u8.ToArray()),
             ("content/dir/", []),
+            ("content/nul\0.txt", "x"u8.ToArray()),
             ("content/ok.txt", "ok"u8.ToArray()));
         var opened = await CreateReader().OpenAsync(PackageArchiveReaderTests.InstallAt(_root, "Acme.Addon", "1.0.0", archive));
 
