@@ -588,9 +588,8 @@ internal static class PackageInstallStore
             return false;
         }
 
-        var comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
+        // Case-insensitive on every OS: a Linux directory can be case-insensitive too (casefold, vfat).
+        const StringComparison comparison = StringComparison.OrdinalIgnoreCase;
         var kept = Path.GetFullPath(archivePath);
         return string.Equals(target, kept, comparison) ||
                target.StartsWith(kept + Path.DirectorySeparatorChar, comparison);
@@ -643,7 +642,7 @@ internal static class PackageInstallStore
     /// also neutralizes directory separators and relative segments so that a hostile package
     /// identifier, feed name, or version cannot escape the install root.
     /// </summary>
-    private static string SanitizePathSegment(string value)
+    internal static string SanitizePathSegment(string value)
     {
         var invalidCharacters = Path.GetInvalidFileNameChars();
         var buffer = value

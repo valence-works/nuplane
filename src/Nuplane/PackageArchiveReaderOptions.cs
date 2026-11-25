@@ -4,8 +4,7 @@ namespace Nuplane;
 /// <remarks>Configuration section: <c>Nuplane:PackageArchives</c>.</remarks>
 public sealed class PackageArchiveReaderOptions
 {
-    /// <summary>The configuration section name under <c>Nuplane</c>.</summary>
-    public const string SectionName = "PackageArchives";
+    internal const string SectionName = "PackageArchives";
 
     /// <summary>Gets or sets the largest archive the reader loads and verifies. Defaults to 256 MiB.</summary>
     public long MaximumArchiveBytes { get; set; } = 256L * 1024 * 1024;

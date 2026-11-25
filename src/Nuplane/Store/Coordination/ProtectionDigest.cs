@@ -399,7 +399,7 @@ internal static partial class ProtectionDigest
         return writer.ToArray();
     }
 
-    /// <summary>Encodes a map whose keys are exact strings, such as install paths, in ordinal key order.</summary>
+    /// <summary>Encodes a map whose keys are exact strings, such as package record keys, in ordinal key order.</summary>
     private static byte[] EncodeExactKeyMap<TValue>(IReadOnlyDictionary<string, TValue> map, Func<TValue, byte[]> valueEncoder)
     {
         ArgumentNullException.ThrowIfNull(map);

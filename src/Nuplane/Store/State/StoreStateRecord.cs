@@ -78,11 +78,15 @@ public sealed record StoreStateRecord(
         ActiveGraphsById ?? new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Builds the case-folded <c>feed/packageId/version</c> key of <see cref="ArchiveHashesByPackage"/>.</summary>
+    /// <remarks>
+    /// Each segment is sanitized the way the install directory segment is, so two names that share an install
+    /// directory (such as feeds <c>add/ons</c> and <c>add_ons</c>) also share a record.
+    /// </remarks>
     internal static string ArchiveHashKey(string? feedName, string packageId, string version) =>
         string.Join('/',
-            (string.IsNullOrWhiteSpace(feedName) ? string.Empty : feedName).ToLowerInvariant(),
-            packageId.ToLowerInvariant(),
-            version.ToLowerInvariant());
+            (string.IsNullOrWhiteSpace(feedName) ? string.Empty : Feeds.PackageInstallStore.SanitizePathSegment(feedName)).ToLowerInvariant(),
+            Feeds.PackageInstallStore.SanitizePathSegment(packageId).ToLowerInvariant(),
+            Feeds.PackageInstallStore.SanitizePathSegment(version).ToLowerInvariant());
 
     /// <summary>Copies the recorded archive hashes, or returns <see langword="null"/> when none are recorded.</summary>
     internal Dictionary<string, string>? CopyArchiveHashes() =>

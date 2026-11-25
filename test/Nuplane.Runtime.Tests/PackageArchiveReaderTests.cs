@@ -90,7 +90,7 @@ public sealed class PackageArchiveReaderTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task OpenAsync_ArchiveReplacedByFifoOrLinkToFifo_RefusesWithoutBlocking(bool throughLink)
+    public async Task OpenAsync_OnUnixArchiveReplacedByFifoOrLinkToFifo_RefusesWithoutBlocking(bool throughLink)
     {
         // Named pipes are a Unix filesystem entry; Windows has no equivalent at a file path.
         if (OperatingSystem.IsWindows())
@@ -123,7 +123,9 @@ public sealed class PackageArchiveReaderTests : IDisposable
         var second = await Assert.ThrowsAsync<PackageArchiveException>(() => reader.OpenAsync(package).AsTask());
 
         Assert.Equal(PackageArchiveFailureReason.ArchiveMissing, first.Reason);
-        Assert.Same(first, second);
+        Assert.Equal(first.Reason, second.Reason);
+        Assert.Equal(first.Message, second.Message);
+        Assert.NotSame(first, second);
     }
 
     [Fact]

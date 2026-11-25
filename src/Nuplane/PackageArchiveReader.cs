@@ -74,7 +74,7 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
             if (_refusals.TryGetValue(key, out var refusal))
             {
                 if (Environment.TickCount64 < refusal.ExpiresAt)
-                    throw refusal.Error;
+                    throw refusal.Error.Repeat();
                 _refusals.Remove(key);
             }
 
@@ -90,7 +90,9 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
             // take any caller's token, so one caller cancelling cannot fail the others.
             if (!_loading.TryGetValue(key, out load!))
             {
-                load = LoadAsync(package, archivePath, recordedHash, key);
+                // Task.Run starts the load on the thread pool, away from any caller SynchronizationContext.
+                // Its cleanup takes _sync, so it cannot remove the entry before it is added here.
+                load = Task.Run(() => LoadAsync(package, archivePath, recordedHash, key));
                 _loading[key] = load;
             }
         }
@@ -105,7 +107,6 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
     {
         try
         {
-            await Task.Yield();
             var bytes = await ReadArchiveAsync(package, archivePath).ConfigureAwait(false);
             var actualHash = "sha512:" + Convert.ToBase64String(SHA512.HashData(bytes));
             if (!string.Equals(actualHash, recordedHash, StringComparison.Ordinal))

@@ -231,6 +231,35 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
         Assert.Equal(PackageArchiveFailureReason.HashMismatch, error.Reason);
     }
 
+    [Fact]
+    public async Task OpenAsync_ForgedInstallSharedByARenamedFeed_RefusesWithTheRecordedHash()
+    {
+        AssertExpectedFilesystem(_root);
+        var feed = WritePackage("1.0.0");
+        ActivePackage original;
+        using (var host = CreateHost(feed, feedName: "add/ons"))
+        {
+            await ReconcileAsync(host);
+            original = await GetActivePackageAsync(host);
+        }
+
+        var forged = BuildPackage("1.0.0", "export const addon = 'forged';");
+        await File.WriteAllBytesAsync(PackageInstallStore.GetArchivePath(original.InstallPath), forged);
+        await File.WriteAllTextAsync(Path.Combine(original.InstallPath, PackageInstallStore.ContentHashFileName),
+            "sha512:" + Convert.ToBase64String(System.Security.Cryptography.SHA512.HashData(forged)));
+
+        // "add_ons" sanitizes to the same install directory segment as "add/ons".
+        using var renamed = CreateHost(Path.GetDirectoryName(feed)!, createFeedPackage: false, feedName: "add_ons");
+        await ReconcileAsync(renamed);
+        var reached = await GetActivePackageAsync(renamed);
+
+        Assert.Equal(original.InstallPath, reached.InstallPath);
+        Assert.Equal(original.ArchiveHash, reached.ArchiveHash);
+        var error = await Assert.ThrowsAsync<PackageArchiveException>(() =>
+            renamed.Services.GetRequiredService<IPackageArchiveReader>().OpenAsync(reached).AsTask());
+        Assert.Equal(PackageArchiveFailureReason.HashMismatch, error.Reason);
+    }
+
     private static string PackageArchiveHash(ActivePackage package) =>
         "sha512:" + Convert.ToBase64String(System.Security.Cryptography.SHA512.HashData(
             File.ReadAllBytes(PackageInstallStore.GetArchivePath(package.InstallPath))));
@@ -244,7 +273,11 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
         return path;
     }
 
-    private IHost CreateHost(string feedPackageOrDirectory, bool createFeedPackage = true, string? packageInstallRoot = null)
+    private IHost CreateHost(
+        string feedPackageOrDirectory,
+        bool createFeedPackage = true,
+        string? packageInstallRoot = null,
+        string feedName = "addons")
     {
         var feedDirectory = createFeedPackage ? Path.GetDirectoryName(feedPackageOrDirectory)! : feedPackageOrDirectory;
         var configuration = new Dictionary<string, string?>
@@ -260,7 +293,7 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
             .ConfigureAppConfiguration((_, builder) => builder.AddInMemoryCollection(configuration))
             .ConfigureLogging(logging => logging.ClearProviders().SetMinimumLevel(LogLevel.Warning))
             .ConfigureServices((context, services) => services.AddNuplane(context.Configuration.GetSection("Nuplane"),
-                nuplane => nuplane.AddDirectoryFeed("addons", feedDirectory, feed =>
+                nuplane => nuplane.AddDirectoryFeed(feedName, feedDirectory, feed =>
                 {
                     feed.Include(PackageId);
                     feed.Watch = false;

@@ -17,6 +17,7 @@ public sealed class PackageArchiveException : Exception
         Exception? innerException = null)
         : base($"Package '{packageId}' {version} archive refused ({reason}): {detail}", innerException)
     {
+        Detail = detail;
         PackageId = packageId;
         Version = version;
         Reason = reason;
@@ -30,4 +31,9 @@ public sealed class PackageArchiveException : Exception
 
     /// <summary>Gets why the archive was refused.</summary>
     public PackageArchiveFailureReason Reason { get; }
+
+    internal string Detail { get; }
+
+    /// <summary>Creates an equal refusal with its own stack trace, for repeating a remembered refusal.</summary>
+    internal PackageArchiveException Repeat() => new(PackageId, Version, Reason, Detail, InnerException);
 }

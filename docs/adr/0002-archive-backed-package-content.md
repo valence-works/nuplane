@@ -29,7 +29,7 @@ The owner decided on 2026-11-25 that Nuplane serves admitted content from the ac
 Both installers write the exact acquired archive to `<install>/.nuplane-archive` before the completion marker:
 
 - The ordinary installer copies the source into staging, then hashes and extracts that copy.
-- The coordinated installer copies its staged archive into the prepared directory and checks that the copy has the same sha512.
+- The coordinated installer copies its staged archive into the prepared directory. It hashes the bytes as it writes them and refuses unless they have the staged archive's sha512, then checks the written file's length and link count.
 
 The archive is published with the install and shares its protection and pruning lifetime. Pruning deletes an install directory as one unit, through the full manifest bound for that candidate.
 
@@ -45,7 +45,7 @@ Rejected: reading the archive from the feed while it still matches. Remote downl
 The state file records each install's archive hash in two places:
 
 - `ActivePackageDescriptor.ArchiveHash`, projected as `ActivePackage.ArchiveHash`, for the active install of each package;
-- `StoreStateRecord.ArchiveHashesByPackage`, for every package version the state has activated, active or not. The key is `feed/packageId/version`, case-folded. It names the artifact, so no spelling of the install root, through case or a link, can miss the record.
+- `StoreStateRecord.ArchiveHashesByPackage`, for every package version the state has activated, active or not. The key is `feed/packageId/version`, with each segment sanitized the way the install directory segment is, and case-folded. It names the artifact, so no spelling of the install root (through case or a link), and no feed name that shares an install directory, can miss the record.
 
 The rules:
 
@@ -107,7 +107,7 @@ Verified archives stay in an in-memory LRU cache keyed by package, version, arch
 ## Validation
 
 - Unit tests cover verification, each refusal reason, path normalization and the cache.
-- `AddNuplane` acceptance tests with a directory feed and no enrolled store cover serving content and refusing modified, replaced and missing archives. Replacing the archive and its hash file together is still refused, including after a restart and reconciliation, after a rollback to a forged retained install, and when the install root is reached through another spelling.
+- `AddNuplane` acceptance tests with a directory feed and no enrolled store cover serving content and refusing modified, replaced and missing archives. Replacing the archive and its hash file together is still refused, including after a restart and reconciliation, after a rollback to a forged retained install, when the install root is reached through another spelling, and when a renamed feed shares the install directory.
 - A coordinated-install test checks that the archive is kept and served by the reader, and that the reserved name is refused during entry planning.
 - Registration tests resolve the reader in ordinary and coordinated compositions and bind `Nuplane:PackageArchives`.
 - A pruning test checks that protected installs keep their archive bytes and that pruned installs lose theirs with the directory.

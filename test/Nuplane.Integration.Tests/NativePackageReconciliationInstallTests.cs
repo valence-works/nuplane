@@ -101,7 +101,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
                 Assert.Equal(expectedHash,
                     await PackageInstallStore.ReadContentHashAsync(installPath, borrow, CancellationToken.None));
 
-                // The protected state records the archive hash for the active install and per install path,
+                // The protected state records the archive hash for the active install and per package,
                 // and the archive reader serves the coordinated install from its kept archive.
                 var descriptor = state.ActivePackageDescriptorsByIdNormalized["Root.Second"];
                 Assert.Equal(expectedHash, descriptor.ArchiveHash);
