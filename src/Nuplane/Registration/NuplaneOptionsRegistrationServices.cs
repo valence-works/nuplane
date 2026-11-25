@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Nuplane.Capabilities;
 using Nuplane.Feeds.Configuration;
+using Nuplane.PackageArchives;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Convergence;
 using Nuplane.Reconciliation.LockFile;

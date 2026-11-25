@@ -1,4 +1,4 @@
-namespace Nuplane;
+namespace Nuplane.PackageArchives;
 
 /// <summary>Reports that a package archive was refused, naming the package and the reason.</summary>
 public sealed class PackageArchiveException : Exception

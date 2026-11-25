@@ -1,4 +1,4 @@
-namespace Nuplane;
+namespace Nuplane.PackageArchives;
 
 /// <summary>Bounds for <see cref="IPackageArchiveReader"/>.</summary>
 /// <remarks>Configuration section: <c>Nuplane:PackageArchives</c>.</remarks>

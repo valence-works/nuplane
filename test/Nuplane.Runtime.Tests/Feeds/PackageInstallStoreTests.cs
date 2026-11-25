@@ -106,6 +106,7 @@ public sealed class PackageInstallStoreTests
     [InlineData("./.nuplane-archive")]
     [InlineData("lib/../.nuplane-archive")]
     [InlineData(".nuplane-archive/nested.txt")]
+    [InlineData(".NUPLANE-ARCHIVE")]
     public async Task InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(string entryName)
     {
         using var packages = new TempDirectory();

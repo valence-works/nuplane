@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO.Compression;
 
-namespace Nuplane;
+namespace Nuplane.PackageArchives;
 
 /// <summary>
 /// The verified <c>.nupkg</c> of one active package, held in memory. Its bytes matched the package's recorded

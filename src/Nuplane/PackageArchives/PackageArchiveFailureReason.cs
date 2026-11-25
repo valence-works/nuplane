@@ -1,4 +1,4 @@
-namespace Nuplane;
+namespace Nuplane.PackageArchives;
 
 /// <summary>Why <see cref="IPackageArchiveReader"/> refused a package archive.</summary>
 public enum PackageArchiveFailureReason

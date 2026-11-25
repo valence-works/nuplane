@@ -165,7 +165,8 @@ public sealed class NuplaneStoreSnapshotAccess
         state.ActiveVersionById.Count == 0 && state.LastKnownGoodById.Count == 0 &&
         state.LastFailureById.Count == 0 && state.LastSuccessfulSourceSnapshots.Count == 0 &&
         state.ActivePackageDescriptorsByIdNormalized.Count == 0 && state.ActiveGraphsByIdNormalized.Count == 0 &&
-        state.ProtectionRecord is null && state.ProtectionBundle is null;
+        state.ProtectionRecord is null && state.ProtectionBundle is null &&
+        state.ArchiveHashesByPackage is null or { Count: 0 };
 
     private static bool SameProtectionRevision(StoreStateRecord left, StoreStateRecord right)
     {

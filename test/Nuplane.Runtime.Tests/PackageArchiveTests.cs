@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Nuplane.PackageArchives;
 
 namespace Nuplane.Runtime.Tests;
 
@@ -53,6 +54,20 @@ public sealed class PackageArchiveTests : IDisposable
         Assert.Null(opened.GetEntry("/content/ok.txt"));
         Assert.Null(opened.GetEntry("content/ok.txt\0"));
         Assert.Null(opened.GetEntry(""));
+    }
+
+    [Fact]
+    public async Task GetEntry_BackslashInEntryName_IsReadAsASeparator()
+    {
+        var archive = PackageArchiveReaderTests.CreateArchive(
+            ("content\\nested\\a.txt", "a"u8.ToArray()),
+            ("content/dup.txt", "first"u8.ToArray()),
+            ("content\\dup.txt", "second"u8.ToArray()));
+        var opened = await CreateReader().OpenAsync(PackageArchiveReaderTests.InstallAt(_root, "Acme.Addon", "1.0.0", archive));
+
+        Assert.Equal("a"u8.ToArray(), opened.GetEntry("content/nested/a.txt")!.ReadAllBytes());
+        Assert.Equal("content/nested/a.txt", Assert.Single(opened.Entries).Path);
+        Assert.Null(opened.GetEntry("content/dup.txt"));
     }
 
     private static PackageArchiveReader CreateReader() =>

@@ -44,8 +44,9 @@ public sealed record StoreStateRecord(
     /// </summary>
     /// <remarks>
     /// An entry is written the first time a package version becomes active and is kept after it is deactivated,
-    /// so a later rollback to that version is verified against the same record instead of the hash file beside
-    /// its archive. The key names the artifact, so a differently spelled install root cannot bypass it.
+    /// so a later rollback to that version is verified against the same record. The hash file beside the archive is
+    /// read only for a version the state has never recorded. The key names the artifact, so a differently spelled
+    /// install root cannot bypass it.
     /// A null value is legacy absence.
     /// </remarks>
     [JsonPropertyName("archiveHashesByPackage")]
@@ -79,14 +80,23 @@ public sealed record StoreStateRecord(
 
     /// <summary>Builds the case-folded <c>feed/packageId/version</c> key of <see cref="ArchiveHashesByPackage"/>.</summary>
     /// <remarks>
-    /// Each segment is sanitized the way the install directory segment is, so two names that share an install
-    /// directory (such as feeds <c>add/ons</c> and <c>add_ons</c>) also share a record.
+    /// Each segment is sanitized the way the install directory segment is, then folded the way common
+    /// filesystems fold names: Unicode NFC, invariant case in both directions, and trailing dots and spaces
+    /// removed (Windows). Two names that share an install directory (such as feeds <c>add/ons</c> and
+    /// <c>add_ons</c>, or <c>addons</c> and <c>addonſ</c> on a case-insensitive volume) therefore share a record.
     /// </remarks>
     internal static string ArchiveHashKey(string? feedName, string packageId, string version) =>
         string.Join('/',
-            (string.IsNullOrWhiteSpace(feedName) ? string.Empty : Feeds.PackageInstallStore.SanitizePathSegment(feedName)).ToLowerInvariant(),
-            Feeds.PackageInstallStore.SanitizePathSegment(packageId).ToLowerInvariant(),
-            Feeds.PackageInstallStore.SanitizePathSegment(version).ToLowerInvariant());
+            string.IsNullOrWhiteSpace(feedName) ? string.Empty : FoldKeySegment(feedName),
+            FoldKeySegment(packageId),
+            FoldKeySegment(version));
+
+    private static string FoldKeySegment(string segment) =>
+        Feeds.PackageInstallStore.SanitizePathSegment(segment)
+            .Normalize(System.Text.NormalizationForm.FormC)
+            .ToUpperInvariant()
+            .ToLowerInvariant()
+            .TrimEnd('.', ' ');
 
     /// <summary>Copies the recorded archive hashes, or returns <see langword="null"/> when none are recorded.</summary>
     internal Dictionary<string, string>? CopyArchiveHashes() =>

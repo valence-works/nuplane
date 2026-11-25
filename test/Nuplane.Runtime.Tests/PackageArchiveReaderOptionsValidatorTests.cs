@@ -1,3 +1,5 @@
+using Nuplane.PackageArchives;
+
 namespace Nuplane.Runtime.Tests;
 
 public sealed class PackageArchiveReaderOptionsValidatorTests

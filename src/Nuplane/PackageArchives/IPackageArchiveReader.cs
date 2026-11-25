@@ -1,6 +1,6 @@
 using Nuplane.Abstractions;
 
-namespace Nuplane;
+namespace Nuplane.PackageArchives;
 
 /// <summary>
 /// Reads an active package's files from the exact <c>.nupkg</c> Nuplane acquired for it, after checking the

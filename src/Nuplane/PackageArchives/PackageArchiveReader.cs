@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Feeds;
 
-namespace Nuplane;
+namespace Nuplane.PackageArchives;
 
 /// <summary>
 /// Default <see cref="IPackageArchiveReader"/>: reads the archive kept in the install directory with ordinary
@@ -149,7 +149,7 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
             // refuse anything else before opening it, and again from the opened handle.
             if (Directory.Exists(archivePath))
                 throw Refuse(package, PackageArchiveFailureReason.ArchiveUnreadable,
-                    $"'{archivePath}' is a directory, not an archive file.");
+                    $"'{archivePath}' is a directory; a kept archive is a regular file.");
             var info = new FileInfo(archivePath);
             if (info.LinkTarget is not null)
                 throw Refuse(package, PackageArchiveFailureReason.ArchiveUnreadable,

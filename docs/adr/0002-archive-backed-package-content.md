@@ -45,7 +45,7 @@ Rejected: reading the archive from the feed while it still matches. Remote downl
 The state file records each install's archive hash in two places:
 
 - `ActivePackageDescriptor.ArchiveHash`, projected as `ActivePackage.ArchiveHash`, for the active install of each package;
-- `StoreStateRecord.ArchiveHashesByPackage`, for every package version the state has activated, active or not. The key is `feed/packageId/version`, with each segment sanitized the way the install directory segment is, and case-folded. It names the artifact, so no spelling of the install root (through case or a link), and no feed name that shares an install directory, can miss the record.
+- `StoreStateRecord.ArchiveHashesByPackage`, for every package version the state has activated, active or not. The key is `feed/packageId/version`. Each segment is sanitized the way the install directory segment is, then folded the way common filesystems fold names: Unicode NFC, invariant case in both directions, and trailing dots and spaces removed. It names the artifact, so no spelling of the install root (through case or a link), and no feed name that shares an install directory, can miss the record.
 
 The rules:
 
@@ -99,6 +99,8 @@ Verified archives stay in an in-memory LRU cache keyed by package, version, arch
 - Each install stores its archive as well as its extracted files, so it uses roughly twice the disk space.
 - A verified archive is held in memory while it is cached or in use.
 - `ArchiveHashesByPackage` keeps one entry per package version the state has activated and never removes entries, so it grows by one line for each version a host activates.
+- The key is derived from names, not read from the filesystem. A custom `IRemotePackageAcquirer` must place installs in the standard `<root>/<feed>/<id>/<version>` layout (`PackageInstallStore.GetInstallDirectory`). An acquirer that shares one directory across feeds could map a renamed or fallback feed onto a forged install under a key with no record.
+- Only the open is bounded. A read that stalls on a hung network or FUSE mount holds the shared load until it completes. Each caller's wait is bounded only by its own cancellation token.
 - A refusal is remembered for five seconds, so a repaired archive is served again after that delay.
 - Installs made before this change have no kept archive and are refused with `ArchiveMissing` until they are reinstalled. Before GA, no backfill of archives is provided.
 - A package activated before this change gets its recorded hash at its next reconciliation, from its acquisition record (first activation rule).

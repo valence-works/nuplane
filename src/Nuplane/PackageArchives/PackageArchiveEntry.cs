@@ -1,4 +1,4 @@
-namespace Nuplane;
+namespace Nuplane.PackageArchives;
 
 /// <summary>One file entry of a <see cref="PackageArchive"/>.</summary>
 public sealed class PackageArchiveEntry

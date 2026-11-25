@@ -582,8 +582,8 @@ and never removes an active, last-known-good or in-use install.
 
 ### Reading package content
 
-`IPackageArchiveReader` serves an active package's files from its kept archive. `AddNuplane` registers it
-for every composition, with or without an enrolled coordinated store:
+`IPackageArchiveReader` (namespace `Nuplane.PackageArchives`) serves an active package's files from its
+kept archive. `AddNuplane` registers it for every composition, with or without an enrolled coordinated store:
 
 ```csharp
 var snapshot = await catalog.GetActivePackagesAsync(cancellationToken);   // IActivePackageCatalog

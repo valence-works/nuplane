@@ -37,7 +37,7 @@ internal static class PackageInstallStore
 
     /// <summary>
     /// The exact acquired <c>.nupkg</c>, kept inside the install directory so it shares the install's
-    /// publication, protection and pruning lifetime. <see cref="IPackageArchiveReader"/> serves content from it.
+    /// publication, protection and pruning lifetime. <see cref="PackageArchives.IPackageArchiveReader"/> serves content from it.
     /// </summary>
     public const string ArchiveFileName = ".nuplane-archive";
 

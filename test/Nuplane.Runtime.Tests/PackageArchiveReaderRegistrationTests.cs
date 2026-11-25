@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nuplane.Builder;
+using Nuplane.PackageArchives;
 
 namespace Nuplane.Runtime.Tests;
 

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Feeds;
+using Nuplane.PackageArchives;
 
 namespace Nuplane.Runtime.Tests;
 
@@ -88,20 +89,32 @@ public sealed class PackageArchiveReaderTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task OpenAsync_OnUnixArchiveReplacedByFifoOrLinkToFifo_RefusesWithoutBlocking(bool throughLink)
+    [InlineData("fifo")]
+    [InlineData("link-to-fifo")]
+    [InlineData("link-to-file")]
+    public async Task OpenAsync_OnUnixArchiveReplacedByFifoOrLink_RefusesWithoutBlocking(string replacement)
     {
-        // Named pipes are a Unix filesystem entry; Windows has no equivalent at a file path.
+        // Named pipes are a Unix filesystem entry and links need a privilege on Windows.
         if (OperatingSystem.IsWindows())
             return;
-        var package = Install("Acme.Addon", "1.0.0", CreateArchive(("content/a.txt", "a"u8.ToArray())));
+        var archive = CreateArchive(("content/a.txt", "a"u8.ToArray()));
+        var package = Install("Acme.Addon", "1.0.0", archive);
         File.Delete(ArchivePath(package));
-        var fifo = throughLink ? Path.Combine(package.InstallPath, "pipe") : ArchivePath(package);
-        using (var mkfifo = System.Diagnostics.Process.Start("mkfifo", fifo))
+        var target = Path.Combine(package.InstallPath, "target");
+        if (replacement == "link-to-file")
+        {
+            // Even a link to the genuine archive bytes is refused: a kept archive is a regular file.
+            await File.WriteAllBytesAsync(target, archive);
+        }
+        else
+        {
+            using var mkfifo = System.Diagnostics.Process.Start("mkfifo",
+                replacement == "fifo" ? ArchivePath(package) : target);
             await mkfifo.WaitForExitAsync();
-        if (throughLink)
-            File.CreateSymbolicLink(ArchivePath(package), fifo);
+        }
+
+        if (replacement != "fifo")
+            File.CreateSymbolicLink(ArchivePath(package), target);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
         var error = await Assert.ThrowsAsync<PackageArchiveException>(() =>

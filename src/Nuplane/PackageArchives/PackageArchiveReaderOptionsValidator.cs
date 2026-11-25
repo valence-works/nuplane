@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 
-namespace Nuplane;
+namespace Nuplane.PackageArchives;
 
 internal sealed class PackageArchiveReaderOptionsValidator : IValidateOptions<PackageArchiveReaderOptions>
 {

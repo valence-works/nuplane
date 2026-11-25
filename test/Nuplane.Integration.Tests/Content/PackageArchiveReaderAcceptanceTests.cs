@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nuplane.Abstractions;
 using Nuplane.Feeds;
+using Nuplane.PackageArchives;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Sources.Directory.Builder;
@@ -258,6 +259,47 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
         var error = await Assert.ThrowsAsync<PackageArchiveException>(() =>
             renamed.Services.GetRequiredService<IPackageArchiveReader>().OpenAsync(reached).AsTask());
         Assert.Equal(PackageArchiveFailureReason.HashMismatch, error.Reason);
+    }
+
+    [Theory]
+    [InlineData("addons", "addon\u017F")]          // ſ folds to s on case-insensitive volumes
+    [InlineData("caf\u00E9", "cafe\u0301")]       // NFC and NFD spellings of café
+    [InlineData("addons", "addons.")]               // Windows drops a trailing dot
+    [InlineData("Addons", "addons")]
+    public async Task OpenAsync_FeedRenamedToAnEquivalentSpelling_NeverServesAForgedArchive(string before, string after)
+    {
+        AssertExpectedFilesystem(_root);
+        var feed = WritePackage("1.0.0");
+        ActivePackage original;
+        using (var host = CreateHost(feed, feedName: before))
+        {
+            await ReconcileAsync(host);
+            original = await GetActivePackageAsync(host);
+        }
+
+        var forged = BuildPackage("1.0.0", "export const addon = 'forged';");
+        await File.WriteAllBytesAsync(PackageInstallStore.GetArchivePath(original.InstallPath), forged);
+        await File.WriteAllTextAsync(Path.Combine(original.InstallPath, PackageInstallStore.ContentHashFileName),
+            "sha512:" + Convert.ToBase64String(System.Security.Cryptography.SHA512.HashData(forged)));
+
+        using var renamed = CreateHost(Path.GetDirectoryName(feed)!, createFeedPackage: false, feedName: after);
+        await ReconcileAsync(renamed);
+        var reached = await GetActivePackageAsync(renamed);
+        var reader = renamed.Services.GetRequiredService<IPackageArchiveReader>();
+
+        // Whether the filesystem maps the new name onto the forged install or to a fresh extraction, the
+        // reader serves the genuine content or refuses; it never serves the forged archive.
+        try
+        {
+            var archive = await reader.OpenAsync(reached);
+            Assert.Equal(ModuleScript, Encoding.UTF8.GetString(archive.GetEntry("staticwebassets/module.js")!.ReadAllBytes()));
+            Assert.NotEqual(original.InstallPath, reached.InstallPath, StringComparer.Ordinal);
+        }
+        catch (PackageArchiveException error)
+        {
+            Assert.Equal(PackageArchiveFailureReason.HashMismatch, error.Reason);
+            Assert.Equal(original.ArchiveHash, reached.ArchiveHash);
+        }
     }
 
     private static string PackageArchiveHash(ActivePackage package) =>

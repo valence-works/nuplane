@@ -2,6 +2,7 @@
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveBytes_KeepsTheExactArchiveInsideTheInstall",
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveBytes_PersistsCanonicalSha512BeforePublishing",
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(entryName: \"./.nuplane-archive\")",
+  "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(entryName: \".NUPLANE-ARCHIVE\")",
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(entryName: \".nuplane-archive\")",
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(entryName: \".nuplane-archive/nested.txt\")",
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(entryName: \"lib/../.nuplane-archive\")",
@@ -24,8 +25,9 @@
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_HashMatchesButNotAZip_RefusesWithInvalidArchive",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_MissingArchive_RefusesWithArchiveMissing",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_ModifiedArchive_RefusesWithHashMismatchNamingThePackage",
-  "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_OnUnixArchiveReplacedByFifoOrLinkToFifo_RefusesWithoutBlocking(throughLink: False)",
-  "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_OnUnixArchiveReplacedByFifoOrLinkToFifo_RefusesWithoutBlocking(throughLink: True)",
+  "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_OnUnixArchiveReplacedByFifoOrLink_RefusesWithoutBlocking(replacement: \"fifo\")",
+  "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_OnUnixArchiveReplacedByFifoOrLink_RefusesWithoutBlocking(replacement: \"link-to-fifo\")",
+  "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_OnUnixArchiveReplacedByFifoOrLink_RefusesWithoutBlocking(replacement: \"link-to-file\")",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_RecentlyRefusedArchive_RefusesAgainWithoutRereading",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_RefusalAfterItsRetention_ReadsTheRepairedArchive",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_ReplacedArchive_RefusesWithHashMismatch",
@@ -33,6 +35,7 @@
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_WithoutCanonicalRecordedHash_RefusesWithHashNotRecorded(recordedHash: \"sha256:AAAA\")",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_WithoutCanonicalRecordedHash_RefusesWithHashNotRecorded(recordedHash: \"sha512:not-base64\")",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_WithoutCanonicalRecordedHash_RefusesWithHashNotRecorded(recordedHash: null)",
+  "Nuplane.Runtime.Tests.PackageArchiveTests.GetEntry_BackslashInEntryName_IsReadAsASeparator",
   "Nuplane.Runtime.Tests.PackageArchiveTests.GetEntry_EscapingInvalidOrAmbiguousNames_AreNotExposed",
   "Nuplane.Runtime.Tests.PackageArchiveTests.ReadAllBytes_ConcurrentReads_ReturnEachEntryExactly"
 ]
