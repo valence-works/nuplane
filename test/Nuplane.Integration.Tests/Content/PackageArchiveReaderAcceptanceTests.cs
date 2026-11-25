@@ -342,6 +342,49 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
         Assert.Equal(PackageArchiveFailureReason.HashMismatch, error.Reason);
     }
 
+    [Fact]
+    public async Task OpenAsync_RollbackThroughAnotherFeedOverAForgedInstall_RefusesWithTheRecordedHash()
+    {
+        AssertExpectedFilesystem(_root);
+        WritePackage("1.0.0");
+        var feedDirectory = Path.Combine(_root, "feed");
+        ActivePackage original;
+        using (var host = CreateHost(feedDirectory, createFeedPackage: false))
+        {
+            await ReconcileAsync(host);
+            original = await GetActivePackageAsync(host);
+            var newer = WritePackage("2.0.0");
+            await ReconcileAsync(host);
+            Assert.Equal("2.0.0", (await GetActivePackageAsync(host)).Version);
+            File.Delete(newer);
+        }
+
+        // 1.0.0 is recorded but no longer active. A forged copy waits where a second feed installs it.
+        var mirrorInstall = PackageInstallStore.GetInstallDirectory(Path.Combine(_root, "packages"), "mirror", PackageId, "1.0.0");
+        foreach (var file in Directory.EnumerateFiles(original.InstallPath, "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(mirrorInstall, Path.GetRelativePath(original.InstallPath, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+
+        var forged = BuildPackage("1.0.0", "export const addon = 'forged';");
+        await File.WriteAllBytesAsync(PackageInstallStore.GetArchivePath(mirrorInstall), forged);
+        await File.WriteAllTextAsync(Path.Combine(mirrorInstall, PackageInstallStore.ContentHashFileName),
+            "sha512:" + Convert.ToBase64String(System.Security.Cryptography.SHA512.HashData(forged)));
+
+        using var mirror = CreateHost(feedDirectory, createFeedPackage: false, feedName: "mirror");
+        await ReconcileAsync(mirror);
+        var rolledBack = await GetActivePackageAsync(mirror);
+
+        Assert.Equal("1.0.0", rolledBack.Version);
+        Assert.Equal(Path.GetFullPath(mirrorInstall), Path.GetFullPath(rolledBack.InstallPath));
+        Assert.Equal(original.ArchiveHash, rolledBack.ArchiveHash);
+        var error = await Assert.ThrowsAsync<PackageArchiveException>(() =>
+            mirror.Services.GetRequiredService<IPackageArchiveReader>().OpenAsync(rolledBack).AsTask());
+        Assert.Equal(PackageArchiveFailureReason.HashMismatch, error.Reason);
+    }
+
     private static string PackageArchiveHash(ActivePackage package) =>
         "sha512:" + Convert.ToBase64String(System.Security.Cryptography.SHA512.HashData(
             File.ReadAllBytes(PackageInstallStore.GetArchivePath(package.InstallPath))));

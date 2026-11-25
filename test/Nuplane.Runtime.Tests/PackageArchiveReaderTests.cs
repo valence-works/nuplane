@@ -88,15 +88,16 @@ public sealed class PackageArchiveReaderTests : IDisposable
         Assert.Equal("Acme.Addon", error.PackageId);
     }
 
+    // Named pipes are a Unix filesystem entry, so Windows runs only the link-to-file row
+    // (build/test-cases/package-archive-reader-windows.json).
+    public static TheoryData<string> NonRegularReplacements => OperatingSystem.IsWindows()
+        ? new TheoryData<string> { "link-to-file" }
+        : new TheoryData<string> { "fifo", "link-to-fifo", "link-to-file" };
+
     [Theory]
-    [InlineData("fifo")]
-    [InlineData("link-to-fifo")]
-    [InlineData("link-to-file")]
+    [MemberData(nameof(NonRegularReplacements))]
     public async Task OpenAsync_ArchiveReplacedByFifoOrLink_RefusesWithoutBlocking(string replacement)
     {
-        // Named pipes are a Unix filesystem entry; the link rows also run on Windows where links can be created.
-        if (OperatingSystem.IsWindows() && replacement != "link-to-file")
-            return;
         var archive = CreateArchive(("content/a.txt", "a"u8.ToArray()));
         var package = Install("Acme.Addon", "1.0.0", archive);
         File.Delete(ArchivePath(package));
@@ -269,6 +270,19 @@ public sealed class PackageArchiveReaderTests : IDisposable
         var error = await Assert.ThrowsAsync<PackageArchiveException>(() => reader.OpenAsync(package).AsTask());
 
         Assert.Equal(PackageArchiveFailureReason.HashMismatch, error.Reason);
+    }
+
+    [Fact]
+    public async Task OpenAsync_ArchiveLargerThanTheCache_IsVerifiedOnEveryOpen()
+    {
+        var archive = CreateArchive(("content/a.txt", RandomNumberGenerator.GetBytes(4096)));
+        var package = Install("Acme.Addon", "1.0.0", archive);
+        var reader = CreateReader(new PackageArchiveReaderOptions { CacheBytes = archive.Length - 1 });
+
+        var first = await reader.OpenAsync(package);
+        var second = await reader.OpenAsync(package);
+
+        Assert.NotSame(first, second);
     }
 
     [Fact]

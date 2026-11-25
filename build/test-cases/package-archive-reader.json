@@ -15,6 +15,7 @@
   "Nuplane.Runtime.Tests.PackageArchiveReaderRegistrationTests.AddNuplane_Configuration_BindsArchiveReaderOptionsAndRegistersOneSingletonReader",
   "Nuplane.Runtime.Tests.PackageArchiveReaderRegistrationTests.AddNuplane_CoordinatedComposition_RegistersTheArchiveReader",
   "Nuplane.Runtime.Tests.PackageArchiveReaderRegistrationTests.AddNuplane_InvalidArchiveReaderOptions_FailValidation",
+  "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_ArchiveLargerThanTheCache_IsVerifiedOnEveryOpen",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_ArchiveOpenThatNeverReturns_RefusesWhenTheOpenBoundExpires",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_ArchiveOverLimit_RefusesWithArchiveTooLarge",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_ArchivePathIsNotAReadableFile_RefusesWithArchiveUnreadable",
@@ -37,5 +38,8 @@
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_WithoutCanonicalRecordedHash_RefusesWithHashNotRecorded(recordedHash: null)",
   "Nuplane.Runtime.Tests.PackageArchiveTests.GetEntry_BackslashInEntryName_IsReadAsASeparator",
   "Nuplane.Runtime.Tests.PackageArchiveTests.GetEntry_EscapingInvalidOrAmbiguousNames_AreNotExposed",
-  "Nuplane.Runtime.Tests.PackageArchiveTests.ReadAllBytes_ConcurrentReads_ReturnEachEntryExactly"
+  "Nuplane.Runtime.Tests.PackageArchiveTests.ReadAllBytes_ConcurrentReads_ReturnEachEntryExactly",
+  "Nuplane.Runtime.Tests.Store.StoreStateRecordArchiveHashTests.ArchiveHashKey_SpellingsOfOneVersion_ShareAKey",
+  "Nuplane.Runtime.Tests.Store.StoreStateRecordArchiveHashTests.NextArchiveHashes_RecordedVersion_KeepsTheFirstValue",
+  "Nuplane.Runtime.Tests.Store.StoreStateRecordArchiveHashTests.WithRecordedArchiveHashes_DescriptorDisagreeingWithTheRecord_TakesTheRecordedValue"
 ]

@@ -54,7 +54,7 @@ The rules:
 - **Digests:** the protection digest covers both places in coordinated compositions. Each field is written only when present, so states without recorded hashes keep their existing digests.
 - **Different bytes for a recorded version:** a package version acquired again with different bytes, from any feed, stays refused (`HashMismatch`). This happens only when a version is republished or a second feed carries a different build of it, which ADR-0001 already treats as an artifact change. Publish a new version instead.
 
-The reader compares the archive bytes against the active descriptor's value. It never compares them against `.nuplane-content-hash`.
+Every write of the state sets each descriptor's hash to the recorded value, so the two places always agree. The reader compares the archive bytes against the active descriptor's value. It never compares them against `.nuplane-content-hash`.
 
 ### Verify the exact bytes that are served
 

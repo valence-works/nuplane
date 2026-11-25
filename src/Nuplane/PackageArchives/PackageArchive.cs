@@ -11,7 +11,8 @@ namespace Nuplane.PackageArchives;
 /// Entry paths are package-relative and use <c>/</c>; names are used as the archive stores them, as Nuplane
 /// extracts them. Lookup is case-insensitive, like NuGet package paths. Directory entries, entries whose names would escape the
 /// package (rooted, <c>..</c>, <c>.</c>, empty segments, <c>:</c> or NUL), and names that two entries share
-/// after normalization are not exposed. Instances are immutable and safe to use from several threads.
+/// after normalization are not exposed. Instances are immutable and safe to use from several threads; reads of
+/// entries from one instance run one at a time, because they share one parsed zip archive.
 /// </remarks>
 public sealed class PackageArchive
 {

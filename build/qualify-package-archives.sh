@@ -14,12 +14,13 @@ fi
 
 dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
   --configuration Release --framework net10.0 \
-  --filter "FullyQualifiedName~Nuplane.Runtime.Tests.PackageArchive|FullyQualifiedName~Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_Archive" \
+  --filter "FullyQualifiedName~Nuplane.Runtime.Tests.PackageArchive|FullyQualifiedName~Nuplane.Runtime.Tests.Store.StoreStateRecordArchiveHashTests|FullyQualifiedName~Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_Archive" \
   --blame-hang-timeout 3m \
   --logger "trx;LogFileName=package-archive-reader.trx" \
   --results-directory "$results_directory/reader"
-"$python" build/verify-required-trx.py "$results_directory/reader/package-archive-reader.trx" \
-  build/test-cases/package-archive-reader.json
+reader_manifest=build/test-cases/package-archive-reader.json
+if [[ "${RUNNER_OS:-}" == Windows ]]; then reader_manifest=build/test-cases/package-archive-reader-windows.json; fi
+"$python" build/verify-required-trx.py "$results_directory/reader/package-archive-reader.trx" "$reader_manifest"
 
 dotnet test test/Nuplane.Integration.Tests/Nuplane.Integration.Tests.csproj \
   --configuration Release --framework net10.0 \

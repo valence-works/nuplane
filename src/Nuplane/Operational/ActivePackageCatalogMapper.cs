@@ -397,14 +397,14 @@ internal static class ActivePackageCatalogMapper
         string? ArchiveHashFor(ResolvedPackage package)
         {
             var key = StoreStateRecord.ArchiveHashKey(package.Id, package.Version);
+            if (recordedByPackage is not null && recordedByPackage.TryGetValue(key, out var recorded))
+                return recorded;
             if (currentState.ActivePackageDescriptorsByIdNormalized.TryGetValue(package.Id, out var current) &&
                 current.ArchiveHash is { } active &&
                 string.Equals(StoreStateRecord.ArchiveHashKey(current.PackageId, current.Version),
                     key, StringComparison.Ordinal))
                 return active;
-            return recordedByPackage is not null && recordedByPackage.TryGetValue(key, out var recorded)
-                ? recorded
-                : package.PackageContentHash;
+            return package.PackageContentHash;
         }
 
         foreach (var package in appliedPackages.OrderBy(pkg => pkg.Id, StringComparer.OrdinalIgnoreCase))

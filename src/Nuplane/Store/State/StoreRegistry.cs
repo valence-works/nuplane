@@ -230,14 +230,17 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
                 }
             }
 
+            // The state reloaded under the lock may hold records another writer added during this cycle; the
+            // record wins over any hash this cycle derived.
+            var nextRecords = currentState.NextArchiveHashes(nextDescriptors.Values);
             var nextState = currentState with
             {
                 ActiveVersionById = nextActive,
                 LastKnownGoodById = nextLkg,
                 UpdatedAt = now,
-                ActivePackageDescriptorsById = nextDescriptors,
+                ActivePackageDescriptorsById = StoreStateRecord.WithRecordedArchiveHashes(nextDescriptors, nextRecords),
                 ActiveGraphsById = nextGraphs,
-                ArchiveHashesByPackage = currentState.NextArchiveHashes(nextDescriptors.Values)
+                ArchiveHashesByPackage = nextRecords
             };
 
             await CommitStateUnderLockAsync(nextState, currentState, cancellationToken);

@@ -190,16 +190,17 @@ internal static class CoordinatedActiveStateTransitionProducer
                 foreach (var (packageId, version) in appliedVersions)
                     lastKnownGood[packageId] = version;
 
+                var nextRecords = current.NextArchiveHashes(descriptors.Values);
                 var next = new StoreStateRecord(
                     new Dictionary<string, string>(nextActive, StringComparer.OrdinalIgnoreCase),
                     lastKnownGood,
                     new Dictionary<string, FailureRecord>(current.LastFailureById, StringComparer.OrdinalIgnoreCase),
                     new Dictionary<string, SourceSnapshotRef>(current.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
                     activatedAtUtc,
-                    new Dictionary<string, ActivePackageDescriptor>(descriptors, StringComparer.OrdinalIgnoreCase),
+                    StoreStateRecord.WithRecordedArchiveHashes(descriptors, nextRecords),
                     new Dictionary<string, GraphActivationRecord>(records, StringComparer.OrdinalIgnoreCase))
                 {
-                    ArchiveHashesByPackage = current.NextArchiveHashes(descriptors.Values)
+                    ArchiveHashesByPackage = nextRecords
                 };
 
                 var nextRevision = checked(priorProtection.Revision + 1);

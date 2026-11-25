@@ -60,7 +60,7 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
         var archivePath = ResolveArchivePath(package.InstallPath);
         var key = new CacheKey(package.PackageId.ToUpperInvariant(), package.Version.ToUpperInvariant(), archivePath,
             recordedHash ?? string.Empty);
-        Task<PackageArchive> load;
+        Task<PackageArchive>? load = null;
         lock (_sync)
         {
             if (_cache.TryGetValue(key, out var node))
@@ -78,26 +78,29 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
                 _refusals.Remove(key);
             }
 
-            if (recordedHash is null)
-            {
-                var unrecorded = Refuse(package, PackageArchiveFailureReason.HashNotRecorded,
-                    "the active package record has no canonical sha512 archive hash; reconcile again, or reinstall the package with this Nuplane version.");
-                RememberRefusal(key, unrecorded);
-                throw unrecorded;
-            }
-
-            // Concurrent opens of one archive share a single read and verification. The shared load does not
-            // take any caller's token, so one caller cancelling cannot fail the others.
-            if (!_loading.TryGetValue(key, out load!))
+            if (recordedHash is not null && !_loading.TryGetValue(key, out load))
             {
                 // Task.Run starts the load on the thread pool, away from any caller SynchronizationContext.
                 // Its cleanup takes _sync, so it cannot remove the entry before it is added here.
                 load = Task.Run(() => LoadAsync(package, archivePath, recordedHash, key));
                 _loading[key] = load;
+                // Observe a failure even when every waiter has cancelled.
+                _ = load.ContinueWith(static task => _ = task.Exception, CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             }
         }
 
-        return await load.WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (recordedHash is null)
+        {
+            // Built and logged outside the lock; a concurrent duplicate is harmless.
+            var unrecorded = Refuse(package, PackageArchiveFailureReason.HashNotRecorded,
+                "the active package record has no canonical sha512 archive hash; reconcile again, or reinstall the package with this Nuplane version.");
+            lock (_sync)
+                RememberRefusal(key, unrecorded);
+            throw unrecorded;
+        }
+
+        return await load!.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static string ResolveArchivePath(string installPath) =>

@@ -95,6 +95,28 @@ public sealed record StoreStateRecord(
             ? new Dictionary<string, string>(hashes, StringComparer.Ordinal)
             : null;
 
+    /// <summary>
+    /// Returns the descriptors with each archive hash set to the value recorded for its package version, so a
+    /// persisted descriptor never carries a hash that differs from the record.
+    /// </summary>
+    internal static Dictionary<string, ActivePackageDescriptor> WithRecordedArchiveHashes(
+        IReadOnlyDictionary<string, ActivePackageDescriptor> descriptors,
+        IReadOnlyDictionary<string, string>? recorded)
+    {
+        ArgumentNullException.ThrowIfNull(descriptors);
+        var result = new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (packageId, descriptor) in descriptors)
+        {
+            result[packageId] = recorded is not null &&
+                                recorded.TryGetValue(ArchiveHashKey(descriptor.PackageId, descriptor.Version), out var hash) &&
+                                !string.Equals(descriptor.ArchiveHash, hash, StringComparison.Ordinal)
+                ? descriptor with { ArchiveHash = hash }
+                : descriptor;
+        }
+
+        return result;
+    }
+
     /// <summary>Records the archive hash of every active descriptor that has no record yet; recorded values are kept.</summary>
     internal Dictionary<string, string>? NextArchiveHashes(IEnumerable<ActivePackageDescriptor> activeDescriptors)
     {
