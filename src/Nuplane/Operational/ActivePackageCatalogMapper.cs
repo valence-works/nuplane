@@ -389,19 +389,20 @@ internal static class ActivePackageCatalogMapper
             resolvedGraphs ?? [],
             selectedActiveGraphs);
 
-        // The state records an install's archive hash the first time that install becomes active and keeps it,
-        // also after deactivation. Re-resolution re-reads the hash file beside the archive; that value is used
-        // only for an install the state has never recorded.
-        var recordedByInstallPath = currentState.ArchiveHashesByInstallPath;
+        // The state records a package version's archive hash the first time it becomes active and keeps it, also
+        // after deactivation. The record is keyed by feed, package ID and version, so no spelling of the install
+        // path can miss it. Re-resolution re-reads the hash file beside the archive; that value is used only for
+        // a package version the state has never recorded.
+        var recordedByPackage = currentState.ArchiveHashesByPackage;
         string? ArchiveHashFor(ResolvedPackage package)
         {
+            var key = StoreStateRecord.ArchiveHashKey(package.FeedName, package.Id, package.Version);
             if (currentState.ActivePackageDescriptorsByIdNormalized.TryGetValue(package.Id, out var current) &&
                 current.ArchiveHash is { } active &&
-                string.Equals(current.Version, package.Version, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(current.InstallPath, package.InstallPath, StringComparison.Ordinal))
+                string.Equals(StoreStateRecord.ArchiveHashKey(current.FeedName, current.PackageId, current.Version),
+                    key, StringComparison.Ordinal))
                 return active;
-            return recordedByInstallPath is not null &&
-                   recordedByInstallPath.TryGetValue(package.InstallPath, out var recorded)
+            return recordedByPackage is not null && recordedByPackage.TryGetValue(key, out var recorded)
                 ? recorded
                 : package.PackageContentHash;
         }

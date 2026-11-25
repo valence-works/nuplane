@@ -91,13 +91,13 @@ public sealed class ProtectionDigestTests
 
         var recorded = withoutHash with
         {
-            ArchiveHashesByInstallPath = new(StringComparer.Ordinal) { ["Module/0.9.0"] = withHash.ActivePackageDescriptorsById!["Module"].ArchiveHash! }
+            ArchiveHashesByPackage = new(StringComparer.Ordinal) { ["feed/module/0.9.0"] = withHash.ActivePackageDescriptorsById!["Module"].ArchiveHash! }
         };
-        var emptyRecord = withoutHash with { ArchiveHashesByInstallPath = new(StringComparer.Ordinal) };
-        // Install paths are exact strings: characters without an invariant-uppercase form are accepted.
+        var emptyRecord = withoutHash with { ArchiveHashesByPackage = new(StringComparer.Ordinal) };
+        // Keys are exact strings: characters without an invariant-uppercase form are accepted.
         var unfoldablePath = withoutHash with
         {
-            ArchiveHashesByInstallPath = new(StringComparer.Ordinal) { ["/srv/\u017Fhop/Module/1.0.0"] = withHash.ActivePackageDescriptorsById!["Module"].ArchiveHash! }
+            ArchiveHashesByPackage = new(StringComparer.Ordinal) { ["feed/\u017Fhop/1.0.0"] = withHash.ActivePackageDescriptorsById!["Module"].ArchiveHash! }
         };
         Assert.NotEqual(ProtectionDigest.StateBody(recorded), ProtectionDigest.StateBody(unfoldablePath));
         Assert.NotEqual(ProtectionDigest.StateBody(withoutHash), ProtectionDigest.StateBody(recorded));

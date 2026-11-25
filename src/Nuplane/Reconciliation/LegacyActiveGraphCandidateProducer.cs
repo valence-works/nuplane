@@ -198,7 +198,7 @@ internal static class LegacyActiveGraphCandidateProducer
                 new Dictionary<string, ActivePackageDescriptor>(descriptorsNext, StringComparer.OrdinalIgnoreCase),
                 new Dictionary<string, GraphActivationRecord>(records, StringComparer.OrdinalIgnoreCase))
             {
-                ArchiveHashesByInstallPath = legacyState.NextArchiveHashes(descriptorsNext.Values)
+                ArchiveHashesByPackage = legacyState.NextArchiveHashes(descriptorsNext.Values)
             };
             next = WithInitialProtection(next, ledger.RootIdentity, ledger.EnrollmentEpoch, memberId, closure);
             next = await RoundTripAsync(serializer, next, cancellationToken).ConfigureAwait(false);

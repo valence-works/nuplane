@@ -44,7 +44,7 @@ internal static partial class ProtectionDigest
             writer.Field(6, EncodeMap(normalized.ActivePackageDescriptorsByIdNormalized, EncodeDescriptor));
             writer.Field(7, EncodeMap(normalized.ActiveGraphsByIdNormalized, EncodeActivationGraph));
             // Optional so state bodies without recorded archive hashes keep their existing digest.
-            if (normalized.ArchiveHashesByInstallPath is { Count: > 0 } archiveHashes)
+            if (normalized.ArchiveHashesByPackage is { Count: > 0 } archiveHashes)
                 writer.Field(8, EncodeExactKeyMap(archiveHashes, EncodeString));
         });
     }

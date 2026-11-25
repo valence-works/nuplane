@@ -140,7 +140,7 @@ public sealed class StoreStateSerializer : IPackageProtectionBundleStatePayloadS
         {
             ActivePackageDescriptorsById = new(state.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase),
             ActiveGraphsById = new(state.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase),
-            ArchiveHashesByInstallPath = state.CopyArchiveHashes(),
+            ArchiveHashesByPackage = state.CopyArchiveHashes(),
             ProtectionRecord = state.ProtectionRecord,
             ProtectionBundle = state.ProtectionBundle?.Copy()
         };

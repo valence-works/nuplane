@@ -39,16 +39,18 @@ public sealed record StoreStateRecord(
     public PackageProtectionBundle? ProtectionBundle { get; init; }
 
     /// <summary>
-    /// Gets or initializes the archive hash recorded for each install path this state has activated.
+    /// Gets or initializes the archive hash recorded for each package this state has activated, keyed by
+    /// <see cref="ArchiveHashKey"/> (feed, package ID and version).
     /// </summary>
     /// <remarks>
-    /// An entry is written the first time an install becomes active and is kept after it is deactivated, so a
-    /// later rollback to that install is verified against the same record instead of the hash file beside its
-    /// archive. A null value is legacy absence.
+    /// An entry is written the first time a package version becomes active and is kept after it is deactivated,
+    /// so a later rollback to that version is verified against the same record instead of the hash file beside
+    /// its archive. The key names the artifact, so a differently spelled install root cannot bypass it.
+    /// A null value is legacy absence.
     /// </remarks>
-    [JsonPropertyName("archiveHashesByInstallPath")]
+    [JsonPropertyName("archiveHashesByPackage")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public Dictionary<string, string>? ArchiveHashesByInstallPath { get; init; }
+    public Dictionary<string, string>? ArchiveHashesByPackage { get; init; }
 
     /// <summary>
     /// Creates an empty store state record with the current timestamp.
@@ -75,9 +77,16 @@ public sealed record StoreStateRecord(
     public Dictionary<string, GraphActivationRecord> ActiveGraphsByIdNormalized =>
         ActiveGraphsById ?? new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Builds the case-folded <c>feed/packageId/version</c> key of <see cref="ArchiveHashesByPackage"/>.</summary>
+    internal static string ArchiveHashKey(string? feedName, string packageId, string version) =>
+        string.Join('/',
+            (string.IsNullOrWhiteSpace(feedName) ? string.Empty : feedName).ToLowerInvariant(),
+            packageId.ToLowerInvariant(),
+            version.ToLowerInvariant());
+
     /// <summary>Copies the recorded archive hashes, or returns <see langword="null"/> when none are recorded.</summary>
     internal Dictionary<string, string>? CopyArchiveHashes() =>
-        ArchiveHashesByInstallPath is { Count: > 0 } hashes
+        ArchiveHashesByPackage is { Count: > 0 } hashes
             ? new Dictionary<string, string>(hashes, StringComparer.Ordinal)
             : null;
 
@@ -89,7 +98,7 @@ public sealed record StoreStateRecord(
         foreach (var descriptor in activeDescriptors)
         {
             if (descriptor.ArchiveHash is { } hash)
-                next[descriptor.InstallPath] = hash;
+                next[ArchiveHashKey(descriptor.FeedName, descriptor.PackageId, descriptor.Version)] = hash;
         }
 
         return next.Count == 0 ? null : next;

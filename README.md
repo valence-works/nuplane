@@ -567,7 +567,7 @@ Every feed kind installs under the one writable `PackageInstallRoot`:
 ```
 
 The persisted state file (`Nuplane:StoreRegistry:StateFilePath`) records the active version and
-descriptor of each package. It also records the archive hash of every install it has activated.
+descriptor of each package. It also records the archive hash of every package version it has activated.
 
 Updates are atomic:
 
@@ -595,13 +595,14 @@ if (archive.GetEntry("staticwebassets/module.js") is { Length: <= MaxBytes } ent
 
 * The reader reads the archive into memory, computes its sha512 and compares it with
   `ActivePackage.ArchiveHash`. Only bytes that match are served.
-* Nuplane records an install's hash in the state file the first time that install becomes active, from
-  the hash computed when its archive was acquired, and keeps it, including after the install is
-  deactivated. A restart, a reconciliation or a rollback to a retained install is verified against that
-  record, so replacing an archive together with the hash file beside it is refused.
+* Nuplane records a package version's hash in the state file the first time it becomes active, from the
+  hash computed when its archive was acquired. It keeps that record, including after the version is
+  deactivated, keyed by feed, package ID and version. A restart, a reconciliation, a rollback to a
+  retained install, or the install root reached through another spelling is verified against that record,
+  so replacing an archive together with the hash file beside it is refused.
 * A modified, replaced, truncated or missing archive is refused with `PackageArchiveException`, which
   names the package, the version and a `Reason` (`HashNotRecorded`, `ArchiveMissing`, `ArchiveUnreadable`,
-  `ArchiveTooLarge`, `HashMismatch` or `InvalidArchive`). Each refusal is logged as a warning.
+  `ArchiveTooLarge`, `HashMismatch` or `InvalidArchive`). A refusal is logged as a warning when it is made; repeats within the five seconds it is remembered are not logged again.
 * It works on any filesystem that can store a file. CI qualifies it on Linux overlayfs (a container's
   writable layer), xfs, btrfs, tmpfs and ext4, macOS, and Windows x64 and arm64, all without an enrolled
   store.

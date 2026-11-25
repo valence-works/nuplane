@@ -127,6 +127,46 @@ public sealed class PackageArchiveReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task OpenAsync_ArchiveOpenThatNeverReturns_RefusesWhenTheOpenBoundExpires()
+    {
+        var package = Install("Acme.Addon", "1.0.0", CreateArchive(("content/a.txt", "a"u8.ToArray())));
+        using var neverOpens = new ManualResetEventSlim();
+        var reader = new PackageArchiveReader(Options.Create(new PackageArchiveReaderOptions()),
+            NullLogger<PackageArchiveReader>.Instance, TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(200),
+            _ => { neverOpens.Wait(); throw new IOException("released"); });
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        try
+        {
+            var error = await Assert.ThrowsAsync<PackageArchiveException>(() =>
+                reader.OpenAsync(package, timeout.Token).AsTask());
+
+            Assert.Equal(PackageArchiveFailureReason.ArchiveUnreadable, error.Reason);
+            Assert.IsType<TimeoutException>(error.InnerException);
+        }
+        finally
+        {
+            neverOpens.Set();
+        }
+    }
+
+    [Fact]
+    public async Task OpenAsync_RefusalAfterItsRetention_ReadsTheRepairedArchive()
+    {
+        var archive = CreateArchive(("content/a.txt", "repaired"u8.ToArray()));
+        var package = Install("Acme.Addon", "1.0.0", archive);
+        File.Delete(ArchivePath(package));
+        var reader = new PackageArchiveReader(Options.Create(new PackageArchiveReaderOptions()),
+            NullLogger<PackageArchiveReader>.Instance, TimeSpan.Zero, TimeSpan.FromSeconds(30), openArchive: null);
+        _ = await Assert.ThrowsAsync<PackageArchiveException>(() => reader.OpenAsync(package).AsTask());
+        await File.WriteAllBytesAsync(ArchivePath(package), archive);
+
+        var opened = await reader.OpenAsync(package);
+
+        Assert.Equal("repaired"u8.ToArray(), opened.GetEntry("content/a.txt")!.ReadAllBytes());
+    }
+
+    [Fact]
     public async Task OpenAsync_ConcurrentColdOpens_ShareOneVerifiedArchive()
     {
         var package = Install("Acme.Addon", "1.0.0",
@@ -136,23 +176,6 @@ public sealed class PackageArchiveReaderTests : IDisposable
         var opened = await Task.WhenAll(Enumerable.Range(0, 32).Select(_ => Task.Run(() => reader.OpenAsync(package).AsTask())));
 
         Assert.All(opened, archive => Assert.Same(opened[0], archive));
-    }
-
-    [Fact]
-    public async Task ReadAllBytes_ConcurrentReads_ReturnEachEntryExactly()
-    {
-        var files = Enumerable.Range(0, 32)
-            .Select(index => ($"staticwebassets/file{index}.js", RandomNumberGenerator.GetBytes(4096 + index)))
-            .ToArray();
-        var opened = await CreateReader().OpenAsync(Install("Acme.Addon", "1.0.0", CreateArchive(files)));
-
-        var reads = await Task.WhenAll(Enumerable.Range(0, 256).Select(index => Task.Run(() =>
-        {
-            var (path, content) = files[index % files.Length];
-            return (Expected: content, Actual: opened.GetEntry(path)!.ReadAllBytes());
-        })));
-
-        Assert.All(reads, read => Assert.Equal(read.Expected, read.Actual));
     }
 
     [Theory]
@@ -191,30 +214,6 @@ public sealed class PackageArchiveReaderTests : IDisposable
         var error = await Assert.ThrowsAsync<PackageArchiveException>(() => CreateReader().OpenAsync(package).AsTask());
 
         Assert.Equal(PackageArchiveFailureReason.InvalidArchive, error.Reason);
-    }
-
-    [Fact]
-    public async Task GetEntry_EscapingInvalidOrAmbiguousNames_AreNotExposed()
-    {
-        var archive = CreateArchive(
-            ("../escaped.txt", "x"u8.ToArray()),
-            ("content/./dot.txt", "x"u8.ToArray()),
-            ("content//empty.txt", "x"u8.ToArray()),
-            ("C:/rooted.txt", "x"u8.ToArray()),
-            ("/leading.txt", "x"u8.ToArray()),
-            ("content/dup.txt", "first"u8.ToArray()),
-            ("content/DUP.txt", "second"u8.ToArray()),
-            ("content/dir/", []),
-            ("content/ok.txt", "ok"u8.ToArray()));
-        var opened = await CreateReader().OpenAsync(Install("Acme.Addon", "1.0.0", archive));
-
-        Assert.Equal(["content/ok.txt"], opened.Entries.Select(static entry => entry.Path));
-        Assert.Null(opened.GetEntry("content/dup.txt"));
-        Assert.Null(opened.GetEntry("content/dir"));
-        Assert.Null(opened.GetEntry("content/../content/ok.txt"));
-        Assert.Null(opened.GetEntry("/content/ok.txt"));
-        Assert.Null(opened.GetEntry("content/ok.txt\0"));
-        Assert.Null(opened.GetEntry(""));
     }
 
     [Fact]
@@ -270,9 +269,12 @@ public sealed class PackageArchiveReaderTests : IDisposable
     private PackageArchiveReader CreateReader(PackageArchiveReaderOptions? options = null) =>
         new(Options.Create(options ?? new PackageArchiveReaderOptions()), NullLogger<PackageArchiveReader>.Instance);
 
-    private ActivePackage Install(string packageId, string version, byte[] archive)
+    private ActivePackage Install(string packageId, string version, byte[] archive) =>
+        InstallAt(_root, packageId, version, archive);
+
+    internal static ActivePackage InstallAt(string root, string packageId, string version, byte[] archive)
     {
-        var installPath = Path.Combine(_root, "feed", packageId, version);
+        var installPath = Path.Combine(root, "feed", packageId, version);
         Directory.CreateDirectory(installPath);
         File.WriteAllBytes(PackageInstallStore.GetArchivePath(installPath), archive);
         return new ActivePackage(packageId, version, "feed", "source", installPath, DateTimeOffset.UtcNow, "correlation")
@@ -283,9 +285,9 @@ public sealed class PackageArchiveReaderTests : IDisposable
 
     private static string ArchivePath(ActivePackage package) => PackageInstallStore.GetArchivePath(package.InstallPath);
 
-    private static string Hash(byte[] archive) => "sha512:" + Convert.ToBase64String(SHA512.HashData(archive));
+    internal static string Hash(byte[] archive) => "sha512:" + Convert.ToBase64String(SHA512.HashData(archive));
 
-    private static byte[] CreateArchive(params (string Path, byte[] Content)[] files)
+    internal static byte[] CreateArchive(params (string Path, byte[] Content)[] files)
     {
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))

@@ -105,7 +105,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
                 // and the archive reader serves the coordinated install from its kept archive.
                 var descriptor = state.ActivePackageDescriptorsByIdNormalized["Root.Second"];
                 Assert.Equal(expectedHash, descriptor.ArchiveHash);
-                Assert.Equal(expectedHash, state.ArchiveHashesByInstallPath![descriptor.InstallPath]);
+                Assert.Equal(expectedHash, state.ArchiveHashesByPackage![StoreStateRecord.ArchiveHashKey("feed", "Root.Second", "3.0.0")]);
                 var archive = await provider.GetRequiredService<IPackageArchiveReader>()
                     .OpenAsync(descriptor.ToActivePackage());
                 Assert.NotNull(archive.GetEntry("lib/net10.0/Root.Second.dll"));

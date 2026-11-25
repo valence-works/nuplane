@@ -204,7 +204,7 @@ public sealed partial class StoreRegistry
                 StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, GraphActivationRecord>(state.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase))
         {
-            ArchiveHashesByInstallPath = state.CopyArchiveHashes(),
+            ArchiveHashesByPackage = state.CopyArchiveHashes(),
             ProtectionRecord = state.ProtectionRecord,
             ProtectionBundle = state.ProtectionBundle?.Copy()
         };

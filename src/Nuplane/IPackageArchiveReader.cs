@@ -21,6 +21,9 @@ public interface IPackageArchiveReader
     /// </param>
     /// <returns>The verified archive. It holds the archive bytes in memory and needs no disposal.</returns>
     /// <remarks>A refusal is remembered for a few seconds, so repeated opens of a refused archive fail without rereading it.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="package"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="package"/> has no install path.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
     /// <exception cref="PackageArchiveException">The archive is missing, unverifiable or does not match its recorded hash.</exception>
     ValueTask<PackageArchive> OpenAsync(ActivePackage package, CancellationToken cancellationToken = default);
 }

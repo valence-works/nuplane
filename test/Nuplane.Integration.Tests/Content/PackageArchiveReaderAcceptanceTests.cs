@@ -172,7 +172,7 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
 
         // A state written by a Nuplane version without archive hashes.
         var state = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(statePath))!.AsObject();
-        Assert.True(state.Remove("archiveHashesByInstallPath"));
+        Assert.True(state.Remove("archiveHashesByPackage"));
         foreach (var descriptor in state["activePackageDescriptorsById"]!.AsObject())
             Assert.True(descriptor.Value!.AsObject().Remove("archiveHash"));
         await File.WriteAllTextAsync(statePath, state.ToJsonString());
@@ -191,6 +191,46 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
         Assert.Equal(ModuleScript, Encoding.UTF8.GetString(archive.GetEntry("staticwebassets/module.js")!.ReadAllBytes()));
     }
 
+    [Fact]
+    public async Task OpenAsync_ForgedInstallReachedThroughAnotherRootSpelling_RefusesWithTheRecordedHash()
+    {
+        AssertExpectedFilesystem(_root);
+        var feed = WritePackage("1.0.0");
+        ActivePackage original;
+        using (var host = CreateHost(feed))
+        {
+            await ReconcileAsync(host);
+            original = await GetActivePackageAsync(host);
+        }
+
+        var forged = BuildPackage("1.0.0", "export const addon = 'forged';");
+        await File.WriteAllBytesAsync(PackageInstallStore.GetArchivePath(original.InstallPath), forged);
+        await File.WriteAllTextAsync(Path.Combine(original.InstallPath, PackageInstallStore.ContentHashFileName),
+            "sha512:" + Convert.ToBase64String(System.Security.Cryptography.SHA512.HashData(forged)));
+        // The same physical install root, spelled differently: a case variant on Windows (links need a
+        // privilege there), a link elsewhere.
+        string alias;
+        if (OperatingSystem.IsWindows())
+        {
+            alias = Path.Combine(_root, "PACKAGES");
+        }
+        else
+        {
+            alias = Path.Combine(_root, "packages-alias");
+            Directory.CreateSymbolicLink(alias, Path.Combine(_root, "packages"));
+        }
+
+        using var aliased = CreateHost(Path.GetDirectoryName(feed)!, createFeedPackage: false, packageInstallRoot: alias);
+        await ReconcileAsync(aliased);
+        var reached = await GetActivePackageAsync(aliased);
+
+        Assert.NotEqual(original.InstallPath, reached.InstallPath);
+        Assert.Equal(original.ArchiveHash, reached.ArchiveHash);
+        var error = await Assert.ThrowsAsync<PackageArchiveException>(() =>
+            aliased.Services.GetRequiredService<IPackageArchiveReader>().OpenAsync(reached).AsTask());
+        Assert.Equal(PackageArchiveFailureReason.HashMismatch, error.Reason);
+    }
+
     private static string PackageArchiveHash(ActivePackage package) =>
         "sha512:" + Convert.ToBase64String(System.Security.Cryptography.SHA512.HashData(
             File.ReadAllBytes(PackageInstallStore.GetArchivePath(package.InstallPath))));
@@ -204,7 +244,7 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
         return path;
     }
 
-    private IHost CreateHost(string feedPackageOrDirectory, bool createFeedPackage = true)
+    private IHost CreateHost(string feedPackageOrDirectory, bool createFeedPackage = true, string? packageInstallRoot = null)
     {
         var feedDirectory = createFeedPackage ? Path.GetDirectoryName(feedPackageOrDirectory)! : feedPackageOrDirectory;
         var configuration = new Dictionary<string, string?>
@@ -212,7 +252,7 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
             ["Nuplane:Reconciliation:EnableAutomaticReconciliation"] = "false",
             ["Nuplane:Reconciliation:MaxRetryAttempts"] = "0",
             ["Nuplane:FeedResolution:OfflineMode"] = "true",
-            ["Nuplane:FeedResolution:PackageInstallRoot"] = Path.Combine(_root, "packages"),
+            ["Nuplane:FeedResolution:PackageInstallRoot"] = packageInstallRoot ?? Path.Combine(_root, "packages"),
             ["Nuplane:StoreRegistry:StateFilePath"] = Path.Combine(_root, "store-state.json")
         };
 

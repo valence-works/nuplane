@@ -45,14 +45,14 @@ Rejected: reading the archive from the feed while it still matches. Remote downl
 The state file records each install's archive hash in two places:
 
 - `ActivePackageDescriptor.ArchiveHash`, projected as `ActivePackage.ArchiveHash`, for the active install of each package;
-- `StoreStateRecord.ArchiveHashesByInstallPath`, for every install the state has activated, active or not.
+- `StoreStateRecord.ArchiveHashesByPackage`, for every package version the state has activated, active or not. The key is `feed/packageId/version`, case-folded. It names the artifact, so no spelling of the install root, through case or a link, can miss the record.
 
 The rules:
 
-- **First activation:** the first time an install becomes active, its hash comes from its acquisition record, `.nuplane-content-hash`. That record was computed from the archive bytes when the archive was acquired. The value is written to both places.
+- **First activation:** the first time a package version becomes active, its hash comes from its install's acquisition record, `.nuplane-content-hash`. That record was computed from the archive bytes when the archive was acquired. The value is written to both places.
 - **Later activations:** the recorded value is kept from then on. This covers re-resolution of the active install, restarts, and a rollback to a retained install. Re-reading the hash file beside the archive never replaces a recorded value. So replacing an install's archive and its hash file together is refused, whether the install is active or is reactivated later.
 - **Digests:** the protection digest covers both places in coordinated compositions. Each field is written only when present, so states without recorded hashes keep their existing digests.
-- **Re-acquired with different bytes:** an install deleted and acquired again at the same path with different bytes stays refused (`HashMismatch`). This happens only when a version is republished with new bytes, which ADR-0001 already treats as an artifact change.
+- **Re-acquired with different bytes:** a package version acquired again with different bytes stays refused (`HashMismatch`). This happens only when a version is republished with new bytes, which ADR-0001 already treats as an artifact change.
 
 The reader compares the archive bytes against the active descriptor's value. It never compares them against `.nuplane-content-hash`.
 
@@ -63,7 +63,7 @@ The reader compares the archive bytes against the active descriptor's value. It 
 1. It reads the whole archive with ordinary file access. `MaximumArchiveBytes` bounds the read.
 2. It hashes those bytes and compares the result with `ArchiveHash`.
 3. It returns a `PackageArchive` that serves entries only from the verified in-memory copy.
-4. Any failure throws `PackageArchiveException` with a `Reason`: `HashNotRecorded`, `ArchiveMissing`, `ArchiveUnreadable`, `ArchiveTooLarge`, `HashMismatch` or `InvalidArchive`. The failure is also logged as a warning.
+4. Any failure throws `PackageArchiveException` with a `Reason`: `HashNotRecorded`, `ArchiveMissing`, `ArchiveUnreadable`, `ArchiveTooLarge`, `HashMismatch` or `InvalidArchive`. The refusal is logged as a warning when it is made; repeats within the five seconds it is remembered are not logged again.
 
 No filesystem semantics take part in the safety argument, so the reader needs no qualification. It reads without store admission, even when the store is enrolled. Published installs are never written in place, so a concurrent prune can only make the read fail as missing or truncated, and both are refusals.
 
@@ -98,7 +98,7 @@ Verified archives stay in an in-memory LRU cache keyed by package, version, arch
 
 - Each install stores its archive as well as its extracted files, so it uses roughly twice the disk space.
 - A verified archive is held in memory while it is cached or in use.
-- `ArchiveHashesByInstallPath` keeps one entry per install the state has activated and never removes entries, so it grows by one line for each version a host activates.
+- `ArchiveHashesByPackage` keeps one entry per package version the state has activated and never removes entries, so it grows by one line for each version a host activates.
 - A refusal is remembered for five seconds, so a repaired archive is served again after that delay.
 - Installs made before this change have no kept archive and are refused with `ArchiveMissing` until they are reinstalled. Before GA, no backfill of archives is provided.
 - A package activated before this change gets its recorded hash at its next reconciliation, from its acquisition record (first activation rule).
@@ -107,7 +107,7 @@ Verified archives stay in an in-memory LRU cache keyed by package, version, arch
 ## Validation
 
 - Unit tests cover verification, each refusal reason, path normalization and the cache.
-- `AddNuplane` acceptance tests with a directory feed and no enrolled store cover serving content and refusing modified, replaced and missing archives. Replacing the archive and its hash file together is still refused, including after a restart and reconciliation, and after a rollback to a forged retained install.
+- `AddNuplane` acceptance tests with a directory feed and no enrolled store cover serving content and refusing modified, replaced and missing archives. Replacing the archive and its hash file together is still refused, including after a restart and reconciliation, after a rollback to a forged retained install, and when the install root is reached through another spelling.
 - A coordinated-install test checks that the archive is kept and served by the reader, and that the reserved name is refused during entry planning.
 - Registration tests resolve the reader in ordinary and coordinated compositions and bind `Nuplane:PackageArchives`.
 - A pruning test checks that protected installs keep their archive bytes and that pruned installs lose theirs with the directory.

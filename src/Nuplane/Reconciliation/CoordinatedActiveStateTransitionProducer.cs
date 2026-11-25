@@ -199,7 +199,7 @@ internal static class CoordinatedActiveStateTransitionProducer
                     new Dictionary<string, ActivePackageDescriptor>(descriptors, StringComparer.OrdinalIgnoreCase),
                     new Dictionary<string, GraphActivationRecord>(records, StringComparer.OrdinalIgnoreCase))
                 {
-                    ArchiveHashesByInstallPath = current.NextArchiveHashes(descriptors.Values)
+                    ArchiveHashesByPackage = current.NextArchiveHashes(descriptors.Values)
                 };
 
                 var nextRevision = checked(priorProtection.Revision + 1);
