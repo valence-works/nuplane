@@ -84,4 +84,40 @@ public sealed class PackageInstallStoreTests
 
         Assert.Equal(expectedHash, await File.ReadAllTextAsync(Path.Combine(installDirectory, ".nuplane-content-hash")));
     }
+
+    [Fact]
+    public async Task InstallAsync_ArchiveBytes_KeepsTheExactArchiveInsideTheInstall()
+    {
+        using var packages = new TempDirectory();
+        using var installRoot = new TempDirectory();
+        var archivePath = NupkgTestBuilder.Create("Plugin", "1.0.0").BuildTo(packages.Path);
+        var installDirectory = Path.Combine(installRoot.Path, "installed");
+
+        await PackageInstallStore.InstallAsync(installRoot.Path, installDirectory, archivePath, CancellationToken.None);
+
+        var kept = await File.ReadAllBytesAsync(Path.Combine(installDirectory, PackageInstallStore.ArchiveFileName));
+        Assert.Equal(await File.ReadAllBytesAsync(archivePath), kept);
+        Assert.Equal("sha512:" + Convert.ToBase64String(SHA512.HashData(kept)),
+            await File.ReadAllTextAsync(Path.Combine(installDirectory, PackageInstallStore.ContentHashFileName)));
+    }
+
+    [Fact]
+    public async Task InstallAsync_ArchiveShipsTheKeptArchiveName_RefusesWithoutPublishing()
+    {
+        using var packages = new TempDirectory();
+        using var installRoot = new TempDirectory();
+        var archivePath = NupkgTestBuilder.Create("Plugin", "1.0.0").BuildTo(packages.Path);
+        using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Update))
+        {
+            using var writer = new StreamWriter(archive.CreateEntry(PackageInstallStore.ArchiveFileName).Open());
+            await writer.WriteAsync("forged");
+        }
+        var installDirectory = Path.Combine(installRoot.Path, "installed");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            PackageInstallStore.InstallAsync(installRoot.Path, installDirectory, archivePath, CancellationToken.None));
+
+        Assert.False(Directory.Exists(installDirectory));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(installRoot.Path, ".tmp")));
+    }
 }

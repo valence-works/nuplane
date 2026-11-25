@@ -514,6 +514,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
                 package.Id + ".nuspec",
                 package.Id + ".dll",
                 Nuplane.Metadata.NuplanePackageMetadataReader.MetadataFileName,
+                PackageInstallStore.ArchiveFileName,
                 PackageInstallStore.CompletionMarkerFileName
             };
             var payloadDigest = string.Join("\n", payloadFiles.Select(fileName =>

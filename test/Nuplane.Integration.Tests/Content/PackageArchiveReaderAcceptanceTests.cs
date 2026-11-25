@@ -1,0 +1,220 @@
+using System.IO.Compression;
+using System.Text;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Nuplane.Abstractions;
+using Nuplane.Feeds;
+using Nuplane.Reconciliation;
+using Nuplane.Reconciliation.Models;
+using Nuplane.Sources.Directory.Builder;
+
+namespace Nuplane.Integration.Tests.Content;
+
+/// <summary>
+/// Proves that a host with no enrolled package store reads an active package's files from its verified archive.
+/// </summary>
+/// <remarks>
+/// <c>NUPLANE_ARCHIVE_TEST_ROOT</c> moves the test directories onto a chosen filesystem, and
+/// <c>NUPLANE_EXPECT_FILESYSTEM</c> (Linux) makes the test assert that filesystem's type, so CI can prove the
+/// reader on overlayfs, xfs, btrfs and tmpfs.
+/// </remarks>
+public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
+{
+    private const string PackageId = "Acme.Studio.Addon";
+    private const string ModuleScript = "export const addon = 'acme';";
+    private readonly string _root;
+
+    public PackageArchiveReaderAcceptanceTests()
+    {
+        var baseDirectory = Environment.GetEnvironmentVariable("NUPLANE_ARCHIVE_TEST_ROOT") is { Length: > 0 } configured
+            ? configured
+            : Path.GetTempPath();
+        _root = Path.Combine(baseDirectory, $"nuplane-archive-acceptance-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_root);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_root))
+            Directory.Delete(_root, recursive: true);
+    }
+
+    [Fact]
+    public async Task OpenAsync_UnenrolledHost_ServesActivePackageContentFromVerifiedArchive()
+    {
+        AssertExpectedFilesystem(_root);
+        var feed = WritePackage("1.0.0");
+        using var host = CreateHost(feed);
+        await ReconcileAsync(host);
+
+        var package = await GetActivePackageAsync(host);
+        var archive = await host.Services.GetRequiredService<IPackageArchiveReader>().OpenAsync(package);
+
+        Assert.Equal(PackageArchiveHash(package), package.ArchiveHash);
+        Assert.Equal(ModuleScript, Encoding.UTF8.GetString(archive.GetEntry("staticwebassets/module.js")!.ReadAllBytes()));
+        Assert.NotNull(archive.Entries.SingleOrDefault(entry => entry.Path == $"{PackageId}.nuspec"));
+
+        // The feed may drop the version while it stays active; the kept archive still serves it.
+        File.Delete(feed);
+        using var restarted = CreateHost(Path.GetDirectoryName(feed)!, createFeedPackage: false);
+        var restartedPackage = await GetActivePackageAsync(restarted);
+        var reopened = await restarted.Services.GetRequiredService<IPackageArchiveReader>().OpenAsync(restartedPackage);
+        Assert.Equal(archive.ArchiveHash, reopened.ArchiveHash);
+    }
+
+    [Fact]
+    public async Task OpenAsync_UnenrolledHost_RefusesModifiedReplacedOrMissingArchive()
+    {
+        AssertExpectedFilesystem(_root);
+        var feed = WritePackage("1.0.0");
+        using var host = CreateHost(feed);
+        await ReconcileAsync(host);
+        var package = await GetActivePackageAsync(host);
+        var archivePath = PackageInstallStore.GetArchivePath(package.InstallPath);
+        var original = await File.ReadAllBytesAsync(archivePath);
+
+        // Modified in place.
+        var modified = (byte[])original.Clone();
+        modified[^12] ^= 0x5A;
+        await File.WriteAllBytesAsync(archivePath, modified);
+        await AssertRefusedAsync(package, PackageArchiveFailureReason.HashMismatch);
+
+        // Replaced together with the acquisition hash file beside it: the active record still decides.
+        var replacement = BuildPackage("1.0.0", "export const addon = 'forged';");
+        await File.WriteAllBytesAsync(archivePath, replacement);
+        await File.WriteAllTextAsync(Path.Combine(package.InstallPath, PackageInstallStore.ContentHashFileName),
+            "sha512:" + Convert.ToBase64String(System.Security.Cryptography.SHA512.HashData(replacement)));
+        await AssertRefusedAsync(package, PackageArchiveFailureReason.HashMismatch);
+
+        // Missing.
+        File.Delete(archivePath);
+        await AssertRefusedAsync(package, PackageArchiveFailureReason.ArchiveMissing);
+
+        // Restored: served again.
+        await File.WriteAllBytesAsync(archivePath, original);
+        using var reader = CreateHost(Path.GetDirectoryName(feed)!, createFeedPackage: false);
+        var archive = await reader.Services.GetRequiredService<IPackageArchiveReader>().OpenAsync(package);
+        Assert.Equal(ModuleScript, Encoding.UTF8.GetString(archive.GetEntry("staticwebassets/module.js")!.ReadAllBytes()));
+
+        async Task AssertRefusedAsync(ActivePackage refused, PackageArchiveFailureReason reason)
+        {
+            // A fresh host has an empty verified-archive cache.
+            using var fresh = CreateHost(Path.GetDirectoryName(feed)!, createFeedPackage: false);
+            var error = await Assert.ThrowsAsync<PackageArchiveException>(() =>
+                fresh.Services.GetRequiredService<IPackageArchiveReader>().OpenAsync(refused).AsTask());
+            Assert.Equal(reason, error.Reason);
+            Assert.Equal(PackageId, error.PackageId);
+            Assert.Contains(PackageId, error.Message, StringComparison.Ordinal);
+        }
+    }
+
+    private static string PackageArchiveHash(ActivePackage package) =>
+        "sha512:" + Convert.ToBase64String(System.Security.Cryptography.SHA512.HashData(
+            File.ReadAllBytes(PackageInstallStore.GetArchivePath(package.InstallPath))));
+
+    private string WritePackage(string version)
+    {
+        var feedDirectory = Path.Combine(_root, "feed");
+        Directory.CreateDirectory(feedDirectory);
+        var path = Path.Combine(feedDirectory, $"{PackageId}.{version}.nupkg");
+        File.WriteAllBytes(path, BuildPackage(version, ModuleScript));
+        return path;
+    }
+
+    private IHost CreateHost(string feedPackageOrDirectory, bool createFeedPackage = true)
+    {
+        var feedDirectory = createFeedPackage ? Path.GetDirectoryName(feedPackageOrDirectory)! : feedPackageOrDirectory;
+        var configuration = new Dictionary<string, string?>
+        {
+            ["Nuplane:Reconciliation:EnableAutomaticReconciliation"] = "false",
+            ["Nuplane:Reconciliation:MaxRetryAttempts"] = "0",
+            ["Nuplane:FeedResolution:OfflineMode"] = "true",
+            ["Nuplane:FeedResolution:PackageInstallRoot"] = Path.Combine(_root, "packages"),
+            ["Nuplane:StoreRegistry:StateFilePath"] = Path.Combine(_root, "store-state.json")
+        };
+
+        return new HostBuilder()
+            .ConfigureAppConfiguration((_, builder) => builder.AddInMemoryCollection(configuration))
+            .ConfigureLogging(logging => logging.ClearProviders().SetMinimumLevel(LogLevel.Warning))
+            .ConfigureServices((context, services) => services.AddNuplane(context.Configuration.GetSection("Nuplane"),
+                nuplane => nuplane.AddDirectoryFeed("addons", feedDirectory, feed =>
+                {
+                    feed.Include(PackageId);
+                    feed.Watch = false;
+                })))
+            .Build();
+    }
+
+    private static async Task ReconcileAsync(IHost host)
+    {
+        var result = await host.Services.GetRequiredService<IReconciliationService>()
+            .TriggerAsync(ReconciliationTrigger.Manual(), CancellationToken.None);
+        Assert.False(result.Skipped);
+        Assert.Empty(result.FailedPackages);
+    }
+
+    private static async Task<ActivePackage> GetActivePackageAsync(IHost host)
+    {
+        var snapshot = await host.Services.GetRequiredService<IActivePackageCatalog>()
+            .GetActivePackagesAsync(CancellationToken.None);
+        return Assert.Single(snapshot.Packages);
+    }
+
+    private static byte[] BuildPackage(string version, string moduleScript)
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            Write(archive, $"{PackageId}.nuspec", $"""
+                <?xml version="1.0" encoding="utf-8"?>
+                <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+                  <metadata>
+                    <id>{PackageId}</id>
+                    <version>{version}</version>
+                    <authors>nuplane-tests</authors>
+                    <description>Archive reader acceptance fixture.</description>
+                  </metadata>
+                </package>
+                """);
+            Write(archive, "staticwebassets/module.js", moduleScript);
+        }
+
+        return stream.ToArray();
+    }
+
+    private static void Write(ZipArchive archive, string path, string content)
+    {
+        using var writer = new StreamWriter(archive.CreateEntry(path).Open(), new UTF8Encoding(false));
+        writer.Write(content);
+    }
+
+    private static void AssertExpectedFilesystem(string path)
+    {
+        if (Environment.GetEnvironmentVariable("NUPLANE_EXPECT_FILESYSTEM") is not { Length: > 0 } expected)
+            return;
+        Assert.True(OperatingSystem.IsLinux(), "NUPLANE_EXPECT_FILESYSTEM is checked on Linux only.");
+
+        // mountinfo: "id parent major:minor root mountpoint options [optional...] - fstype source superoptions"
+        var full = Path.GetFullPath(path);
+        string? actual = null;
+        var longest = -1;
+        foreach (var line in File.ReadLines("/proc/self/mountinfo"))
+        {
+            var fields = line.Split(' ');
+            var separator = Array.IndexOf(fields, "-");
+            if (fields.Length < 5 || separator < 0 || separator + 1 >= fields.Length)
+                continue;
+            var mountPoint = fields[4].Replace("\\040", " ");
+            var contains = mountPoint == "/" || full == mountPoint || full.StartsWith(mountPoint + "/", StringComparison.Ordinal);
+            if (contains && mountPoint.Length > longest)
+            {
+                longest = mountPoint.Length;
+                actual = fields[separator + 1];
+            }
+        }
+
+        Assert.Equal(expected, actual);
+    }
+}

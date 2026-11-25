@@ -865,6 +865,10 @@ jobs:
           python3 build/verify-required-trx.py "$RUNNER_TEMP/package-content-runtime/package-content-runtime.trx" \
             build/test-cases/package-content-runtime.json
 
+      - name: Qualify archive-backed package content without an enrolled store
+        shell: bash
+        run: bash build/qualify-package-archives.sh "$RUNNER_TEMP/package-archives"
+
       - name: Qualify package-content admission and held native replay
         shell: bash
         run: |
@@ -1459,6 +1463,123 @@ jobs:
           path: ${{ runner.temp }}/retained-loading/
           if-no-files-found: ignore
           retention-days: 7
+
+  package-archive-container:
+    name: Archive-backed package content (Linux container, overlayfs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: mcr.microsoft.com/dotnet/sdk:10.0
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Install the TRX verifier's Python
+        run: apt-get update -qq && apt-get install -y -qq python3
+
+      # The workspace is a bind mount from the runner; /var/tmp is the container's own overlayfs layer.
+      - name: Qualify the reader on the container's writable layer
+        shell: bash
+        env:
+          NUPLANE_ARCHIVE_TEST_ROOT: /var/tmp/nuplane-archives
+          NUPLANE_EXPECT_FILESYSTEM: overlay
+        run: |
+          set -euo pipefail
+          mkdir -p "$NUPLANE_ARCHIVE_TEST_ROOT"
+          bash build/qualify-package-archives.sh "$RUNNER_TEMP/package-archives-overlay"
+
+  package-archive-filesystems:
+    name: Archive-backed package content (Linux ${{ matrix.filesystem }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        filesystem: [xfs, btrfs, tmpfs, ext4]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Mount an owned ${{ matrix.filesystem }} test root
+        shell: bash
+        run: |
+          set -euo pipefail
+          mount_point="$RUNNER_TEMP/archive-root"
+          mkdir -p "$mount_point"
+          case "${{ matrix.filesystem }}" in
+            tmpfs) sudo mount -t tmpfs -o size=512m tmpfs "$mount_point" ;;
+            *)
+              if [[ "${{ matrix.filesystem }}" != ext4 ]]; then
+                sudo apt-get update -qq
+                sudo apt-get install -y -qq xfsprogs btrfs-progs
+              fi
+              image="$RUNNER_TEMP/archive-root.img"
+              truncate -s 512M "$image"
+              sudo "mkfs.${{ matrix.filesystem }}" -q "$image" 2>/dev/null || sudo "mkfs.${{ matrix.filesystem }}" "$image"
+              sudo mount -o loop "$image" "$mount_point"
+              ;;
+          esac
+          sudo chown "$(id -u):$(id -g)" "$mount_point"
+          echo "NUPLANE_ARCHIVE_TEST_ROOT=$mount_point" >> "$GITHUB_ENV"
+          echo "NUPLANE_EXPECT_FILESYSTEM=${{ matrix.filesystem }}" >> "$GITHUB_ENV"
+
+      - name: Qualify the reader on ${{ matrix.filesystem }}
+        shell: bash
+        run: bash build/qualify-package-archives.sh "$RUNNER_TEMP/package-archives-${{ matrix.filesystem }}"
+
+  package-archive-windows-arm64:
+    name: Archive-backed package content (Windows arm64)
+    runs-on: windows-11-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Setup Python for the TRX verifier
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Qualify the reader on Windows arm64
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$(dotnet --info | grep -m1 'RID:' | awk '{print $2}')" != win-arm64 ]]; then
+            echo "The Windows arm64 lane must run a native win-arm64 SDK."
+            exit 1
+          fi
+          bash build/qualify-package-archives.sh "$RUNNER_TEMP/package-archives-arm64"
 
   build-test:
     needs:

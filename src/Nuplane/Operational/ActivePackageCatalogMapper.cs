@@ -405,7 +405,8 @@ internal static class ActivePackageCatalogMapper
                 package.InstallPath,
                 activatedAtUtc,
                 correlationId,
-                graphNodesByPackageId);
+                graphNodesByPackageId,
+                package.PackageContentHash);
 
             if (!changedPackageIds.Contains(package.Id) &&
                 descriptors.TryGetValue(package.Id, out var existing) &&
@@ -430,7 +431,8 @@ internal static class ActivePackageCatalogMapper
                     package.InstallPath,
                     activatedAtUtc,
                     correlationId,
-                    graphNodesByPackageId);
+                    graphNodesByPackageId,
+                    package.PackageContentHash);
             }
         }
 
@@ -767,6 +769,7 @@ internal static class ActivePackageCatalogMapper
         string.Equals(existing.FeedName, next.FeedName, StringComparison.Ordinal) &&
         string.Equals(existing.SourceName, next.SourceName, StringComparison.Ordinal) &&
         string.Equals(existing.InstallPath, next.InstallPath, StringComparison.Ordinal) &&
+        string.Equals(existing.ArchiveHash, next.ArchiveHash, StringComparison.Ordinal) &&
         string.Equals(existing.GraphId, next.GraphId, StringComparison.OrdinalIgnoreCase) &&
         HasSameGraphGeneration(existing, next) &&
         existing.PackageRole == next.PackageRole &&
@@ -829,7 +832,8 @@ internal static class ActivePackageCatalogMapper
         string installPath,
         DateTimeOffset activatedAtUtc,
         string correlationId,
-        IReadOnlyDictionary<string, GraphNodeProjection> graphNodesByPackageId)
+        IReadOnlyDictionary<string, GraphNodeProjection> graphNodesByPackageId,
+        string? archiveHash)
     {
         if (!graphNodesByPackageId.TryGetValue(packageId, out var graphNode))
         {
@@ -840,7 +844,10 @@ internal static class ActivePackageCatalogMapper
                 sourceName,
                 installPath,
                 activatedAtUtc,
-                correlationId);
+                correlationId)
+            {
+                ArchiveHash = archiveHash
+            };
         }
 
         return new ActivePackageDescriptor(
@@ -856,7 +863,10 @@ internal static class ActivePackageCatalogMapper
             graphNode.Role,
             graphNode.RootPackageIds,
             graphNode.DependencyOfPackageIds,
-            Discoverable: graphNode.Role is not ActivePackageRole.Dependency);
+            Discoverable: graphNode.Role is not ActivePackageRole.Dependency)
+        {
+            ArchiveHash = archiveHash
+        };
     }
 
     private static IReadOnlyDictionary<string, GraphNodeProjection> BuildGraphNodesByPackageId(IReadOnlyList<ResolvedPackageGraph> graphs)

@@ -36,6 +36,16 @@ internal static class PackageInstallStore
     public const string ContentHashFileName = ".nuplane-content-hash";
 
     /// <summary>
+    /// The exact acquired <c>.nupkg</c>, kept inside the install directory so it shares the install's
+    /// publication, protection and pruning lifetime. <see cref="IPackageArchiveReader"/> serves content from it.
+    /// </summary>
+    public const string ArchiveFileName = ".nuplane-archive";
+
+    /// <summary>Gets the path of the archive kept for an install directory.</summary>
+    /// <param name="installDirectory">The package install directory.</param>
+    internal static string GetArchivePath(string installDirectory) => Path.Combine(installDirectory, ArchiveFileName);
+
+    /// <summary>
     /// Resolves the writable root that all package extractions land under.
     /// </summary>
     /// <param name="options">The feed resolution options carrying the configured root.</param>
@@ -147,16 +157,36 @@ internal static class PackageInstallStore
 
         try
         {
-            await using var packageStream = File.OpenRead(nupkgPath);
-            var hash = await SHA512.HashDataAsync(packageStream, cancellationToken);
-            var contentHash = "sha512:" + Convert.ToBase64String(hash);
-            packageStream.Position = 0;
-
             Directory.CreateDirectory(stagingDirectory);
-            using (var archive = new ZipArchive(packageStream, ZipArchiveMode.Read, leaveOpen: true))
+            var archivePath = GetArchivePath(stagingDirectory);
+
+            // Keep the archive first, then hash and extract that kept copy, so the recorded hash, the
+            // extracted files and the archive the reader later verifies all come from the same bytes.
+            await using (var source = File.OpenRead(nupkgPath))
+            await using (var kept = new FileStream(archivePath, FileMode.CreateNew, FileAccess.Write,
+                             FileShare.None, 81920, useAsync: true))
             {
+                await source.CopyToAsync(kept, cancellationToken);
+            }
+
+            string contentHash;
+            await using (var packageStream = File.OpenRead(archivePath))
+            {
+                var hash = await SHA512.HashDataAsync(packageStream, cancellationToken);
+                contentHash = "sha512:" + Convert.ToBase64String(hash);
+                packageStream.Position = 0;
+
+                using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read, leaveOpen: true);
+                foreach (var entry in archive.Entries)
+                {
+                    if (IsReservedRootEntry(entry.FullName))
+                        throw new InvalidDataException(
+                            $"The package archive contains the reserved install entry '{entry.FullName}'.");
+                }
+
                 archive.ExtractToDirectory(stagingDirectory, overwriteFiles: true);
             }
+
             await File.WriteAllTextAsync(
                 Path.Combine(stagingDirectory, ContentHashFileName),
                 contentHash,
@@ -343,7 +373,7 @@ internal static class PackageInstallStore
         return result;
     }
 
-    private static string? ParseCanonicalContentHash(string contentHash)
+    internal static string? ParseCanonicalContentHash(string contentHash)
     {
         const string prefix = "sha512:";
         if (contentHash.Length != prefix.Length + 88 || !contentHash.StartsWith(prefix, StringComparison.Ordinal))
@@ -542,6 +572,11 @@ internal static class PackageInstallStore
 
     private static PackageStoreAdmissionException Refuse(string message, PhysicalRootIdentity? root = null)
         => new(PackageStoreAdmissionReason.UnknownAuthority, message, root);
+
+    // The marker and hash files are written after extraction and overwrite package entries of the same
+    // name (released behavior). The kept archive is written before extraction, so its name is refused.
+    private static bool IsReservedRootEntry(string entryName) =>
+        string.Equals(entryName.Replace('\\', '/').TrimStart('/'), ArchiveFileName, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Renames a completed staging directory onto the final install path.

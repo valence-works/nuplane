@@ -512,6 +512,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             EmitPackageAssembly(packageId, Path.Combine(path, packageId + ".dll"), emitNativeProbe);
             File.WriteAllText(Path.Combine(path, Nuplane.Metadata.NuplanePackageMetadataReader.MetadataFileName),
                 $"{{\"schemaVersion\":2,\"loading\":{{\"loadMode\":\"{_packageLoadMode}\",\"scope\":\"DependencyClosure\"}}}}");
+            File.WriteAllText(Path.Combine(path, PackageInstallStore.ArchiveFileName), $"archive:{packageId}:{version}");
             beforeCompletionMarker?.Invoke(path);
             File.WriteAllBytes(Path.Combine(path, PackageInstallStore.CompletionMarkerFileName), []);
             return new ResolvedPackage(packageId, version, "feed", path, DateTimeOffset.UnixEpoch, sourceName);

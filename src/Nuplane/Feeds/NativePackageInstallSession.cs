@@ -306,6 +306,8 @@ internal static class NativePackageInstallSession
                     "An extracted package entry changed after writing.");
             }
 
+            await WriteKeptArchiveAsync(files, names, streams, preparedDirectory, archiveStream,
+                archiveInfo.Length, contentHash, borrow.Root, cancellationToken).ConfigureAwait(false);
             WriteNewPackageMetadata(files, names, preparedDirectory, PackageInstallStore.ContentHashFileName,
                 StrictUtf8.GetBytes(contentHash), borrow.Root);
             WriteNewPackageMetadata(files, names, preparedDirectory, PackageInstallStore.CompletionMarkerFileName,
@@ -964,6 +966,57 @@ internal static class NativePackageInstallSession
         plan.Add(new PlannedEntry(components, false, entry));
     }
 
+    /// <summary>Copies the staged archive into the prepared install, proving the copy has the recorded hash.</summary>
+    private static async Task WriteKeptArchiveAsync(
+        IPhysicalStoreFileSystem files,
+        IPhysicalStoreNameFileSystem names,
+        IPhysicalStorePackageStreamFileSystem streams,
+        HeldDirectory preparedDirectory,
+        Stream archiveStream,
+        long archiveLength,
+        string contentHash,
+        PhysicalRootIdentity expectedRoot,
+        CancellationToken cancellationToken)
+    {
+        const string name = PackageInstallStore.ArchiveFileName;
+        archiveStream.Position = 0;
+        using var file = CreateNewFile(files, names, preparedDirectory, name, expectedRoot);
+        using var digest = IncrementalHash.CreateHash(HashAlgorithmName.SHA512);
+        long written = 0;
+        await using (var output = streams.CreatePackageFileWriteStream(
+                         preparedDirectory.Handle, name, file.Handle,
+                         files.InspectHandle(preparedDirectory.Handle), MaximumArchiveBytes))
+        {
+            var buffer = new byte[64 * 1024];
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var read = await archiveStream.ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false);
+                if (read == 0)
+                    break;
+                if (read > archiveLength - written)
+                    throw Refuse("The staged archive grew while it was kept in the install.", expectedRoot);
+                digest.AppendData(buffer, 0, read);
+                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                written += read;
+            }
+
+            await output.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (written != archiveLength ||
+            !string.Equals("sha512:" + Convert.ToBase64String(digest.GetHashAndReset()), contentHash, StringComparison.Ordinal))
+            throw Refuse("The archive kept in the install does not match the staged archive hash.", expectedRoot);
+
+        var kept = RequireRegularFile(files.InspectHandle(file.Handle), expectedRoot,
+            "The kept package archive is not a single-link regular file.", preparedDirectory.Identity, archiveLength);
+        RequireCanonicalFileName(names, preparedDirectory, name, kept, expectedRoot);
+        RequireSameEntry(kept,
+            RequireRegularFile(files.InspectChildNoFollow(preparedDirectory.Handle, name), expectedRoot,
+                "The kept package archive changed after writing.", preparedDirectory.Identity, archiveLength),
+            expectedRoot, "The kept package archive changed after writing.");
+    }
+
     private static async Task<long> CopyEntryBoundedAsync(
         Stream input,
         Stream output,
@@ -1201,7 +1254,8 @@ internal static class NativePackageInstallSession
     {
         var comparer = PathComparer(semantics);
         return comparer.Equals(name, PackageInstallStore.CompletionMarkerFileName) ||
-               comparer.Equals(name, PackageInstallStore.ContentHashFileName);
+               comparer.Equals(name, PackageInstallStore.ContentHashFileName) ||
+               comparer.Equals(name, PackageInstallStore.ArchiveFileName);
     }
 
     private static bool IsReservedRootName(string name, PhysicalStoreNameSemantics semantics)

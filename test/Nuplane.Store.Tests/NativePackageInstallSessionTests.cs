@@ -42,6 +42,24 @@ public sealed class NativePackageInstallSessionTests
             await PackageInstallStore.ReadContentHashAsync(destination, borrow, CancellationToken.None));
         Assert.Equal(payload, await File.ReadAllBytesAsync(Path.Combine(destination, "lib", "net10.0", "Native.Package.dll")));
         Assert.Empty(await File.ReadAllBytesAsync(Path.Combine(destination, PackageInstallStore.CompletionMarkerFileName)));
+        Assert.Equal(archiveBytes, await File.ReadAllBytesAsync(Path.Combine(destination, PackageInstallStore.ArchiveFileName)));
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task AcquireAsync_RejectsPackageEntryNamedLikeTheKeptArchive()
+    {
+        using var context = await RootMembershipProtectionVerificationTests.Context.CreateCompleteAsync();
+        await using var admission = await CreateAdmission(context)
+            .AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Installation);
+        using var borrow = Assert.IsType<PackageStoreOperationOwner>(admission.Owner).Borrow();
+        var destination = InstallPath(context, "Reserved.Kept.Archive");
+        var archiveBytes = CreateArchive((PackageInstallStore.ArchiveFileName, "forged"u8.ToArray()));
+
+        await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => NativePackageInstallSession.AcquireAsync(
+            context.Fixture.PackageInstallRoot, destination, borrow,
+            async (stream, token) => await stream.WriteAsync(archiveBytes, token), CancellationToken.None));
+
+        Assert.False(Directory.Exists(destination));
     }
 
     [SupportedPhysicalStoreFact]

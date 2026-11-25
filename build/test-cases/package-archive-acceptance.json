@@ -1,0 +1,4 @@
+[
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_UnenrolledHost_RefusesModifiedReplacedOrMissingArchive",
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_UnenrolledHost_ServesActivePackageContentFromVerifiedArchive"
+]

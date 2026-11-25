@@ -5,6 +5,12 @@ after every client participates in its coordinated admission protocol. Ordinary
 Nuplane configuration remains supported. It does not become eligible for pruning
 just because the maintenance package is installed.
 
+Enrollment is not needed to read package content. `IPackageArchiveReader` serves an active package's
+files from the archive kept in its install directory, verified against its recorded sha512, on any
+filesystem (see the README section "Reading package content" and
+[ADR-0002](adr/0002-archive-backed-package-content.md)). The kept archive, `.nuplane-archive`, is part of
+its install: pruning deletes it only together with that install.
+
 ## Configure participation
 
 Configure the package root and each client's state file through trusted host

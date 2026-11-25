@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Admin;
+using Nuplane.Feeds;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Maintenance;
 using Nuplane.Store.State;
@@ -86,6 +87,40 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         Assert.Equal("Completed", repeated.Status);
         Assert.DoesNotContain(repeated.Candidates, static candidate => candidate.PhysicalOutcome == "Deleted");
         AssertMaintenanceStateEqual(stateBefore, fixture);
+    }
+
+    [Fact]
+    public async Task PublicMaintenance_ExecuteKeepsProtectedArchivesAndDeletesPrunedArchivesWithTheirInstall()
+    {
+        using var fixture = await GraphUseFixture.CreateAsync();
+        await using var provider = CreateMaintenanceProvider(fixture);
+        var operations = provider.GetRequiredService<INuplanePackageStoreMaintenanceOperations>();
+        var retention = new PackageStoreRetentionPolicy(0);
+        var preview = await operations.PruneAsync(new PackageStorePruneRequest(Retention: retention));
+        var archives = preview.Candidates.ToDictionary(
+            static candidate => candidate.Install.RootRelativeInstallPath,
+            candidate => File.ReadAllBytes(Path.Combine(fixture.RootPath, candidate.Install.RootRelativeInstallPath,
+                PackageInstallStore.ArchiveFileName)),
+            StringComparer.Ordinal);
+
+        var executed = await operations.PruneAsync(Confirm(preview, retention));
+
+        Assert.Equal("Completed", executed.Status);
+        Assert.Contains(executed.Candidates, static candidate => candidate.PhysicalOutcome == "Deleted");
+        Assert.Contains(executed.Candidates, static candidate => candidate.PhysicalOutcome == "Retained");
+        Assert.All(executed.Candidates, candidate =>
+        {
+            var install = Path.Combine(fixture.RootPath, candidate.Install.RootRelativeInstallPath);
+            if (candidate.PhysicalOutcome == "Deleted")
+            {
+                Assert.False(Directory.Exists(install));
+                return;
+            }
+
+            Assert.Equal("Retained", candidate.PhysicalOutcome);
+            Assert.Equal(archives[candidate.Install.RootRelativeInstallPath],
+                File.ReadAllBytes(Path.Combine(install, PackageInstallStore.ArchiveFileName)));
+        });
     }
 
     [Fact]

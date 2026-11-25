@@ -141,6 +141,8 @@ public static class NuplaneRuntimeRegistrationServices
                 : new ActivePackageCatalog(storeRegistry, logger, metrics);
         });
         services.AddSingleton<IActivePackageCatalog>(sp => sp.GetRequiredService<ActivePackageCatalog>());
+        services.TryAddSingleton<PackageArchiveReader>();
+        services.TryAddSingleton<IPackageArchiveReader>(sp => sp.GetRequiredService<PackageArchiveReader>());
         services.TryAddSingleton<NuplaneStoreSnapshotAccess>(sp =>
         {
             var composition = sp.GetRequiredService<PackageStoreCompositionSnapshot>();

@@ -554,25 +554,67 @@ builder.Services.AddNuplane(nuplane =>
 
 ## 🗂 Package Store Layout
 
-Nuplane maintains a deterministic store:
+Every feed kind installs under the one writable `PackageInstallRoot`:
 
 ```
-root/
-  state.json
-  packages/{id}/{version}/
-  current/{id} -> ../packages/{id}/{version}
-  staging/
+<PackageInstallRoot>/
+  <feed>/<packageId>/<version>/
+    ...extracted package files...
+    .nuplane-archive        the exact .nupkg acquired from the feed
+    .nuplane-content-hash   sha512:<base64> of that archive
+    .nuplane-ready          completion marker, written last
+  .tmp/                     ordinary staging
 ```
+
+The persisted state file (`Nuplane:StoreRegistry:StateFilePath`) records the active version and
+descriptor of each package, including the archive hash.
 
 Updates are atomic:
 
-* Download to staging
-* Validate
-* Move to immutable store
-* Atomically switch active version
-* Persist state
+* Download or copy the archive into staging
+* Hash it, then extract it
+* Publish the complete install directory with one rename
+* Switch the active version and persist state
 
-If anything fails, the previous version remains active.
+If anything fails, the previous version remains active. An install directory is immutable once
+published, and the kept archive shares its lifetime: pruning removes the archive only with its install,
+and never removes an active, last-known-good or in-use install.
+
+### Reading package content
+
+`IPackageArchiveReader` serves an active package's files from its kept archive. `AddNuplane` registers it
+for every composition, with or without an enrolled coordinated store:
+
+```csharp
+var snapshot = await catalog.GetActivePackagesAsync(cancellationToken);   // IActivePackageCatalog
+var package = snapshot.Packages.Single(p => p.PackageId == "Acme.Addon");
+var archive = await archives.OpenAsync(package, cancellationToken);        // IPackageArchiveReader
+if (archive.GetEntry("staticwebassets/module.js") is { Length: <= MaxBytes } entry)
+    return entry.ReadAllBytes();
+```
+
+* The reader reads the archive into memory, computes its sha512 and compares it with
+  `ActivePackage.ArchiveHash`, recorded when the package was activated. Only bytes that match are served.
+* A modified, replaced, truncated or missing archive is refused with `PackageArchiveException`, which
+  names the package, the version and a `Reason` (`HashNotRecorded`, `ArchiveMissing`, `ArchiveTooLarge`,
+  `HashMismatch` or `InvalidArchive`). Each refusal is logged as a warning.
+* It works on any filesystem that can store a file. CI qualifies it on Linux overlayfs (a container's
+  writable layer), xfs, btrfs, tmpfs and ext4, macOS, and Windows x64 and arm64, all without an enrolled
+  store.
+* Every file entry is exposed. Paths use `/` or `\`, are matched case-insensitively, and must stay inside
+  the package: rooted paths, empty, `.` or `..` segments, `:` and NUL are refused. When two entries share a
+  path after normalization, neither is exposed.
+* Verified archives stay in a bounded in-memory cache, so each archive is verified once until it is
+  evicted. Configure the bounds under `Nuplane:PackageArchives`: `CacheBytes` (64 MiB by default, 0 turns
+  the cache off) and `MaximumArchiveBytes` (256 MiB by default).
+* Packages installed or activated by a Nuplane version without archive retention have no kept archive
+  or recorded hash. Reinstall them, for example by removing the install root and state file.
+
+The extracted-store reader, `PackageContent` with an operation borrow or graph-use lease, stays
+available for hosts that enroll the coordinated package store (see
+[Manual package-store maintenance](docs/package-store-maintenance.md)). That store qualifies only
+specific native filesystems; the archive reader needs no qualification. See
+[ADR-0002](docs/adr/0002-archive-backed-package-content.md).
 
 ---
 

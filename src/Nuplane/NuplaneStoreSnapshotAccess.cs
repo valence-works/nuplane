@@ -196,6 +196,7 @@ public sealed class NuplaneStoreSnapshotAccess
             if (!string.Equals(first.PackageId, second.PackageId, StringComparison.Ordinal) ||
                 !string.Equals(first.Version, second.Version, StringComparison.Ordinal) ||
                 !string.Equals(first.InstallPath, second.InstallPath, StringComparison.Ordinal) ||
+                !string.Equals(first.ArchiveHash, second.ArchiveHash, StringComparison.Ordinal) ||
                 !string.Equals(first.FeedName, second.FeedName, StringComparison.Ordinal) ||
                 !string.Equals(first.SourceName, second.SourceName, StringComparison.Ordinal) ||
                 first.ActivatedAtUtc != second.ActivatedAtUtc ||
