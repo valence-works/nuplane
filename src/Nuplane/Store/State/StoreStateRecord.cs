@@ -39,15 +39,14 @@ public sealed record StoreStateRecord(
     public PackageProtectionBundle? ProtectionBundle { get; init; }
 
     /// <summary>
-    /// Gets or initializes the archive hash recorded for each package this state has activated, keyed by
-    /// <see cref="ArchiveHashKey"/> (feed, package ID and version).
+    /// Gets or initializes the archive hash recorded for each package version this state has activated, keyed by
+    /// <see cref="ArchiveHashKey"/> (package ID and version).
     /// </summary>
     /// <remarks>
-    /// An entry is written the first time a package version becomes active and is kept after it is deactivated,
-    /// so a later rollback to that version is verified against the same record. The hash file beside the archive is
-    /// read only for a version the state has never recorded. The key names the artifact, so a differently spelled
-    /// install root cannot bypass it.
-    /// A null value is legacy absence.
+    /// An entry is written the first time a package version becomes active and is never replaced, also after the
+    /// version is deactivated. A later activation of that version, from any feed, install path or spelling of the
+    /// install root, is verified against the same record. The hash file beside an archive is read only for a
+    /// version the state has never recorded. A null value is legacy absence.
     /// </remarks>
     [JsonPropertyName("archiveHashesByPackage")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -78,25 +77,17 @@ public sealed record StoreStateRecord(
     public Dictionary<string, GraphActivationRecord> ActiveGraphsByIdNormalized =>
         ActiveGraphsById ?? new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Builds the case-folded <c>feed/packageId/version</c> key of <see cref="ArchiveHashesByPackage"/>.</summary>
+    /// <summary>Builds the <c>packageId/version</c> key of <see cref="ArchiveHashesByPackage"/>.</summary>
     /// <remarks>
-    /// Each segment is sanitized the way the install directory segment is, then folded the way common
-    /// filesystems fold names: Unicode NFC, invariant case in both directions, and trailing dots and spaces
-    /// removed (Windows). Two names that share an install directory (such as feeds <c>add/ons</c> and
-    /// <c>add_ons</c>, or <c>addons</c> and <c>addonſ</c> on a case-insensitive volume) therefore share a record.
+    /// The feed and the install path are left out: a NuGet package version names one artifact, so the same version
+    /// from another feed must have the same bytes (ADR-0001). Segments are folded like NuGet identities and common
+    /// filesystem names: Unicode NFC and invariant case in both directions.
     /// </remarks>
-    internal static string ArchiveHashKey(string? feedName, string packageId, string version) =>
-        string.Join('/',
-            string.IsNullOrWhiteSpace(feedName) ? string.Empty : FoldKeySegment(feedName),
-            FoldKeySegment(packageId),
-            FoldKeySegment(version));
+    internal static string ArchiveHashKey(string packageId, string version) =>
+        string.Join('/', FoldKeySegment(packageId), FoldKeySegment(version));
 
     private static string FoldKeySegment(string segment) =>
-        Feeds.PackageInstallStore.SanitizePathSegment(segment)
-            .Normalize(System.Text.NormalizationForm.FormC)
-            .ToUpperInvariant()
-            .ToLowerInvariant()
-            .TrimEnd('.', ' ');
+        segment.Normalize(System.Text.NormalizationForm.FormC).ToUpperInvariant().ToLowerInvariant();
 
     /// <summary>Copies the recorded archive hashes, or returns <see langword="null"/> when none are recorded.</summary>
     internal Dictionary<string, string>? CopyArchiveHashes() =>
@@ -104,7 +95,7 @@ public sealed record StoreStateRecord(
             ? new Dictionary<string, string>(hashes, StringComparer.Ordinal)
             : null;
 
-    /// <summary>Records the archive hash of every active descriptor, keeping entries for deactivated installs.</summary>
+    /// <summary>Records the archive hash of every active descriptor that has no record yet; recorded values are kept.</summary>
     internal Dictionary<string, string>? NextArchiveHashes(IEnumerable<ActivePackageDescriptor> activeDescriptors)
     {
         ArgumentNullException.ThrowIfNull(activeDescriptors);
@@ -112,7 +103,7 @@ public sealed record StoreStateRecord(
         foreach (var descriptor in activeDescriptors)
         {
             if (descriptor.ArchiveHash is { } hash)
-                next[ArchiveHashKey(descriptor.FeedName, descriptor.PackageId, descriptor.Version)] = hash;
+                next.TryAdd(ArchiveHashKey(descriptor.PackageId, descriptor.Version), hash);
         }
 
         return next.Count == 0 ? null : next;

@@ -266,6 +266,8 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
     [InlineData("caf\u00E9", "cafe\u0301")]       // NFC and NFD spellings of café
     [InlineData("addons", "addons.")]               // Windows drops a trailing dot
     [InlineData("Addons", "addons")]
+    [InlineData("strasse", "stra\u00DFe")]           // APFS full case folding: ß and ss
+    [InlineData("office", "o\uFB03ce")]              // APFS full case folding: the ﬃ ligature
     public async Task OpenAsync_FeedRenamedToAnEquivalentSpelling_NeverServesAForgedArchive(string before, string after)
     {
         AssertExpectedFilesystem(_root);
@@ -300,6 +302,44 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
             Assert.Equal(PackageArchiveFailureReason.HashMismatch, error.Reason);
             Assert.Equal(original.ArchiveHash, reached.ArchiveHash);
         }
+    }
+
+    [Fact]
+    public async Task OpenAsync_VersionServedFromAnotherFeedOverAForgedInstall_RefusesWithTheRecordedHash()
+    {
+        AssertExpectedFilesystem(_root);
+        var feed = WritePackage("1.0.0");
+        ActivePackage original;
+        using (var host = CreateHost(feed))
+        {
+            await ReconcileAsync(host);
+            original = await GetActivePackageAsync(host);
+        }
+
+        // A forged install planted where another feed would install the same version.
+        var mirrorInstall = PackageInstallStore.GetInstallDirectory(Path.Combine(_root, "packages"), "mirror", PackageId, "1.0.0");
+        Directory.CreateDirectory(mirrorInstall);
+        foreach (var file in Directory.EnumerateFiles(original.InstallPath, "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(mirrorInstall, Path.GetRelativePath(original.InstallPath, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+
+        var forged = BuildPackage("1.0.0", "export const addon = 'forged';");
+        await File.WriteAllBytesAsync(PackageInstallStore.GetArchivePath(mirrorInstall), forged);
+        await File.WriteAllTextAsync(Path.Combine(mirrorInstall, PackageInstallStore.ContentHashFileName),
+            "sha512:" + Convert.ToBase64String(System.Security.Cryptography.SHA512.HashData(forged)));
+
+        using var mirror = CreateHost(Path.GetDirectoryName(feed)!, createFeedPackage: false, feedName: "mirror");
+        await ReconcileAsync(mirror);
+        var reached = await GetActivePackageAsync(mirror);
+
+        Assert.Equal(Path.GetFullPath(mirrorInstall), Path.GetFullPath(reached.InstallPath));
+        Assert.Equal(original.ArchiveHash, reached.ArchiveHash);
+        var error = await Assert.ThrowsAsync<PackageArchiveException>(() =>
+            mirror.Services.GetRequiredService<IPackageArchiveReader>().OpenAsync(reached).AsTask());
+        Assert.Equal(PackageArchiveFailureReason.HashMismatch, error.Reason);
     }
 
     private static string PackageArchiveHash(ActivePackage package) =>

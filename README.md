@@ -597,9 +597,10 @@ if (archive.GetEntry("staticwebassets/module.js") is { Length: <= MaxBytes } ent
   `ActivePackage.ArchiveHash`. Only bytes that match are served.
 * Nuplane records a package version's hash in the state file the first time it becomes active, from the
   hash computed when its archive was acquired. It keeps that record, including after the version is
-  deactivated, keyed by feed, package ID and version. A restart, a reconciliation, a rollback to a
-  retained install, or the install root reached through another spelling is verified against that record,
-  so replacing an archive together with the hash file beside it is refused.
+  deactivated, keyed by package ID and version. A restart, a reconciliation, a rollback to a retained
+  install, another feed serving the same version, or the install root reached through another spelling is
+  verified against that record, so replacing an archive together with the hash file beside it is refused.
+  The same version with different bytes from any feed is refused; publish a new version instead.
 * A modified, replaced, truncated or missing archive is refused with `PackageArchiveException`, which
   names the package, the version and a `Reason` (`HashNotRecorded`, `ArchiveMissing`, `ArchiveUnreadable`,
   `ArchiveTooLarge`, `HashMismatch` or `InvalidArchive`). A refusal is logged as a warning when it is made; repeats within the five seconds it is remembered are not logged again.

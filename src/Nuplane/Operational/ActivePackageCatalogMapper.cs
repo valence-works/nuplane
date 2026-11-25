@@ -390,16 +390,16 @@ internal static class ActivePackageCatalogMapper
             selectedActiveGraphs);
 
         // The state records a package version's archive hash the first time it becomes active and keeps it, also
-        // after deactivation. The record is keyed by feed, package ID and version, so no spelling of the install
-        // path can miss it. Re-resolution re-reads the hash file beside the archive; that value is used only for
-        // a package version the state has never recorded.
+        // after deactivation. The record is keyed by package ID and version only, so no feed, install path or
+        // spelling can miss it. Re-resolution re-reads the hash file beside the archive; that value is used only
+        // for a package version the state has never recorded.
         var recordedByPackage = currentState.ArchiveHashesByPackage;
         string? ArchiveHashFor(ResolvedPackage package)
         {
-            var key = StoreStateRecord.ArchiveHashKey(package.FeedName, package.Id, package.Version);
+            var key = StoreStateRecord.ArchiveHashKey(package.Id, package.Version);
             if (currentState.ActivePackageDescriptorsByIdNormalized.TryGetValue(package.Id, out var current) &&
                 current.ArchiveHash is { } active &&
-                string.Equals(StoreStateRecord.ArchiveHashKey(current.FeedName, current.PackageId, current.Version),
+                string.Equals(StoreStateRecord.ArchiveHashKey(current.PackageId, current.Version),
                     key, StringComparison.Ordinal))
                 return active;
             return recordedByPackage is not null && recordedByPackage.TryGetValue(key, out var recorded)

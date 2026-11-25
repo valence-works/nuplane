@@ -91,17 +91,17 @@ public sealed class ProtectionDigestTests
 
         var recorded = withoutHash with
         {
-            ArchiveHashesByPackage = new(StringComparer.Ordinal) { ["feed/module/0.9.0"] = withHash.ActivePackageDescriptorsById!["Module"].ArchiveHash! }
+            ArchiveHashesByPackage = new(StringComparer.Ordinal) { ["module/0.9.0"] = withHash.ActivePackageDescriptorsById!["Module"].ArchiveHash! }
         };
         var emptyRecord = withoutHash with { ArchiveHashesByPackage = new(StringComparer.Ordinal) };
         var otherRecordedValue = withoutHash with
         {
-            ArchiveHashesByPackage = new(StringComparer.Ordinal) { ["feed/module/0.9.0"] = withOtherHash.ActivePackageDescriptorsById!["Module"].ArchiveHash! }
+            ArchiveHashesByPackage = new(StringComparer.Ordinal) { ["module/0.9.0"] = withOtherHash.ActivePackageDescriptorsById!["Module"].ArchiveHash! }
         };
         // Keys are exact strings, so a key without an invariant-uppercase form encodes instead of throwing.
         var unfoldableKey = withoutHash with
         {
-            ArchiveHashesByPackage = new(StringComparer.Ordinal) { ["feed/\u017Fhop/1.0.0"] = withHash.ActivePackageDescriptorsById!["Module"].ArchiveHash! }
+            ArchiveHashesByPackage = new(StringComparer.Ordinal) { ["\u017Fhop/1.0.0"] = withHash.ActivePackageDescriptorsById!["Module"].ArchiveHash! }
         };
         Assert.NotEqual(ProtectionDigest.StateBody(recorded), ProtectionDigest.StateBody(unfoldableKey));
         Assert.NotEqual(ProtectionDigest.StateBody(withoutHash), ProtectionDigest.StateBody(recorded));
