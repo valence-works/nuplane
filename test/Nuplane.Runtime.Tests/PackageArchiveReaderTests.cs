@@ -120,11 +120,13 @@ public sealed class PackageArchiveReaderTests : IDisposable
             {
                 File.CreateSymbolicLink(ArchivePath(package), target);
             }
-            catch (IOException) when (OperatingSystem.IsWindows())
+            // Creating links needs Developer Mode or an elevated process on Windows. Hosted CI runners are
+            // elevated, so there (CI is set) the row must run.
+            catch (IOException) when (OperatingSystem.IsWindows() && Environment.GetEnvironmentVariable("CI") is null)
             {
-                return; // Creating links needs Developer Mode or an elevated process on Windows.
+                return;
             }
-            catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows())
+            catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows() && Environment.GetEnvironmentVariable("CI") is null)
             {
                 return;
             }
@@ -143,7 +145,8 @@ public sealed class PackageArchiveReaderTests : IDisposable
         var archive = CreateArchive(("content/a.txt", "a"u8.ToArray()));
         var package = Install("Acme.Addon", "1.0.0", archive);
         File.Delete(ArchivePath(package));
-        var reader = CreateReader();
+        var reader = new PackageArchiveReader(Options.Create(new PackageArchiveReaderOptions()),
+            NullLogger<PackageArchiveReader>.Instance, TimeSpan.FromHours(1), TimeSpan.FromSeconds(30), openArchive: null);
         var first = await Assert.ThrowsAsync<PackageArchiveException>(() => reader.OpenAsync(package).AsTask());
         await File.WriteAllBytesAsync(ArchivePath(package), archive);
 

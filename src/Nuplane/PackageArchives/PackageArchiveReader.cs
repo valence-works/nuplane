@@ -22,6 +22,9 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
     private readonly TimeSpan _refusalRetention;
     private readonly TimeSpan _openTimeout;
     private readonly Func<string, FileStream> _openArchive;
+    // Bounds the archive bytes held by loads in progress: at most this many archives are read at once.
+    private readonly SemaphoreSlim _loadSlots = new(MaximumConcurrentLoads, MaximumConcurrentLoads);
+    private const int MaximumConcurrentLoads = 4;
     private long _cachedBytes;
 
     public PackageArchiveReader(IOptions<PackageArchiveReaderOptions> options, ILogger<PackageArchiveReader> logger)
@@ -110,8 +113,19 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
     {
         try
         {
-            var bytes = await ReadArchiveAsync(package, archivePath).ConfigureAwait(false);
-            var actualHash = "sha512:" + Convert.ToBase64String(SHA512.HashData(bytes));
+            byte[] bytes;
+            string actualHash;
+            await _loadSlots.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                bytes = await ReadArchiveAsync(package, archivePath).ConfigureAwait(false);
+                actualHash = "sha512:" + Convert.ToBase64String(SHA512.HashData(bytes));
+            }
+            finally
+            {
+                _loadSlots.Release();
+            }
+
             if (!string.Equals(actualHash, recordedHash, StringComparison.Ordinal))
                 throw Refuse(package, PackageArchiveFailureReason.HashMismatch,
                     $"'{archivePath}' does not match the sha512 recorded at acquisition; it was modified or replaced.");

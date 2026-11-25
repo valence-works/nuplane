@@ -14,7 +14,7 @@ fi
 
 dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
   --configuration Release --framework net10.0 \
-  --filter "FullyQualifiedName~Nuplane.Runtime.Tests.PackageArchive|FullyQualifiedName~Nuplane.Runtime.Tests.Store.StoreStateRecordArchiveHashTests|FullyQualifiedName~Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_Archive" \
+  --filter "FullyQualifiedName~Nuplane.Runtime.Tests.PackageArchive|FullyQualifiedName~Nuplane.Runtime.Tests.Store.StoreStateRecordTests|FullyQualifiedName~Nuplane.Runtime.Tests.Store.StoreRegistryTests|FullyQualifiedName~Nuplane.Runtime.Tests.Operational.ActivePackageCatalogMapperTests|FullyQualifiedName~Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_Archive" \
   --blame-hang-timeout 3m \
   --logger "trx;LogFileName=package-archive-reader.trx" \
   --results-directory "$results_directory/reader"

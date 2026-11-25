@@ -6,7 +6,11 @@
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(entryName: \".nuplane-archive\")",
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(entryName: \".nuplane-archive/nested.txt\")",
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(entryName: \"lib/../.nuplane-archive\")",
+  "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(entryName: \"x\\0/../.nuplane-archive\")",
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveSuppliesHashMetadata_OverwritesWithActualArchiveHash",
+  "Nuplane.Runtime.Tests.Operational.ActivePackageCatalogMapperTests.BuildNextDescriptors_RecordedVersion_UsesTheRecordOverTheHashReadFromDisk(feedName: \"feed\", installPath: \"/packages/feed/Acme.Addon/1.0.0\")",
+  "Nuplane.Runtime.Tests.Operational.ActivePackageCatalogMapperTests.BuildNextDescriptors_RecordedVersion_UsesTheRecordOverTheHashReadFromDisk(feedName: \"mirror\", installPath: \"/packages/mirror/Acme.Addon/1.0.0\")",
+  "Nuplane.Runtime.Tests.Operational.ActivePackageCatalogMapperTests.BuildNextDescriptors_UnrecordedVersion_UsesTheAcquisitionRecord",
   "Nuplane.Runtime.Tests.PackageArchiveReaderOptionsValidatorTests.Validate_DefaultOptions_Succeeds",
   "Nuplane.Runtime.Tests.PackageArchiveReaderOptionsValidatorTests.Validate_OutOfRangeBounds_Fails(maximumArchiveBytes: -1, cacheBytes: 0)",
   "Nuplane.Runtime.Tests.PackageArchiveReaderOptionsValidatorTests.Validate_OutOfRangeBounds_Fails(maximumArchiveBytes: 0, cacheBytes: 0)",
@@ -39,7 +43,8 @@
   "Nuplane.Runtime.Tests.PackageArchiveTests.GetEntry_BackslashInEntryName_IsReadAsASeparator",
   "Nuplane.Runtime.Tests.PackageArchiveTests.GetEntry_EscapingInvalidOrAmbiguousNames_AreNotExposed",
   "Nuplane.Runtime.Tests.PackageArchiveTests.ReadAllBytes_ConcurrentReads_ReturnEachEntryExactly",
-  "Nuplane.Runtime.Tests.Store.StoreStateRecordArchiveHashTests.ArchiveHashKey_SpellingsOfOneVersion_ShareAKey",
-  "Nuplane.Runtime.Tests.Store.StoreStateRecordArchiveHashTests.NextArchiveHashes_RecordedVersion_KeepsTheFirstValue",
-  "Nuplane.Runtime.Tests.Store.StoreStateRecordArchiveHashTests.WithRecordedArchiveHashes_DescriptorDisagreeingWithTheRecord_TakesTheRecordedValue"
+  "Nuplane.Runtime.Tests.Store.StoreRegistryTests.PersistActiveVersionsAsync_DescriptorDisagreeingWithTheRecord_PersistsTheRecordedHash",
+  "Nuplane.Runtime.Tests.Store.StoreStateRecordTests.ArchiveHashKey_SpellingsOfOneVersion_ShareAKey",
+  "Nuplane.Runtime.Tests.Store.StoreStateRecordTests.NextArchiveHashes_RecordedVersion_KeepsTheFirstValue",
+  "Nuplane.Runtime.Tests.Store.StoreStateRecordTests.WithRecordedArchiveHashes_DescriptorDisagreeingWithTheRecord_TakesTheRecordedValue"
 ]

@@ -3,7 +3,7 @@ using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Store;
 
-public sealed class StoreStateRecordArchiveHashTests
+public sealed class StoreStateRecordTests
 {
     private const string Recorded = "sha512:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
     private const string Other = "sha512:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ==";

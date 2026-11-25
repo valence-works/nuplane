@@ -612,7 +612,8 @@ if (archive.GetEntry("staticwebassets/module.js") is { Length: <= MaxBytes } ent
   path after normalization, neither is exposed.
 * Verified archives stay in a bounded in-memory cache, so each archive is verified once until it is
   evicted. An archive larger than `CacheBytes` is never cached, so every open reads and verifies it
-  again. Configure the bounds under `Nuplane:PackageArchives`: `CacheBytes` (64 MiB by default, 0 turns
+  again; size `CacheBytes` to the archives a host serves, or verified archives are evicted and re-read.
+  At most four archives are read and verified at once. Configure the bounds under `Nuplane:PackageArchives`: `CacheBytes` (64 MiB by default, 0 turns
   the cache off) and `MaximumArchiveBytes` (256 MiB by default).
 * Installs made by a Nuplane version without archive retention have no kept archive. Reinstall them,
   for example by removing the install root and state file.

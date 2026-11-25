@@ -585,7 +585,8 @@ internal static class PackageInstallStore
         }
         catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
         {
-            return false;
+            // A name the path API rejects (NUL, for example) may still be sanitized onto the kept archive.
+            return true;
         }
 
         // Case-insensitive on every OS: a Linux directory can be case-insensitive too (casefold, vfat).
