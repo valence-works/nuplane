@@ -42,9 +42,14 @@ Rejected: reading the archive from the feed while it still matches. Remote downl
 
 ### The active package record is the trust anchor
 
-`ActivePackageDescriptor.ArchiveHash`, projected as `ActivePackage.ArchiveHash`, records the acquisition hash when the package is activated. It is persisted in the state file and is part of the descriptor's activation shape.
+`ActivePackageDescriptor.ArchiveHash`, projected as `ActivePackage.ArchiveHash`, records the archive hash in the state file.
 
-The reader compares the archive bytes against this value, never against `.nuplane-content-hash`. A file beside the archive can be replaced together with it.
+- **When it is set:** when an install becomes active. The value is the hash computed from the archive when it was acquired.
+- **While the same install stays active:** the recorded value is kept. Re-resolving that install re-reads `.nuplane-content-hash`, and that value does not replace the record. So replacing the archive and its hash file together is still refused after a restart and reconciliation.
+- **Coordinated compositions:** the value comes from the protected install identity, `PackageInstallIdentity.VerifiedArchiveHash`, which the protection digest covers.
+- **Switching to an install that is already on disk:** for example, rolling back to an earlier version. The recorded value is then that install's acquisition record. Enforce or Strict lock files pin this value through ADR-0001.
+
+The reader compares the archive bytes against the recorded value. It never compares them against `.nuplane-content-hash`.
 
 ### Verify the exact bytes that are served
 
@@ -53,14 +58,14 @@ The reader compares the archive bytes against this value, never against `.nuplan
 1. It reads the whole archive with ordinary file access. `MaximumArchiveBytes` bounds the read.
 2. It hashes those bytes and compares the result with `ArchiveHash`.
 3. It returns a `PackageArchive` that serves entries only from the verified in-memory copy.
-4. Any failure throws `PackageArchiveException` with a `Reason`: `HashNotRecorded`, `ArchiveMissing`, `ArchiveTooLarge`, `HashMismatch` or `InvalidArchive`. The failure is also logged as a warning.
+4. Any failure throws `PackageArchiveException` with a `Reason`: `HashNotRecorded`, `ArchiveMissing`, `ArchiveUnreadable`, `ArchiveTooLarge`, `HashMismatch` or `InvalidArchive`. The failure is also logged as a warning.
 
 No filesystem semantics take part in the safety argument, so the reader needs no qualification. It reads without store admission, even when the store is enrolled. Published installs are never written in place, so a concurrent prune can only make the read fail as missing or truncated, and both are refusals.
 
 ### Entry scope and paths
 
 - Every file entry is exposed, and the host decides which prefix it serves.
-- Names are used as the archive stores them, as Nuplane extracts them. Current `dotnet pack` stores names literally, so no percent-decoding is applied.
+- Names are used as the archive stores them; `\` in a name is read as a separator, as NuGet reads it. Current `dotnet pack` stores names literally, so no percent-decoding is applied.
 - Lookups are case-insensitive. A request path accepts `/` or `\`.
 - These are refused, and an entry that fails them is not reachable: rooted paths, empty segments, `.` and `..` segments, `:` and NUL.
 - When two entries share a path after normalization, neither is exposed.
@@ -94,8 +99,9 @@ Verified archives stay in an in-memory LRU cache keyed by package, version, arch
 ## Validation
 
 - Unit tests cover verification, each refusal reason, path normalization and the cache.
-- `AddNuplane` acceptance tests with a directory feed and no enrolled store cover serving content and refusing modified, replaced and missing archives. In those tests, replacing the archive and its hash file together is still refused.
-- A coordinated-install test checks that the archive is kept and that the reserved name is refused.
+- `AddNuplane` acceptance tests with a directory feed and no enrolled store cover serving content and refusing modified, replaced and missing archives. Replacing the archive and its hash file together is still refused, including after a restart and reconciliation.
+- A coordinated-install test checks that the archive is kept and served by the reader, and that the reserved name is refused during entry planning.
+- Registration tests resolve the reader in ordinary and coordinated compositions and bind `Nuplane:PackageArchives`.
 - A pruning test checks that protected installs keep their archive bytes and that pruned installs lose theirs with the directory.
 - CI runs the acceptance tests:
   - inside a Linux container, asserting overlayfs;

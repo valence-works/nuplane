@@ -453,6 +453,7 @@ internal static class CoordinatedActiveStateTransitionProducer
                 FeedName = projection.Lineage.FeedName,
                 SourceName = projection.Lineage.SourceName,
                 InstallPath = projection.Lineage.InstallPath,
+                ArchiveHash = projection.Install.VerifiedArchiveHash,
                 GraphId = chosen.GraphId,
                 GraphGenerationId = chosen.GenerationId,
                 PackageRole = projection.Role,

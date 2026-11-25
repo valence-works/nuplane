@@ -594,10 +594,11 @@ if (archive.GetEntry("staticwebassets/module.js") is { Length: <= MaxBytes } ent
 ```
 
 * The reader reads the archive into memory, computes its sha512 and compares it with
-  `ActivePackage.ArchiveHash`, recorded when the package was activated. Only bytes that match are served.
+  `ActivePackage.ArchiveHash`. Nuplane records that hash in the state file when the install becomes
+  active and keeps it while that install stays active. Only bytes that match are served.
 * A modified, replaced, truncated or missing archive is refused with `PackageArchiveException`, which
-  names the package, the version and a `Reason` (`HashNotRecorded`, `ArchiveMissing`, `ArchiveTooLarge`,
-  `HashMismatch` or `InvalidArchive`). Each refusal is logged as a warning.
+  names the package, the version and a `Reason` (`HashNotRecorded`, `ArchiveMissing`, `ArchiveUnreadable`,
+  `ArchiveTooLarge`, `HashMismatch` or `InvalidArchive`). Each refusal is logged as a warning.
 * It works on any filesystem that can store a file. CI qualifies it on Linux overlayfs (a container's
   writable layer), xfs, btrfs, tmpfs and ext4, macOS, and Windows x64 and arm64, all without an enrolled
   store.

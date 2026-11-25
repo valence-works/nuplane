@@ -74,6 +74,36 @@ public sealed class PackageArchiveReaderTests : IDisposable
         Assert.Equal(PackageArchiveFailureReason.ArchiveMissing, error.Reason);
     }
 
+    [Fact]
+    public async Task OpenAsync_ArchivePathIsNotAReadableFile_RefusesWithArchiveUnreadable()
+    {
+        var package = Install("Acme.Addon", "1.0.0", CreateArchive(("content/a.txt", "a"u8.ToArray())));
+        File.Delete(ArchivePath(package));
+        Directory.CreateDirectory(ArchivePath(package));
+
+        var error = await Assert.ThrowsAsync<PackageArchiveException>(() => CreateReader().OpenAsync(package).AsTask());
+
+        Assert.Equal(PackageArchiveFailureReason.ArchiveUnreadable, error.Reason);
+        Assert.Equal("Acme.Addon", error.PackageId);
+    }
+
+    [Fact]
+    public async Task ReadAllBytes_ConcurrentReads_ReturnEachEntryExactly()
+    {
+        var files = Enumerable.Range(0, 32)
+            .Select(index => ($"staticwebassets/file{index}.js", RandomNumberGenerator.GetBytes(4096 + index)))
+            .ToArray();
+        var opened = await CreateReader().OpenAsync(Install("Acme.Addon", "1.0.0", CreateArchive(files)));
+
+        var reads = await Task.WhenAll(Enumerable.Range(0, 256).Select(index => Task.Run(() =>
+        {
+            var (path, content) = files[index % files.Length];
+            return (Expected: content, Actual: opened.GetEntry(path)!.ReadAllBytes());
+        })));
+
+        Assert.All(reads, read => Assert.Equal(read.Expected, read.Actual));
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("sha512:not-base64")]
@@ -166,20 +196,23 @@ public sealed class PackageArchiveReaderTests : IDisposable
     [Fact]
     public async Task OpenAsync_CacheOverBudget_EvictsTheLeastRecentlyUsedArchive()
     {
-        var firstArchive = CreateArchive(("content/a.txt", RandomNumberGenerator.GetBytes(2048)));
-        var secondArchive = CreateArchive(("content/b.txt", RandomNumberGenerator.GetBytes(2048)));
-        var first = Install("Acme.First", "1.0.0", firstArchive);
-        var second = Install("Acme.Second", "1.0.0", secondArchive);
+        var archives = Enumerable.Range(0, 3)
+            .Select(index => CreateArchive(($"content/{index}.txt", RandomNumberGenerator.GetBytes(2048))))
+            .ToArray();
+        var packages = archives.Select((archive, index) => Install($"Acme.Package{index}", "1.0.0", archive)).ToArray();
         var reader = CreateReader(new PackageArchiveReaderOptions
         {
-            CacheBytes = Math.Max(firstArchive.Length, secondArchive.Length) + 1
+            CacheBytes = archives[0].Length + archives[1].Length + archives[2].Length - 1
         });
-        _ = await reader.OpenAsync(first);
-        _ = await reader.OpenAsync(second);
-        File.Delete(ArchivePath(first));
+        var first = await reader.OpenAsync(packages[0]);
+        _ = await reader.OpenAsync(packages[1]);
+        Assert.Same(first, await reader.OpenAsync(packages[0]));   // touch the first: the second is now oldest
+        _ = await reader.OpenAsync(packages[2]);                   // over budget: evict one
+        File.Delete(ArchivePath(packages[0]));
+        File.Delete(ArchivePath(packages[1]));
 
-        var error = await Assert.ThrowsAsync<PackageArchiveException>(() => reader.OpenAsync(first).AsTask());
-
+        Assert.Same(first, await reader.OpenAsync(packages[0]));
+        var error = await Assert.ThrowsAsync<PackageArchiveException>(() => reader.OpenAsync(packages[1]).AsTask());
         Assert.Equal(PackageArchiveFailureReason.ArchiveMissing, error.Reason);
     }
 

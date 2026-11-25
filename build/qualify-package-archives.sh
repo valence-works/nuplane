@@ -9,7 +9,7 @@ if [[ "${RUNNER_OS:-}" == Windows ]]; then python=python; else python=python3; f
 
 dotnet test test/Nuplane.Runtime.Tests/Nuplane.Runtime.Tests.csproj \
   --configuration Release --framework net10.0 \
-  --filter "FullyQualifiedName~Nuplane.Runtime.Tests.PackageArchiveReaderTests|FullyQualifiedName~Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_Archive" \
+  --filter "FullyQualifiedName~Nuplane.Runtime.Tests.PackageArchiveReader|FullyQualifiedName~Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_Archive" \
   --blame-hang-timeout 3m \
   --logger "trx;LogFileName=package-archive-reader.trx" \
   --results-directory "$results_directory/reader"

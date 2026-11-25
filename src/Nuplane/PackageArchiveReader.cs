@@ -31,6 +31,7 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
     public async ValueTask<PackageArchive> OpenAsync(ActivePackage package, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(package);
+        ArgumentException.ThrowIfNullOrWhiteSpace(package.InstallPath, nameof(package));
         cancellationToken.ThrowIfCancellationRequested();
 
         if (package.ArchiveHash is not { } recordedHash || PackageInstallStore.ParseCanonicalContentHash(recordedHash) is null)
@@ -64,14 +65,8 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
         return archive;
     }
 
-    private static string ResolveArchivePath(string installPath)
-    {
-        // A custom acquirer may report the .nupkg itself as the install path.
-        if (string.Equals(Path.GetExtension(installPath), ".nupkg", StringComparison.OrdinalIgnoreCase) &&
-            File.Exists(installPath))
-            return Path.GetFullPath(installPath);
-        return Path.GetFullPath(PackageInstallStore.GetArchivePath(installPath));
-    }
+    private static string ResolveArchivePath(string installPath) =>
+        Path.GetFullPath(PackageInstallStore.GetArchivePath(installPath));
 
     private async Task<byte[]> ReadArchiveAsync(ActivePackage package, string archivePath, CancellationToken cancellationToken)
     {
@@ -102,6 +97,11 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
             throw Refuse(package, PackageArchiveFailureReason.ArchiveMissing,
                 $"'{archivePath}' does not exist. Packages installed by a Nuplane version before archive retention have no kept archive; reinstall the package.",
                 exception);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw Refuse(package, PackageArchiveFailureReason.ArchiveUnreadable,
+                $"'{archivePath}' could not be read: {exception.Message}", exception);
         }
     }
 

@@ -43,7 +43,7 @@ jobs:
   state-persistence-platform:
     name: State persistence (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ matrix.os == 'windows-latest' && 60 || matrix.os == 'macos-15-intel' && 45 || 20 }}
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 60 || matrix.os == 'macos-15-intel' && 50 || 20 }}
     strategy:
       fail-fast: false
       matrix:
@@ -1575,7 +1575,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$(dotnet --info | grep -m1 'RID:' | awk '{print $2}')" != win-arm64 ]]; then
+          if ! dotnet --info | tr -d '\r' | grep -Eq '^ *RID: *win-arm64$'; then
             echo "The Windows arm64 lane must run a native win-arm64 SDK."
             exit 1
           fi

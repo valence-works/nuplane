@@ -3,8 +3,12 @@
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveBytes_PersistsCanonicalSha512BeforePublishing",
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveShipsTheKeptArchiveName_RefusesWithoutPublishing",
   "Nuplane.Runtime.Tests.Feeds.PackageInstallStoreTests.InstallAsync_ArchiveSuppliesHashMetadata_OverwritesWithActualArchiveHash",
+  "Nuplane.Runtime.Tests.PackageArchiveReaderRegistrationTests.AddNuplane_Configuration_BindsArchiveReaderOptionsAndRegistersOneReader",
+  "Nuplane.Runtime.Tests.PackageArchiveReaderRegistrationTests.AddNuplane_CoordinatedComposition_RegistersTheArchiveReader",
+  "Nuplane.Runtime.Tests.PackageArchiveReaderRegistrationTests.AddNuplane_InvalidArchiveReaderOptions_FailValidation",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.GetEntry_EscapingInvalidOrAmbiguousNames_AreNotExposed",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_ArchiveOverLimit_RefusesWithArchiveTooLarge",
+  "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_ArchivePathIsNotAReadableFile_RefusesWithArchiveUnreadable",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_CacheDisabled_VerifiesEveryOpen",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_CacheOverBudget_EvictsTheLeastRecentlyUsedArchive",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_CachedArchive_ServesTheVerifiedCopyWithoutRereading",
@@ -16,5 +20,6 @@
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_WithoutCanonicalRecordedHash_RefusesWithHashNotRecorded(recordedHash: \"sha256:AAAA\")",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_WithoutCanonicalRecordedHash_RefusesWithHashNotRecorded(recordedHash: \"sha512:not-base64\")",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.OpenAsync_WithoutCanonicalRecordedHash_RefusesWithHashNotRecorded(recordedHash: null)",
+  "Nuplane.Runtime.Tests.PackageArchiveReaderTests.ReadAllBytes_ConcurrentReads_ReturnEachEntryExactly",
   "Nuplane.Runtime.Tests.PackageArchiveReaderTests.Validate_RejectsOutOfRangeBounds"
 ]

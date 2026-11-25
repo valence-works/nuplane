@@ -15,7 +15,9 @@ namespace Nuplane;
 /// </remarks>
 public sealed class PackageArchive
 {
-    private readonly byte[] _bytes;
+    // ZipArchive reads are not thread-safe; one parsed instance serves every entry read under this lock.
+    private readonly object _readSync = new();
+    private readonly ZipArchive _archive;
     private readonly Dictionary<string, PackageArchiveEntry> _entriesByPath;
 
     private PackageArchive(string packageId, string version, string archiveHash, byte[] bytes)
@@ -23,9 +25,10 @@ public sealed class PackageArchive
         PackageId = packageId;
         Version = version;
         ArchiveHash = archiveHash;
-        _bytes = bytes;
+        Length = bytes.LongLength;
 
-        using var archive = new ZipArchive(new MemoryStream(bytes, writable: false), ZipArchiveMode.Read);
+        var archive = new ZipArchive(new MemoryStream(bytes, writable: false), ZipArchiveMode.Read);
+        _archive = archive;
         var entries = new Dictionary<string, PackageArchiveEntry>(StringComparer.OrdinalIgnoreCase);
         var ambiguous = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < archive.Entries.Count; index++)
@@ -35,7 +38,7 @@ public sealed class PackageArchive
                 continue;
             if (ambiguous.Contains(path))
                 continue;
-            if (!entries.TryAdd(path, new PackageArchiveEntry(this, index, entry.FullName, path, entry.Length, entry.LastWriteTime)))
+            if (!entries.TryAdd(path, new PackageArchiveEntry(this, index, path, entry.Length, entry.LastWriteTime)))
             {
                 entries.Remove(path);
                 ambiguous.Add(path);
@@ -57,7 +60,7 @@ public sealed class PackageArchive
     public string ArchiveHash { get; }
 
     /// <summary>Gets the size of the verified archive in bytes.</summary>
-    public long Length => _bytes.LongLength;
+    public long Length { get; }
 
     /// <summary>Gets the exposed file entries in archive order.</summary>
     public IReadOnlyList<PackageArchiveEntry> Entries { get; }
@@ -80,24 +83,23 @@ public sealed class PackageArchive
         if (expected.Length > Array.MaxLength)
             throw new InvalidDataException("The package archive entry is larger than a managed byte array can represent.");
 
-        using var archive = new ZipArchive(new MemoryStream(_bytes, writable: false), ZipArchiveMode.Read);
-        var entry = archive.Entries[expected.Index];
-        if (!string.Equals(entry.FullName, expected.EntryName, StringComparison.Ordinal))
-            throw new InvalidDataException("The package archive entry table changed.");
-
         var bytes = new byte[(int)expected.Length];
-        using var stream = entry.Open();
-        var offset = 0;
-        while (offset < bytes.Length)
+        lock (_readSync)
         {
-            var read = stream.Read(bytes, offset, bytes.Length - offset);
-            if (read == 0)
-                throw new InvalidDataException("The package archive entry ended before its declared length.");
-            offset += read;
+            using var stream = _archive.Entries[expected.Index].Open();
+            var offset = 0;
+            while (offset < bytes.Length)
+            {
+                var read = stream.Read(bytes, offset, bytes.Length - offset);
+                if (read == 0)
+                    throw new InvalidDataException("The package archive entry ended before its declared length.");
+                offset += read;
+            }
+
+            if (stream.ReadByte() != -1)
+                throw new InvalidDataException("The package archive entry exceeded its declared length.");
         }
 
-        if (stream.ReadByte() != -1)
-            throw new InvalidDataException("The package archive entry exceeded its declared length.");
         return bytes;
     }
 
@@ -128,44 +130,4 @@ public sealed class PackageArchive
         normalized = path;
         return true;
     }
-}
-
-/// <summary>One file entry of a <see cref="PackageArchive"/>.</summary>
-public sealed class PackageArchiveEntry
-{
-    private readonly PackageArchive _archive;
-
-    internal PackageArchiveEntry(
-        PackageArchive archive,
-        int index,
-        string entryName,
-        string path,
-        long length,
-        DateTimeOffset lastWriteTime)
-    {
-        _archive = archive;
-        Index = index;
-        EntryName = entryName;
-        Path = path;
-        Length = length;
-        LastWriteTime = lastWriteTime;
-    }
-
-    /// <summary>Gets the normalized package-relative path, using <c>/</c>.</summary>
-    public string Path { get; }
-
-    /// <summary>Gets the uncompressed size the archive declares for this entry.</summary>
-    public long Length { get; }
-
-    /// <summary>Gets the modification time the archive records for this entry.</summary>
-    public DateTimeOffset LastWriteTime { get; }
-
-    internal int Index { get; }
-
-    internal string EntryName { get; }
-
-    /// <summary>Decompresses the entry.</summary>
-    /// <returns>Exactly <see cref="Length"/> bytes.</returns>
-    /// <exception cref="InvalidDataException">The entry's data does not match its declared size.</exception>
-    public byte[] ReadAllBytes() => _archive.ReadEntry(this);
 }

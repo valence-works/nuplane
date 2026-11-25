@@ -88,6 +88,17 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
             "sha512:" + Convert.ToBase64String(System.Security.Cryptography.SHA512.HashData(replacement)));
         await AssertRefusedAsync(package, PackageArchiveFailureReason.HashMismatch);
 
+        // A restart and another reconciliation reuse the install; the hash recorded at activation still decides.
+        using (var restarted = CreateHost(Path.GetDirectoryName(feed)!, createFeedPackage: false))
+        {
+            await ReconcileAsync(restarted);
+            var reconciled = await GetActivePackageAsync(restarted);
+            Assert.Equal(package.ArchiveHash, reconciled.ArchiveHash);
+            var error = await Assert.ThrowsAsync<PackageArchiveException>(() =>
+                restarted.Services.GetRequiredService<IPackageArchiveReader>().OpenAsync(reconciled).AsTask());
+            Assert.Equal(PackageArchiveFailureReason.HashMismatch, error.Reason);
+        }
+
         // Missing.
         File.Delete(archivePath);
         await AssertRefusedAsync(package, PackageArchiveFailureReason.ArchiveMissing);
@@ -208,7 +219,8 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
                 continue;
             var mountPoint = fields[4].Replace("\\040", " ");
             var contains = mountPoint == "/" || full == mountPoint || full.StartsWith(mountPoint + "/", StringComparison.Ordinal);
-            if (contains && mountPoint.Length > longest)
+            // A later row at the same mount point covers an earlier one.
+            if (contains && mountPoint.Length >= longest)
             {
                 longest = mountPoint.Length;
                 actual = fields[separator + 1];
