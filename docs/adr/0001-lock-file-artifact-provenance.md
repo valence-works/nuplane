@@ -93,6 +93,12 @@ The owner accepted the following compatibility policy on 2026-10-05:
 
 The accepted trade-off is a deliberate migration requirement for existing lock files in exchange for never presenting unverified Enforce or Strict activation as provenance-locked.
 
+## Generate publication
+
+Generate publishes the complete resolved package graph only after a reconciliation cycle succeeds without a skip, degradation, failed package resolution, or activation failure. Each resolved root and dependency must carry its canonical archive hash. A failed cycle leaves an existing lock byte-for-byte intact and does not create a lock where none existed. An unchanged successful graph keeps its prior timestamps.
+
+Use Enforce to honor entries in a generated lock while retaining ordinary resolution for unlisted packages. Use Strict to require entries for every acquired root and dependency.
+
 ## Consequences
 
 ### Positive

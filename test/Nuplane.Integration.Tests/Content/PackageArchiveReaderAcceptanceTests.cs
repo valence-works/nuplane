@@ -420,6 +420,7 @@ public sealed class PackageArchiveReaderAcceptanceTests : IDisposable
             .ConfigureServices((context, services) => services.AddNuplane(context.Configuration.GetSection("Nuplane"),
                 nuplane => nuplane.AddDirectoryFeed(feedName, feedDirectory, feed =>
                 {
+                    feed.Trust = FeedTrustLevel.Trusted;
                     feed.Include(PackageId);
                     feed.Watch = false;
                 })))

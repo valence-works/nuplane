@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-03-08  
-**Feature**: [spec.md](/Users/sipke/Projects/ValenceWorks/nuplane/main/specs/012-default-state-path/spec.md)
+**Feature**: [spec.md](../spec.md)
 
 ## Content Quality
 

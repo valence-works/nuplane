@@ -3,7 +3,7 @@ using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Events;
 
-public sealed partial class ObserverEventDispatcher
+internal sealed partial class ObserverEventDispatcher
 {
     /// <inheritdoc />
     public async Task PublishPackageLoadingCompletedAsync(

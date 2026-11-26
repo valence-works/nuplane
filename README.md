@@ -16,7 +16,7 @@ The most immediate use case is **dynamic NuGet package installation into a live 
 - **Workflow and rule engines** — deploy new steps, validators, or rules as packages and pick them up live without restarting the engine.
 - **Internal tool hosts** — extend internal platforms dynamically by pushing a new package to a watched folder; the host picks it up automatically.
 
-See the [End-to-End ASP.NET Plugin Demo](#-end-to-end-aspnet-plugin-demo) below for a full walkthrough of the drop-folder workflow with a live ASP.NET Core host.
+See the [End-to-End ASP.NET Plugin Demo](#end-to-end-aspnet-plugin-demo) below for a full walkthrough of the drop-folder workflow with a live ASP.NET Core host.
 
 Nuplane handles the infrastructure: feed resolution, deterministic storage, transactional updates, last-known-good fallback, isolated assembly loading, and structured change events. Your host decides what the loaded packages mean.
 
@@ -45,7 +45,7 @@ The wiki follows a **hybrid-hub** model: it is self-sufficient for evaluation an
 - Apply atomic per-package updates
 - Provide last-known-good (LKG) fallback
 - Emit structured change events for host integration
-- Offer integrity validation hooks
+- Verify acquired archives against package lock provenance
 - Provide operational visibility (logs, metrics, health)
 
 ---
@@ -107,6 +107,7 @@ In a configuration-driven host, the builder callback runs after binding and can 
 priorities:
 
 ```csharp
+using Nuplane;
 using Nuplane.Sources.Configuration;
 
 services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
@@ -130,6 +131,14 @@ their own stages. `FeedResolution:FeedPriorities` does not implicitly set source
 does not compare semantic versions across sources. For example, a higher-priority exact `1.0.0` request
 remains the winner over a lower-priority source's newer `1.1.0` request. With no priorities, existing
 case-insensitive source-name ordering remains the default.
+
+Desired-state snapshots and outage diagnostics identify each registered source instance. Built-in
+feeds and directories use their configured names. If a host registers multiple instances of a custom
+source type, implement `IIdentifiedDesiredPackageSource` with a unique `SourceInstanceId` that stays
+stable across restarts. This ID is independent of the `PackageRequest.SourceName` used for source
+priority. A legacy type-keyed snapshot can provide fallback if its saved requests identify the
+current built-in source. On a successful read Nuplane stores the new instance snapshot, even if
+the source returns zero packages.
 
 ### Actual state
 
@@ -192,6 +201,7 @@ Nuplane emits events such as package-change completion or package-loading comple
 ### Optional loading
 
 An opt-in subsystem that loads resolved packages into assembly load contexts.
+Call `AutoloadPackages` from `Nuplane.Loading` to register and enable it. Set `Nuplane:Loading:Enabled` to `false` to register the query surfaces while leaving loading disabled.
 Nuplane supports two package load modes:
 
 - `Collectible` is the default mode for isolated or scan-only plugin scenarios where package assemblies should remain unloadable when references drain.
@@ -223,48 +233,65 @@ A host can also refuse activation outright. A registered `IPackageActivationGate
 
 ### Module registration
 
-Each optional Nuplane module (loading, directory-source) provides its own direct `IServiceCollection` registration extension.
-You can register modules independently of the builder surface, or use the module-owned builder integration package for fluent configuration.
-If the same module is registered through both paths, the last registration wins and the service graph remains deduplicated.
+Core `AddNuplane` registers the runtime and configured feeds. Add the `Nuplane.Loading` package and
+call `AutoloadPackages` when the host should load assemblies. Loading is enabled when called unless
+`Nuplane:Loading:Enabled` is explicitly set to `false`. For HTTP administration, install
+`Nuplane.Admin.Api`, register `AddNuplaneAdmin`, and map `MapNuplaneAdmin`. The separate
+`Nuplane.Loading.Api` package maps the optional load-state route.
 
 ### Configuration-driven setup
 
 A way to declare Nuplane infrastructure in configuration instead of code.
-`Nuplane:Setup` covers builder-only concepts like feeds, polling, and state-file persistence, while `Nuplane:Loading` covers optional runtime loading behavior.
+`Nuplane:Setup:Feeds` declares feeds. Use `Nuplane:Reconciliation` for polling, `Nuplane:StoreRegistry` for state-file persistence, and `Nuplane:Loading` for optional runtime loading.
 Observer registration and other host-specific reactions stay in code.
 
 ---
 
 ## 📦 Quick Start
 
-Use the `Nuplane` configuration section for infrastructure, then keep host-owned reactions in code:
+In an ASP.NET Core project, reference the `Nuplane` and `Nuplane.Loading` packages at the same
+version. Put the configuration below in `appsettings.json`.
 
 ```csharp
 using Nuplane;
-using Nuplane.Loading.Hosting.Builder;
-using Nuplane.Sources.Directory.Configuration;
+using Nuplane.Abstractions;
+using Nuplane.Loading;
 
 var builder = WebApplication.CreateBuilder(args);
-var nuplaneConfiguration = builder.Configuration.GetSection("Nuplane");
+var configuration = builder.Configuration.GetSection("Nuplane");
 
-builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
+builder.Services.AddNuplane(configuration, nuplane =>
 {
-    nuplane.AddDirectoryFeedsFromConfiguration(nuplaneConfiguration);
-    nuplane.AutoloadPackages(nuplaneConfiguration.GetSection("Loading"));
+    nuplane.UseBasePath(builder.Environment.ContentRootPath);
+    nuplane.AutoloadPackages(configuration);
     nuplane.OnPackagesChanged<PackageChangeObserver>();
-    nuplane.OnPackagesLoaded<PluginDiscoveryObserver>();
 });
+
+var app = builder.Build();
+app.Run();
+
+public sealed class PackageChangeObserver(ILogger<PackageChangeObserver> logger) : INuplaneObserver
+{
+    public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken cancellationToken)
+    {
+        logger.LogInformation("Nuplane reconciled package changes for {CorrelationId}", changeSet.CorrelationId);
+        return Task.CompletedTask;
+    }
+}
 ```
 
 ```json
 {
   "Nuplane": {
+    "Reconciliation": {
+      "EnableAutomaticReconciliation": true,
+      "PollInterval": "00:01:00"
+    },
     "Setup": {
-      "AutomaticReconciliation": true,
-      "PollInterval": "00:01:00",
       "Feeds": {
         "local-packages": {
           "DirectoryPath": "packages",
+          "Trust": "Trusted",
           "IncludePatterns": [
             "*"
           ],
@@ -275,6 +302,7 @@ builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
         },
         "nuget.org": {
           "ServiceIndex": "https://api.nuget.org/v3/index.json",
+          "Trust": "Trusted",
           "IncludePatterns": [
             "Elsa.*"
           ]
@@ -309,11 +337,8 @@ When packages are added, updated, or removed, Nuplane emits `PackageChangeSet` e
 
 Observers are supplemental invalidation and logging signals. For authoritative reads, query the standalone catalog services directly:
 
-```csharp
-using Nuplane.Sample.AspNetCore.Catalog;
-
-app.MapSampleCatalog();
-```
+The [sample's endpoint mappings](samples/Nuplane.Sample.AspNetCore/Program.cs) show how a host can
+expose these reads over HTTP.
 
 - Use `IActivePackageCatalog.GetActivePackagesAsync(ct)` when you only need the authoritative active package inventory from inside a running host.
 - Use `NuplaneStore.ReadActivePackagesAsync(stateFilePath, ct)` when you need the same active package id/version/install-path data without a running host, a DI container, or network access — see [Usage Guide: Offline reads of the active package set](docs/wiki/Usage-Guide.md#offline-reads-of-the-active-package-set).
@@ -338,13 +363,9 @@ app.MapSampleCatalog();
 
 ### Configuration model
 
-Nuplane has two configuration layers:
+Each part of Nuplane has its own configuration section.
 
-- `Nuplane:Setup` — the builder-only setup surface:
-  - automatic reconciliation
-  - poll interval
-  - optional state file path
-  - feeds, include patterns, directory watcher settings
+- `Nuplane:Setup:Feeds` declares feeds, include patterns, and directory watcher settings.
 - existing runtime option sections under `Nuplane:*` — advanced operator configuration:
   - `DesiredState`
   - `Reconciliation`
@@ -353,7 +374,7 @@ Nuplane has two configuration layers:
   - `FeedTrustPolicy`
   - `LockFile`
   - `CleanupPolicy`
-  - `Convergence`
+  - `DesiredState:Manifest`
   - `TrustedSourcePolicy`
   - `StoreRegistry`
 - `Nuplane:Loading` — optional loading settings:
@@ -365,14 +386,25 @@ Nuplane has two configuration layers:
   - `PackageLoadModes`
   - `SharedAssemblies`
 
-When both layers express the same setting, the more specific runtime option section wins over the `Nuplane:Setup` shorthand:
+Automatic reconciliation is opt-in via `Nuplane:Reconciliation:EnableAutomaticReconciliation` and
+polls every 60 seconds unless you set `Nuplane:Reconciliation:PollInterval`. For persistence, choose
+either `Nuplane:StoreRegistry:StateFilePath` or `Nuplane:StoreRegistry:UseInMemoryStore`.
+Builder calls in the `AddNuplane` callback run after binding, so `PollEvery(...)`, `WithStateFile(...)`,
+and `UseInMemoryStore()` can override configuration.
 
-- `Reconciliation:EnableAutomaticReconciliation` overrides `Setup:AutomaticReconciliation` in both directions when the key is present; an explicit `false` disables automatic reconciliation even when the shorthand enables it.
-- `Reconciliation:PollInterval` overrides `Setup:PollInterval`; when neither is set, automatic reconciliation polls every 60 seconds.
-- `StoreRegistry:StateFilePath` overrides `Setup:StateFilePath`, and `StoreRegistry:UseInMemoryStore` overrides `Setup:UseInMemoryStore` in both directions; an explicit `false` there keeps state persisted even when the shorthand asks for an in-memory store.
-- The two store persistence settings are mutually exclusive, so an explicit choice in `StoreRegistry` also suppresses the opposing `Setup` shorthand: `StoreRegistry:UseInMemoryStore: true` ignores `Setup:StateFilePath`, and `StoreRegistry:StateFilePath` ignores `Setup:UseInMemoryStore`.
+Older `Setup` keys fail startup validation. Migrate them as follows.
 
-Builder calls run after configuration binds, so `WithStateFile(...)` and `UseInMemoryStore()` in the `AddNuplane` callback still override both layers.
+| Old key | Replacement |
+| --- | --- |
+| `Setup:AutomaticReconciliation` | `Reconciliation:EnableAutomaticReconciliation` |
+| `Setup:PollInterval` | `Reconciliation:PollInterval` |
+| `Setup:StateFilePath` | `StoreRegistry:StateFilePath` |
+| `Setup:UseInMemoryStore` | `StoreRegistry:UseInMemoryStore` |
+
+Directory-backed feeds are part of the core `Nuplane` package. Remove the old
+`Nuplane.Sources.Directory` package reference and the separate directory configuration call when
+upgrading. Use `Nuplane:Setup:Feeds` for configuration or `AddDirectoryFeed(...)` from
+`Nuplane.Sources.Directory.Builder` for code-first registration.
 
 For unrestricted feeds, prefer one of these explicit forms:
 
@@ -436,13 +468,18 @@ Example configuration:
 ```json
 {
   "Nuplane": {
+    "StoreRegistry": {
+      "StateFilePath": "/var/lib/nuplane/store-state.json"
+    },
+    "Reconciliation": {
+      "EnableAutomaticReconciliation": true,
+      "PollInterval": "00:01:00"
+    },
     "Setup": {
-      "StateFilePath": "/var/lib/nuplane/store-state.json",
-      "AutomaticReconciliation": true,
-      "PollInterval": "00:01:00",
       "Feeds": {
         "nuget.org": {
           "ServiceIndex": "https://api.nuget.org/v3/index.json",
+          "Trust": "Trusted",
           "IncludePatterns": [
             "*"
           ]
@@ -530,7 +567,6 @@ Use configuration for infrastructure and policy:
 Keep application-specific behavior in code:
 
 - `OnPackagesChanged<T>()`
-- `OnPackagesLoaded<T>()`
 - any logic that decides how your host reacts to package changes
 
 ### Fluent builder still works
@@ -538,11 +574,16 @@ Keep application-specific behavior in code:
 If you prefer code-first setup, the fluent API remains available:
 
 ```csharp
+using Nuplane;
+using Nuplane.Abstractions;
+using Nuplane.Sources.Directory.Builder;
+
 builder.Services.AddNuplane(nuplane =>
 {
     nuplane.PollEvery(TimeSpan.FromSeconds(60));
     nuplane.AddDirectoryFeed("local-packages", "packages", dir =>
     {
+        dir.Trust = FeedTrustLevel.Trusted;
         dir.Watch = true;
         dir.DebounceWindow = TimeSpan.FromSeconds(1);
         dir.IncludeAll();
@@ -586,11 +627,25 @@ and never removes an active, last-known-good or in-use install.
 kept archive. `AddNuplane` registers it for every composition, with or without an enrolled coordinated store:
 
 ```csharp
-var snapshot = await catalog.GetActivePackagesAsync(cancellationToken);   // IActivePackageCatalog
-var package = snapshot.Packages.Single(p => p.PackageId == "Acme.Addon");
-var archive = await archives.OpenAsync(package, cancellationToken);        // IPackageArchiveReader
-if (archive.GetEntry("staticwebassets/module.js") is { Length: <= MaxBytes } entry)
-    return entry.ReadAllBytes();
+using Nuplane.Abstractions;
+using Nuplane.PackageArchives;
+
+static async Task<byte[]?> ReadModuleAsync(
+    IActivePackageCatalog catalog,
+    IPackageArchiveReader archives,
+    CancellationToken cancellationToken)
+{
+    const long maximumEntryBytes = 1024 * 1024;
+    var snapshot = await catalog.GetActivePackagesAsync(cancellationToken);
+    var package = snapshot.Packages.SingleOrDefault(p => p.PackageId == "Acme.Addon");
+    if (package is null)
+        return null;
+
+    var archive = await archives.OpenAsync(package, cancellationToken);
+    return archive.GetEntry("staticwebassets/module.js") is { Length: <= maximumEntryBytes } entry
+        ? entry.ReadAllBytes()
+        : null;
+}
 ```
 
 * The reader reads the archive into memory, computes its sha512 and compares it with
@@ -660,10 +715,15 @@ Nuplane can discover desired packages from configured feeds and sources.
 ### Directory-backed local feed
 
 ```csharp
+using Nuplane;
+using Nuplane.Abstractions;
+using Nuplane.Sources.Directory.Builder;
+
 builder.Services.AddNuplane(nuplane =>
 {
     nuplane.AddDirectoryFeed("local-packages", "packages", dir =>
     {
+        dir.Trust = FeedTrustLevel.Trusted;
         dir.Watch = true;
         dir.DebounceWindow = TimeSpan.FromSeconds(1);
         dir.Include("MyApp.Plugins.*");
@@ -676,7 +736,7 @@ Removing the file removes it.
 
 The same setup can be declared through `Nuplane:Setup:Feeds` when you prefer configuration-driven hosts.
 
-## 🧪 End-to-End ASP.NET Plugin Demo — Dynamic Package Installation in Action
+## End-to-End ASP.NET Plugin Demo
 
 The sample app shows what it looks like to install a NuGet package into a running ASP.NET Core application without restarting it:
 
@@ -686,7 +746,7 @@ The sample app shows what it looks like to install a NuGet package into a runnin
 4. `PackageChangeObserver` and `PluginDiscoveryObserver` react to those events and re-query the authoritative catalog surfaces.
 5. The `/catalog/plugins` endpoint exposes all `IPlugin` implementations discovered from the newly loaded packages.
 
-The whole loop — from dropping a file to having the types available through the HTTP surface — takes about a second.
+Wait a few seconds after copying the package for the watcher and reconciliation to finish.
 
 ### Build and pack the sample plugin
 
@@ -700,119 +760,57 @@ This produces a `.nupkg` like:
 
 ### Start the ASP.NET sample
 
+Run from the repository root:
+
 ```bash
-dotnet run --project samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj
+dotnet run --project samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj --no-launch-profile -- --urls http://127.0.0.1:5086
 ```
 
-The app is configured (via the `Nuplane` section in `samples/Nuplane.Sample.AspNetCore/appsettings.json`) to watch:
-
-- `packages`
+The sample anchors its relative `DirectoryPath` to its ASP.NET Core content root. The watched folder
+is `samples/Nuplane.Sample.AspNetCore/packages` when running from the repository root.
 
 ### Trigger reconciliation by dropping a package
 
-In another shell:
+From the repository root in a second terminal:
 
 ```bash
-mkdir -p packages
-cp samples/Nuplane.Sample.Plugin/bin/Debug/Nuplane.Sample.Plugin.1.0.0.nupkg packages/
+mkdir -p samples/Nuplane.Sample.AspNetCore/packages
+cp samples/Nuplane.Sample.Plugin/bin/Debug/Nuplane.Sample.Plugin.1.0.0.nupkg samples/Nuplane.Sample.AspNetCore/packages/
 ```
 
-Expected behavior:
+After the package loads, query the active package and the discovered plugin type:
 
-- The file watcher detects the new `.nupkg` and triggers manual reconcile asynchronously.
-- Nuplane applies any changes and emits `PackageChangeSet` events.
-- `PackageChangeObserver` logs the change-set lifecycle.
-- `PluginDiscoveryObserver` scans changed package contexts for `IPlugin` and logs discovered type names (for example, `Nuplane.Sample.Plugin.HelloPlugin`).
+```bash
+curl -fsS http://127.0.0.1:5086/catalog/packages
+curl -fsS http://127.0.0.1:5086/catalog/plugins
+```
 
-See:
-
-- `samples/Nuplane.Sample.AspNetCore/PackageChangeObserver.cs`
-- `samples/Nuplane.Sample.AspNetCore/PluginDiscoveryObserver.cs`
-
-To trigger another cycle, update/remove packages in `packages`.
-
-## ⚙️ Phase 2 Operator Guidance
-
-Use these conventions when enabling advanced feed governance:
-
-- Configure deterministic feed priorities and keep names stable across environments.
-- Set trust explicitly per feed: `Trusted`, `Restricted`, or `Untrusted`.
-- Use untrusted overrides only with scoped intent (`package` or `feed-rule`) and always provide an operator reason.
-- Enable strict outage handling only when you want impacted packages to fail fast while unrelated packages continue.
-
-### Lock-file conventions
-
-- Recommended lock path: `./state/nuplane.lock.json` (outside source-controlled app code paths).
-- Commit lock files only for reproducibility workflows where environment parity is required.
-- Schema `2.0` records each exact acquired `.nupkg` as `sha512:<standard-padded-base64>`; the digest includes every archive byte, including package signatures.
-- Use `generate` mode to atomically refresh the complete root and dependency closure after a successful cycle. Unchanged closure output remains byte-for-byte stable.
-- Use `enforce` mode to constrain matching entries to their locked version and feed before acquisition; packages with no entry continue through live resolution.
-- Use `strict` mode to require a valid entry for every acquired root and dependency. Host-provided dependencies are not acquired and therefore require no entry.
-- Schema `1.0`, malformed hashes, missing hashes, and artifact mismatches are rejected by `enforce` and `strict`; run a successful `generate` cycle to migrate a legacy lock.
-- Rotate lock files intentionally and treat lock updates as auditable operational changes.
-
-## ⚙️ Phase 4 Operator Guidance (Convergent Runtime Loading)
-
-Use these conventions when enabling cluster-convergent runtime loading:
-
-- Configure a shared desired manifest with exact version pins for deterministic convergence across replicas.
-- Update manifests atomically: upload package artifacts first, then write/update the manifest last.
-- Use `ConvergenceOptions` to configure manifest path, admin surfaces, optional loader boundary, and poll interval.
-- Keep loader integration opt-in and default-disabled unless the host explicitly wants Nuplane-managed loading.
-- Use `INuplaneAdminOperations` (in-process) or `Nuplane.Admin.AspNetCore` (HTTP) for admin reads and manual reconcile triggers.
-- Monitor convergence through correlation-linked logs, metrics, health transitions, and observer failure events.
-- Treat degraded cycles as non-mutating: LKG active state is preserved; impacted scope is explicitly reported.
-
-### Phase 4 validation baseline
-
-- Profile: `phase4-convergent-loading-baseline`
-- Replicas: 2+
-- Desired input: shared manifest with exact package versions
-- Determinism window: 20 unchanged cycles
-- Failure injections: manifest invalid, source outage, acquisition failure, loader failure, manual trigger unavailable/rejected
-
----
-
-## ⚙️ Phase 3 Operator Guidance (Optional Loading)
-
-Use these conventions when enabling optional in-process loading:
-
-- Keep loading opt-in and default-disabled unless the host explicitly wants Nuplane-managed loading.
-- Use per-package isolated load contexts and configure shared contracts by identity (`name`, `publicKeyToken`, `majorVersion`); a `null`, empty, or omitted `publicKeyToken` identifies an unsigned assembly, and a shared assembly a package carries is the host's: it is left out of the package's assemblies and a host-integrated load is refused if the host has no matching copy. See [Usage Guide: Sharing assemblies with the host](docs/wiki/Usage-Guide.md#sharing-assemblies-with-the-host).
-- Configure bounded deactivation timeout and continue with unload attempt on timeout.
-- Treat `UnloadPending` as degraded and retry pending unload on each reconciliation cycle.
-- Capture outcome evidence using observer callbacks plus correlation-linked logs/metrics/health.
-
-### Phase 3 validation baseline
-
-- Profile: `phase3-loading-baseline`
-- Dataset: 20 active packages (including overlapping dependencies + shared-contract references)
-- Window: 10 identical reconciliation cycles
-- Failure injection: load failures, unload failures, deactivation timeout events
-
----
+Expect `Nuplane.Sample.Plugin` version `1.0.0` and `Nuplane.Sample.Plugin.HelloPlugin`. The
+[query quickstart](specs/014-query-package-catalog/quickstart.md) checks the other sample and admin
+routes.
 
 ## 🛡 Integrity & Trust
 
-Nuplane supports validation hooks:
+- Set `Trust: Trusted` on each approved acquisition feed. Nuplane refuses unspecified and untrusted
+  feeds before package acquisition. An exact feed and package pair can be allowed under
+  `FeedResolution:TrustOverrides` with a reason. See [feed trust](docs/adr/0003-feed-trust-before-acquisition.md).
+- A package lock file pins feed, version, and the SHA-512 of the exact acquired archive. Use
+  `Generate` after a successful reconciliation. `Enforce` verifies locked entries and lets other
+  requests use live resolution. `Strict` requires entries for every acquired root and dependency.
+  Generate a new schema 2.0 lock before enforcing a legacy lock. See
+  [lock-file artifact provenance](docs/adr/0001-lock-file-artifact-provenance.md).
+- Package load gates let the host refuse a resolved package graph before loading its assemblies.
+  See [package activation gates](docs/wiki/Usage-Guide.md#refusing-activation-with-a-package-activation-gate).
 
-```csharp
-public interface IPackageValidator
-{
-    Task ValidateAsync(PackageArtifact artifact);
-}
-```
+### Desired manifest
 
-Possible implementations:
+Set `DesiredState:Manifest:Enabled` and `DesiredState:Manifest:Path` to reconcile replicas from a
+shared manifest with exact version pins. Publish the packages first, then replace the manifest
+atomically. Configure the polling interval with `Reconciliation:PollInterval`.
 
-* Hash validation
-* Signature validation
-* Allowlist / denylist
-* Feed trust enforcement
-
-Nuplane assumes trusted code execution unless your host enforces additional policies.
-
----
+When upgrading, move `Convergence:Manifest` to `DesiredState:Manifest` and the old
+`Convergence:PollInterval` to `Reconciliation:PollInterval`. Update dashboard queries from
+`nuplane.convergence.*` to `nuplane.reconciliation.*`.
 
 ## 📊 Observability
 
@@ -832,7 +830,6 @@ Nuplane is modular:
 
 * `Nuplane` — control plane: reconciliation loop, deterministic package store, NuGet feed integration, and DI/Generic Host registration
 * `Nuplane.Abstractions` — contracts and data models shared across packages
-* `Nuplane.Sources.Directory` — directory-backed feed with local `.nupkg` discovery and change monitoring
 * `Nuplane.Loading` (optional) — assembly loading with collectible load contexts, with contracts in `Nuplane.Loading.Abstractions`
 * `Nuplane.Admin` (optional) — snapshots and manual reconciliation triggers
 * `Nuplane.Admin.Api` / `Nuplane.Loading.Api` (optional) — ASP.NET Core endpoints for the admin and loading catalog surfaces

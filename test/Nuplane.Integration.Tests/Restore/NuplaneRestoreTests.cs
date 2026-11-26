@@ -13,7 +13,6 @@ using Nuplane.Loading;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Restore;
 using Nuplane.Sources;
-using Nuplane.Sources.Directory.Configuration;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Restore;
@@ -181,7 +180,7 @@ public sealed class NuplaneRestoreTests : IDisposable
 
         var result = await NuplaneRestore.RestoreAsync(
             configuration,
-            new() { BasePath = _root, ConfigureBuilder = DirectoryFeeds });
+            new() { BasePath = _root });
 
         Assert.Equal(Path.Combine(_root, "relative-packages"), result.InstallRoot);
         Assert.Equal(Path.Combine(_root, "relative-state", "store-state.json"), result.StateFilePath);
@@ -224,7 +223,7 @@ public sealed class NuplaneRestoreTests : IDisposable
 
         var result = await NuplaneRestore.RestoreAsync(
             configuration,
-            new() { BasePath = _root, ConfigureBuilder = DirectoryFeeds });
+            new() { BasePath = _root });
 
         Assert.Equal(Path.Combine(_root, ".nuplane", "packages"), result.InstallRoot);
         Assert.Equal(Path.Combine(_root, ".nuplane", "store-state.json"), result.StateFilePath);
@@ -238,7 +237,7 @@ public sealed class NuplaneRestoreTests : IDisposable
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => NuplaneRestore.RestoreAsync(
                 configuration,
-                new() { InstallRoot = _installRoot, ConfigureBuilder = DirectoryFeeds }));
+                new() { InstallRoot = _installRoot }));
 
         // The default a running host would apply — .nuplane/store-state.json under its own base
         // directory — is named in the refusal rather than applied to this process's base directory.
@@ -255,7 +254,7 @@ public sealed class NuplaneRestoreTests : IDisposable
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => NuplaneRestore.RestoreAsync(
                 configuration,
-                new() { StateFilePath = _stateFilePath, ConfigureBuilder = DirectoryFeeds }));
+                new() { StateFilePath = _stateFilePath }));
 
         Assert.Contains(".nuplane/packages", exception.Message, StringComparison.Ordinal);
         Assert.Contains(nameof(NuplaneRestoreOptions.BasePath), exception.Message, StringComparison.Ordinal);
@@ -270,7 +269,7 @@ public sealed class NuplaneRestoreTests : IDisposable
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => NuplaneRestore.RestoreAsync(
                 configuration,
-                new() { InstallRoot = _installRoot, ConfigureBuilder = DirectoryFeeds }));
+                new() { InstallRoot = _installRoot }));
 
         Assert.Contains("relative-state/store-state.json", exception.Message, StringComparison.Ordinal);
     }
@@ -316,6 +315,7 @@ public sealed class NuplaneRestoreTests : IDisposable
     {
         var configuration = Configure(
             ("Nuplane:Setup:Feeds:private-feed:ServiceIndex", "https://packages.example.com/v3/index.json"),
+            ("Nuplane:Setup:Feeds:private-feed:Trust", "Trusted"),
             ("Nuplane:Setup:Feeds:private-feed:Credentials", "secrets://packages/token"),
             ("Nuplane:Setup:Feeds:private-feed:IncludePatterns:0", "Ghost.Package [1.0.0]"));
 
@@ -334,6 +334,7 @@ public sealed class NuplaneRestoreTests : IDisposable
         // the refusal would fail loudly instead of this test passing by luck or by timing out.
         var configuration = Configure(
             ("Nuplane:Setup:Feeds:private-feed:ServiceIndex", "https://credentialed.invalid/index.json"),
+            ("Nuplane:Setup:Feeds:private-feed:Trust", "Trusted"),
             ("Nuplane:Setup:Feeds:private-feed:Credentials", "secrets://packages/token"),
             ("Nuplane:Setup:Feeds:private-feed:IncludePatterns:0", "Ghost.Package [1.0.0]"));
         var versionEnumerator = Substitute.For<IFeedVersionEnumerator>();
@@ -367,6 +368,7 @@ public sealed class NuplaneRestoreTests : IDisposable
     {
         var configuration = Configure(
             ("Nuplane:Setup:Feeds:private-feed:ServiceIndex", "https://packages.example.com/v3/index.json"),
+            ("Nuplane:Setup:Feeds:private-feed:Trust", "Trusted"),
             ("Nuplane:Setup:Feeds:private-feed:Credentials", "secrets://packages/token"),
             ("Nuplane:Setup:Feeds:private-feed:IncludePatterns:0", "Ghost.Package [1.0.0]"));
 
@@ -407,6 +409,7 @@ public sealed class NuplaneRestoreTests : IDisposable
     {
         var configuration = Configure(
             ("Nuplane:Setup:Feeds:remote:ServiceIndex", "https://packages.example.com/v3/index.json"),
+            ("Nuplane:Setup:Feeds:remote:Trust", "Trusted"),
             ("Nuplane:Setup:Feeds:remote:IncludePatterns:0", "Pinned.Package [1.2.3]"),
             ("Nuplane:Setup:Feeds:remote:IncludePatterns:1", "Bare.Package"),
             ("Nuplane:Setup:Feeds:remote:IncludePatterns:2", "Ranged.Package [1.0.0,2.0.0)"),
@@ -464,6 +467,7 @@ public sealed class NuplaneRestoreTests : IDisposable
         HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory);
         var configuration = Configure(
             ("Nuplane:Setup:Feeds:remote:ServiceIndex", "https://packages.example.com/v3/index.json"),
+            ("Nuplane:Setup:Feeds:remote:Trust", "Trusted"),
             ("Nuplane:Setup:Feeds:remote:IncludePatterns:0", "Unpinned.Package"));
 
         var result = await NuplaneRestore.RestoreAsync(
@@ -597,6 +601,7 @@ public sealed class NuplaneRestoreTests : IDisposable
             new Dictionary<string, string?>
             {
                 ["Setup:Feeds:" + FeedName + ":DirectoryPath"] = _feedDirectory,
+                ["Setup:Feeds:" + FeedName + ":Trust"] = "Trusted",
                 ["Setup:Feeds:" + FeedName + ":IncludeAll"] = "true",
                 ["Setup:Feeds:" + FeedName + ":Directory:Watch"] = "false"
             },
@@ -610,12 +615,11 @@ public sealed class NuplaneRestoreTests : IDisposable
     [Fact]
     public async Task DescribeDesiredAsync_WithARootConfigurationHavingADirectoryFeedAndAnOrdinaryFeed_IncludesBoth()
     {
-        // A caller passing the configuration root must get the directory feed too: its module
-        // registration helper only works against the resolved Nuplane configuration
-        // ConfigureBuilder's second argument supplies, not against a captured, unresolved root.
+        // Root configuration must bind directory and remote feeds without a builder callback.
         HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory);
         var root = ConfigureAsRoot(
             ("Nuplane:Setup:Feeds:remote:ServiceIndex", "https://packages.example.com/v3/index.json"),
+            ("Nuplane:Setup:Feeds:remote:Trust", "Trusted"),
             ("Nuplane:Setup:Feeds:remote:IncludePatterns:0", "Ghost.Package [1.0.0]"));
 
         var description = await NuplaneRestore.DescribeDesiredAsync(root, Options());
@@ -627,9 +631,7 @@ public sealed class NuplaneRestoreTests : IDisposable
     [Fact]
     public async Task RestoreAsync_WithARootConfigurationHavingOnlyADirectoryFeed_RestoresInsteadOfRefusing()
     {
-        // With only the module-registered directory feed and a root passed in, an entry point that
-        // handed ConfigureBuilder the wrong configuration would see no directory feed and no other
-        // desired source, and refuse an otherwise-populated configuration as empty.
+        // A directory-only configuration needs no builder callback or additional package.
         var package = HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory);
         var root = ConfigureAsRoot();
 
@@ -691,6 +693,7 @@ public sealed class NuplaneRestoreTests : IDisposable
             new Dictionary<string, string?>
             {
                 ["Nuplane:Setup:Feeds:" + FeedName + ":DirectoryPath"] = _feedDirectory,
+                ["Nuplane:Setup:Feeds:" + FeedName + ":Trust"] = "Trusted",
                 ["Nuplane:Setup:Feeds:" + FeedName + ":IncludeAll"] = "true",
                 ["Nuplane:Setup:Feeds:" + FeedName + ":Directory:Watch"] = "false",
                 ["Logging:LogLevel:Default"] = "Information"
@@ -708,6 +711,7 @@ public sealed class NuplaneRestoreTests : IDisposable
             new Dictionary<string, string?>
             {
                 ["Nuplane:Setup:Feeds:" + FeedName + ":DirectoryPath"] = relativeDirectoryPath,
+                ["Nuplane:Setup:Feeds:" + FeedName + ":Trust"] = "Trusted",
                 ["Nuplane:Setup:Feeds:" + FeedName + ":IncludeAll"] = "true",
                 ["Nuplane:Setup:Feeds:" + FeedName + ":Directory:Watch"] = "false"
             },
@@ -744,24 +748,12 @@ public sealed class NuplaneRestoreTests : IDisposable
         {
             InstallRoot = _installRoot,
             StateFilePath = _stateFilePath,
-            LockFilePath = _lockFilePath,
-            ConfigureBuilder = DirectoryFeeds
+            LockFilePath = _lockFilePath
         };
 
         configure?.Invoke(options);
         return options;
     }
-
-    /// <summary>
-    /// The caller-supplied hook that adds the module-owned directory feeds the core package
-    /// deliberately skips — the reason <see cref="NuplaneRestoreOptions.ConfigureBuilder"/> exists.
-    /// Uses only the callback's own <c>configuration</c> argument — the already-resolved Nuplane
-    /// configuration — never a configuration captured from the call to
-    /// <see cref="NuplaneRestore.RestoreAsync"/>/<see cref="NuplaneRestore.DescribeDesiredAsync"/>,
-    /// which is the trap the option's docs warn against.
-    /// </summary>
-    private static readonly Action<NuplaneBuilder, IConfiguration> DirectoryFeeds =
-        (builder, configuration) => builder.AddDirectoryFeedsFromConfiguration(configuration);
 
     /// <summary>
     /// Holds one restore inside its reconciliation cycle — and therefore inside its store lock —

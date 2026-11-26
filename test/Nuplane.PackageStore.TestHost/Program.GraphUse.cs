@@ -9,7 +9,6 @@ using Nuplane;
 using Nuplane.Feeds;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Loading;
-using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Models;
@@ -289,7 +288,7 @@ internal static partial class Program
         services.Configure<FeedResolutionOptions>(options =>
         {
             options.PackageInstallRoot = request.RootPath;
-            options.Feeds.Add(new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")));
+            options.Feeds.Add(new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")) { Trust = FeedTrustLevel.Trusted });
         });
         services.Configure<LockFileOptions>(options =>
         {

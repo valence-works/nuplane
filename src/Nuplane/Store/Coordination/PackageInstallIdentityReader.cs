@@ -231,7 +231,7 @@ internal sealed class PackageInstallIdentityReader
         {
             "windows-ntfs-name-v1" => OperatingSystem.IsWindows() && !semantics.NormalizationInsensitive,
             "darwin-apfs-v1" => OperatingSystem.IsMacOS(),
-            "linux-ext4-sensitive-v1" => OperatingSystem.IsLinux() &&
+            "linux-ext4-sensitive-v1" or "linux-overlayfs-sensitive-v1" or "linux-xfs-sensitive-v1" => OperatingSystem.IsLinux() &&
                 semantics.CaseSensitive && !semantics.NormalizationInsensitive,
             "linux-ext4-casefold-v1" => OperatingSystem.IsLinux() &&
                 !semantics.CaseSensitive && semantics.NormalizationInsensitive,

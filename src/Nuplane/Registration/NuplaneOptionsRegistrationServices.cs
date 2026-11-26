@@ -4,9 +4,9 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Nuplane.Capabilities;
 using Nuplane.Feeds.Configuration;
+using Nuplane.Hosting;
 using Nuplane.PackageArchives;
 using Nuplane.Reconciliation.Configuration;
-using Nuplane.Reconciliation.Convergence;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Validation;
 using Nuplane.Setup;
@@ -26,11 +26,18 @@ internal static class NuplaneOptionsRegistrationServices
     private const string LockFileSectionName = "LockFile";
     private const string CleanupPolicySectionName = "CleanupPolicy";
     private const string PackageStoreMaintenanceSectionName = "PackageStoreMaintenance";
-    private const string ConvergenceSectionName = "Convergence";
     private const string DesiredStateSectionName = "DesiredState";
     internal const string StoreRegistrySectionName = "StoreRegistry";
     internal const string CapabilitiesSectionName = "Capabilities";
     internal const string HostProvidedPackagesSectionName = "HostProvidedPackages";
+
+    private static readonly (string OldKey, string ReplacementKey)[] RetiredSetupKeys =
+    [
+        ("AutomaticReconciliation", "Reconciliation:EnableAutomaticReconciliation"),
+        ("PollInterval", "Reconciliation:PollInterval"),
+        ("StateFilePath", "StoreRegistry:StateFilePath"),
+        ("UseInMemoryStore", "StoreRegistry:UseInMemoryStore")
+    ];
 
     private static readonly Action<IServiceCollection, IConfiguration>[] ConfiguredOptionBinders =
     [
@@ -40,7 +47,6 @@ internal static class NuplaneOptionsRegistrationServices
         static (services, configuration) => ConfigureBoundOptions<LockFileOptions>(services, configuration, LockFileSectionName),
         static (services, configuration) => ConfigureBoundOptions<CleanupPolicyOptions>(services, configuration, CleanupPolicySectionName),
         static (services, configuration) => ConfigureBoundOptions<PackageStoreMaintenanceOptions>(services, configuration, PackageStoreMaintenanceSectionName),
-        static (services, configuration) => ConfigureBoundOptions<ConvergenceOptions>(services, configuration, ConvergenceSectionName),
         static (services, configuration) => ConfigureBoundOptions<DesiredStateOptions>(services, configuration, DesiredStateSectionName),
         static (services, configuration) => ConfigureBoundOptions<StoreRegistryOptions>(services, configuration, StoreRegistrySectionName),
         static (services, configuration) => ConfigureBoundOptions<PackageArchiveReaderOptions>(services, configuration, PackageArchiveReaderOptions.SectionName),
@@ -56,7 +62,7 @@ internal static class NuplaneOptionsRegistrationServices
         services.AddSingleton<IValidateOptions<LockFileOptions>, LockFileOptionsValidator>();
         services.AddSingleton<IValidateOptions<CleanupPolicyOptions>, CleanupPolicyOptionsValidator>();
         services.AddSingleton<FeedCredentialOptionsValidator>();
-        services.AddSingleton<IValidateOptions<ConvergenceOptions>, ConvergenceOptionsValidator>();
+        services.AddSingleton<IValidateOptions<DesiredStateOptions>, DesiredStateOptionsValidator>();
         services.AddSingleton<IValidateOptions<StoreRegistryOptions>, StoreRegistryOptionsValidator>();
         services.AddSingleton<IValidateOptions<CapabilityOptions>, CapabilityOptionsValidator>();
         services.AddSingleton<IValidateOptions<HostProvidedPackagesOptions>, HostProvidedPackagesOptionsValidator>();
@@ -70,7 +76,6 @@ internal static class NuplaneOptionsRegistrationServices
         services.AddOptions<FeedResolutionOptions>().ValidateOnStart();
         services.AddOptions<LockFileOptions>().ValidateOnStart();
         services.AddOptions<CleanupPolicyOptions>().ValidateOnStart();
-        services.AddOptions<ConvergenceOptions>().ValidateOnStart();
         services.AddOptions<DesiredStateOptions>().ValidateOnStart();
         services.AddOptions<StoreRegistryOptions>().ValidateOnStart();
         services.AddOptions<CapabilityOptions>().ValidateOnStart();
@@ -78,17 +83,39 @@ internal static class NuplaneOptionsRegistrationServices
         services.AddOptions<PackageArchiveReaderOptions>().ValidateOnStart();
     }
 
-    internal static void BindConfiguredOptions(IServiceCollection services, IConfiguration configuration)
+    internal static IConfigurationSection BindConfiguredOptions(IServiceCollection services, IConfiguration configuration)
     {
         var setupSection = GetNamedSectionOrSelf(configuration, SetupSectionName);
         services.Replace(ServiceDescriptor.Singleton<INuplaneSetupFeedDeclarationSource>(
             new ConfigurationNuplaneSetupFeedDeclarationSource(setupSection)));
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IPostConfigureOptions<NuplaneSetupOptions>, NuplaneSetupFeedDiagnosticReporter>());
 
+        var setupOptions = services.AddOptions<NuplaneSetupOptions>();
+        foreach (var (oldKey, replacementKey) in RetiredSetupKeys)
+        {
+            setupOptions.Validate(
+                _ => !setupSection.GetChildren().Any(key => string.Equals(key.Key, oldKey, StringComparison.OrdinalIgnoreCase)),
+                $"Nuplane:Setup:{oldKey} has been removed. Set Nuplane:{replacementKey} instead.");
+        }
+
+        var retiredSection = GetNamedSectionOrSelf(configuration, "Convergence");
+        services.AddOptions<DesiredStateOptions>().Validate(
+            _ => !retiredSection.Exists(),
+            "Nuplane:Convergence has been removed. Move Nuplane:Convergence:Manifest:Enabled to Nuplane:DesiredState:Manifest:Enabled, "
+            + "move the other Manifest settings to Nuplane:DesiredState:Manifest, and set the poll interval under Nuplane:Reconciliation:PollInterval.");
+
         foreach (var bindOptions in ConfiguredOptionBinders)
         {
             bindOptions(services, configuration);
         }
+
+        var reconciliationSection = GetNamedSectionOrSelf(configuration, ReconciliationSectionName);
+        if (reconciliationSection.GetValue<bool>(nameof(ReconciliationOptions.EnableAutomaticReconciliation)))
+        {
+            services.AddHostedService<ReconciliationHostedService>();
+        }
+
+        return setupSection;
     }
 
     private static void ConfigureCapabilityOptions(IServiceCollection services, IConfiguration configuration)

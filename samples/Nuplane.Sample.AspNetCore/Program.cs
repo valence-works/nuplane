@@ -2,17 +2,16 @@ using Nuplane;
 using Nuplane.Admin;
 using Nuplane.Admin.Api;
 using Nuplane.Loading.Api;
-using Nuplane.Loading.Hosting.Builder;
+using Nuplane.Loading;
 using Nuplane.Sample.AspNetCore;
 using Nuplane.Sample.AspNetCore.Catalog;
-using Nuplane.Sources.Directory.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 var nuplaneConfiguration = builder.Configuration.GetSection("Nuplane");
 
 builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
 {
-    nuplane.AddDirectoryFeedsFromConfiguration(nuplaneConfiguration);
+    nuplane.UseBasePath(builder.Environment.ContentRootPath);
     nuplane.AutoloadPackages(nuplaneConfiguration.GetSection("Loading"));
     nuplane.OnPackagesChanged<PackageChangeObserver>();
     nuplane.OnPackagesChanged<PluginDiscoveryObserver>();

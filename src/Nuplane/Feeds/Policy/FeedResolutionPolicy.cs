@@ -9,7 +9,7 @@ namespace Nuplane.Feeds.Policy;
 /// Orders candidate feeds for package resolution based on priority and deterministic ordering,
 /// and selects the winning package from multiple candidates.
 /// </summary>
-public sealed class FeedResolutionPolicy(IOptions<FeedResolutionOptions> options)
+internal sealed class FeedResolutionPolicy(IOptions<FeedResolutionOptions> options)
 {
     private readonly FeedResolutionOptions _options = (options ?? throw new ArgumentNullException(nameof(options))).Value;
 
@@ -77,6 +77,12 @@ public sealed class FeedResolutionPolicy(IOptions<FeedResolutionOptions> options
             .ThenBy(x => x.FeedName, StringComparer.OrdinalIgnoreCase)
             .First();
     }
+
+    internal string? GetTrustOverrideReason(FeedDefinition feed, PackageRequest request) =>
+        _options.TrustOverrides.FirstOrDefault(rule =>
+            string.Equals(rule.FeedName, feed.Name, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(rule.PackageId, request.Id, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(rule.Reason))?.Reason;
 
     private static bool IsLocalDirectoryFeed(FeedDefinition feed) =>
         feed.ServiceIndex.Scheme.Equals("file", StringComparison.OrdinalIgnoreCase);

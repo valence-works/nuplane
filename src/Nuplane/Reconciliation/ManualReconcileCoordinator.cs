@@ -7,6 +7,7 @@ namespace Nuplane.Reconciliation;
 /// Coordinates manual reconciliation trigger requests through the shared trigger ingress,
 /// mapping outcomes to explicit <see cref="ManualReconcileOutcomeCode"/> values with correlation context.
 /// </summary>
+/// <remarks>Hosts can share the singleton registered by <c>AddNuplaneAdmin()</c> with child service providers.</remarks>
 public sealed class ManualReconcileCoordinator
 {
     private readonly IReconciliationTriggerIngress _triggerIngress;
@@ -19,7 +20,7 @@ public sealed class ManualReconcileCoordinator
     /// <param name="triggerIngress">The shared trigger ingress used to dispatch manual reconciliation requests.</param>
     /// <param name="logger">The reconciliation logger for diagnostics.</param>
     /// <param name="metrics">Optional reconciliation metrics to record admin trigger outcomes.</param>
-    public ManualReconcileCoordinator(
+    internal ManualReconcileCoordinator(
         IReconciliationTriggerIngress triggerIngress,
         IReconciliationLogger logger,
         ReconciliationMetrics? metrics = null)

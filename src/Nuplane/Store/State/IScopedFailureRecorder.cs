@@ -3,7 +3,7 @@ using Nuplane.Abstractions.PackageStoreProtection;
 namespace Nuplane.Store.State;
 
 /// <summary>Opts failure persistence into an already-held package-store operation.</summary>
-public interface IScopedFailureRecorder : IFailureRecorder
+internal interface IScopedFailureRecorder : IFailureRecorder
 {
     /// <summary>Persists a failure under the caller's existing owner.</summary>
     /// <param name="packageId">The failed package or source.</param>

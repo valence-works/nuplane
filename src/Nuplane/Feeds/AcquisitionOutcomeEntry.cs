@@ -10,7 +10,7 @@ namespace Nuplane.Feeds;
 /// <param name="Stage">The acquisition stage where the outcome was determined.</param>
 /// <param name="Status">The outcome status.</param>
 /// <param name="ReasonCode">The reason code for the outcome.</param>
-public sealed record AcquisitionOutcomeEntry(
+internal sealed record AcquisitionOutcomeEntry(
     string PackageId,
     string Version,
     AcquisitionStage Stage,

@@ -13,7 +13,7 @@ namespace Nuplane.Sources;
 /// In the unscoped mode, per-source exceptions are captured in <see cref="DesiredAggregateResult.SourceErrors"/>
 /// rather than propagated. The scoped mode propagates cancellation and typed package-store admission refusals.
 /// </summary>
-public sealed class DesiredStateAggregator : IScopedDesiredStateAggregator
+internal sealed class DesiredStateAggregator : IScopedDesiredStateAggregator
 {
     private readonly DesiredStateOptions _options;
 
@@ -82,22 +82,15 @@ public sealed class DesiredStateAggregator : IScopedDesiredStateAggregator
         var collected = new List<PackageRequest>();
         var sourceErrors = new Dictionary<string, Exception>(StringComparer.Ordinal);
 
-        // Deterministic source ordering: stable sort by full type name then ToString()
-        var orderedSources = sources
-            .OrderBy(GetSourceTypeName, StringComparer.Ordinal)
-            .ThenBy(s => s.ToString() ?? string.Empty, StringComparer.Ordinal)
-            .ToList();
-
-        foreach (var source in orderedSources)
+        foreach (var entry in DesiredPackageSourceAccess.Describe(sources, preserveSourceTraversalOrder: true))
         {
             if (propagateAdmissionRefusals)
                 cancellationToken.ThrowIfCancellationRequested();
 
-            var sourceName = GetSourceTypeName(source);
             IReadOnlyList<PackageRequest> sourceRequests;
             try
             {
-                sourceRequests = await readSourceAsync(source, cancellationToken);
+                sourceRequests = await readSourceAsync(entry.Source, cancellationToken);
                 if (propagateAdmissionRefusals)
                     cancellationToken.ThrowIfCancellationRequested();
             }
@@ -111,7 +104,7 @@ public sealed class DesiredStateAggregator : IScopedDesiredStateAggregator
             }
             catch (Exception ex)
             {
-                sourceErrors[sourceName] = ex;
+                sourceErrors[entry.DiagnosticName] = ex;
                 continue;
             }
 
@@ -148,6 +141,4 @@ public sealed class DesiredStateAggregator : IScopedDesiredStateAggregator
 
     private int GetPriority(string sourceName) =>
         string.IsNullOrWhiteSpace(sourceName) ? int.MaxValue : _options.GetPriority(sourceName);
-
-    private static string GetSourceTypeName(IDesiredPackageSource source) => DesiredPackageSourceAccess.GetSourceName(source);
 }

@@ -374,8 +374,6 @@ public sealed class StartupLoadingEventIntegrationTests
     {
         public List<(string packageId, string correlationId)> PackageFailures { get; } = [];
 
-        public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
-        public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
         public Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken ct)
         {
             PackageFailures.Add((packageId, string.Empty));

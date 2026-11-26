@@ -66,7 +66,7 @@ public sealed class ActivePackageCatalogMapperTests
     [InlineData(false)]
     public void MapActivePackages_PersistedDescriptor_UsesRecordedHashWhenAvailable(bool hasRecord)
     {
-        var descriptor = new ActivePackageDescriptor("Acme.Addon", "1.0.0+build.7", "feed", "source",
+        var descriptor = new ActivePackage("Acme.Addon", "1.0.0+build.7", "feed", "source",
             "/packages/feed/Acme.Addon/1.0.0", DateTimeOffset.UnixEpoch, "correlation") { ArchiveHash = FromDisk };
         var state = StoreStateRecord.Empty() with
         {
@@ -77,6 +77,6 @@ public sealed class ActivePackageCatalogMapperTests
 
         var active = Assert.Single(ActivePackageCatalogMapper.MapActivePackages(state));
 
-        Assert.Equal(descriptor.ToActivePackage() with { ArchiveHash = hasRecord ? Recorded : FromDisk }, active);
+        Assert.Equal(descriptor with { ArchiveHash = hasRecord ? Recorded : FromDisk }, active);
     }
 }

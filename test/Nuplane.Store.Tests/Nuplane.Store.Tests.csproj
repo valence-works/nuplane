@@ -13,5 +13,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Update="Native\darwin-stat-layout.c" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="State\Fixtures\active-packages-*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

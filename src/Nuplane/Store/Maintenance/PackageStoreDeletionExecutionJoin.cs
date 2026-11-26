@@ -105,11 +105,17 @@ internal sealed class PackageStoreDeletionExecutionJoin : IDisposable
                     _binder.VerifyPreparedOriginal(binding.Discovered, _rootHandle, EnsureLive, cancellationToken);
                     binding.OriginalAtOriginalName = true;
                 }
-                else if (journal.Phase == PackageStoreDeletionPhase.Finalizing && originalRows.Length == 0)
+                else if (journal.Phase == PackageStoreDeletionPhase.Finalizing &&
+                    (originalRows.Length == 0 || originalRows[0] is
+                        { Kind: PackageStoreInventoryEntryKind.CompletedInstallCandidate, InstallIdentity: not null }))
                 {
-                    _binder.VerifyFinalizingQuarantineAbsent(binding.Discovered, _rootHandle, EnsureLive, cancellationToken);
+                    var replacement = originalRows.SingleOrDefault()?.InstallIdentity;
+                    _binder.VerifyFinalizingQuarantineAbsent(binding.Discovered, _rootHandle, EnsureLive,
+                        cancellationToken, replacement?.DirectoryIdentity);
+                    binding.ReplacementIdentity = replacement?.DirectoryIdentity;
                     binding.QuarantinePositivelyAbsent = true;
-                    overlays.Add(journal.OriginalInstall);
+                    if (replacement is null)
+                        overlays.Add(journal.OriginalInstall);
                 }
                 else
                 {
@@ -159,6 +165,25 @@ internal sealed class PackageStoreDeletionExecutionJoin : IDisposable
         return overlays;
     }
 
+    internal void RetireReplacedTerminalJournals(CancellationToken cancellationToken)
+    {
+        foreach (var binding in _bindings.Where(static binding => binding.ReplacementIdentity is not null).ToArray())
+            RetireTerminalJournal(binding, cancellationToken);
+    }
+
+    internal void RetireTerminalJournal(JournalBinding binding, CancellationToken cancellationToken)
+    {
+        EnsureLive(cancellationToken);
+        if (!_bindings.Contains(binding))
+            throw Refuse("The terminal prune journal is not bound to the current execution.");
+
+        _store.RetireFinalizing(_rootHandle, _root, binding.Discovered,
+            token => _binder.VerifyFinalizingQuarantineAbsent(binding.Discovered, _rootHandle, EnsureLive,
+                token, binding.ReplacementIdentity), cancellationToken);
+        binding.QuarantinePositivelyAbsent = true;
+        binding.Retired = true;
+    }
+
     /// <summary>Overlay rows whose Finalizing journal proved the original install and its quarantine absent.</summary>
     /// <remarks>Their native identities are tombstones that the filesystem may already have reused.</remarks>
     internal IReadOnlyList<PackageInstallIdentity> PositivelyAbsentOriginals
@@ -166,7 +191,7 @@ internal sealed class PackageStoreDeletionExecutionJoin : IDisposable
         get
         {
             EnsureLive(CancellationToken.None);
-            return _bindings.Where(static binding => binding.QuarantinePositivelyAbsent)
+            return _bindings.Where(static binding => binding.QuarantinePositivelyAbsent && binding.ReplacementIdentity is null)
                 .Select(static binding => binding.Discovered.Journal.OriginalInstall)
                 .ToArray();
         }
@@ -188,7 +213,7 @@ internal sealed class PackageStoreDeletionExecutionJoin : IDisposable
     {
         ArgumentNullException.ThrowIfNull(install);
         EnsureLive(CancellationToken.None);
-        binding = _bindings.SingleOrDefault(item => item.Discovered.Journal.OriginalInstall == install)!;
+        binding = _bindings.SingleOrDefault(item => !item.Retired && item.Discovered.Journal.OriginalInstall == install)!;
         return binding is not null;
     }
 
@@ -220,9 +245,9 @@ internal sealed class PackageStoreDeletionExecutionJoin : IDisposable
         var journal = published.Journal;
         if (journal.Phase != PackageStoreDeletionPhase.Prepared || journal.StoreRoot != _root ||
             journal.EnrollmentEpoch != _epoch || journal.OriginalInstall != candidate.InstallIdentity ||
-            _bindings.Any(binding => binding.Discovered.Journal.CandidateId == journal.CandidateId ||
+            _bindings.Any(binding => !binding.Retired && (binding.Discovered.Journal.CandidateId == journal.CandidateId ||
                                      (!binding.QuarantinePositivelyAbsent &&
-                                      binding.Discovered.Journal.OriginalInstall.DirectoryIdentity == journal.OriginalInstall.DirectoryIdentity)))
+                                      binding.Discovered.Journal.OriginalInstall.DirectoryIdentity == journal.OriginalInstall.DirectoryIdentity))))
             throw Refuse("The newly published Prepared journal does not uniquely bind this exact current candidate.");
 
         var discovered = new PackageStoreDeletionJournalStore.DiscoveredJournal(
@@ -324,6 +349,8 @@ internal sealed class PackageStoreDeletionExecutionJoin : IDisposable
         internal PackageStoreDeletionJournalStore.DiscoveredJournal Discovered { get; set; } = discovered;
         internal bool OriginalAtOriginalName { get; set; }
         internal bool QuarantinePositivelyAbsent { get; set; }
+        internal PhysicalFileIdentity? ReplacementIdentity { get; set; }
+        internal bool Retired { get; set; }
         internal PackageStoreDeletionCandidate? PreparedCandidate { get; set; }
         internal PackageStoreQuarantinedCandidate? QuarantinedCandidate { get; set; }
     }

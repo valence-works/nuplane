@@ -486,7 +486,7 @@ internal static partial class ProtectionDigest
         });
     }
 
-    private static byte[] EncodeDescriptor(ActivePackageDescriptor value)
+    private static byte[] EncodeDescriptor(ActivePackage value)
     {
         ArgumentNullException.ThrowIfNull(value);
         return Record(writer =>

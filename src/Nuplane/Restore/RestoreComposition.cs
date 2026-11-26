@@ -13,6 +13,8 @@ using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Reconciliation;
 using Nuplane.Registration;
+using Nuplane.Setup;
+using Nuplane.Sources.Configuration;
 using Nuplane.Sources;
 using Nuplane.Store.State;
 using Nuplane.Versioning;
@@ -74,28 +76,12 @@ internal sealed class RestoreComposition : IAsyncDisposable
             services.AddSingleton<ILoggerFactory>(new NonDisposingLoggerFactory(options.LoggerFactory));
         }
 
-        // Loading is deliberately not registered: PackageAutoLoadingObserver is only ever added by
-        // Nuplane.Loading's AutoloadPackages, so a composition that never calls it loads nothing.
-        // The callback is handed the already-resolved Nuplane configuration, not the value the
-        // caller passed in, so a closure that captured the caller's unresolved root — the trap
-        // NuplaneRestoreOptions.ConfigureBuilder's docs warn about — is never the reason a module
-        // registration helper finds nothing.
-        //
-        // NuplaneBuilder.BasePath is set before the callback runs, not after, so a module
-        // registration helper the callback calls — AddDirectoryFeedsFromConfiguration is the current
-        // one — resolves its own relative configured paths against the host's BasePath without the
-        // callback having to forward it itself. Setting it first rather than last also means a
-        // callback that calls NuplaneBuilder.UseBasePath itself overrides this restore's base
-        // instead of being silently overridden by it.
-        services.AddNuplane(nuplaneConfiguration, builder =>
-        {
-            builder.BasePath = paths.BasePath;
-            options.ConfigureBuilder?.Invoke(builder, nuplaneConfiguration);
-        });
+        // Compose the same configured feeds as the host, with relative directory paths
+        // anchored to the restore's base. Provide the resolved section to custom registrations.
+        services.AddNuplane(nuplaneConfiguration, paths.BasePath,
+            builder => options.ConfigureBuilder?.Invoke(builder, nuplaneConfiguration));
 
-        // These post-configure callbacks are registered after AddNuplane, and therefore run after
-        // every Configure and PostConfigure the configuration and the builder callback registered —
-        // including the directory module's, which adds its feeds through PostConfigure.
+        // Resolve final store and lock paths after configuration and builder overrides.
         services.PostConfigure<StoreRegistryOptions>(storeOptions =>
         {
             if (storeOptions.UseInMemoryStore)
@@ -136,6 +122,8 @@ internal sealed class RestoreComposition : IAsyncDisposable
             // store comes first, so "this configuration persists nothing" and "nothing says which
             // store to write" are reported ahead of anything derived from them.
             var persistence = provider.GetRequiredService<EffectiveStorePersistenceSettings>();
+            _ = provider.GetRequiredService<IOptions<NuplaneSetupOptions>>().Value;
+            _ = provider.GetRequiredService<IOptions<DesiredStateOptions>>().Value;
             _ = provider.GetRequiredService<IOptions<LockFileOptions>>().Value;
             var feedOptions = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
 
@@ -153,9 +141,8 @@ internal sealed class RestoreComposition : IAsyncDisposable
             // secret. Nothing has been written or fetched at this point.
             var secretReferenceResolver = provider.GetRequiredService<ISecretReferenceResolver>();
 
-            // After validation, and before anything reads the feed list: a feed whose secret
-            // reference resolves stays and is used authenticated; one that cannot be resolved is
-            // dropped and named here, before the first network call.
+            // Check credential references only for feeds with acquisition authority. Keep other
+            // feeds visible so the resolver can report the trust refusal and its configuration key.
             await RefuseUnresolvableCredentialFeedsAsync(provider, secretReferenceResolver, feedOptions, credentialRefusedFeeds)
                 .ConfigureAwait(false);
 
@@ -357,14 +344,14 @@ internal sealed class RestoreComposition : IAsyncDisposable
     /// <summary>
     /// Whether no registered <see cref="IDesiredPackageSource"/> would contribute anything — the
     /// same exclusion <see cref="DescribeDesiredAsync"/> and a reconciliation cycle apply, since the
-    /// manifest source is always registered but does nothing unless convergence is configured.
+    /// manifest source is always registered but does nothing unless the desired manifest is configured.
     /// </summary>
     private static bool HasNoDesiredPackageSources(IServiceProvider provider) =>
         !provider.GetServices<IDesiredPackageSource>()
             .Any(static source => source is not DesiredManifestPackageSource { IsEnabled: false });
 
     /// <summary>
-    /// Drops every feed whose configured secret reference no registered
+    /// Drops candidate feeds whose configured secret reference no registered
     /// <see cref="ISecretReferenceProvider"/> could resolve, recording its name. A feed whose
     /// reference does resolve is left in place and contacted with credentials, like any other feed.
     /// </summary>
@@ -382,7 +369,9 @@ internal sealed class RestoreComposition : IAsyncDisposable
         List<string> refusedFeeds)
     {
         var credentialFeeds = feedOptions.Feeds
-            .Where(static feed => !string.IsNullOrWhiteSpace(feed.Credentials))
+            .Where(feed => !string.IsNullOrWhiteSpace(feed.Credentials)
+                && (feed.Trust == FeedTrustLevel.Trusted || feedOptions.TrustOverrides.Any(rule =>
+                    string.Equals(rule.FeedName, feed.Name, StringComparison.OrdinalIgnoreCase))))
             .ToArray();
 
         if (credentialFeeds.Length == 0)

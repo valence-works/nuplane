@@ -4,7 +4,7 @@ using Nuplane.Abstractions;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Builder;
 using Nuplane.Feeds;
-using Nuplane.Loading.Hosting.Builder;
+using Nuplane.Loading;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.DeletionRecords;
 using Nuplane.Store.Maintenance;

@@ -154,19 +154,17 @@ public sealed class LoadingCatalogObservabilityTests
             && message.Contains("metadata was not valid", StringComparison.Ordinal));
     }
 
-    private static ActivePackageCatalogSnapshot CreateSnapshot(string packageId, string installPath, string version = "1.0.0") =>
+    private static ActivePackagesSnapshot CreateSnapshot(string packageId, string installPath, string version = "1.0.0") =>
         new(
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow,
-            [new ActivePackageDescriptor(packageId, version, "feed-a", "source-a", installPath, DateTimeOffset.UtcNow, "corr")],
+            [new ActivePackage(packageId, version, "feed-a", "source-a", installPath, DateTimeOffset.UtcNow, "corr")],
             "read-obs");
 
-    private sealed class StubActivePackageCatalog(ActivePackageCatalogSnapshot snapshot) : IActivePackageCatalog
+    private sealed class StubActivePackageCatalog(ActivePackagesSnapshot snapshot) : IActivePackageCatalog
     {
         public Task<ActivePackagesSnapshot> GetActivePackagesAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(snapshot.ToActivePackagesSnapshot());
-
-        public Task<ActivePackageCatalogSnapshot> GetSnapshotAsync(CancellationToken cancellationToken) => Task.FromResult(snapshot);
+            Task.FromResult(snapshot);
     }
 
     private sealed class CapturingLoggerProvider(List<string> messages) : ILoggerProvider

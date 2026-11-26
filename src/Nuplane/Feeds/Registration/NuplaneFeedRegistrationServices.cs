@@ -9,7 +9,7 @@ namespace Nuplane.Feeds.Registration;
 /// <summary>
 /// Provides services for registering Nuplane feeds and their associated metadata in the service collection.
 /// </summary>
-public static class NuplaneFeedRegistrationServices
+internal static class NuplaneFeedRegistrationServices
 {
     /// <summary>
     /// Determines whether a feed with the specified name has already been registered in the service collection.
@@ -43,7 +43,8 @@ public static class NuplaneFeedRegistrationServices
             {
                 if (!opts.Feeds.Any(f => string.Equals(f.Name, feed.Name, StringComparison.OrdinalIgnoreCase)))
                 {
-                    opts.Feeds.Add(new(feed.Name, serviceIndex, feed.Credentials));
+                    opts.Feeds.Add(new(feed.Name, serviceIndex, feed.Credentials) { Trust = feed.Trust });
+                    opts.SetTrustConfigurationPath(feed.Name, feed.TrustConfigurationPath);
                 }
             });
 

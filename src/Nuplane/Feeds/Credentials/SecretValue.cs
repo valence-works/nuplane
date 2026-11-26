@@ -5,7 +5,7 @@ namespace Nuplane.Feeds.Credentials;
 /// in an exception prints a redaction marker instead of the value. <see cref="Reveal"/> is the only
 /// way back to the value, which makes every place that handles the secret in the clear greppable.
 /// </summary>
-public sealed class SecretValue
+internal sealed class SecretValue
 {
     /// <summary>
     /// What a secret prints as. Nothing that goes to a log, a message, or the store ever sees more.

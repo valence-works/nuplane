@@ -25,7 +25,7 @@ public sealed class ProtectionDigestTests
         var legacy = EmptyState();
         var empty = legacy with
         {
-            ActivePackageDescriptorsById = NewMap<ActivePackageDescriptor>(),
+            ActivePackageDescriptorsById = NewMap<ActivePackage>(),
             ActiveGraphsById = NewMap<GraphActivationRecord>()
         };
 
@@ -108,7 +108,7 @@ public sealed class ProtectionDigestTests
         Assert.NotEqual(ProtectionDigest.StateBody(recorded), ProtectionDigest.StateBody(otherRecordedValue));
         Assert.Equal(ProtectionDigest.StateBody(withoutHash), ProtectionDigest.StateBody(emptyRecord));
 
-        static StoreStateRecord StateWithDescriptor(ActivePackageDescriptor descriptor) => EmptyState() with
+        static StoreStateRecord StateWithDescriptor(ActivePackage descriptor) => EmptyState() with
         {
             ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase) { ["Module"] = descriptor }
         };
@@ -217,7 +217,7 @@ public sealed class ProtectionDigestTests
     [Fact]
     public void StateBody_CaseCollisionsRefuseBeforeLegacyOptionalMapsNormalize()
     {
-        var descriptors = new Dictionary<string, ActivePackageDescriptor>(StringComparer.Ordinal)
+        var descriptors = new Dictionary<string, ActivePackage>(StringComparer.Ordinal)
         {
             ["Module"] = Descriptor(),
             ["module"] = Descriptor()
@@ -884,7 +884,7 @@ public sealed class ProtectionDigestTests
     {
         var request = new PackageRequest("Module", "[1.0.0,2.0.0)", "feed", PackageUpdatePolicy.Range, "source");
         var failure = new FailureRecord("Failed", "install", "failure", Epoch, "correlation");
-        var descriptor = new ActivePackageDescriptor("Module", "1.0.0", "feed", "source", "Module/1.0.0", Epoch,
+        var descriptor = new ActivePackage("Module", "1.0.0", "feed", "source", "Module/1.0.0", Epoch,
             "activation-correlation", "graph", "generation", ActivePackageRole.Root, ["Module"], [], true);
         var graphFailure = new GraphActivationFailure("activation", "failed", "failure", ["Module", "Support"], "unsupported.dll");
         var graph = new GraphActivationRecord("graph", "generation", ["Module"], ["Module", "Support"], Epoch,
@@ -900,7 +900,7 @@ public sealed class ProtectionDigestTests
         };
     }
 
-    private static ActivePackageDescriptor Descriptor()
+    private static ActivePackage Descriptor()
         => new("Module", "1.0.0", "feed", "source", "Module/1.0.0", Epoch, "corr", "graph", "generation",
             ActivePackageRole.Root, ["Module"], [], true);
 

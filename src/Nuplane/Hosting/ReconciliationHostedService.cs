@@ -3,15 +3,13 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Configuration;
-using Nuplane.Reconciliation.Convergence;
 using Nuplane.Reconciliation.Models;
 
 namespace Nuplane.Hosting;
 
 /// <summary>
 /// A background service that queues periodic reconciliation triggers.
-/// Uses <see cref="ConvergenceOptions.PollInterval"/> when convergence is configured,
-/// otherwise falls back to <see cref="ReconciliationOptions.PollInterval"/>.
+/// Uses <see cref="ReconciliationOptions.PollInterval"/>.
 /// Registered automatically when <see cref="ReconciliationOptions.EnableAutomaticReconciliation"/> is <see langword="true"/>.
 /// </summary>
 /// <remarks>
@@ -20,24 +18,21 @@ namespace Nuplane.Hosting;
 internal sealed class ReconciliationHostedService(
     IReconciliationTriggerIngress triggerSink,
     IOptions<ReconciliationOptions> options,
-    IOptions<ConvergenceOptions> convergenceOptions,
     ILogger<ReconciliationHostedService> logger)
     : BackgroundService
 {
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var effectivePollInterval = convergenceOptions.Value.Manifest.Enabled
-            ? convergenceOptions.Value.PollInterval
-            : options.Value.PollInterval;
+        var pollInterval = options.Value.PollInterval;
 
-        logger.LogInformation("Nuplane automatic reconciliation started with poll interval {PollInterval}", effectivePollInterval);
+        logger.LogInformation("Nuplane automatic reconciliation started with poll interval {PollInterval}", pollInterval);
 
         // Note: The startup reconciliation trigger is handled by NuplaneStartupHostedService,
         // which blocks until the initial reconciliation completes. This service only handles
         // periodic scheduled triggers.
 
-        using var timer = new PeriodicTimer(effectivePollInterval);
+        using var timer = new PeriodicTimer(pollInterval);
 
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {

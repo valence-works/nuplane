@@ -191,8 +191,8 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         var expectedHash = "sha512:" + Convert.ToBase64String(SHA512.HashData(packageBytes));
         var request = new PackageRequest("ROOT.SECOND", "[2.0.0,4.0.0)", "feed",
             PackageUpdatePolicy.Range, "post-loading-test");
-        var localFeed = new FeedDefinition("local-cache", new Uri(feedPath + Path.DirectorySeparatorChar));
-        var remoteFeed = new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json"));
+        var localFeed = new FeedDefinition("local-cache", new Uri(feedPath + Path.DirectorySeparatorChar)) { Trust = FeedTrustLevel.Trusted };
+        var remoteFeed = new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")) { Trust = FeedTrustLevel.Trusted };
         var provider = fixture.CreateProvider("member-b", desiredRequests: [request], remoteFeed: remoteFeed,
             additionalFeeds: [localFeed], participant: true, observer: observer,
             configureServices: services =>
@@ -274,18 +274,6 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         internal object? Observation { get; set; }
         internal PackageStoreAdmissionException ExpectedRefusal { get; } = new(
             PackageStoreAdmissionReason.UnknownAuthority, "Post-loading admission was refused by the observer.");
-
-        public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
-        public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
-        public Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken ct) => Task.CompletedTask;
-        public Task OnPackagesChangingAsync(PackageChangeSet changeSet, PackageStoreOperationBorrow borrow,
-            CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task OnPackagesChangedAsync(PackageChangeSet changeSet, PackageStoreOperationBorrow borrow,
-            CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task OnPackageFailedAsync(string packageId, Exception exception, PackageStoreOperationBorrow borrow,
-            CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task OnPackagesReconciledAsync(PackageChangeSet changeSet, IReadOnlyList<ResolvedPackage> appliedPackages,
-            PackageStoreOperationBorrow borrow, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public async Task OnPackageLoadingCompletedAsync(PackageChangeSet changeSet,
             IReadOnlyList<ResolvedPackage> appliedPackages, CancellationToken cancellationToken)

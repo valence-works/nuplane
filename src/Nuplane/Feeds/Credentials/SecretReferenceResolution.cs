@@ -6,7 +6,7 @@ namespace Nuplane.Feeds.Credentials;
 /// because a host that has registered no provider for a reference must degrade to a refused feed,
 /// not to a failed run.
 /// </summary>
-public sealed record SecretReferenceResolution
+internal sealed record SecretReferenceResolution
 {
     private SecretReferenceResolution(SecretReferenceResolutionStatus status, string providerName, SecretValue? value)
     {

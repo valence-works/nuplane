@@ -88,6 +88,54 @@ public sealed class PackageStorePartialExecutionRecoveryTests
         AssertStateEvidenceEqual(stateBefore, await CaptureStateEvidenceAsync(fixture));
         AssertPackageEvidenceEqual(protectedBefore, CapturePackageEvidence(fixture, packages));
         AssertInstallAbsent(fixture, eligiblePackage, eligibleVersion);
+        AssertNoDeletionJournals(fixture);
+    }
+
+    [Theory]
+    [InlineData("BeforeTerminalRemoval", true)]
+    [InlineData("AfterTerminalRemoval", false)]
+    public async Task ExecuteEligibleCandidatesAsync_WhenProcessDiesAtJournalRetirement_RestartUsesDurableNamespace(
+        string checkpointPoint,
+        bool journalRemains)
+    {
+        using var fixture = await OverlappingPackageGraphProtectionTests.GraphUseFixture.CreateAsync(
+            PackageLoadMode.HostIntegrated);
+        var preflight = await InspectAsync(fixture);
+        var eligible = EligibleRows(preflight).First().Install;
+        var protectedPackages = await PersistedProtectedPackagesAsync(fixture, preflight);
+        var protectedBefore = CapturePackageEvidence(fixture, protectedPackages);
+        var stateBefore = await CaptureStateEvidenceAsync(fixture);
+
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+        await using var interrupted = await StartPausedExecutionAsync(fixture,
+            stopAtPublicationPoint: checkpointPoint, cancellationToken: deadline.Token);
+        Assert.Equal(checkpointPoint, String(interrupted.Checkpoint, "point"));
+        Assert.Equal("Finalizing", String(interrupted.Checkpoint, "journalPhase"));
+        Assert.Equal(eligible.PackageId, String(interrupted.Checkpoint, "packageId"));
+        Assert.NotEqual(0, (await interrupted.Process.TerminateAsync(deadline.Token)).ExitCode);
+        AssertInstallAbsent(fixture, eligible.PackageId, eligible.Version);
+
+        if (journalRemains)
+        {
+            var journal = DiscoverSingleJournal(fixture).Journal;
+            AssertCheckpointNamespace(fixture, journal, "AfterQuarantineRootRemoved");
+        }
+        else
+        {
+            AssertNoDeletionJournals(fixture);
+        }
+
+        var resumed = await RunExecutionAsync(fixture, cancellationToken: deadline.Token);
+        Assert.Equal("execution-result", resumed.Kind);
+        Assert.Equal("Completed", String(resumed.Message, "status"));
+        if (journalRemains)
+            Assert.Equal("AlreadyAbsent", String(Candidate(resumed.Message, eligible.PackageId, eligible.Version), "physicalOutcome"));
+        else
+            Assert.DoesNotContain(resumed.Message.GetProperty("candidates").EnumerateArray(), row =>
+                String(row, "packageId") == eligible.PackageId && String(row, "version") == eligible.Version);
+        AssertNoDeletionJournals(fixture);
+        AssertStateEvidenceEqual(stateBefore, await CaptureStateEvidenceAsync(fixture));
+        AssertPackageEvidenceEqual(protectedBefore, CapturePackageEvidence(fixture, protectedPackages));
     }
 
     [Fact]
@@ -224,7 +272,8 @@ public sealed class PackageStorePartialExecutionRecoveryTests
         Assert.Equal("execution-result", resumed.Kind);
         Assert.Equal("Completed", String(resumed.Message, "status"));
         AssertOfflineMemberOutcome(resumed.Message);
-        Assert.Equal("AlreadyAbsent", String(Candidate(resumed.Message, "Root.Second", "2.0.0"), "physicalOutcome"));
+        Assert.DoesNotContain(resumed.Message.GetProperty("candidates").EnumerateArray(), row =>
+            String(row, "packageId") == "Root.Second" && String(row, "version") == "2.0.0");
         Assert.Equal("Deleted", String(Candidate(resumed.Message, "Unrelated.Package", "0.1.0"), "physicalOutcome"));
         Assert.Equal("Deleted", String(Candidate(resumed.Message, "Zzz.Later.Package", "0.1.0"), "physicalOutcome"));
         AssertStateEvidenceEqual(stateBefore, await CaptureStateEvidenceAsync(fixture));

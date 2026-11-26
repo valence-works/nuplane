@@ -20,7 +20,7 @@ public sealed class PackageCatalogHealthTests
             new Dictionary<string, FailureRecord>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, SourceSnapshotRef>(StringComparer.OrdinalIgnoreCase),
             DateTimeOffset.UtcNow,
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase));
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase));
 
         var evaluator = new ReconciliationHealthEvaluator();
         var catalog = new ActivePackageCatalog(
@@ -33,7 +33,7 @@ public sealed class PackageCatalogHealthTests
             new ReconciliationMetrics(new ReconciliationTelemetry()),
             [new PackageCatalogOperationalStateContributor(new StubStoreRegistry(state))]);
 
-        await catalog.GetSnapshotAsync(CancellationToken.None);
+        await catalog.GetActivePackagesAsync(CancellationToken.None);
         var snapshot = await projector.ProjectAsync("health-1", CancellationToken.None);
 
         Assert.Equal(HealthState.Degraded, snapshot.Health);

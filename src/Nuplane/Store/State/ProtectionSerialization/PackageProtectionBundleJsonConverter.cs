@@ -6,7 +6,7 @@ using Nuplane.Store.Coordination.ProtectionRecords;
 namespace Nuplane.Store.State.ProtectionSerialization;
 
 /// <summary>Reads and writes descriptive v2 protection bundles without exposing their constructors.</summary>
-public sealed class PackageProtectionBundleJsonConverter : JsonConverter<PackageProtectionBundle>
+internal sealed class PackageProtectionBundleJsonConverter : JsonConverter<PackageProtectionBundle>
 {
     private static readonly JsonSerializerOptions BundleJsonOptions = new()
     {

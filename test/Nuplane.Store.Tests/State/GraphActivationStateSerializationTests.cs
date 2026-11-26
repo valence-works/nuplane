@@ -24,7 +24,7 @@ public sealed class GraphActivationStateSerializationTests
                 new Dictionary<string, FailureRecord>(StringComparer.OrdinalIgnoreCase),
                 new Dictionary<string, SourceSnapshotRef>(StringComparer.OrdinalIgnoreCase),
                 activatedAtUtc,
-                new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+                new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["Plugin.Root"] = new(
                         "Plugin.Root",
@@ -115,7 +115,7 @@ public sealed class GraphActivationStateSerializationTests
                 new Dictionary<string, FailureRecord>(StringComparer.OrdinalIgnoreCase),
                 new Dictionary<string, SourceSnapshotRef>(StringComparer.OrdinalIgnoreCase),
                 DateTimeOffset.Parse("2026-05-05T10:00:00Z"),
-                new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+                new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["Plugin.Root"] = new("Plugin.Root", "1.0.0", "feed-a", "source-a", "/packages/root", DateTimeOffset.UtcNow, "corr-legacy")
                 });

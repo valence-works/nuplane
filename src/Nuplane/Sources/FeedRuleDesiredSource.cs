@@ -21,7 +21,8 @@ namespace Nuplane.Sources;
 /// </list>
 /// </para>
 /// </summary>
-public sealed class FeedRuleDesiredSource : IPackagePathIndependentDesiredPackageSource
+internal sealed class FeedRuleDesiredSource : IPackagePathIndependentDesiredPackageSource,
+    IIdentifiedDesiredPackageSource, ILegacyDesiredPackageSourceSnapshotVerifier
 {
     private readonly string _feedName;
     private readonly IReadOnlyList<string> _includePatterns;
@@ -81,6 +82,14 @@ public sealed class FeedRuleDesiredSource : IPackagePathIndependentDesiredPackag
     }
 
     /// <inheritdoc />
+    public string SourceInstanceId => $"feed-rule:{_feedName}";
+
+    bool ILegacyDesiredPackageSourceSnapshotVerifier.OwnsLegacySnapshot(IReadOnlyList<PackageRequest> requests) =>
+        requests.Count > 0 && requests.All(request =>
+            string.Equals(_feedName, request.FeedName, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(SourceInstanceId, request.SourceName, StringComparison.OrdinalIgnoreCase));
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -101,7 +110,7 @@ public sealed class FeedRuleDesiredSource : IPackagePathIndependentDesiredPackag
         var rangeByPackageId = candidateIds.ToDictionary(c => c.Id, c => c.VersionRange, StringComparer.OrdinalIgnoreCase);
 
         var requests = selected
-            .Select(id => new PackageRequest(id, rangeByPackageId.GetValueOrDefault(id, string.Empty), _feedName, PackageUpdatePolicy.Range, $"feed-rule:{_feedName}"))
+            .Select(id => new PackageRequest(id, rangeByPackageId.GetValueOrDefault(id, string.Empty), _feedName, PackageUpdatePolicy.Range, SourceInstanceId))
             .ToArray();
 
         return Task.FromResult<IReadOnlyList<PackageRequest>>(requests);

@@ -8,7 +8,7 @@
 
 ## Context
 
-Hosts read files of installed packages; Elsa Studio serves the browser files of its add-on modules this way. The only protected reader reads the coordinated immutable extracted store, enrolled. Its safety rests on native filesystem semantics, such as held-parent name lookup, inode identity and the name profile. So it qualifies only ext4 and APFS on local disks and NTFS on Windows x64. It refuses overlayfs, which every container uses, as well as xfs, btrfs, tmpfs and Windows arm64.
+When this decision was made, the protected reader required enrollment of the coordinated immutable extracted store. Its native name and identity checks were qualified on local ext4 and APFS and Windows x64 NTFS. Elsa Studio needed to serve add-on files across more filesystems without enrollment. See [current coordinated store support](../package-store-maintenance.md#configure-participation).
 
 ADR-0001 defines a canonical artifact hash: `sha512:<base64>` over every byte of the exact acquired `.nupkg`. A byte comparison against that hash proves that content is the admitted package's content, whatever the filesystem.
 

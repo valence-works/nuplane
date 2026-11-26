@@ -20,13 +20,16 @@ public sealed class OperationalStateContributorIntegrationTests
         {
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddNuplane(nuplane => nuplane.WithStateFile(stateFilePath));
-            services.AddNuplaneLoading(options => options.Enabled = true);
+            services.AddNuplane(nuplane =>
+            {
+                nuplane.WithStateFile(stateFilePath);
+                nuplane.AutoloadPackages();
+            });
             services.AddNuplaneAdmin();
 
             using var provider = services.BuildServiceProvider();
             var store = provider.GetRequiredService<IStoreRegistry>();
-            var descriptor = new ActivePackageDescriptor(
+            var descriptor = new ActivePackage(
                 "pkg-a",
                 "1.0.0",
                 "feed-a",
@@ -40,7 +43,7 @@ public sealed class OperationalStateContributorIntegrationTests
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [descriptor.PackageId] = descriptor.Version },
                 descriptor.ActivationCorrelationId,
                 CancellationToken.None,
-                new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase) { [descriptor.PackageId] = descriptor });
+                new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase) { [descriptor.PackageId] = descriptor });
 
             Assert.True(File.Exists(stateFilePath));
 

@@ -22,13 +22,18 @@
          (duplicated there because core Nuplane cannot reference the optional loading module)
          against Nuplane.Loading's own PackageLoadMode/LoadModeScopes. -->
     <InternalsVisibleTo Include="Nuplane.Loading.Tests" />
+    <InternalsVisibleTo Include="Nuplane.NuGet.Tests" />
+    <InternalsVisibleTo Include="Nuplane.Sources.Directory.Tests" />
+    <!-- NSubstitute generates test doubles for internal core contracts in this assembly. -->
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
     <InternalsVisibleTo Include="Nuplane.Loading" />
-    <InternalsVisibleTo Include="Nuplane.Sources.Directory" />
     <!-- Optional Admin projects detached reports over the core-owned maintenance kernels. -->
     <InternalsVisibleTo Include="Nuplane.Admin" />
   </ItemGroup>
 
   <ItemGroup>
+    <AdditionalFiles Include="PublicAPI.Shipped.txt;PublicAPI.Unshipped.txt" />
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <!-- The container and logging implementations, not only their abstractions, because
          NuplaneRestore composes, drives, and disposes its own throwaway service provider. -->

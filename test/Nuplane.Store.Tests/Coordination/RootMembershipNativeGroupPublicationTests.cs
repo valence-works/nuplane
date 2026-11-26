@@ -675,12 +675,12 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
                     [rootSelection], nodes, [edge], recoveryEvidence);
                 activeClosure = new PackageProtectionClosureV2(PackageProtectionClosureKnowledge.Known, null, [graph]);
                 recoverableClosure = new PackageProtectionClosureV2(PackageProtectionClosureKnowledge.Known, null, [graph]);
-                nextBase.ActivePackageDescriptorsById!["Sample.Root"] = new ActivePackageDescriptor(
+                nextBase.ActivePackageDescriptorsById!["Sample.Root"] = new ActivePackage(
                     "Sample.Root", "1.0.0", "feed", "fixture",
                     Path.Combine(_rootAPath, rootInstall.RootRelativeInstallPath.Replace('/', Path.DirectorySeparatorChar)),
                     DateTimeOffset.UnixEpoch, "activation", graphId, generationId, ActivePackageRole.Root,
                     ["Sample.Root"], [], true);
-                nextBase.ActivePackageDescriptorsById["Sample.Dependency"] = new ActivePackageDescriptor(
+                nextBase.ActivePackageDescriptorsById["Sample.Dependency"] = new ActivePackage(
                     "Sample.Dependency", "2.0.0", "feed", "fixture",
                     Path.Combine(_rootBPath, dependencyInstall.RootRelativeInstallPath.Replace('/', Path.DirectorySeparatorChar)),
                     DateTimeOffset.UnixEpoch, "activation", graphId, generationId, ActivePackageRole.Dependency,
@@ -924,7 +924,7 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
                 };
                 var installPath = Path.Combine(_rootAPath,
                     newlyActiveRootInstall.RootRelativeInstallPath.Replace('/', Path.DirectorySeparatorChar));
-                var descriptors = new Dictionary<string, ActivePackageDescriptor>(
+                var descriptors = new Dictionary<string, ActivePackage>(
                     nextBase.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase);
                 descriptors[newlyActiveRootInstall.PackageId] = descriptors[newlyActiveRootInstall.PackageId] with
                 {

@@ -12,7 +12,6 @@ using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Feeds;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Loading;
-using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Reconciliation.LockFile;
@@ -277,7 +276,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
                 services.AddSingleton<IDesiredPackageSource>(new StaticDesiredSource(desiredRequests));
                 services.Configure<FeedResolutionOptions>(options =>
                 {
-                    options.Feeds.Add(remoteFeed ?? new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")));
+                    options.Feeds.Add(remoteFeed ?? new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")) { Trust = FeedTrustLevel.Trusted });
                     if (additionalFeeds is not null)
                         options.Feeds.AddRange(additionalFeeds);
                 });
@@ -374,7 +373,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             {
                 ActiveVersionById = versions,
                 LastKnownGoodById = new Dictionary<string, string>(versions, StringComparer.OrdinalIgnoreCase),
-                ActivePackageDescriptorsById = new Dictionary<string, ActivePackageDescriptor>(descriptors,
+                ActivePackageDescriptorsById = new Dictionary<string, ActivePackage>(descriptors,
                     StringComparer.OrdinalIgnoreCase),
                 ActiveGraphsById = new Dictionary<string, GraphActivationRecord>(graphRecords,
                     StringComparer.OrdinalIgnoreCase),

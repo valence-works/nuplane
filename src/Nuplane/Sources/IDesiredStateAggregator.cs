@@ -6,7 +6,7 @@ namespace Nuplane.Sources;
 /// Aggregates desired package requests from multiple sources, enforcing allowlist rules
 /// and producing a deterministically ordered list of requests.
 /// </summary>
-public interface IDesiredStateAggregator
+internal interface IDesiredStateAggregator
 {
     /// <summary>
     /// Aggregates desired package requests from the specified sources.

@@ -3,7 +3,7 @@ namespace Nuplane.Store.State;
 /// <summary>
 /// Defines the contract for recording package processing failures during reconciliation.
 /// </summary>
-public interface IFailureRecorder
+internal interface IFailureRecorder
 {
     /// <summary>
     /// Records a failure for the specified package.

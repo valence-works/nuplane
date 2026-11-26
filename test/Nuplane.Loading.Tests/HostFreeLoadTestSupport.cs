@@ -158,8 +158,7 @@ internal sealed class NuplaneHostFixture : IAsyncDisposable
     /// <param name="withLoading">Whether the host composes loading at all.</param>
     /// <param name="loadingConfiguration">
     /// A <c>Nuplane:Loading</c> section to install loading from, as a host that keeps its loading settings in
-    /// configuration does; it must enable loading itself. When <see langword="null"/>, loading is installed from
-    /// code and enabled.
+    /// configuration does. When <see langword="null"/>, loading is installed from code.
     /// </param>
     public NuplaneHostFixture(string? stateFilePath = null, bool withLoading = true, IConfiguration? loadingConfiguration = null)
     {
@@ -208,7 +207,7 @@ internal sealed class NuplaneHostFixture : IAsyncDisposable
             packages.ToDictionary(static package => package.PackageId, static package => package.Version, StringComparer.OrdinalIgnoreCase),
             CorrelationId,
             CancellationToken.None,
-            packages.ToDictionary(static package => package.PackageId, static package => package.ToDescriptor(), StringComparer.OrdinalIgnoreCase));
+            packages.ToDictionary(static package => package.PackageId, static package => package, StringComparer.OrdinalIgnoreCase));
 
         await _provider.GetRequiredService<IObserverEventDispatcher>().PublishReconciledAsync(
             new PackageChangeSet([], [], [], CorrelationId, DateTimeOffset.UtcNow),

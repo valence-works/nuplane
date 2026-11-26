@@ -58,15 +58,11 @@ public sealed class RemovalCompletionIntegrationTests
         public IReadOnlyList<ResolvedPackage>? AppliedPackages { get; private set; }
         public IReadOnlyDictionary<string, string>? ActiveVersionsSeenAtCompletion { get; private set; }
 
-        public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
-
         public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct)
         {
             Calls.Add("changed");
             return Task.CompletedTask;
         }
-
-        public Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken ct) => Task.CompletedTask;
 
         public async Task OnPackagesReconciledAsync(
             PackageChangeSet changeSet,

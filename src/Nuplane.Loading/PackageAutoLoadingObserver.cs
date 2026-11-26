@@ -82,32 +82,10 @@ internal sealed class PackageAutoLoadingObserver : IScopedNuplaneObserver, ILeas
 
     private LoadingCatalogRefreshTracker? RefreshTracker { get; }
 
-    /// <inheritdoc />
-    public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
-
-    /// <inheritdoc />
-    public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
-
-    /// <inheritdoc />
-    public Task OnPackagesChangingAsync(PackageChangeSet changeSet, PackageStoreOperationBorrow borrow, CancellationToken cancellationToken) => Task.CompletedTask;
-
-    /// <inheritdoc />
-    public Task OnPackagesChangedAsync(PackageChangeSet changeSet, PackageStoreOperationBorrow borrow, CancellationToken cancellationToken) => Task.CompletedTask;
-
-    /// <inheritdoc />
-    public Task OnPackageFailedAsync(string packageId, Exception exception, PackageStoreOperationBorrow borrow, CancellationToken cancellationToken) => Task.CompletedTask;
-
     /// <summary>
-    /// Enrolled reconciliation defers all Loading work until its root admission and StoreLock have
-    /// been released. The typed post-admission handoff performs the retained reads.
+    /// Loads packages for ordinary reconciliation. Enrolled reconciliation hands off leased graphs
+    /// after releasing root admission and the store lock.
     /// </summary>
-    public Task OnPackagesReconciledAsync(
-        PackageChangeSet changeSet,
-        IReadOnlyList<ResolvedPackage> appliedPackages,
-        PackageStoreOperationBorrow borrow,
-        CancellationToken cancellationToken) => Task.CompletedTask;
-
-    /// <inheritdoc />
     public async Task OnPackagesReconciledAsync(
         PackageChangeSet changeSet,
         IReadOnlyList<ResolvedPackage> appliedPackages,
@@ -424,10 +402,6 @@ internal sealed class PackageAutoLoadingObserver : IScopedNuplaneObserver, ILeas
 
         return new(failures);
     }
-
-    /// <inheritdoc />
-    public Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken ct)
-        => Task.CompletedTask;
 
     /// <summary>
     /// Releases the assembly load contexts of packages that this reconciliation removed or superseded.

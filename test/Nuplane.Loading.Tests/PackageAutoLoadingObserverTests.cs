@@ -481,15 +481,15 @@ public sealed class PackageAutoLoadingObserverTests : IDisposable
             "corr-graph",
             GraphActivationStatus.Active);
 
-    private static ActivePackageDescriptor Descriptor(ResolvedPackage package) =>
-        ActivePackageDescriptor.FromActivePackage(new ActivePackage(
+    private static ActivePackage Descriptor(ResolvedPackage package) =>
+        new(
             package.Id,
             package.Version,
             package.FeedName,
             package.SourceName,
             package.InstallPath,
             Now,
-            "corr-active"));
+            "corr-active");
 
     internal sealed class FakePackageLoader(
         IEnumerable<string>? failIds = null,

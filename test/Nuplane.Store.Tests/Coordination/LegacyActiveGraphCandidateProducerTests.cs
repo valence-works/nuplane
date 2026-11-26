@@ -448,7 +448,7 @@ public sealed partial class LegacyActiveGraphCandidateProducerTests
             {
                 ActiveVersionById = new Dictionary<string, string>(versions, StringComparer.OrdinalIgnoreCase),
                 LastKnownGoodById = new Dictionary<string, string>(versions, StringComparer.OrdinalIgnoreCase),
-                ActivePackageDescriptorsById = new Dictionary<string, ActivePackageDescriptor>(descriptors, StringComparer.OrdinalIgnoreCase),
+                ActivePackageDescriptorsById = new Dictionary<string, ActivePackage>(descriptors, StringComparer.OrdinalIgnoreCase),
                 ActiveGraphsById = new Dictionary<string, GraphActivationRecord>(graphRecords, StringComparer.OrdinalIgnoreCase),
                 LastSuccessfulSourceSnapshots = new Dictionary<string, SourceSnapshotRef>(StringComparer.OrdinalIgnoreCase)
                 {
@@ -475,7 +475,7 @@ public sealed partial class LegacyActiveGraphCandidateProducerTests
             var requests = snapshot.Requests!.ToArray();
             var graphRecords = new Dictionary<string, GraphActivationRecord>(state.ActiveGraphsByIdNormalized,
                 StringComparer.OrdinalIgnoreCase);
-            var descriptors = new Dictionary<string, ActivePackageDescriptor>(state.ActivePackageDescriptorsByIdNormalized,
+            var descriptors = new Dictionary<string, ActivePackage>(state.ActivePackageDescriptorsByIdNormalized,
                 StringComparer.OrdinalIgnoreCase);
             var active = new Dictionary<string, string>(state.ActiveVersionById, StringComparer.OrdinalIgnoreCase);
             var lkg = new Dictionary<string, string>(state.LastKnownGoodById, StringComparer.OrdinalIgnoreCase);

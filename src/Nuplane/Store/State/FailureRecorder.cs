@@ -5,7 +5,7 @@ namespace Nuplane.Store.State;
 /// <summary>
 /// Records package failures by persisting them to the store registry.
 /// </summary>
-public sealed class FailureRecorder(IStoreRegistry storeRegistry) : IScopedFailureRecorder
+internal sealed class FailureRecorder(IStoreRegistry storeRegistry) : IScopedFailureRecorder
 {
     private readonly IStoreRegistry _storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
 

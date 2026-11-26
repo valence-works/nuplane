@@ -19,7 +19,7 @@ namespace Nuplane.Feeds.Versioning;
 /// to nothing else. Nuplane never installs a process-global NuGet credential provider, so one feed's
 /// secret can never be offered to another.
 /// </remarks>
-public sealed class NuGetFeedVersionEnumerator : IFeedVersionEnumerator
+internal sealed class NuGetFeedVersionEnumerator : IFeedVersionEnumerator
 {
     private readonly bool _disableHttpCache;
     private readonly ISecretReferenceResolver? _secretReferenceResolver;

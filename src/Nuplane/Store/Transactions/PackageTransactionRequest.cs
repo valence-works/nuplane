@@ -12,7 +12,7 @@ namespace Nuplane.Store.Transactions;
 /// <param name="ExpectedArtifactHash">The expected integrity hash from the lock file.</param>
 /// <param name="ActualArtifactHash">The actual hash of the resolved artifact.</param>
 /// <param name="StageExecutor">An optional delegate to execute at each transaction stage.</param>
-public sealed record PackageTransactionRequest(
+internal sealed record PackageTransactionRequest(
     string PackageId,
     string Version,
     string CorrelationId,

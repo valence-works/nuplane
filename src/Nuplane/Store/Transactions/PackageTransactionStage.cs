@@ -3,7 +3,7 @@ namespace Nuplane.Store.Transactions;
 /// <summary>
 /// Represents the sequential stages of a package transaction.
 /// </summary>
-public enum PackageTransactionStage
+internal enum PackageTransactionStage
 {
     /// <summary>Trust policy gate evaluation stage.</summary>
     TrustPolicyGate,

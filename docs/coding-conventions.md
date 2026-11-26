@@ -5,6 +5,7 @@ This document defines the coding standards and conventions for the Nuplane proje
 ## Table of Contents
 
 - [General Principles](#general-principles)
+- [Public API](#public-api)
 - [Naming Conventions](#naming-conventions)
 - [Code Organization](#code-organization)
 - [XML Documentation](#xml-documentation)
@@ -30,6 +31,34 @@ This document defines the coding standards and conventions for the Nuplane proje
 5. **Immutability** — Prefer `sealed record` for data transfer types. Use `readonly` fields and properties where possible.
 
 ---
+
+## Public API
+
+Types in `Nuplane` and `Nuplane.Admin` are internal by default. Keep a type public when a
+supported host, package author, or extension needs to call or implement it, or when a supported
+public signature uses it. First-party modules may share implementation types through scoped
+`InternalsVisibleTo` declarations.
+
+| Purpose | Supported entry points |
+| --- | --- |
+| Host configuration | `AddNuplane`, `NuplaneBuilder`, feed builders, and configuration options and enums |
+| Reconciliation and observers | `IReconciliationService`, `IReconciliationTriggerIngress`, `INuplaneObserver`, `PackageChangeSet`, and the scoped, path-independent, and post-loading observer contracts |
+| Catalog reads | `IActivePackageCatalog`, `IPackageAssemblyCatalog`, `IPackageTypeFinder`, and `IPackageLoadStateCatalog` |
+| Host-free tooling and package content | `NuplaneRestore`, `NuplaneStore`, `NuplaneHostIntegratedLoader`, `PackageContent`, and `IPackageArchiveReader` |
+| Coordinated stores | Builder participation and root declarations, admitted snapshots, package-store admission and graph-use leases, and the documented session-aware companions for store state, serializers, and callbacks |
+| Host customization | Desired-state sources and contributors, package resolution and acquisition contracts, secret reference providers, operational state contributors, package metadata readers, activation gates, and load-mode advisors |
+| Admin operations | `AddNuplaneAdmin`, `AddNuplanePackageStoreMaintenance`, `INuplaneAdminOperations`, and `INuplanePackageStoreMaintenanceOperations` with their request and result records. Hosts can share the registered `ManualReconcileCoordinator` across service providers. |
+
+Resolve these contracts through the documented host registration APIs. Concrete pipeline,
+persistence, observability, and registration classes belong to the implementation. External code
+that composed these classes directly can use `AddNuplane`, `NuplaneRestore`, or `NuplaneStore`
+for the host or offline workflow it needs.
+
+`Microsoft.CodeAnalysis.PublicApiAnalyzers` checks the `PublicAPI.Shipped.txt` and
+`PublicAPI.Unshipped.txt` manifests in both projects during ordinary builds. Review the API diff
+with any intentional addition or change. Record new or changed signatures in the unshipped
+manifest and promote reviewed entries to the shipped manifest with the release. The manifest
+includes nullability and supports the same API on .NET 8, .NET 9, and .NET 10.
 
 ## Naming Conventions
 
@@ -86,14 +115,17 @@ Nuplane.Reconciliation.Models        — Result/model records (data-only types)
 Nuplane.Reconciliation.Middleware    — Pipeline middleware stages
 Nuplane.Feeds                        — Feed access, configuration, credentials, resolution policy
 Nuplane.Store                        — State persistence, transactions, activation, cleanup
-Nuplane.Sources                      — Desired-state source abstractions
+Nuplane.Sources                      — Desired-state discovery and source implementations
+Nuplane.Sources.Directory            — Directory feeds and watchers
 Nuplane.Hosting                      — Hosted services and startup recovery
 Nuplane.Observability                — Logging, metrics, telemetry
 Nuplane.Health                       — Health evaluation
 Nuplane.Events                       — Observer event dispatching
 Nuplane.Versioning                   — Shared version parsing and comparison
-Nuplane.Loading                      — Assembly loading, unloading, ALCs
-Nuplane.Loading.Abstractions         — Loading contracts
+Nuplane.Loading                      — Assembly loading, unloading, and public loading contracts
+Nuplane.Admin                       — Optional administration services
+Nuplane.Admin.Api                   — ASP.NET Core admin endpoints
+Nuplane.Loading.Api                 — ASP.NET Core load-state endpoint
 ```
 
 ### Using Directives Order
@@ -201,7 +233,6 @@ test/
   Nuplane.Runtime.Tests/            — Unit tests for the core Nuplane package
   Nuplane.Store.Tests/              — Unit tests for Store
   Nuplane.NuGet.Tests/              — Unit tests for NuGet feed integration
-  Nuplane.Sources.Directory.Tests/  — Unit tests for the directory source
   Nuplane.Loading.Tests/            — Unit tests for Loading (fixtures in Nuplane.Loading.Tests.Fixtures.*)
   Nuplane.Integration.Tests/        — Integration / contract tests
 ```
@@ -355,9 +386,6 @@ private static partial void CycleStarted(ILogger logger, string correlationId, i
 Nuplane (consumer package)
   └── Nuplane.Abstractions
 
-Nuplane.Sources.Directory
-  └── Nuplane
-
 Nuplane.Loading (optional)
   ├── Nuplane
   └── Nuplane.Loading.Abstractions
@@ -373,8 +401,8 @@ Nuplane.Loading.Api (ASP.NET Core)
   └── Nuplane.Loading.Abstractions
 ```
 
-- **Nuplane** (consumer package) owns core composition, feed abstractions, and generic runtime registration. It does NOT own module-specific builder conveniences, options, hosted services, or registration helpers.
-- **Module packages** own their module-specific builder extensions (`Builder/`) and configuration-driven setup translation (`Configuration/`). There are no separate `*.Hosting` packages.
+- **Nuplane** owns core composition, remote and directory feeds, reconciliation, store state, and archive reads.
+- **Optional packages** own their extensions and configuration. The `Nuplane.Loading` package supplies `AutoloadPackages`; there are no separate hosting packages.
 
 ### Multi-Targeting
 
@@ -404,52 +432,35 @@ Package versions are managed centrally in `Directory.Packages.props`. Never spec
 
 ### Module Boundary Rule
 
-Each optional or source-specific capability (e.g., directory-source, loading) is treated as a **module** with its own package set. Module-specific items belong to the module's own packages, NOT to the core `Nuplane` package:
+Optional loading and admin services live in their owning packages.
 
 | Concern | Owner |
 |---------|-------|
-| Options classes | Module implementation package (`Nuplane.Loading`, `Nuplane.Sources.Directory`) |
+| Options classes | Module implementation package (`Nuplane.Loading`) |
 | Registration services | Module implementation package |
 | Hosted services | Module implementation package (`Hosting/`) |
-| Direct `IServiceCollection` extensions | Module implementation package |
-| Builder extensions (`NuplaneBuilder`) | Module implementation package (`Builder/`) |
+| Registration and endpoint extensions | Package that owns the service or endpoint |
+| Loading builder extension | `Nuplane.Loading` |
 | Configuration-driven setup translation | Module implementation package (`Configuration/`) |
 
 ### Registration Surface Rules
 
-- Every module MUST expose at least one `IServiceCollection.Add{Module}(...)` extension method for direct registration.
-- Module-specific `NuplaneBuilder` extensions (fluent builder APIs) live in the module package's `Builder/` folder.
-- Duplicate registration follows **last-registration-wins** semantics using `TryAdd` / replace patterns.
-- Core `Nuplane` retains only generic runtime composition, feed abstractions, and URI-based feed registration.
+- Use one supported registration path per module. Loading uses `NuplaneBuilder.AutoloadPackages` and admin uses `IServiceCollection.AddNuplaneAdmin`.
+- Use the owning package for builder and service collection extensions.
+- Keep repeat registration deterministic and deduplicate singletons and observers.
+- Core `Nuplane` owns runtime composition and both remote and directory-backed feed registration.
 
 ### Builder Integration Pattern
 
-Module builder extensions delegate to module-owned registration services:
-
-```csharp
-// Nuplane.Sources.Directory.Builder
-public static NuplaneBuilder AddDirectoryFeed(
-    this NuplaneBuilder builder, string name, string path,
-    Action<NuplaneDirectoryFeedConfiguration>? configure = null)
-{
-    // Delegates to DirectorySourceRegistrationServices.RegisterFeed(...)
-}
-```
-
-For configuration-driven directory feeds, call `AddDirectoryFeedsFromConfiguration`:
-
-```csharp
-services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
-{
-    nuplane.AddDirectoryFeedsFromConfiguration(configuration.GetSection("Nuplane"));
-    nuplane.AutoloadPackages(configuration.GetSection("Nuplane"));
-});
-```
+Loading builder extensions delegate to loading-owned registration services. Directory feeds are
+registered by core `AddNuplane` from `Setup:Feeds`, or in code through
+`Nuplane.Sources.Directory.Builder.AddDirectoryFeed`. Both paths share one directory feed
+registration and validation path.
 
 ### Adding a New Module
 
-1. Create the module package with options, registration services, and direct `IServiceCollection` extension.
-2. Put builder extensions in its `Builder/` folder and configuration-driven setup translation in its `Configuration/` folder.
+1. Create the optional package with its options and registration services.
+2. Choose a registration entry point that fits the host composition.
 3. Add tests in the module's test project and integration test project.
 4. Do NOT add module-specific code to the core `Nuplane` package.
 

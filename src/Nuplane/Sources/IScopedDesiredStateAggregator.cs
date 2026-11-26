@@ -8,7 +8,7 @@ namespace Nuplane.Sources;
 /// Implementations validate every source before invoking the first callback, await each scoped
 /// source while its borrow is live, and propagate typed package-store admission refusals.
 /// </remarks>
-public interface IScopedDesiredStateAggregator : IDesiredStateAggregator
+internal interface IScopedDesiredStateAggregator : IDesiredStateAggregator
 {
     /// <summary>Aggregates desired requests under an already-admitted operation owner.</summary>
     /// <param name="sources">The original desired sources, without identity-changing wrappers.</param>

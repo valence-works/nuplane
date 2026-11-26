@@ -1,7 +1,7 @@
 namespace Nuplane.Abstractions;
 
 /// <summary>
-/// Represents a scoped failure event during convergence operations.
+/// Represents a scoped failure event during reconciliation operations.
 /// </summary>
 /// <param name="Scope">The failure scope (e.g., source, acquisition, loader, admin, manifest).</param>
 /// <param name="Target">The specific target that failed (e.g., source name, package ID, endpoint).</param>

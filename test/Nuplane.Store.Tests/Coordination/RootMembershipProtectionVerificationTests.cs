@@ -62,7 +62,7 @@ public sealed class RootMembershipProtectionVerificationTests
             if (scenario == "descriptor")
             {
                 var state = context.States["second"];
-                var descriptors = new Dictionary<string, ActivePackageDescriptor>(state.ActivePackageDescriptorsByIdNormalized,
+                var descriptors = new Dictionary<string, ActivePackage>(state.ActivePackageDescriptorsByIdNormalized,
                     StringComparer.OrdinalIgnoreCase);
                 descriptors["Root.Second"] = descriptors["Root.Second"] with { InstallPath = context.SharedInstallPath };
                 context.States["second"] = context.Reprotect(state with { ActivePackageDescriptorsById = descriptors }, false);
@@ -251,7 +251,7 @@ public sealed class RootMembershipProtectionVerificationTests
             {
                 ActiveVersionById = versions,
                 LastKnownGoodById = new Dictionary<string, string>(versions, StringComparer.OrdinalIgnoreCase),
-                ActivePackageDescriptorsById = new Dictionary<string, ActivePackageDescriptor>(descriptors, StringComparer.OrdinalIgnoreCase),
+                ActivePackageDescriptorsById = new Dictionary<string, ActivePackage>(descriptors, StringComparer.OrdinalIgnoreCase),
                 ActiveGraphsById = new Dictionary<string, GraphActivationRecord>(graphRecords, StringComparer.OrdinalIgnoreCase),
                 UpdatedAt = DateTimeOffset.UnixEpoch
             };

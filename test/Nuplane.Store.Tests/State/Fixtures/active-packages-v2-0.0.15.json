@@ -1,0 +1,90 @@
+{
+  "activeVersionById": {
+    "Plugin.Root": "1.0.0",
+    "Plugin.Support": "2.0.0"
+  },
+  "lastKnownGoodById": {
+    "Plugin.Root": "1.0.0"
+  },
+  "lastFailureById": {},
+  "lastSuccessfulSourceSnapshots": {},
+  "updatedAt": "2026-11-26T10:00:00+00:00",
+  "activePackageDescriptorsById": {
+    "Plugin.Root": {
+      "packageId": "Plugin.Root",
+      "version": "1.0.0",
+      "feedName": "feed",
+      "sourceName": "source",
+      "installPath": "/packages/plugin.root/1.0.0",
+      "activatedAtUtc": "2026-11-26T10:00:00+00:00",
+      "activationCorrelationId": "cycle",
+      "packageRole": 0,
+      "discoverable": true,
+      "graphId": "plugin-graph",
+      "graphGenerationId": "generation-1",
+      "rootPackageIds": [
+        "Plugin.Root"
+      ],
+      "dependencyOfPackageIds": [],
+      "archiveHash": "sha512:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    },
+    "Plugin.Support": {
+      "packageId": "Plugin.Support",
+      "version": "2.0.0",
+      "feedName": "feed",
+      "installPath": "/packages/plugin.support/2.0.0",
+      "activatedAtUtc": "2026-11-26T10:00:00+00:00",
+      "activationCorrelationId": "cycle",
+      "packageRole": 1,
+      "discoverable": false,
+      "graphId": "plugin-graph",
+      "graphGenerationId": "generation-1",
+      "rootPackageIds": [
+        "Plugin.Root"
+      ],
+      "dependencyOfPackageIds": [
+        "Plugin.Root"
+      ]
+    }
+  },
+  "activeGraphsById": {},
+  "archiveHashesByPackage": {
+    "plugin.root/1.0.0": "sha512:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+  },
+  "protectionBundle": {
+    "schemaVersion": 2,
+    "logicalMemberId": "ccaf5e28-384d-492f-94b8-4955f6128fa0",
+    "publicationId": "d6ee6cb5-a633-4432-b8d1-e39c68db481e",
+    "stateGeneration": 1,
+    "stateBodyDigest": "cdaf6f7a4a8a31edce60079b2c47b9ad37f5b8f8a6188f4ec2a2302567b0a21e",
+    "participantSetDigest": "83def722f4e895e12cb9d88970bf57fdd1d15eb52d3b8abe25fdac07965abad1",
+    "rows": [
+      {
+        "rootIdentity": {
+          "handleIdentity": {
+            "provider": "test-provider",
+            "volumeOrDeviceId": "fixture-volume",
+            "fileId": "fixture-root"
+          }
+        },
+        "enrollmentEpoch": 1,
+        "memberId": "member",
+        "revision": 1,
+        "stateGeneration": 1,
+        "stateBodyDigest": "cdaf6f7a4a8a31edce60079b2c47b9ad37f5b8f8a6188f4ec2a2302567b0a21e",
+        "protectionDigest": "599d0b5b5bf8acdd6db830da326fe1902a38fb7f8546da9d5dfa7343c34249aa",
+        "activeClosure": {
+          "knowledge": 0,
+          "unknownReason": 2
+        },
+        "recoverableClosure": {
+          "knowledge": 1,
+          "graphs": []
+        },
+        "retiredGraphs": [],
+        "legacyUnknownRecovery": false
+      }
+    ],
+    "bundleDigest": "10ae4a6d19fb79764be4c6b5f157ad30787709343ece4b1fc5bb3cde6a3de11a"
+  }
+}

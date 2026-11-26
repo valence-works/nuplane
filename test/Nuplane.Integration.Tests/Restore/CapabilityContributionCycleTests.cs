@@ -5,7 +5,6 @@ using Nuplane.Abstractions;
 using Nuplane.Builder;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Models;
-using Nuplane.Sources.Directory.Configuration;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Restore;
@@ -356,11 +355,7 @@ public sealed class CapabilityContributionCycleTests : IDisposable
                 options.RequirePinnedVersions = pinnedOnly;
                 if (configureBuilder is not null)
                 {
-                    options.ConfigureBuilder = (builder, configuration) =>
-                    {
-                        builder.AddDirectoryFeedsFromConfiguration(configuration);
-                        configureBuilder(builder);
-                    };
+                    options.ConfigureBuilder = (builder, _) => configureBuilder(builder);
                 }
             }));
 
@@ -369,9 +364,11 @@ public sealed class CapabilityContributionCycleTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     [$"Nuplane:Setup:Feeds:{ModuleFeedName}:DirectoryPath"] = _moduleFeedDirectory,
+                    [$"Nuplane:Setup:Feeds:{ModuleFeedName}:Trust"] = "Trusted",
                     [$"Nuplane:Setup:Feeds:{ModuleFeedName}:IncludeAll"] = "true",
                     [$"Nuplane:Setup:Feeds:{ModuleFeedName}:Directory:Watch"] = "false",
                     [$"Nuplane:Setup:Feeds:{EngineFeedName}:DirectoryPath"] = _engineFeedDirectory,
+                    [$"Nuplane:Setup:Feeds:{EngineFeedName}:Trust"] = "Trusted",
                     [$"Nuplane:Setup:Feeds:{EngineFeedName}:IncludeAll"] = "true",
                     [$"Nuplane:Setup:Feeds:{EngineFeedName}:Directory:Watch"] = "false",
                     // Resolves packages, produces no desired roots: the option packages are
@@ -388,8 +385,7 @@ public sealed class CapabilityContributionCycleTests : IDisposable
         {
             InstallRoot = _installRoot,
             StateFilePath = _stateFilePath,
-            LockFilePath = _lockFilePath,
-            ConfigureBuilder = static (builder, configuration) => builder.AddDirectoryFeedsFromConfiguration(configuration)
+            LockFilePath = _lockFilePath
         };
 
         configure?.Invoke(options);
@@ -431,15 +427,12 @@ public sealed class CapabilityContributionCycleTests : IDisposable
 
         private sealed class RecordingObserver(List<PackageChangeSet> changeSets) : INuplaneObserver
         {
-            public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
-
             public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct)
             {
                 changeSets.Add(changeSet);
                 return Task.CompletedTask;
             }
 
-            public Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken ct) => Task.CompletedTask;
         }
     }
 }

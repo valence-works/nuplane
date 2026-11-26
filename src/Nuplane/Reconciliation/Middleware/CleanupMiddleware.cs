@@ -58,7 +58,7 @@ internal sealed class CleanupMiddleware(
                 activatedAtUtc,
                 desiredRootPackageIds,
                 failedPackageIds);
-            var activePackageDescriptors = ActivePackageCatalogMapper.BuildNextDescriptors(
+            var activePackages = ActivePackageCatalogMapper.BuildNextDescriptors(
                 priorState,
                 context.MergedActive!,
                 applyResult.AppliedPackages,
@@ -73,7 +73,7 @@ internal sealed class CleanupMiddleware(
                 appliedVersions,
                 context.CorrelationId,
                 context.CancellationToken,
-                activePackageDescriptors,
+                activePackages,
                 activeGraphRecords).ConfigureAwait(false);
         }
 

@@ -1,10 +1,15 @@
 namespace Nuplane.Sources.Configuration;
 
 /// <summary>
-/// Configuration options for resolving overlapping desired package requests from multiple sources.
+/// Configuration for the desired manifest and precedence among desired package sources.
 /// </summary>
 public sealed class DesiredStateOptions
 {
+    /// <summary>
+    /// Gets the configuration for the desired manifest package source.
+    /// </summary>
+    public ManifestOptions Manifest { get; } = new();
+
     /// <summary>
     /// Gets the dictionary mapping desired-state source names to their precedence values.
     /// Lower values have higher precedence. Source names are matched case-insensitively.

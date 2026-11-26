@@ -14,10 +14,10 @@ public sealed class LoadingCatalogHealthTests
         var evaluator = new ReconciliationHealthEvaluator();
         var refreshTracker = new LoadingCatalogRefreshTracker();
         var catalog = new LoadingCatalog(
-            new StubActivePackageCatalog(new ActivePackageCatalogSnapshot(
+            new StubActivePackageCatalog(new ActivePackagesSnapshot(
                 DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow,
-                [new ActivePackageDescriptor("pkg-a", "1.0.0", "feed", "source", "/packages/pkg-a", DateTimeOffset.UtcNow, "corr")],
+                [new ActivePackage("pkg-a", "1.0.0", "feed", "source", "/packages/pkg-a", DateTimeOffset.UtcNow, "corr")],
                 "read")),
             new PackageLoader(),
             new AssemblyScanCandidateProjector(new PackageLoader()),
@@ -30,10 +30,10 @@ public sealed class LoadingCatalogHealthTests
             new ReconciliationLogger(),
             new ReconciliationMetrics(new ReconciliationTelemetry()),
             [new LoadingOperationalStateContributor(
-                new StubActivePackageCatalog(new ActivePackageCatalogSnapshot(
+                new StubActivePackageCatalog(new ActivePackagesSnapshot(
                     DateTimeOffset.UtcNow,
                     DateTimeOffset.UtcNow,
-                    [new ActivePackageDescriptor("pkg-a", "1.0.0", "feed", "source", "/packages/pkg-a", DateTimeOffset.UtcNow, "corr")],
+                    [new ActivePackage("pkg-a", "1.0.0", "feed", "source", "/packages/pkg-a", DateTimeOffset.UtcNow, "corr")],
                     "read")),
                 new PackageLoader(),
                 refreshTracker,
@@ -45,12 +45,10 @@ public sealed class LoadingCatalogHealthTests
         Assert.Contains("load-state-stale:1", snapshot.DegradedReasons);
     }
 
-    private sealed class StubActivePackageCatalog(ActivePackageCatalogSnapshot snapshot) : IActivePackageCatalog
+    private sealed class StubActivePackageCatalog(ActivePackagesSnapshot snapshot) : IActivePackageCatalog
     {
         public Task<ActivePackagesSnapshot> GetActivePackagesAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(snapshot.ToActivePackagesSnapshot());
-
-        public Task<ActivePackageCatalogSnapshot> GetSnapshotAsync(CancellationToken cancellationToken) => Task.FromResult(snapshot);
+            Task.FromResult(snapshot);
     }
 }
 

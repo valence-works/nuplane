@@ -41,8 +41,7 @@ public sealed class NuplaneRestoreOptions
 
     /// <summary>
     /// Gets or sets an absolute override for the store's state file, taking precedence over
-    /// <c>Nuplane:StoreRegistry:StateFilePath</c>, over the <c>Nuplane:Setup:StateFilePath</c>
-    /// shorthand, and over <see cref="BasePath"/>.
+    /// <c>Nuplane:StoreRegistry:StateFilePath</c> and over <see cref="BasePath"/>.
     /// </summary>
     public string? StateFilePath { get; set; }
 
@@ -102,19 +101,9 @@ public sealed class NuplaneRestoreOptions
     /// configuration root that nests it.
     /// </summary>
     /// <remarks>
-    /// This is how a caller adds the module-owned pieces the core package deliberately does not
-    /// know about. Directory-backed feeds are the usual one: core <c>AddNuplane</c> skips every
-    /// feed declaring <c>DirectoryPath</c>, so a caller that references
-    /// <c>Nuplane.Sources.Directory</c> passes
-    /// <c>(builder, configuration) =&gt; builder.AddDirectoryFeedsFromConfiguration(configuration)</c>
-    /// here and the same feeds the host would have are registered — without the core package taking a
-    /// dependency on that module. It is also where a caller registers an
-    /// <c>ISecretReferenceProvider</c> of its own, so a feed can reference a secret that lives
-    /// somewhere other than the process environment; the built-in <c>env</c> provider is registered
-    /// without any of this and needs no callback at all. Use the callback's own <c>configuration</c> parameter rather than a
-    /// configuration captured from the call to <c>RestoreAsync</c>/<c>DescribeDesiredAsync</c>: when
-    /// that call was given the host's configuration root, the captured value is still the unresolved
-    /// root, and a module registration helper expecting Nuplane's own keys would find none.
+    /// Use this callback for host-specific services such as a custom <c>ISecretReferenceProvider</c>.
+    /// Configured directory feeds and the built-in <c>env</c> secret provider are available without
+    /// a callback.
     /// </remarks>
     public Action<NuplaneBuilder, IConfiguration>? ConfigureBuilder { get; set; }
 }

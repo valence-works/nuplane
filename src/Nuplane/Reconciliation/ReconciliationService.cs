@@ -22,7 +22,7 @@ using Nuplane.Abstractions.PackageStoreProtection;
 namespace Nuplane.Reconciliation;
 
 /// <inheritdoc />
-public sealed class ReconciliationService : IReconciliationService
+internal sealed class ReconciliationService : IReconciliationService
 {
     private static readonly PackageChangeSet EmptyChangeSet = new([], [], [], string.Empty, DateTimeOffset.UtcNow);
 
@@ -212,7 +212,7 @@ public sealed class ReconciliationService : IReconciliationService
 
         // DesiredManifestPackageSource is always registered so code-based and configuration-based
         // hosts behave identically; it is excluded here when disabled so it leaves no
-        // snapshot/state footprint on hosts that never opted into manifest convergence.
+        // snapshot/state footprint on hosts that never opted into the desired manifest.
         var sourcesList = (sources ?? throw new ArgumentNullException(nameof(sources)))
             .Where(source => source is not DesiredManifestPackageSource { IsEnabled: false })
             .ToArray();

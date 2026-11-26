@@ -1,0 +1,502 @@
+#nullable enable
+Nuplane.Admin.INuplaneAdminOperations
+Nuplane.Admin.INuplaneAdminOperations.GetPackagesAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Abstractions.ActivePackagesSnapshot!>!
+Nuplane.Admin.INuplaneAdminOperations.GetStateAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Operational.OperationalStateSnapshot!>!
+Nuplane.Admin.INuplaneAdminOperations.TriggerReconcileAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Reconciliation.ManualReconcileOutcome!>!
+Nuplane.Admin.INuplanePackageStoreMaintenanceOperations
+Nuplane.Admin.INuplanePackageStoreMaintenanceOperations.EnrollAsync(Nuplane.Admin.PackageStoreEnrollmentRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.Admin.PackageStoreEnrollmentResult!>!
+Nuplane.Admin.INuplanePackageStoreMaintenanceOperations.InspectAsync(string! rootLabel = "default", System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.Admin.PackageStoreMaintenanceResult!>!
+Nuplane.Admin.INuplanePackageStoreMaintenanceOperations.MigrateAsync(Nuplane.Admin.PackageStoreEnrollmentRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.Admin.PackageStoreEnrollmentResult!>!
+Nuplane.Admin.INuplanePackageStoreMaintenanceOperations.PreviewEnrollmentAsync(string! rootLabel = "default", System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.Admin.PackageStoreEnrollmentPreviewResult!>!
+Nuplane.Admin.INuplanePackageStoreMaintenanceOperations.PruneAsync(Nuplane.Admin.PackageStorePruneRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.Admin.PackageStoreMaintenanceResult!>!
+Nuplane.Admin.INuplanePackageStoreMaintenanceOperations.RecoverEnrollmentAsync(Nuplane.Admin.PackageStoreEnrollmentRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.Admin.PackageStoreEnrollmentResult!>!
+Nuplane.Admin.NuplaneAdminServiceCollectionExtensions
+Nuplane.Admin.PackageStoreCandidateResult
+Nuplane.Admin.PackageStoreCandidateResult.<Clone>$() -> Nuplane.Admin.PackageStoreCandidateResult!
+Nuplane.Admin.PackageStoreCandidateResult.Attempt.get -> string!
+Nuplane.Admin.PackageStoreCandidateResult.Attempt.init -> void
+Nuplane.Admin.PackageStoreCandidateResult.Classification.get -> string!
+Nuplane.Admin.PackageStoreCandidateResult.Classification.init -> void
+Nuplane.Admin.PackageStoreCandidateResult.Deconstruct(out Nuplane.Abstractions.PackageStoreProtection.PackageInstallIdentity! Install, out string! Classification, out System.Collections.Generic.IReadOnlyList<string!>! Reasons, out string! Attempt, out string? PhysicalOutcome, out string? JournalPhase, out System.Collections.Generic.IReadOnlyList<string!>? MissingAtStart, out System.Collections.Generic.IReadOnlyList<string!>? MissingAtLastObservation, out Nuplane.Admin.PackageStoreMaintenanceDiagnostic? Diagnostic) -> void
+Nuplane.Admin.PackageStoreCandidateResult.Diagnostic.get -> Nuplane.Admin.PackageStoreMaintenanceDiagnostic?
+Nuplane.Admin.PackageStoreCandidateResult.Diagnostic.init -> void
+Nuplane.Admin.PackageStoreCandidateResult.Equals(Nuplane.Admin.PackageStoreCandidateResult? other) -> bool
+Nuplane.Admin.PackageStoreCandidateResult.Install.get -> Nuplane.Abstractions.PackageStoreProtection.PackageInstallIdentity!
+Nuplane.Admin.PackageStoreCandidateResult.Install.init -> void
+Nuplane.Admin.PackageStoreCandidateResult.JournalPhase.get -> string?
+Nuplane.Admin.PackageStoreCandidateResult.JournalPhase.init -> void
+Nuplane.Admin.PackageStoreCandidateResult.MissingAtLastObservation.get -> System.Collections.Generic.IReadOnlyList<string!>?
+Nuplane.Admin.PackageStoreCandidateResult.MissingAtLastObservation.init -> void
+Nuplane.Admin.PackageStoreCandidateResult.MissingAtStart.get -> System.Collections.Generic.IReadOnlyList<string!>?
+Nuplane.Admin.PackageStoreCandidateResult.MissingAtStart.init -> void
+Nuplane.Admin.PackageStoreCandidateResult.PackageStoreCandidateResult(Nuplane.Abstractions.PackageStoreProtection.PackageInstallIdentity! Install, string! Classification, System.Collections.Generic.IReadOnlyList<string!>! Reasons, string! Attempt, string? PhysicalOutcome, string? JournalPhase, System.Collections.Generic.IReadOnlyList<string!>? MissingAtStart, System.Collections.Generic.IReadOnlyList<string!>? MissingAtLastObservation, Nuplane.Admin.PackageStoreMaintenanceDiagnostic? Diagnostic) -> void
+Nuplane.Admin.PackageStoreCandidateResult.PhysicalOutcome.get -> string?
+Nuplane.Admin.PackageStoreCandidateResult.PhysicalOutcome.init -> void
+Nuplane.Admin.PackageStoreCandidateResult.Reasons.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Admin.PackageStoreCandidateResult.Reasons.init -> void
+Nuplane.Admin.PackageStoreEnrollmentClosureObservation
+Nuplane.Admin.PackageStoreEnrollmentClosureObservation.<Clone>$() -> Nuplane.Admin.PackageStoreEnrollmentClosureObservation!
+Nuplane.Admin.PackageStoreEnrollmentClosureObservation.Deconstruct(out string! Knowledge, out string? UnknownReason, out System.Collections.Generic.IReadOnlyList<string!>? GraphIds) -> void
+Nuplane.Admin.PackageStoreEnrollmentClosureObservation.Equals(Nuplane.Admin.PackageStoreEnrollmentClosureObservation? other) -> bool
+Nuplane.Admin.PackageStoreEnrollmentClosureObservation.GraphIds.get -> System.Collections.Generic.IReadOnlyList<string!>?
+Nuplane.Admin.PackageStoreEnrollmentClosureObservation.GraphIds.init -> void
+Nuplane.Admin.PackageStoreEnrollmentClosureObservation.Knowledge.get -> string!
+Nuplane.Admin.PackageStoreEnrollmentClosureObservation.Knowledge.init -> void
+Nuplane.Admin.PackageStoreEnrollmentClosureObservation.PackageStoreEnrollmentClosureObservation(string! Knowledge, string? UnknownReason, System.Collections.Generic.IReadOnlyList<string!>? GraphIds) -> void
+Nuplane.Admin.PackageStoreEnrollmentClosureObservation.UnknownReason.get -> string?
+Nuplane.Admin.PackageStoreEnrollmentClosureObservation.UnknownReason.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.<Clone>$() -> Nuplane.Admin.PackageStoreEnrollmentMemberObservation!
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.ActiveClosure.get -> Nuplane.Admin.PackageStoreEnrollmentClosureObservation!
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.ActiveClosure.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.ActiveVersions.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.ActiveVersions.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.BindingKind.get -> string!
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.BindingKind.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.Deconstruct(out string! MemberId, out string! BindingKind, out string! Observation, out string? StateBodyDigest, out Nuplane.Admin.PackageStoreStateSlotObservation? StateSlot, out Nuplane.Abstractions.PackageStoreProtection.PhysicalFileIdentity? StateFileIdentity, out System.Collections.Generic.IReadOnlyDictionary<string!, string!>! ActiveVersions, out System.Collections.Generic.IReadOnlyDictionary<string!, string!>! LastKnownGoodVersions, out Nuplane.Admin.PackageStoreEnrollmentClosureObservation! ActiveClosure, out Nuplane.Admin.PackageStoreEnrollmentClosureObservation! RecoverableClosure, out string! Migration, out System.Collections.Generic.IReadOnlyList<string!>! Diagnostics) -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.Diagnostics.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.Diagnostics.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.Equals(Nuplane.Admin.PackageStoreEnrollmentMemberObservation? other) -> bool
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.LastKnownGoodVersions.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.LastKnownGoodVersions.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.MemberId.get -> string!
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.MemberId.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.Migration.get -> string!
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.Migration.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.Observation.get -> string!
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.Observation.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.PackageStoreEnrollmentMemberObservation(string! MemberId, string! BindingKind, string! Observation, string? StateBodyDigest, Nuplane.Admin.PackageStoreStateSlotObservation? StateSlot, Nuplane.Abstractions.PackageStoreProtection.PhysicalFileIdentity? StateFileIdentity, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! ActiveVersions, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! LastKnownGoodVersions, Nuplane.Admin.PackageStoreEnrollmentClosureObservation! ActiveClosure, Nuplane.Admin.PackageStoreEnrollmentClosureObservation! RecoverableClosure, string! Migration, System.Collections.Generic.IReadOnlyList<string!>! Diagnostics) -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.RecoverableClosure.get -> Nuplane.Admin.PackageStoreEnrollmentClosureObservation!
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.RecoverableClosure.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.StateBodyDigest.get -> string?
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.StateBodyDigest.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.StateFileIdentity.get -> Nuplane.Abstractions.PackageStoreProtection.PhysicalFileIdentity?
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.StateFileIdentity.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.StateSlot.get -> Nuplane.Admin.PackageStoreStateSlotObservation?
+Nuplane.Admin.PackageStoreEnrollmentMemberObservation.StateSlot.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberResult
+Nuplane.Admin.PackageStoreEnrollmentMemberResult.<Clone>$() -> Nuplane.Admin.PackageStoreEnrollmentMemberResult!
+Nuplane.Admin.PackageStoreEnrollmentMemberResult.Deconstruct(out string! MemberId, out string! Disposition, out System.Collections.Generic.IReadOnlyList<string!>! Diagnostics) -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberResult.Diagnostics.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Admin.PackageStoreEnrollmentMemberResult.Diagnostics.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberResult.Disposition.get -> string!
+Nuplane.Admin.PackageStoreEnrollmentMemberResult.Disposition.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberResult.Equals(Nuplane.Admin.PackageStoreEnrollmentMemberResult? other) -> bool
+Nuplane.Admin.PackageStoreEnrollmentMemberResult.MemberId.get -> string!
+Nuplane.Admin.PackageStoreEnrollmentMemberResult.MemberId.init -> void
+Nuplane.Admin.PackageStoreEnrollmentMemberResult.PackageStoreEnrollmentMemberResult(string! MemberId, string! Disposition, System.Collections.Generic.IReadOnlyList<string!>! Diagnostics) -> void
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.<Clone>$() -> Nuplane.Admin.PackageStoreEnrollmentPreviewResult!
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.CurrentMemberIds.get -> System.Collections.Generic.IReadOnlyList<string!>?
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.CurrentMemberIds.init -> void
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.Deconstruct(out string! RootLabel, out Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity? RootIdentity, out string? Membership, out long? EnrollmentEpoch, out string? LedgerDigest, out bool IsNonQuiescentObservation, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreEnrollmentMemberObservation!>! Members, out System.Collections.Generic.IReadOnlyList<string!>! Diagnostics, out System.Collections.Generic.IReadOnlyList<string!>? CurrentMemberIds) -> void
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.Diagnostics.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.Diagnostics.init -> void
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.EnrollmentEpoch.get -> long?
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.EnrollmentEpoch.init -> void
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.Equals(Nuplane.Admin.PackageStoreEnrollmentPreviewResult? other) -> bool
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.IsNonQuiescentObservation.get -> bool
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.IsNonQuiescentObservation.init -> void
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.LedgerDigest.get -> string?
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.LedgerDigest.init -> void
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.Members.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreEnrollmentMemberObservation!>!
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.Members.init -> void
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.Membership.get -> string?
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.Membership.init -> void
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.PackageStoreEnrollmentPreviewResult(string! RootLabel, Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity? RootIdentity, string? Membership, long? EnrollmentEpoch, string? LedgerDigest, bool IsNonQuiescentObservation, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreEnrollmentMemberObservation!>! Members, System.Collections.Generic.IReadOnlyList<string!>! Diagnostics, System.Collections.Generic.IReadOnlyList<string!>? CurrentMemberIds = null) -> void
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.RootIdentity.get -> Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity?
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.RootIdentity.init -> void
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.RootLabel.get -> string!
+Nuplane.Admin.PackageStoreEnrollmentPreviewResult.RootLabel.init -> void
+Nuplane.Admin.PackageStoreEnrollmentRequest
+Nuplane.Admin.PackageStoreEnrollmentRequest.<Clone>$() -> Nuplane.Admin.PackageStoreEnrollmentRequest!
+Nuplane.Admin.PackageStoreEnrollmentRequest.Deconstruct(out string! RootLabel, out Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity! ExpectedPhysicalRootIdentity, out long ExpectedEnrollmentEpoch, out bool QuiescentCutoverConfirmed, out System.Collections.Generic.IReadOnlyList<string!>! IntendedMemberIds, out System.Collections.Generic.IReadOnlyList<string!>! ExpectedCurrentMemberIds, out System.Collections.Generic.IReadOnlyList<string!>? RetireMemberIds, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryEvidence!>? RecoveryEvidence, out System.Collections.Generic.IReadOnlyList<string!>? RetireLegacyRecoveryMemberIds) -> void
+Nuplane.Admin.PackageStoreEnrollmentRequest.Equals(Nuplane.Admin.PackageStoreEnrollmentRequest? other) -> bool
+Nuplane.Admin.PackageStoreEnrollmentRequest.ExpectedCurrentMemberIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Admin.PackageStoreEnrollmentRequest.ExpectedCurrentMemberIds.init -> void
+Nuplane.Admin.PackageStoreEnrollmentRequest.ExpectedEnrollmentEpoch.get -> long
+Nuplane.Admin.PackageStoreEnrollmentRequest.ExpectedEnrollmentEpoch.init -> void
+Nuplane.Admin.PackageStoreEnrollmentRequest.ExpectedPhysicalRootIdentity.get -> Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity!
+Nuplane.Admin.PackageStoreEnrollmentRequest.ExpectedPhysicalRootIdentity.init -> void
+Nuplane.Admin.PackageStoreEnrollmentRequest.IntendedMemberIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Admin.PackageStoreEnrollmentRequest.IntendedMemberIds.init -> void
+Nuplane.Admin.PackageStoreEnrollmentRequest.PackageStoreEnrollmentRequest(string! RootLabel, Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity! ExpectedPhysicalRootIdentity, long ExpectedEnrollmentEpoch, bool QuiescentCutoverConfirmed, System.Collections.Generic.IReadOnlyList<string!>! IntendedMemberIds, System.Collections.Generic.IReadOnlyList<string!>! ExpectedCurrentMemberIds, System.Collections.Generic.IReadOnlyList<string!>? RetireMemberIds = null, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryEvidence!>? RecoveryEvidence = null, System.Collections.Generic.IReadOnlyList<string!>? RetireLegacyRecoveryMemberIds = null) -> void
+Nuplane.Admin.PackageStoreEnrollmentRequest.QuiescentCutoverConfirmed.get -> bool
+Nuplane.Admin.PackageStoreEnrollmentRequest.QuiescentCutoverConfirmed.init -> void
+Nuplane.Admin.PackageStoreEnrollmentRequest.RecoveryEvidence.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryEvidence!>?
+Nuplane.Admin.PackageStoreEnrollmentRequest.RecoveryEvidence.init -> void
+Nuplane.Admin.PackageStoreEnrollmentRequest.RetireLegacyRecoveryMemberIds.get -> System.Collections.Generic.IReadOnlyList<string!>?
+Nuplane.Admin.PackageStoreEnrollmentRequest.RetireLegacyRecoveryMemberIds.init -> void
+Nuplane.Admin.PackageStoreEnrollmentRequest.RetireMemberIds.get -> System.Collections.Generic.IReadOnlyList<string!>?
+Nuplane.Admin.PackageStoreEnrollmentRequest.RetireMemberIds.init -> void
+Nuplane.Admin.PackageStoreEnrollmentRequest.RootLabel.get -> string!
+Nuplane.Admin.PackageStoreEnrollmentRequest.RootLabel.init -> void
+Nuplane.Admin.PackageStoreEnrollmentResult
+Nuplane.Admin.PackageStoreEnrollmentResult.<Clone>$() -> Nuplane.Admin.PackageStoreEnrollmentResult!
+Nuplane.Admin.PackageStoreEnrollmentResult.Deconstruct(out string! RootLabel, out Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity? RootIdentity, out long? EnrollmentEpoch, out string! Status, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreEnrollmentMemberResult!>! Members, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreMaintenanceDiagnostic!>! Diagnostics) -> void
+Nuplane.Admin.PackageStoreEnrollmentResult.Diagnostics.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreMaintenanceDiagnostic!>!
+Nuplane.Admin.PackageStoreEnrollmentResult.Diagnostics.init -> void
+Nuplane.Admin.PackageStoreEnrollmentResult.EnrollmentEpoch.get -> long?
+Nuplane.Admin.PackageStoreEnrollmentResult.EnrollmentEpoch.init -> void
+Nuplane.Admin.PackageStoreEnrollmentResult.Equals(Nuplane.Admin.PackageStoreEnrollmentResult? other) -> bool
+Nuplane.Admin.PackageStoreEnrollmentResult.Members.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreEnrollmentMemberResult!>!
+Nuplane.Admin.PackageStoreEnrollmentResult.Members.init -> void
+Nuplane.Admin.PackageStoreEnrollmentResult.PackageStoreEnrollmentResult(string! RootLabel, Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity? RootIdentity, long? EnrollmentEpoch, string! Status, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreEnrollmentMemberResult!>! Members, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreMaintenanceDiagnostic!>! Diagnostics) -> void
+Nuplane.Admin.PackageStoreEnrollmentResult.RootIdentity.get -> Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity?
+Nuplane.Admin.PackageStoreEnrollmentResult.RootIdentity.init -> void
+Nuplane.Admin.PackageStoreEnrollmentResult.RootLabel.get -> string!
+Nuplane.Admin.PackageStoreEnrollmentResult.RootLabel.init -> void
+Nuplane.Admin.PackageStoreEnrollmentResult.Status.get -> string!
+Nuplane.Admin.PackageStoreEnrollmentResult.Status.init -> void
+Nuplane.Admin.PackageStoreInventoryObservation
+Nuplane.Admin.PackageStoreInventoryObservation.<Clone>$() -> Nuplane.Admin.PackageStoreInventoryObservation!
+Nuplane.Admin.PackageStoreInventoryObservation.Deconstruct(out string! RelativePath, out string! Kind, out string? Reason, out Nuplane.Abstractions.PackageStoreProtection.PackageInstallIdentity? Install) -> void
+Nuplane.Admin.PackageStoreInventoryObservation.Equals(Nuplane.Admin.PackageStoreInventoryObservation? other) -> bool
+Nuplane.Admin.PackageStoreInventoryObservation.Install.get -> Nuplane.Abstractions.PackageStoreProtection.PackageInstallIdentity?
+Nuplane.Admin.PackageStoreInventoryObservation.Install.init -> void
+Nuplane.Admin.PackageStoreInventoryObservation.Kind.get -> string!
+Nuplane.Admin.PackageStoreInventoryObservation.Kind.init -> void
+Nuplane.Admin.PackageStoreInventoryObservation.PackageStoreInventoryObservation(string! RelativePath, string! Kind, string? Reason, Nuplane.Abstractions.PackageStoreProtection.PackageInstallIdentity? Install) -> void
+Nuplane.Admin.PackageStoreInventoryObservation.Reason.get -> string?
+Nuplane.Admin.PackageStoreInventoryObservation.Reason.init -> void
+Nuplane.Admin.PackageStoreInventoryObservation.RelativePath.get -> string!
+Nuplane.Admin.PackageStoreInventoryObservation.RelativePath.init -> void
+Nuplane.Admin.PackageStoreInventoryUncertainty
+Nuplane.Admin.PackageStoreInventoryUncertainty.<Clone>$() -> Nuplane.Admin.PackageStoreInventoryUncertainty!
+Nuplane.Admin.PackageStoreInventoryUncertainty.Deconstruct(out string! RelativePath, out string! Reason) -> void
+Nuplane.Admin.PackageStoreInventoryUncertainty.Equals(Nuplane.Admin.PackageStoreInventoryUncertainty? other) -> bool
+Nuplane.Admin.PackageStoreInventoryUncertainty.PackageStoreInventoryUncertainty(string! RelativePath, string! Reason) -> void
+Nuplane.Admin.PackageStoreInventoryUncertainty.Reason.get -> string!
+Nuplane.Admin.PackageStoreInventoryUncertainty.Reason.init -> void
+Nuplane.Admin.PackageStoreInventoryUncertainty.RelativePath.get -> string!
+Nuplane.Admin.PackageStoreInventoryUncertainty.RelativePath.init -> void
+Nuplane.Admin.PackageStoreMaintenanceDiagnostic
+Nuplane.Admin.PackageStoreMaintenanceDiagnostic.<Clone>$() -> Nuplane.Admin.PackageStoreMaintenanceDiagnostic!
+Nuplane.Admin.PackageStoreMaintenanceDiagnostic.Code.get -> string!
+Nuplane.Admin.PackageStoreMaintenanceDiagnostic.Code.init -> void
+Nuplane.Admin.PackageStoreMaintenanceDiagnostic.Deconstruct(out string! Code, out string! Message) -> void
+Nuplane.Admin.PackageStoreMaintenanceDiagnostic.Equals(Nuplane.Admin.PackageStoreMaintenanceDiagnostic? other) -> bool
+Nuplane.Admin.PackageStoreMaintenanceDiagnostic.Message.get -> string!
+Nuplane.Admin.PackageStoreMaintenanceDiagnostic.Message.init -> void
+Nuplane.Admin.PackageStoreMaintenanceDiagnostic.PackageStoreMaintenanceDiagnostic(string! Code, string! Message) -> void
+Nuplane.Admin.PackageStoreMaintenanceResult
+Nuplane.Admin.PackageStoreMaintenanceResult.<Clone>$() -> Nuplane.Admin.PackageStoreMaintenanceResult!
+Nuplane.Admin.PackageStoreMaintenanceResult.Candidates.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreCandidateResult!>!
+Nuplane.Admin.PackageStoreMaintenanceResult.Candidates.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.CorrelationId.get -> string?
+Nuplane.Admin.PackageStoreMaintenanceResult.CorrelationId.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.Deconstruct(out string! RootLabel, out Nuplane.Admin.PackageStorePruneMode Mode, out string! Status, out Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity? RootIdentity, out long? EnrollmentEpoch, out string? LedgerDigest, out string! ProtectionKnowledge, out bool InventoryComplete, out Nuplane.Admin.PackageStoreRetentionPolicy? Retention, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreMemberObservation!>! Members, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreInventoryObservation!>! Inventory, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreInventoryUncertainty!>! InventoryIssues, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreUseObservation!>! Uses, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreCandidateResult!>! Candidates, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreMaintenanceDiagnostic!>! Diagnostics, out string? CorrelationId) -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.Diagnostics.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreMaintenanceDiagnostic!>!
+Nuplane.Admin.PackageStoreMaintenanceResult.Diagnostics.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.EnrollmentEpoch.get -> long?
+Nuplane.Admin.PackageStoreMaintenanceResult.EnrollmentEpoch.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.Equals(Nuplane.Admin.PackageStoreMaintenanceResult? other) -> bool
+Nuplane.Admin.PackageStoreMaintenanceResult.Inventory.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreInventoryObservation!>!
+Nuplane.Admin.PackageStoreMaintenanceResult.Inventory.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.InventoryComplete.get -> bool
+Nuplane.Admin.PackageStoreMaintenanceResult.InventoryComplete.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.InventoryIssues.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreInventoryUncertainty!>!
+Nuplane.Admin.PackageStoreMaintenanceResult.InventoryIssues.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.LedgerDigest.get -> string?
+Nuplane.Admin.PackageStoreMaintenanceResult.LedgerDigest.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.Members.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreMemberObservation!>!
+Nuplane.Admin.PackageStoreMaintenanceResult.Members.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.Mode.get -> Nuplane.Admin.PackageStorePruneMode
+Nuplane.Admin.PackageStoreMaintenanceResult.Mode.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.PackageStoreMaintenanceResult(string! RootLabel, Nuplane.Admin.PackageStorePruneMode Mode, string! Status, Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity? RootIdentity, long? EnrollmentEpoch, string? LedgerDigest, string! ProtectionKnowledge, bool InventoryComplete, Nuplane.Admin.PackageStoreRetentionPolicy? Retention, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreMemberObservation!>! Members, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreInventoryObservation!>! Inventory, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreInventoryUncertainty!>! InventoryIssues, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreUseObservation!>! Uses, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreCandidateResult!>! Candidates, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreMaintenanceDiagnostic!>! Diagnostics, string? CorrelationId) -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.ProtectionKnowledge.get -> string!
+Nuplane.Admin.PackageStoreMaintenanceResult.ProtectionKnowledge.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.Retention.get -> Nuplane.Admin.PackageStoreRetentionPolicy?
+Nuplane.Admin.PackageStoreMaintenanceResult.Retention.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.RootIdentity.get -> Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity?
+Nuplane.Admin.PackageStoreMaintenanceResult.RootIdentity.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.RootLabel.get -> string!
+Nuplane.Admin.PackageStoreMaintenanceResult.RootLabel.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.Status.get -> string!
+Nuplane.Admin.PackageStoreMaintenanceResult.Status.init -> void
+Nuplane.Admin.PackageStoreMaintenanceResult.Uses.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreUseObservation!>!
+Nuplane.Admin.PackageStoreMaintenanceResult.Uses.init -> void
+Nuplane.Admin.PackageStoreMemberObservation
+Nuplane.Admin.PackageStoreMemberObservation.<Clone>$() -> Nuplane.Admin.PackageStoreMemberObservation!
+Nuplane.Admin.PackageStoreMemberObservation.Deconstruct(out string! MemberId, out long Revision, out string! StateBodyDigest, out string! ProtectionDigest) -> void
+Nuplane.Admin.PackageStoreMemberObservation.Equals(Nuplane.Admin.PackageStoreMemberObservation? other) -> bool
+Nuplane.Admin.PackageStoreMemberObservation.MemberId.get -> string!
+Nuplane.Admin.PackageStoreMemberObservation.MemberId.init -> void
+Nuplane.Admin.PackageStoreMemberObservation.PackageStoreMemberObservation(string! MemberId, long Revision, string! StateBodyDigest, string! ProtectionDigest) -> void
+Nuplane.Admin.PackageStoreMemberObservation.ProtectionDigest.get -> string!
+Nuplane.Admin.PackageStoreMemberObservation.ProtectionDigest.init -> void
+Nuplane.Admin.PackageStoreMemberObservation.Revision.get -> long
+Nuplane.Admin.PackageStoreMemberObservation.Revision.init -> void
+Nuplane.Admin.PackageStoreMemberObservation.StateBodyDigest.get -> string!
+Nuplane.Admin.PackageStoreMemberObservation.StateBodyDigest.init -> void
+Nuplane.Admin.PackageStorePruneConfirmation
+Nuplane.Admin.PackageStorePruneConfirmation.<Clone>$() -> Nuplane.Admin.PackageStorePruneConfirmation!
+Nuplane.Admin.PackageStorePruneConfirmation.Deconstruct(out string! RootLabel, out Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity! RootIdentity, out long EnrollmentEpoch, out Nuplane.Admin.PackageStoreRetentionPolicy? Retention) -> void
+Nuplane.Admin.PackageStorePruneConfirmation.EnrollmentEpoch.get -> long
+Nuplane.Admin.PackageStorePruneConfirmation.EnrollmentEpoch.init -> void
+Nuplane.Admin.PackageStorePruneConfirmation.Equals(Nuplane.Admin.PackageStorePruneConfirmation? other) -> bool
+Nuplane.Admin.PackageStorePruneConfirmation.PackageStorePruneConfirmation(string! RootLabel, Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity! RootIdentity, long EnrollmentEpoch, Nuplane.Admin.PackageStoreRetentionPolicy? Retention) -> void
+Nuplane.Admin.PackageStorePruneConfirmation.Retention.get -> Nuplane.Admin.PackageStoreRetentionPolicy?
+Nuplane.Admin.PackageStorePruneConfirmation.Retention.init -> void
+Nuplane.Admin.PackageStorePruneConfirmation.RootIdentity.get -> Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity!
+Nuplane.Admin.PackageStorePruneConfirmation.RootIdentity.init -> void
+Nuplane.Admin.PackageStorePruneConfirmation.RootLabel.get -> string!
+Nuplane.Admin.PackageStorePruneConfirmation.RootLabel.init -> void
+Nuplane.Admin.PackageStorePruneMode
+Nuplane.Admin.PackageStorePruneMode.Execute = 1 -> Nuplane.Admin.PackageStorePruneMode
+Nuplane.Admin.PackageStorePruneMode.Preview = 0 -> Nuplane.Admin.PackageStorePruneMode
+Nuplane.Admin.PackageStorePruneRequest
+Nuplane.Admin.PackageStorePruneRequest.<Clone>$() -> Nuplane.Admin.PackageStorePruneRequest!
+Nuplane.Admin.PackageStorePruneRequest.Confirmation.get -> Nuplane.Admin.PackageStorePruneConfirmation?
+Nuplane.Admin.PackageStorePruneRequest.Confirmation.init -> void
+Nuplane.Admin.PackageStorePruneRequest.CorrelationId.get -> string?
+Nuplane.Admin.PackageStorePruneRequest.CorrelationId.init -> void
+Nuplane.Admin.PackageStorePruneRequest.Deconstruct(out string! RootLabel, out Nuplane.Admin.PackageStoreRetentionPolicy? Retention, out Nuplane.Admin.PackageStorePruneMode Mode, out Nuplane.Admin.PackageStorePruneConfirmation? Confirmation, out string? CorrelationId) -> void
+Nuplane.Admin.PackageStorePruneRequest.Equals(Nuplane.Admin.PackageStorePruneRequest? other) -> bool
+Nuplane.Admin.PackageStorePruneRequest.Mode.get -> Nuplane.Admin.PackageStorePruneMode
+Nuplane.Admin.PackageStorePruneRequest.Mode.init -> void
+Nuplane.Admin.PackageStorePruneRequest.PackageStorePruneRequest(string! RootLabel = "default", Nuplane.Admin.PackageStoreRetentionPolicy? Retention = null, Nuplane.Admin.PackageStorePruneMode Mode = Nuplane.Admin.PackageStorePruneMode.Preview, Nuplane.Admin.PackageStorePruneConfirmation? Confirmation = null, string? CorrelationId = null) -> void
+Nuplane.Admin.PackageStorePruneRequest.Retention.get -> Nuplane.Admin.PackageStoreRetentionPolicy?
+Nuplane.Admin.PackageStorePruneRequest.Retention.init -> void
+Nuplane.Admin.PackageStorePruneRequest.RootLabel.get -> string!
+Nuplane.Admin.PackageStorePruneRequest.RootLabel.init -> void
+Nuplane.Admin.PackageStoreRecoveryEdge
+Nuplane.Admin.PackageStoreRecoveryEdge.<Clone>$() -> Nuplane.Admin.PackageStoreRecoveryEdge!
+Nuplane.Admin.PackageStoreRecoveryEdge.Deconstruct(out System.Guid FromNodeId, out System.Guid ToNodeId, out string! RequestedPackageId, out string! RequestedVersionRange, out string! TargetFramework, out bool IsOptional) -> void
+Nuplane.Admin.PackageStoreRecoveryEdge.Equals(Nuplane.Admin.PackageStoreRecoveryEdge? other) -> bool
+Nuplane.Admin.PackageStoreRecoveryEdge.FromNodeId.get -> System.Guid
+Nuplane.Admin.PackageStoreRecoveryEdge.FromNodeId.init -> void
+Nuplane.Admin.PackageStoreRecoveryEdge.IsOptional.get -> bool
+Nuplane.Admin.PackageStoreRecoveryEdge.IsOptional.init -> void
+Nuplane.Admin.PackageStoreRecoveryEdge.PackageStoreRecoveryEdge(System.Guid FromNodeId, System.Guid ToNodeId, string! RequestedPackageId, string! RequestedVersionRange, string! TargetFramework, bool IsOptional) -> void
+Nuplane.Admin.PackageStoreRecoveryEdge.RequestedPackageId.get -> string!
+Nuplane.Admin.PackageStoreRecoveryEdge.RequestedPackageId.init -> void
+Nuplane.Admin.PackageStoreRecoveryEdge.RequestedVersionRange.get -> string!
+Nuplane.Admin.PackageStoreRecoveryEdge.RequestedVersionRange.init -> void
+Nuplane.Admin.PackageStoreRecoveryEdge.TargetFramework.get -> string!
+Nuplane.Admin.PackageStoreRecoveryEdge.TargetFramework.init -> void
+Nuplane.Admin.PackageStoreRecoveryEdge.ToNodeId.get -> System.Guid
+Nuplane.Admin.PackageStoreRecoveryEdge.ToNodeId.init -> void
+Nuplane.Admin.PackageStoreRecoveryEvidence
+Nuplane.Admin.PackageStoreRecoveryEvidence.<Clone>$() -> Nuplane.Admin.PackageStoreRecoveryEvidence!
+Nuplane.Admin.PackageStoreRecoveryEvidence.ActiveGraphs.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryGraphEvidence!>!
+Nuplane.Admin.PackageStoreRecoveryEvidence.ActiveGraphs.init -> void
+Nuplane.Admin.PackageStoreRecoveryEvidence.Deconstruct(out string! MemberId, out Nuplane.Admin.PackageStoreStateSlotObservation! ExpectedStateSlot, out Nuplane.Abstractions.PackageStoreProtection.PhysicalFileIdentity! ExpectedStateFileIdentity, out string! ExpectedStateBodyDigest, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryGraphEvidence!>! ActiveGraphs, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryGraphEvidence!>! RecoverableGraphs) -> void
+Nuplane.Admin.PackageStoreRecoveryEvidence.Equals(Nuplane.Admin.PackageStoreRecoveryEvidence? other) -> bool
+Nuplane.Admin.PackageStoreRecoveryEvidence.ExpectedStateBodyDigest.get -> string!
+Nuplane.Admin.PackageStoreRecoveryEvidence.ExpectedStateBodyDigest.init -> void
+Nuplane.Admin.PackageStoreRecoveryEvidence.ExpectedStateFileIdentity.get -> Nuplane.Abstractions.PackageStoreProtection.PhysicalFileIdentity!
+Nuplane.Admin.PackageStoreRecoveryEvidence.ExpectedStateFileIdentity.init -> void
+Nuplane.Admin.PackageStoreRecoveryEvidence.ExpectedStateSlot.get -> Nuplane.Admin.PackageStoreStateSlotObservation!
+Nuplane.Admin.PackageStoreRecoveryEvidence.ExpectedStateSlot.init -> void
+Nuplane.Admin.PackageStoreRecoveryEvidence.MemberId.get -> string!
+Nuplane.Admin.PackageStoreRecoveryEvidence.MemberId.init -> void
+Nuplane.Admin.PackageStoreRecoveryEvidence.PackageStoreRecoveryEvidence(string! MemberId, Nuplane.Admin.PackageStoreStateSlotObservation! ExpectedStateSlot, Nuplane.Abstractions.PackageStoreProtection.PhysicalFileIdentity! ExpectedStateFileIdentity, string! ExpectedStateBodyDigest, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryGraphEvidence!>! ActiveGraphs, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryGraphEvidence!>! RecoverableGraphs) -> void
+Nuplane.Admin.PackageStoreRecoveryEvidence.RecoverableGraphs.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryGraphEvidence!>!
+Nuplane.Admin.PackageStoreRecoveryEvidence.RecoverableGraphs.init -> void
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.<Clone>$() -> Nuplane.Admin.PackageStoreRecoveryGraphEvidence!
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.Deconstruct(out System.Guid SnapshotId, out string! GraphId, out string! GenerationId, out Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphDisposition Disposition, out System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity!>! Roots, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryRootSelection!>! RequestedRoots, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryNode!>! Nodes, out System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryEdge!>! Edges, out Nuplane.Admin.PackageStoreRecoverySelectionEvidence? RecoverySelection) -> void
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.Disposition.get -> Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphDisposition
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.Disposition.init -> void
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.Edges.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryEdge!>!
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.Edges.init -> void
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.Equals(Nuplane.Admin.PackageStoreRecoveryGraphEvidence? other) -> bool
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.GenerationId.get -> string!
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.GenerationId.init -> void
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.GraphId.get -> string!
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.GraphId.init -> void
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.Nodes.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryNode!>!
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.Nodes.init -> void
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.PackageStoreRecoveryGraphEvidence(System.Guid SnapshotId, string! GraphId, string! GenerationId, Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphDisposition Disposition, System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity!>! Roots, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryRootSelection!>! RequestedRoots, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryNode!>! Nodes, System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryEdge!>! Edges, Nuplane.Admin.PackageStoreRecoverySelectionEvidence? RecoverySelection) -> void
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.RecoverySelection.get -> Nuplane.Admin.PackageStoreRecoverySelectionEvidence?
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.RecoverySelection.init -> void
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.RequestedRoots.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Admin.PackageStoreRecoveryRootSelection!>!
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.RequestedRoots.init -> void
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.Roots.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity!>!
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.Roots.init -> void
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.SnapshotId.get -> System.Guid
+Nuplane.Admin.PackageStoreRecoveryGraphEvidence.SnapshotId.init -> void
+Nuplane.Admin.PackageStoreRecoveryNode
+Nuplane.Admin.PackageStoreRecoveryNode.<Clone>$() -> Nuplane.Admin.PackageStoreRecoveryNode!
+Nuplane.Admin.PackageStoreRecoveryNode.Deconstruct(out System.Guid NodeId, out Nuplane.Abstractions.PackageStoreProtection.PackageInstallIdentity! Install) -> void
+Nuplane.Admin.PackageStoreRecoveryNode.Equals(Nuplane.Admin.PackageStoreRecoveryNode? other) -> bool
+Nuplane.Admin.PackageStoreRecoveryNode.Install.get -> Nuplane.Abstractions.PackageStoreProtection.PackageInstallIdentity!
+Nuplane.Admin.PackageStoreRecoveryNode.Install.init -> void
+Nuplane.Admin.PackageStoreRecoveryNode.NodeId.get -> System.Guid
+Nuplane.Admin.PackageStoreRecoveryNode.NodeId.init -> void
+Nuplane.Admin.PackageStoreRecoveryNode.PackageStoreRecoveryNode(System.Guid NodeId, Nuplane.Abstractions.PackageStoreProtection.PackageInstallIdentity! Install) -> void
+Nuplane.Admin.PackageStoreRecoveryRootSelection
+Nuplane.Admin.PackageStoreRecoveryRootSelection.<Clone>$() -> Nuplane.Admin.PackageStoreRecoveryRootSelection!
+Nuplane.Admin.PackageStoreRecoveryRootSelection.Deconstruct(out Nuplane.Abstractions.PackageRequest! Request, out System.Guid SelectedNodeId) -> void
+Nuplane.Admin.PackageStoreRecoveryRootSelection.Equals(Nuplane.Admin.PackageStoreRecoveryRootSelection? other) -> bool
+Nuplane.Admin.PackageStoreRecoveryRootSelection.PackageStoreRecoveryRootSelection(Nuplane.Abstractions.PackageRequest! Request, System.Guid SelectedNodeId) -> void
+Nuplane.Admin.PackageStoreRecoveryRootSelection.Request.get -> Nuplane.Abstractions.PackageRequest!
+Nuplane.Admin.PackageStoreRecoveryRootSelection.Request.init -> void
+Nuplane.Admin.PackageStoreRecoveryRootSelection.SelectedNodeId.get -> System.Guid
+Nuplane.Admin.PackageStoreRecoveryRootSelection.SelectedNodeId.init -> void
+Nuplane.Admin.PackageStoreRecoverySelectionEvidence
+Nuplane.Admin.PackageStoreRecoverySelectionEvidence.<Clone>$() -> Nuplane.Admin.PackageStoreRecoverySelectionEvidence!
+Nuplane.Admin.PackageStoreRecoverySelectionEvidence.Deconstruct(out string! RecoveryPolicyId, out long SourceRevision, out System.Collections.Generic.IReadOnlyList<System.Guid>! SelectedRootNodeIds) -> void
+Nuplane.Admin.PackageStoreRecoverySelectionEvidence.Equals(Nuplane.Admin.PackageStoreRecoverySelectionEvidence? other) -> bool
+Nuplane.Admin.PackageStoreRecoverySelectionEvidence.PackageStoreRecoverySelectionEvidence(string! RecoveryPolicyId, long SourceRevision, System.Collections.Generic.IReadOnlyList<System.Guid>! SelectedRootNodeIds) -> void
+Nuplane.Admin.PackageStoreRecoverySelectionEvidence.RecoveryPolicyId.get -> string!
+Nuplane.Admin.PackageStoreRecoverySelectionEvidence.RecoveryPolicyId.init -> void
+Nuplane.Admin.PackageStoreRecoverySelectionEvidence.SelectedRootNodeIds.get -> System.Collections.Generic.IReadOnlyList<System.Guid>!
+Nuplane.Admin.PackageStoreRecoverySelectionEvidence.SelectedRootNodeIds.init -> void
+Nuplane.Admin.PackageStoreRecoverySelectionEvidence.SourceRevision.get -> long
+Nuplane.Admin.PackageStoreRecoverySelectionEvidence.SourceRevision.init -> void
+Nuplane.Admin.PackageStoreRetentionPolicy
+Nuplane.Admin.PackageStoreRetentionPolicy.<Clone>$() -> Nuplane.Admin.PackageStoreRetentionPolicy!
+Nuplane.Admin.PackageStoreRetentionPolicy.Deconstruct(out int KeepNewestInactiveVersionsPerPackage) -> void
+Nuplane.Admin.PackageStoreRetentionPolicy.Equals(Nuplane.Admin.PackageStoreRetentionPolicy? other) -> bool
+Nuplane.Admin.PackageStoreRetentionPolicy.KeepNewestInactiveVersionsPerPackage.get -> int
+Nuplane.Admin.PackageStoreRetentionPolicy.KeepNewestInactiveVersionsPerPackage.init -> void
+Nuplane.Admin.PackageStoreRetentionPolicy.PackageStoreRetentionPolicy(int KeepNewestInactiveVersionsPerPackage) -> void
+Nuplane.Admin.PackageStoreStateSlotObservation
+Nuplane.Admin.PackageStoreStateSlotObservation.<Clone>$() -> Nuplane.Admin.PackageStoreStateSlotObservation!
+Nuplane.Admin.PackageStoreStateSlotObservation.CanonicalBasename.get -> string!
+Nuplane.Admin.PackageStoreStateSlotObservation.CanonicalBasename.init -> void
+Nuplane.Admin.PackageStoreStateSlotObservation.CaseSensitive.get -> bool
+Nuplane.Admin.PackageStoreStateSlotObservation.CaseSensitive.init -> void
+Nuplane.Admin.PackageStoreStateSlotObservation.Deconstruct(out Nuplane.Abstractions.PackageStoreProtection.PhysicalFileIdentity! ParentIdentity, out string! NameProfile, out string! NameEncoding, out bool CaseSensitive, out bool NormalizationInsensitive, out string! CanonicalBasename) -> void
+Nuplane.Admin.PackageStoreStateSlotObservation.Equals(Nuplane.Admin.PackageStoreStateSlotObservation? other) -> bool
+Nuplane.Admin.PackageStoreStateSlotObservation.NameEncoding.get -> string!
+Nuplane.Admin.PackageStoreStateSlotObservation.NameEncoding.init -> void
+Nuplane.Admin.PackageStoreStateSlotObservation.NameProfile.get -> string!
+Nuplane.Admin.PackageStoreStateSlotObservation.NameProfile.init -> void
+Nuplane.Admin.PackageStoreStateSlotObservation.NormalizationInsensitive.get -> bool
+Nuplane.Admin.PackageStoreStateSlotObservation.NormalizationInsensitive.init -> void
+Nuplane.Admin.PackageStoreStateSlotObservation.PackageStoreStateSlotObservation(Nuplane.Abstractions.PackageStoreProtection.PhysicalFileIdentity! ParentIdentity, string! NameProfile, string! NameEncoding, bool CaseSensitive, bool NormalizationInsensitive, string! CanonicalBasename) -> void
+Nuplane.Admin.PackageStoreStateSlotObservation.ParentIdentity.get -> Nuplane.Abstractions.PackageStoreProtection.PhysicalFileIdentity!
+Nuplane.Admin.PackageStoreStateSlotObservation.ParentIdentity.init -> void
+Nuplane.Admin.PackageStoreUseObservation
+Nuplane.Admin.PackageStoreUseObservation.<Clone>$() -> Nuplane.Admin.PackageStoreUseObservation!
+Nuplane.Admin.PackageStoreUseObservation.Deconstruct(out System.Guid UseId, out string! OwnershipState, out string! SnapshotState, out Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshot! Graph) -> void
+Nuplane.Admin.PackageStoreUseObservation.Equals(Nuplane.Admin.PackageStoreUseObservation? other) -> bool
+Nuplane.Admin.PackageStoreUseObservation.Graph.get -> Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshot!
+Nuplane.Admin.PackageStoreUseObservation.Graph.init -> void
+Nuplane.Admin.PackageStoreUseObservation.OwnershipState.get -> string!
+Nuplane.Admin.PackageStoreUseObservation.OwnershipState.init -> void
+Nuplane.Admin.PackageStoreUseObservation.PackageStoreUseObservation(System.Guid UseId, string! OwnershipState, string! SnapshotState, Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshot! Graph) -> void
+Nuplane.Admin.PackageStoreUseObservation.SnapshotState.get -> string!
+Nuplane.Admin.PackageStoreUseObservation.SnapshotState.init -> void
+Nuplane.Admin.PackageStoreUseObservation.UseId.get -> System.Guid
+Nuplane.Admin.PackageStoreUseObservation.UseId.init -> void
+override Nuplane.Admin.PackageStoreCandidateResult.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreCandidateResult.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreCandidateResult.ToString() -> string!
+override Nuplane.Admin.PackageStoreEnrollmentClosureObservation.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreEnrollmentClosureObservation.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreEnrollmentClosureObservation.ToString() -> string!
+override Nuplane.Admin.PackageStoreEnrollmentMemberObservation.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreEnrollmentMemberObservation.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreEnrollmentMemberObservation.ToString() -> string!
+override Nuplane.Admin.PackageStoreEnrollmentMemberResult.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreEnrollmentMemberResult.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreEnrollmentMemberResult.ToString() -> string!
+override Nuplane.Admin.PackageStoreEnrollmentPreviewResult.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreEnrollmentPreviewResult.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreEnrollmentPreviewResult.ToString() -> string!
+override Nuplane.Admin.PackageStoreEnrollmentRequest.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreEnrollmentRequest.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreEnrollmentRequest.ToString() -> string!
+override Nuplane.Admin.PackageStoreEnrollmentResult.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreEnrollmentResult.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreEnrollmentResult.ToString() -> string!
+override Nuplane.Admin.PackageStoreInventoryObservation.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreInventoryObservation.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreInventoryObservation.ToString() -> string!
+override Nuplane.Admin.PackageStoreInventoryUncertainty.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreInventoryUncertainty.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreInventoryUncertainty.ToString() -> string!
+override Nuplane.Admin.PackageStoreMaintenanceDiagnostic.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreMaintenanceDiagnostic.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreMaintenanceDiagnostic.ToString() -> string!
+override Nuplane.Admin.PackageStoreMaintenanceResult.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreMaintenanceResult.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreMaintenanceResult.ToString() -> string!
+override Nuplane.Admin.PackageStoreMemberObservation.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreMemberObservation.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreMemberObservation.ToString() -> string!
+override Nuplane.Admin.PackageStorePruneConfirmation.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStorePruneConfirmation.GetHashCode() -> int
+override Nuplane.Admin.PackageStorePruneConfirmation.ToString() -> string!
+override Nuplane.Admin.PackageStorePruneRequest.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStorePruneRequest.GetHashCode() -> int
+override Nuplane.Admin.PackageStorePruneRequest.ToString() -> string!
+override Nuplane.Admin.PackageStoreRecoveryEdge.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreRecoveryEdge.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreRecoveryEdge.ToString() -> string!
+override Nuplane.Admin.PackageStoreRecoveryEvidence.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreRecoveryEvidence.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreRecoveryEvidence.ToString() -> string!
+override Nuplane.Admin.PackageStoreRecoveryGraphEvidence.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreRecoveryGraphEvidence.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreRecoveryGraphEvidence.ToString() -> string!
+override Nuplane.Admin.PackageStoreRecoveryNode.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreRecoveryNode.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreRecoveryNode.ToString() -> string!
+override Nuplane.Admin.PackageStoreRecoveryRootSelection.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreRecoveryRootSelection.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreRecoveryRootSelection.ToString() -> string!
+override Nuplane.Admin.PackageStoreRecoverySelectionEvidence.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreRecoverySelectionEvidence.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreRecoverySelectionEvidence.ToString() -> string!
+override Nuplane.Admin.PackageStoreRetentionPolicy.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreRetentionPolicy.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreRetentionPolicy.ToString() -> string!
+override Nuplane.Admin.PackageStoreStateSlotObservation.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreStateSlotObservation.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreStateSlotObservation.ToString() -> string!
+override Nuplane.Admin.PackageStoreUseObservation.Equals(object? obj) -> bool
+override Nuplane.Admin.PackageStoreUseObservation.GetHashCode() -> int
+override Nuplane.Admin.PackageStoreUseObservation.ToString() -> string!
+static Nuplane.Admin.NuplaneAdminServiceCollectionExtensions.AddNuplaneAdmin(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Nuplane.Admin.NuplaneAdminServiceCollectionExtensions.AddNuplanePackageStoreMaintenance(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Nuplane.Admin.PackageStoreCandidateResult.operator !=(Nuplane.Admin.PackageStoreCandidateResult? left, Nuplane.Admin.PackageStoreCandidateResult? right) -> bool
+static Nuplane.Admin.PackageStoreCandidateResult.operator ==(Nuplane.Admin.PackageStoreCandidateResult? left, Nuplane.Admin.PackageStoreCandidateResult? right) -> bool
+static Nuplane.Admin.PackageStoreEnrollmentClosureObservation.operator !=(Nuplane.Admin.PackageStoreEnrollmentClosureObservation? left, Nuplane.Admin.PackageStoreEnrollmentClosureObservation? right) -> bool
+static Nuplane.Admin.PackageStoreEnrollmentClosureObservation.operator ==(Nuplane.Admin.PackageStoreEnrollmentClosureObservation? left, Nuplane.Admin.PackageStoreEnrollmentClosureObservation? right) -> bool
+static Nuplane.Admin.PackageStoreEnrollmentMemberObservation.operator !=(Nuplane.Admin.PackageStoreEnrollmentMemberObservation? left, Nuplane.Admin.PackageStoreEnrollmentMemberObservation? right) -> bool
+static Nuplane.Admin.PackageStoreEnrollmentMemberObservation.operator ==(Nuplane.Admin.PackageStoreEnrollmentMemberObservation? left, Nuplane.Admin.PackageStoreEnrollmentMemberObservation? right) -> bool
+static Nuplane.Admin.PackageStoreEnrollmentMemberResult.operator !=(Nuplane.Admin.PackageStoreEnrollmentMemberResult? left, Nuplane.Admin.PackageStoreEnrollmentMemberResult? right) -> bool
+static Nuplane.Admin.PackageStoreEnrollmentMemberResult.operator ==(Nuplane.Admin.PackageStoreEnrollmentMemberResult? left, Nuplane.Admin.PackageStoreEnrollmentMemberResult? right) -> bool
+static Nuplane.Admin.PackageStoreEnrollmentPreviewResult.operator !=(Nuplane.Admin.PackageStoreEnrollmentPreviewResult? left, Nuplane.Admin.PackageStoreEnrollmentPreviewResult? right) -> bool
+static Nuplane.Admin.PackageStoreEnrollmentPreviewResult.operator ==(Nuplane.Admin.PackageStoreEnrollmentPreviewResult? left, Nuplane.Admin.PackageStoreEnrollmentPreviewResult? right) -> bool
+static Nuplane.Admin.PackageStoreEnrollmentRequest.operator !=(Nuplane.Admin.PackageStoreEnrollmentRequest? left, Nuplane.Admin.PackageStoreEnrollmentRequest? right) -> bool
+static Nuplane.Admin.PackageStoreEnrollmentRequest.operator ==(Nuplane.Admin.PackageStoreEnrollmentRequest? left, Nuplane.Admin.PackageStoreEnrollmentRequest? right) -> bool
+static Nuplane.Admin.PackageStoreEnrollmentResult.operator !=(Nuplane.Admin.PackageStoreEnrollmentResult? left, Nuplane.Admin.PackageStoreEnrollmentResult? right) -> bool
+static Nuplane.Admin.PackageStoreEnrollmentResult.operator ==(Nuplane.Admin.PackageStoreEnrollmentResult? left, Nuplane.Admin.PackageStoreEnrollmentResult? right) -> bool
+static Nuplane.Admin.PackageStoreInventoryObservation.operator !=(Nuplane.Admin.PackageStoreInventoryObservation? left, Nuplane.Admin.PackageStoreInventoryObservation? right) -> bool
+static Nuplane.Admin.PackageStoreInventoryObservation.operator ==(Nuplane.Admin.PackageStoreInventoryObservation? left, Nuplane.Admin.PackageStoreInventoryObservation? right) -> bool
+static Nuplane.Admin.PackageStoreInventoryUncertainty.operator !=(Nuplane.Admin.PackageStoreInventoryUncertainty? left, Nuplane.Admin.PackageStoreInventoryUncertainty? right) -> bool
+static Nuplane.Admin.PackageStoreInventoryUncertainty.operator ==(Nuplane.Admin.PackageStoreInventoryUncertainty? left, Nuplane.Admin.PackageStoreInventoryUncertainty? right) -> bool
+static Nuplane.Admin.PackageStoreMaintenanceDiagnostic.operator !=(Nuplane.Admin.PackageStoreMaintenanceDiagnostic? left, Nuplane.Admin.PackageStoreMaintenanceDiagnostic? right) -> bool
+static Nuplane.Admin.PackageStoreMaintenanceDiagnostic.operator ==(Nuplane.Admin.PackageStoreMaintenanceDiagnostic? left, Nuplane.Admin.PackageStoreMaintenanceDiagnostic? right) -> bool
+static Nuplane.Admin.PackageStoreMaintenanceResult.operator !=(Nuplane.Admin.PackageStoreMaintenanceResult? left, Nuplane.Admin.PackageStoreMaintenanceResult? right) -> bool
+static Nuplane.Admin.PackageStoreMaintenanceResult.operator ==(Nuplane.Admin.PackageStoreMaintenanceResult? left, Nuplane.Admin.PackageStoreMaintenanceResult? right) -> bool
+static Nuplane.Admin.PackageStoreMemberObservation.operator !=(Nuplane.Admin.PackageStoreMemberObservation? left, Nuplane.Admin.PackageStoreMemberObservation? right) -> bool
+static Nuplane.Admin.PackageStoreMemberObservation.operator ==(Nuplane.Admin.PackageStoreMemberObservation? left, Nuplane.Admin.PackageStoreMemberObservation? right) -> bool
+static Nuplane.Admin.PackageStorePruneConfirmation.operator !=(Nuplane.Admin.PackageStorePruneConfirmation? left, Nuplane.Admin.PackageStorePruneConfirmation? right) -> bool
+static Nuplane.Admin.PackageStorePruneConfirmation.operator ==(Nuplane.Admin.PackageStorePruneConfirmation? left, Nuplane.Admin.PackageStorePruneConfirmation? right) -> bool
+static Nuplane.Admin.PackageStorePruneRequest.operator !=(Nuplane.Admin.PackageStorePruneRequest? left, Nuplane.Admin.PackageStorePruneRequest? right) -> bool
+static Nuplane.Admin.PackageStorePruneRequest.operator ==(Nuplane.Admin.PackageStorePruneRequest? left, Nuplane.Admin.PackageStorePruneRequest? right) -> bool
+static Nuplane.Admin.PackageStoreRecoveryEdge.operator !=(Nuplane.Admin.PackageStoreRecoveryEdge? left, Nuplane.Admin.PackageStoreRecoveryEdge? right) -> bool
+static Nuplane.Admin.PackageStoreRecoveryEdge.operator ==(Nuplane.Admin.PackageStoreRecoveryEdge? left, Nuplane.Admin.PackageStoreRecoveryEdge? right) -> bool
+static Nuplane.Admin.PackageStoreRecoveryEvidence.operator !=(Nuplane.Admin.PackageStoreRecoveryEvidence? left, Nuplane.Admin.PackageStoreRecoveryEvidence? right) -> bool
+static Nuplane.Admin.PackageStoreRecoveryEvidence.operator ==(Nuplane.Admin.PackageStoreRecoveryEvidence? left, Nuplane.Admin.PackageStoreRecoveryEvidence? right) -> bool
+static Nuplane.Admin.PackageStoreRecoveryGraphEvidence.operator !=(Nuplane.Admin.PackageStoreRecoveryGraphEvidence? left, Nuplane.Admin.PackageStoreRecoveryGraphEvidence? right) -> bool
+static Nuplane.Admin.PackageStoreRecoveryGraphEvidence.operator ==(Nuplane.Admin.PackageStoreRecoveryGraphEvidence? left, Nuplane.Admin.PackageStoreRecoveryGraphEvidence? right) -> bool
+static Nuplane.Admin.PackageStoreRecoveryNode.operator !=(Nuplane.Admin.PackageStoreRecoveryNode? left, Nuplane.Admin.PackageStoreRecoveryNode? right) -> bool
+static Nuplane.Admin.PackageStoreRecoveryNode.operator ==(Nuplane.Admin.PackageStoreRecoveryNode? left, Nuplane.Admin.PackageStoreRecoveryNode? right) -> bool
+static Nuplane.Admin.PackageStoreRecoveryRootSelection.operator !=(Nuplane.Admin.PackageStoreRecoveryRootSelection? left, Nuplane.Admin.PackageStoreRecoveryRootSelection? right) -> bool
+static Nuplane.Admin.PackageStoreRecoveryRootSelection.operator ==(Nuplane.Admin.PackageStoreRecoveryRootSelection? left, Nuplane.Admin.PackageStoreRecoveryRootSelection? right) -> bool
+static Nuplane.Admin.PackageStoreRecoverySelectionEvidence.operator !=(Nuplane.Admin.PackageStoreRecoverySelectionEvidence? left, Nuplane.Admin.PackageStoreRecoverySelectionEvidence? right) -> bool
+static Nuplane.Admin.PackageStoreRecoverySelectionEvidence.operator ==(Nuplane.Admin.PackageStoreRecoverySelectionEvidence? left, Nuplane.Admin.PackageStoreRecoverySelectionEvidence? right) -> bool
+static Nuplane.Admin.PackageStoreRetentionPolicy.operator !=(Nuplane.Admin.PackageStoreRetentionPolicy? left, Nuplane.Admin.PackageStoreRetentionPolicy? right) -> bool
+static Nuplane.Admin.PackageStoreRetentionPolicy.operator ==(Nuplane.Admin.PackageStoreRetentionPolicy? left, Nuplane.Admin.PackageStoreRetentionPolicy? right) -> bool
+static Nuplane.Admin.PackageStoreStateSlotObservation.operator !=(Nuplane.Admin.PackageStoreStateSlotObservation? left, Nuplane.Admin.PackageStoreStateSlotObservation? right) -> bool
+static Nuplane.Admin.PackageStoreStateSlotObservation.operator ==(Nuplane.Admin.PackageStoreStateSlotObservation? left, Nuplane.Admin.PackageStoreStateSlotObservation? right) -> bool
+static Nuplane.Admin.PackageStoreUseObservation.operator !=(Nuplane.Admin.PackageStoreUseObservation? left, Nuplane.Admin.PackageStoreUseObservation? right) -> bool
+static Nuplane.Admin.PackageStoreUseObservation.operator ==(Nuplane.Admin.PackageStoreUseObservation? left, Nuplane.Admin.PackageStoreUseObservation? right) -> bool

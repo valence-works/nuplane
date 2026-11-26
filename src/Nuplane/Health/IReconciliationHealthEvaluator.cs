@@ -4,7 +4,7 @@ namespace Nuplane.Health;
 /// <summary>
 /// Evaluates the health status of the reconciliation system based on failure counts and source freshness.
 /// </summary>
-public interface IReconciliationHealthEvaluator
+internal interface IReconciliationHealthEvaluator
 {
     /// <summary>
     /// Gets whether the system is currently in a degraded state.

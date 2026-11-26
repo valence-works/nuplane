@@ -33,8 +33,8 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         var expectedHash = "sha512:" + Convert.ToBase64String(SHA512.HashData(packageBytes));
         var request = new PackageRequest("ROOT.SECOND", "[2.0.0,4.0.0)", "feed",
             PackageUpdatePolicy.Range, "native-local-feed-test");
-        var localFeed = new FeedDefinition("local-cache", new Uri(localFeedPath + Path.DirectorySeparatorChar));
-        var remoteFeed = new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json"));
+        var localFeed = new FeedDefinition("local-cache", new Uri(localFeedPath + Path.DirectorySeparatorChar)) { Trust = FeedTrustLevel.Trusted };
+        var remoteFeed = new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")) { Trust = FeedTrustLevel.Trusted };
 
         await using var provider = fixture.CreateProvider("member-b", desiredRequests: [request],
             remoteFeed: remoteFeed, additionalFeeds: [localFeed], participant: true);
@@ -117,7 +117,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             var expectedHash = "sha512:" + Convert.ToBase64String(SHA512.HashData(packageBytes));
             var request = new PackageRequest("root.second", "1.0", "local", PackageUpdatePolicy.Exact,
                 "native-external-local-feed-test");
-            var localFeed = new FeedDefinition("local", new Uri(localFeedPath + Path.DirectorySeparatorChar));
+            var localFeed = new FeedDefinition("local", new Uri(localFeedPath + Path.DirectorySeparatorChar)) { Trust = FeedTrustLevel.Trusted };
             await using var provider = fixture.CreateProvider("member-b", desiredRequests: [request],
                 remoteFeed: localFeed, participant: true);
             var resolver = Assert.IsAssignableFrom<IScopedPackageResolver>(provider.GetRequiredService<IPackageResolver>());
@@ -156,7 +156,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         await File.WriteAllBytesAsync(replacementPath, packageBytes);
         var request = new PackageRequest("Root.Second", "[1.0.0,2.0.0)", "local",
             PackageUpdatePolicy.Range, "native-local-replacement-test");
-        var localFeed = new FeedDefinition("local", new Uri(localFeedPath + Path.DirectorySeparatorChar));
+        var localFeed = new FeedDefinition("local", new Uri(localFeedPath + Path.DirectorySeparatorChar)) { Trust = FeedTrustLevel.Trusted };
         await using var provider = fixture.CreateProvider("member-b", desiredRequests: [request],
             remoteFeed: localFeed, participant: true,
             configureServices: services => services.AddSingleton<IVersionRangeEvaluator>(
@@ -181,7 +181,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         Directory.CreateDirectory(Path.Combine(localFeedPath, "Root.Second.1.0.0.nupkg"));
         var request = new PackageRequest("Root.Second", "1.0.0", "local", PackageUpdatePolicy.Exact,
             "native-local-directory-candidate-test");
-        var localFeed = new FeedDefinition("local", new Uri(localFeedPath + Path.DirectorySeparatorChar));
+        var localFeed = new FeedDefinition("local", new Uri(localFeedPath + Path.DirectorySeparatorChar)) { Trust = FeedTrustLevel.Trusted };
         await using var provider = fixture.CreateProvider("member-b", desiredRequests: [request],
             remoteFeed: localFeed, participant: true);
         var resolver = Assert.IsAssignableFrom<IScopedPackageResolver>(provider.GetRequiredService<IPackageResolver>());
@@ -203,7 +203,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             CreatePackageArchive("Root.Second", "1.0.0", "Shared.Dependency", "2.1.0"));
         var request = new PackageRequest("Root.Second", "1.0.0", "foreign", PackageUpdatePolicy.Exact,
             "native-local-foreign-root-test");
-        var foreignFeed = new FeedDefinition("foreign", new Uri(foreignFeedPath + Path.DirectorySeparatorChar));
+        var foreignFeed = new FeedDefinition("foreign", new Uri(foreignFeedPath + Path.DirectorySeparatorChar)) { Trust = FeedTrustLevel.Trusted };
         await using var provider = fixture.CreateProvider("member-b", desiredRequests: [request],
             remoteFeed: foreignFeed, participant: true);
         var resolver = Assert.IsAssignableFrom<IScopedPackageResolver>(provider.GetRequiredService<IPackageResolver>());
@@ -238,8 +238,8 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         var remoteAcquirer = new CountingScopedRemotePackageAcquirer();
         var request = new PackageRequest("Root.Second", "1.0.0", "feed", PackageUpdatePolicy.Exact,
             "native-local-incomplete-authority-test");
-        var incompleteFeed = new FeedDefinition("local-cache", new Uri(foreignFeedPath + Path.DirectorySeparatorChar));
-        var remoteFeed = new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json"));
+        var incompleteFeed = new FeedDefinition("local-cache", new Uri(foreignFeedPath + Path.DirectorySeparatorChar)) { Trust = FeedTrustLevel.Trusted };
+        var remoteFeed = new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")) { Trust = FeedTrustLevel.Trusted };
         await using var provider = fixture.CreateProvider("member-b", desiredRequests: [request],
             remoteFeed: remoteFeed, additionalFeeds: [incompleteFeed], participant: true,
             configureServices: services =>
@@ -272,8 +272,8 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             var remoteAcquirer = new CountingScopedRemotePackageAcquirer();
             var request = new PackageRequest("Root.Second", "1.0.0", "feed", PackageUpdatePolicy.Exact,
                 "native-local-alias-authority-test");
-            var aliasFeed = new FeedDefinition("local-cache", new Uri(aliasPath + Path.DirectorySeparatorChar));
-            var remoteFeed = new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json"));
+            var aliasFeed = new FeedDefinition("local-cache", new Uri(aliasPath + Path.DirectorySeparatorChar)) { Trust = FeedTrustLevel.Trusted };
+            var remoteFeed = new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")) { Trust = FeedTrustLevel.Trusted };
             await using var provider = fixture.CreateProvider("member-b", desiredRequests: [request],
                 remoteFeed: remoteFeed, additionalFeeds: [aliasFeed], participant: true,
                 configureServices: services =>
@@ -315,8 +315,8 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         var remoteAcquirer = new CountingScopedRemotePackageAcquirer();
         var request = new PackageRequest("Root.Second", "1.0.0", "feed", PackageUpdatePolicy.Exact,
             "native-local-linked-candidate-test");
-        var localFeed = new FeedDefinition("local-cache", new Uri(localFeedPath + Path.DirectorySeparatorChar));
-        var remoteFeed = new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json"));
+        var localFeed = new FeedDefinition("local-cache", new Uri(localFeedPath + Path.DirectorySeparatorChar)) { Trust = FeedTrustLevel.Trusted };
+        var remoteFeed = new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")) { Trust = FeedTrustLevel.Trusted };
         await using var provider = fixture.CreateProvider("member-b", desiredRequests: [request],
             remoteFeed: remoteFeed, additionalFeeds: [localFeed], participant: true,
             configureServices: services =>

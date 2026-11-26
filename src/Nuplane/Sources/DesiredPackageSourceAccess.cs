@@ -6,10 +6,78 @@ namespace Nuplane.Sources;
 /// <summary>Shared admission checks and scoped reads for desired package sources.</summary>
 internal static class DesiredPackageSourceAccess
 {
-    internal static string GetSourceName(IDesiredPackageSource source)
-        => source is IDesiredPackageSourceIdentity identified
-            ? identified.SourceName
-            : source.GetType().FullName ?? source.GetType().Name;
+    internal static IReadOnlyList<DesiredPackageSourceEntry> Describe(
+        IEnumerable<IDesiredPackageSource> sources,
+        bool preserveSourceTraversalOrder = false)
+    {
+        if (preserveSourceTraversalOrder)
+        {
+            sources = sources
+                .OrderBy(source => GetTypeName(GetOriginalSource(source)), StringComparer.Ordinal)
+                .ThenBy(source => GetOriginalSource(source).ToString() ?? string.Empty, StringComparer.Ordinal);
+        }
+
+        var entries = new List<DesiredPackageSourceEntry>();
+        foreach (var group in sources.Select(DescribeSource).GroupBy(entry => entry.SnapshotKey, StringComparer.OrdinalIgnoreCase))
+        {
+            var registrations = group.ToArray();
+            if (registrations.Length == 1)
+            {
+                entries.Add(registrations[0]);
+                continue;
+            }
+
+            if (registrations.Any(entry => entry.InstanceIdentityProvided))
+            {
+                throw new InvalidOperationException(
+                    $"More than one desired-state source declares instance identity '{registrations[0].DiagnosticName}'.");
+            }
+
+            // Registration order distinguishes diagnostics. It cannot establish persisted ownership
+            // because an operator may reorder or replace indistinguishable legacy registrations.
+            for (var index = 0; index < registrations.Length; index++)
+            {
+                var entry = registrations[index];
+                entries.Add(entry with
+                {
+                    DiagnosticName = $"{entry.DiagnosticName}#{index + 1}",
+                    SnapshotKey = null,
+                });
+            }
+        }
+
+        return preserveSourceTraversalOrder
+            ? entries
+            : entries.OrderBy(entry => entry.DiagnosticName, StringComparer.Ordinal).ToArray();
+    }
+
+    private static DesiredPackageSourceEntry DescribeSource(IDesiredPackageSource source)
+    {
+        var identitySource = GetOriginalSource(source);
+        var typeName = GetTypeName(identitySource);
+        if (identitySource is not IIdentifiedDesiredPackageSource identified)
+        {
+            return new(source, typeName, typeName);
+        }
+
+        var instanceId = identified.SourceInstanceId;
+        if (string.IsNullOrWhiteSpace(instanceId))
+        {
+            throw new InvalidOperationException($"Desired-state source '{typeName}' declares a blank instance identity.");
+        }
+
+        return new(
+            source, instanceId, $"source-instance:v1:{instanceId}",
+            InstanceIdentityProvided: true,
+            LegacySnapshotKey: typeName,
+            LegacySnapshotVerifier: identitySource as ILegacyDesiredPackageSourceSnapshotVerifier);
+    }
+
+    private static IDesiredPackageSource GetOriginalSource(IDesiredPackageSource source)
+        => source is IDesiredPackageSourceAdapter adapter ? adapter.Source : source;
+
+    private static string GetTypeName(IDesiredPackageSource source)
+        => source.GetType().FullName ?? source.GetType().Name;
 
     internal static void Validate(
         IReadOnlyList<IDesiredPackageSource> sources,
@@ -46,8 +114,22 @@ internal static class DesiredPackageSourceAccess
     }
 }
 
-/// <summary>Preserves the original source's legacy identity through an internal scoped adapter.</summary>
-internal interface IDesiredPackageSourceIdentity
+internal sealed record DesiredPackageSourceEntry(
+    IDesiredPackageSource Source,
+    string DiagnosticName,
+    string? SnapshotKey,
+    bool InstanceIdentityProvided = false,
+    string? LegacySnapshotKey = null,
+    ILegacyDesiredPackageSourceSnapshotVerifier? LegacySnapshotVerifier = null);
+
+/// <summary>Exposes the original source identity through a scoped access adapter.</summary>
+internal interface IDesiredPackageSourceAdapter
 {
-    string SourceName { get; }
+    IDesiredPackageSource Source { get; }
+}
+
+/// <summary>Verifies request provenance before using a snapshot keyed by implementation type.</summary>
+internal interface ILegacyDesiredPackageSourceSnapshotVerifier
+{
+    bool OwnsLegacySnapshot(IReadOnlyList<PackageRequest> requests);
 }

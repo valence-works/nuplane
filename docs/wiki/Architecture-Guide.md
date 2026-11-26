@@ -22,14 +22,14 @@ Nuplane’s architecture centers on a deterministic control loop:
 | Repository area | Product concept | Applicability | Responsibility |
 |-----------------|-----------------|---------------|----------------|
 | `src/Nuplane/` | Core composition and builder surface | `Core` | Wires the runtime story together and exposes host-facing setup entry points |
-| `src/Nuplane.Runtime/` | Reconciliation engine | `Core` | Owns desired-vs-actual reconciliation and runtime orchestration |
-| `src/Nuplane.Store/` | Deterministic package store | `Core` | Owns transactional storage, activation pointers, and LKG safety |
-| `src/Nuplane.NuGet/` | Feed resolution and acquisition | `Core` | Integrates with NuGet feeds and package acquisition |
+| `src/Nuplane/Reconciliation/` | Reconciliation engine | `Core` | Owns desired-vs-actual reconciliation and runtime orchestration |
+| `src/Nuplane/Store/` | Deterministic package store | `Core` | Owns transactional storage, activation pointers, and LKG safety |
+| `src/Nuplane/Feeds/` | Feed resolution and acquisition | `Core` | Integrates with NuGet feeds and package acquisition |
 | `src/Nuplane.Abstractions/` | Shared contracts | `Core` | Keeps common interfaces and models lightweight |
-| `src/Nuplane.Sources.Directory/` | Directory-backed desired source | `Core` | Adds local `.nupkg` directory feed behavior |
-| `src/Nuplane.Admin/` + `src/Nuplane.Admin.Api/` | Admin and HTTP read surfaces | `Core` | Exposes management and read routes for package and operational state |
-| `src/Nuplane.Loading/` + `src/Nuplane.Loading.Api/` | Optional runtime loading | `Optional Module` | Adds load-state and assembly-loading behavior when the host opts in |
-| `src/Nuplane.Loading.Hosting/` | Loading module composition helpers | `Optional Module` | Adds module-owned builder integration for loading scenarios |
+| `src/Nuplane/Sources/Directory/` | Directory-backed desired source | `Core` | Adds local `.nupkg` directory feed behavior |
+| `src/Nuplane.Admin/` + `src/Nuplane.Admin.Api/` | Admin and HTTP read surfaces | `Optional Module` | Exposes management and read routes for package and operational state |
+| `src/Nuplane.Loading/` + `src/Nuplane.Loading.Abstractions/` | Optional runtime loading | `Optional Module` | Owns assembly loading, load-state catalogs, and their contracts |
+| `src/Nuplane.Loading.Api/` | Loading HTTP surface | `Optional Module` | Exposes the load-state catalog through ASP.NET Core |
 
 ## Ownership boundaries
 
@@ -52,9 +52,9 @@ Nuplane’s architecture centers on a deterministic control loop:
 
 | Reader concept | Repository anchor |
 |----------------|-------------------|
-| Host-neutral runtime control plane | `README.md`, `src/Nuplane.Runtime/` |
-| Deterministic store and LKG semantics | `README.md`, `src/Nuplane.Store/` |
-| Feed-backed desired state | `README.md`, `src/Nuplane.NuGet/`, `src/Nuplane.Sources.Directory/` |
+| Host-neutral runtime control plane | `README.md`, `src/Nuplane/Reconciliation/` |
+| Deterministic store and LKG semantics | `README.md`, `src/Nuplane/Store/` |
+| Feed-backed desired state | `README.md`, `src/Nuplane/Feeds/`, `src/Nuplane/Sources/Directory/` |
 | Query-first package and operational reads | `README.md`, `src/Nuplane.Admin/`, `src/Nuplane.Admin.Api/` |
 | Optional load-state and assembly access | `README.md`, `src/Nuplane.Loading/`, `src/Nuplane.Loading.Api/` |
 | Staged feature evolution | `docs/roadmap.md`, accepted specs under `specs/` |
@@ -70,7 +70,7 @@ Nuplane’s architecture centers on a deterministic control loop:
 ### Module-owned registration pattern
 
 - **Applicability:** `Recently Changed`
-- Optional modules now own their own registration helpers and builder integration packages.
+- The optional loading module provides `AutoloadPackages` in the `Nuplane.Loading` package. The admin and HTTP packages own their registration and endpoint extensions.
 - That keeps the core package from absorbing module-specific implementation details.
 
 ### Phase 4 convergence and rollout work
@@ -99,8 +99,8 @@ This guide points to repository-owned sources for:
 - [`README.md`](../../README.md)
 - [`docs/roadmap.md`](../roadmap.md)
 - [`src/Nuplane/`](../../src/Nuplane/)
-- [`src/Nuplane.Runtime/`](../../src/Nuplane.Runtime/)
-- [`src/Nuplane.Store/`](../../src/Nuplane.Store/)
+- [`src/Nuplane/Reconciliation/`](../../src/Nuplane/Reconciliation/)
+- [`src/Nuplane/Store/`](../../src/Nuplane/Store/)
 - [`src/Nuplane.Loading/`](../../src/Nuplane.Loading/)
 - [`src/Nuplane.Admin.Api/`](../../src/Nuplane.Admin.Api/)
 

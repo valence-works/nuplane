@@ -1,0 +1,1016 @@
+#nullable enable
+Nuplane.AdmittedActivePackageSnapshot
+Nuplane.AdmittedActivePackageSnapshot.BorrowFor(string! installPath) -> Nuplane.Abstractions.PackageStoreProtection.PackageStoreOperationBorrow!
+Nuplane.AdmittedActivePackageSnapshot.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Nuplane.AdmittedActivePackageSnapshot.Snapshot.get -> Nuplane.Abstractions.ActivePackagesSnapshot!
+Nuplane.Builder.NuplaneBuilder
+Nuplane.Builder.NuplaneBuilder.AddFeed(string! name, System.Action<Nuplane.Feeds.Builder.NuplaneFeedBuilder!>! configure) -> Nuplane.Builder.NuplaneBuilder!
+Nuplane.Builder.NuplaneBuilder.AddPackageStoreRoot(string! label, string! rootLocator) -> Nuplane.Builder.NuplaneBuilder!
+Nuplane.Builder.NuplaneBuilder.BasePath.get -> string?
+Nuplane.Builder.NuplaneBuilder.OnPackagesChanged<T>() -> Nuplane.Builder.NuplaneBuilder!
+Nuplane.Builder.NuplaneBuilder.PollEvery(System.TimeSpan interval) -> Nuplane.Builder.NuplaneBuilder!
+Nuplane.Builder.NuplaneBuilder.SelectCapability(string! name, Nuplane.Capabilities.CapabilitySelection! selection) -> Nuplane.Builder.NuplaneBuilder!
+Nuplane.Builder.NuplaneBuilder.SelectCapability(string! name, string! option) -> Nuplane.Builder.NuplaneBuilder!
+Nuplane.Builder.NuplaneBuilder.Services.get -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Nuplane.Builder.NuplaneBuilder.UseBasePath(string! absolutePath) -> Nuplane.Builder.NuplaneBuilder!
+Nuplane.Builder.NuplaneBuilder.UseCoordinatedPackageStore(System.Collections.Generic.IEnumerable<Nuplane.Builder.PackageStoreMemberDeclaration!>! completeRoster, bool allClientsParticipate) -> Nuplane.Builder.NuplaneBuilder!
+Nuplane.Builder.NuplaneBuilder.UseInMemoryStore() -> Nuplane.Builder.NuplaneBuilder!
+Nuplane.Builder.NuplaneBuilder.WithStateFile(string! path) -> Nuplane.Builder.NuplaneBuilder!
+Nuplane.Builder.PackageStoreMemberDeclaration
+Nuplane.Builder.PackageStoreMemberDeclaration.<Clone>$() -> Nuplane.Builder.PackageStoreMemberDeclaration!
+Nuplane.Builder.PackageStoreMemberDeclaration.Deconstruct(out string! RootLabel, out string! MemberId, out string! StateFilePath) -> void
+Nuplane.Builder.PackageStoreMemberDeclaration.Equals(Nuplane.Builder.PackageStoreMemberDeclaration? other) -> bool
+Nuplane.Builder.PackageStoreMemberDeclaration.MemberId.get -> string!
+Nuplane.Builder.PackageStoreMemberDeclaration.MemberId.init -> void
+Nuplane.Builder.PackageStoreMemberDeclaration.PackageStoreMemberDeclaration(string! RootLabel, string! MemberId, string! StateFilePath) -> void
+Nuplane.Builder.PackageStoreMemberDeclaration.RootLabel.get -> string!
+Nuplane.Builder.PackageStoreMemberDeclaration.RootLabel.init -> void
+Nuplane.Builder.PackageStoreMemberDeclaration.StateFilePath.get -> string!
+Nuplane.Builder.PackageStoreMemberDeclaration.StateFilePath.init -> void
+Nuplane.Capabilities.CapabilityOptions
+Nuplane.Capabilities.CapabilityOptions.CapabilityOptions() -> void
+Nuplane.Capabilities.CapabilityOptions.Selections.get -> System.Collections.Generic.IDictionary<string!, Nuplane.Capabilities.CapabilitySelection!>!
+Nuplane.Capabilities.CapabilitySelection
+Nuplane.Capabilities.CapabilitySelection.CapabilitySelection() -> void
+Nuplane.Capabilities.CapabilitySelection.Feed.get -> string?
+Nuplane.Capabilities.CapabilitySelection.Feed.set -> void
+Nuplane.Capabilities.CapabilitySelection.Options.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Capabilities.CapabilitySelection.Options.set -> void
+Nuplane.Capabilities.CapabilitySelection.Version.get -> string?
+Nuplane.Capabilities.CapabilitySelection.Version.set -> void
+Nuplane.DesiredPackageDescription
+Nuplane.DesiredPackageDescription.<Clone>$() -> Nuplane.DesiredPackageDescription!
+Nuplane.DesiredPackageDescription.Deconstruct(out string! PackageId, out string! VersionRange, out string? FeedName, out string! SourceName, out bool IsPinned, out string? PinnedVersion) -> void
+Nuplane.DesiredPackageDescription.DesiredPackageDescription(string! PackageId, string! VersionRange, string? FeedName, string! SourceName, bool IsPinned, string? PinnedVersion) -> void
+Nuplane.DesiredPackageDescription.Equals(Nuplane.DesiredPackageDescription? other) -> bool
+Nuplane.DesiredPackageDescription.FeedName.get -> string?
+Nuplane.DesiredPackageDescription.FeedName.init -> void
+Nuplane.DesiredPackageDescription.IsPinned.get -> bool
+Nuplane.DesiredPackageDescription.IsPinned.init -> void
+Nuplane.DesiredPackageDescription.PackageId.get -> string!
+Nuplane.DesiredPackageDescription.PackageId.init -> void
+Nuplane.DesiredPackageDescription.PinnedVersion.get -> string?
+Nuplane.DesiredPackageDescription.PinnedVersion.init -> void
+Nuplane.DesiredPackageDescription.SourceName.get -> string!
+Nuplane.DesiredPackageDescription.SourceName.init -> void
+Nuplane.DesiredPackageDescription.VersionRange.get -> string!
+Nuplane.DesiredPackageDescription.VersionRange.init -> void
+Nuplane.Events.IObserverEventDispatcher
+Nuplane.Events.IObserverEventDispatcher.NotifyPackageFailedAsync(string! packageId, System.Exception! exception, string! correlationId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Events.IObserverEventDispatcher.PublishChangedAsync(Nuplane.Abstractions.PackageChangeSet! changeSet, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Events.IObserverEventDispatcher.PublishChangingAsync(Nuplane.Abstractions.PackageChangeSet! changeSet, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Events.IObserverEventDispatcher.PublishReconciledAsync(Nuplane.Abstractions.PackageChangeSet! changeSet, System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ResolvedPackage!>! appliedPackages, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Events.IPostLoadingObserverEventDispatcher
+Nuplane.Events.IPostLoadingObserverEventDispatcher.HasPostLoadingObservers.get -> bool
+Nuplane.Events.IPostLoadingObserverEventDispatcher.PublishPackageLoadingCompletedAsync(Nuplane.Abstractions.PackageChangeSet! changeSet, System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ResolvedPackage!>! appliedPackages, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Events.IScopedObserverEventDispatcher
+Nuplane.Events.IScopedObserverEventDispatcher.NotifyPackageFailedAsync(string! packageId, System.Exception! exception, string! correlationId, Nuplane.Abstractions.PackageStoreProtection.PackageStoreOperationOwner! owner, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Events.IScopedObserverEventDispatcher.PublishChangedAsync(Nuplane.Abstractions.PackageChangeSet! changeSet, Nuplane.Abstractions.PackageStoreProtection.PackageStoreOperationOwner! owner, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Events.IScopedObserverEventDispatcher.PublishChangingAsync(Nuplane.Abstractions.PackageChangeSet! changeSet, Nuplane.Abstractions.PackageStoreProtection.PackageStoreOperationOwner! owner, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Events.IScopedObserverEventDispatcher.PublishReconciledAsync(Nuplane.Abstractions.PackageChangeSet! changeSet, System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ResolvedPackage!>! appliedPackages, Nuplane.Abstractions.PackageStoreProtection.PackageStoreOperationOwner! owner, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Events.IScopedObserverEventDispatcher.ValidateCoordinatedParticipants() -> void
+Nuplane.Feeds.Builder.NuplaneFeedBuilder
+Nuplane.Feeds.Builder.NuplaneFeedBuilder.FromUri(System.Uri! serviceIndex, string? credentials = null) -> Nuplane.Feeds.Builder.NuplaneFeedBuilder!
+Nuplane.Feeds.Builder.NuplaneFeedBuilder.Include(string! pattern) -> Nuplane.Feeds.Builder.NuplaneFeedBuilder!
+Nuplane.Feeds.Builder.NuplaneFeedBuilder.IncludeAll() -> Nuplane.Feeds.Builder.NuplaneFeedBuilder!
+Nuplane.Feeds.Builder.NuplaneFeedBuilder.WithTrust(Nuplane.Abstractions.FeedTrustLevel trust) -> Nuplane.Feeds.Builder.NuplaneFeedBuilder!
+Nuplane.Feeds.Configuration.FeedResolutionOptions
+Nuplane.Feeds.Configuration.FeedResolutionOptions.DeterministicFeedOrder.get -> bool
+Nuplane.Feeds.Configuration.FeedResolutionOptions.DeterministicFeedOrder.set -> void
+Nuplane.Feeds.Configuration.FeedResolutionOptions.DisableNuGetHttpCache.get -> bool
+Nuplane.Feeds.Configuration.FeedResolutionOptions.DisableNuGetHttpCache.set -> void
+Nuplane.Feeds.Configuration.FeedResolutionOptions.FeedPriorities.get -> System.Collections.Generic.Dictionary<string!, int>!
+Nuplane.Feeds.Configuration.FeedResolutionOptions.FeedResolutionOptions() -> void
+Nuplane.Feeds.Configuration.FeedResolutionOptions.Feeds.get -> System.Collections.Generic.List<Nuplane.Abstractions.FeedDefinition!>!
+Nuplane.Feeds.Configuration.FeedResolutionOptions.GetPriority(string! feedName) -> int
+Nuplane.Feeds.Configuration.FeedResolutionOptions.OfflineMode.get -> bool
+Nuplane.Feeds.Configuration.FeedResolutionOptions.OfflineMode.set -> void
+Nuplane.Feeds.Configuration.FeedResolutionOptions.PackageBaseAddressCacheTtl.get -> System.TimeSpan
+Nuplane.Feeds.Configuration.FeedResolutionOptions.PackageBaseAddressCacheTtl.set -> void
+Nuplane.Feeds.Configuration.FeedResolutionOptions.PackageInstallRoot.get -> string?
+Nuplane.Feeds.Configuration.FeedResolutionOptions.PackageInstallRoot.set -> void
+Nuplane.Feeds.Configuration.FeedResolutionOptions.PolicyMode.get -> Nuplane.Feeds.Configuration.FeedResolutionPolicyMode
+Nuplane.Feeds.Configuration.FeedResolutionOptions.PolicyMode.set -> void
+Nuplane.Feeds.Configuration.FeedResolutionOptions.PreferLocalFeedsForExactVersions.get -> bool
+Nuplane.Feeds.Configuration.FeedResolutionOptions.PreferLocalFeedsForExactVersions.set -> void
+Nuplane.Feeds.Configuration.FeedResolutionOptions.RemoteFallbackMode.get -> Nuplane.Feeds.Configuration.RemoteFallbackMode
+Nuplane.Feeds.Configuration.FeedResolutionOptions.RemoteFallbackMode.set -> void
+Nuplane.Feeds.Configuration.FeedResolutionOptions.SetPriority(string! feedName, int priority) -> void
+Nuplane.Feeds.Configuration.FeedResolutionOptions.StopOnFirstSuccessfulFeed.get -> bool
+Nuplane.Feeds.Configuration.FeedResolutionOptions.StopOnFirstSuccessfulFeed.set -> void
+Nuplane.Feeds.Configuration.FeedResolutionOptions.TrustOverrides.get -> System.Collections.Generic.List<Nuplane.Feeds.Configuration.FeedTrustOverride!>!
+Nuplane.Feeds.Configuration.FeedResolutionOptions.UnavailableFeeds.get -> System.Collections.Generic.HashSet<string!>!
+Nuplane.Feeds.Configuration.FeedResolutionOptions.ValidateDeterministicOrdering.get -> bool
+Nuplane.Feeds.Configuration.FeedResolutionOptions.ValidateDeterministicOrdering.set -> void
+Nuplane.Feeds.Configuration.FeedResolutionOptions.VersionCacheTtl.get -> System.TimeSpan
+Nuplane.Feeds.Configuration.FeedResolutionOptions.VersionCacheTtl.set -> void
+Nuplane.Feeds.Configuration.FeedResolutionPolicyMode
+Nuplane.Feeds.Configuration.FeedResolutionPolicyMode.Fallback = 0 -> Nuplane.Feeds.Configuration.FeedResolutionPolicyMode
+Nuplane.Feeds.Configuration.FeedResolutionPolicyMode.Strict = 1 -> Nuplane.Feeds.Configuration.FeedResolutionPolicyMode
+Nuplane.Feeds.Configuration.FeedTrustOverride
+Nuplane.Feeds.Configuration.FeedTrustOverride.<Clone>$() -> Nuplane.Feeds.Configuration.FeedTrustOverride!
+Nuplane.Feeds.Configuration.FeedTrustOverride.Equals(Nuplane.Feeds.Configuration.FeedTrustOverride? other) -> bool
+Nuplane.Feeds.Configuration.FeedTrustOverride.FeedName.get -> string!
+Nuplane.Feeds.Configuration.FeedTrustOverride.FeedName.set -> void
+Nuplane.Feeds.Configuration.FeedTrustOverride.FeedTrustOverride() -> void
+Nuplane.Feeds.Configuration.FeedTrustOverride.PackageId.get -> string!
+Nuplane.Feeds.Configuration.FeedTrustOverride.PackageId.set -> void
+Nuplane.Feeds.Configuration.FeedTrustOverride.Reason.get -> string!
+Nuplane.Feeds.Configuration.FeedTrustOverride.Reason.set -> void
+Nuplane.Feeds.Configuration.RemoteFallbackMode
+Nuplane.Feeds.Configuration.RemoteFallbackMode.Always = 2 -> Nuplane.Feeds.Configuration.RemoteFallbackMode
+Nuplane.Feeds.Configuration.RemoteFallbackMode.Never = 0 -> Nuplane.Feeds.Configuration.RemoteFallbackMode
+Nuplane.Feeds.Configuration.RemoteFallbackMode.WhenLocalMisses = 1 -> Nuplane.Feeds.Configuration.RemoteFallbackMode
+Nuplane.Feeds.Credentials.FeedCredentialUnavailableException
+Nuplane.Feeds.Credentials.FeedCredentialUnavailableException.FeedCredentialUnavailableException(string! feedName) -> void
+Nuplane.Feeds.Credentials.FeedCredentialUnavailableException.FeedName.get -> string!
+Nuplane.Feeds.Credentials.ISecretReferenceProvider
+Nuplane.Feeds.Credentials.ISecretReferenceProvider.ResolveAsync(string! name, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<string?>
+Nuplane.Feeds.Credentials.ISecretReferenceProvider.Scheme.get -> string!
+Nuplane.Feeds.IRemotePackageAcquirer
+Nuplane.Feeds.IRemotePackageAcquirer.AcquireAsync(Nuplane.Abstractions.FeedDefinition! feed, string! packageId, string! version, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<string!>!
+Nuplane.Feeds.IScopedRemotePackageAcquirer
+Nuplane.Feeds.IScopedRemotePackageAcquirer.AcquireAsync(Nuplane.Abstractions.FeedDefinition! feed, string! packageId, string! version, Nuplane.Abstractions.PackageStoreProtection.PackageStoreOperationBorrow! borrow, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<string!>!
+Nuplane.Feeds.NoEligibleFeedException
+Nuplane.Feeds.NoEligibleFeedException.FailureReason.get -> string!
+Nuplane.Feeds.NoEligibleFeedException.NoEligibleFeedException(string! packageId, string! failureReason) -> void
+Nuplane.Feeds.NoEligibleFeedException.PackageId.get -> string!
+Nuplane.Feeds.Policy.FeedUnavailableException
+Nuplane.Feeds.Policy.FeedUnavailableException.FeedName.get -> string!
+Nuplane.Feeds.Policy.FeedUnavailableException.FeedUnavailableException(string! feedName, string! packageId) -> void
+Nuplane.Feeds.Policy.FeedUnavailableException.PackageId.get -> string!
+Nuplane.Feeds.Setup.DirectoryFeedRole
+Nuplane.Feeds.Setup.DirectoryFeedRole.Cache = 1 -> Nuplane.Feeds.Setup.DirectoryFeedRole
+Nuplane.Feeds.Setup.DirectoryFeedRole.Desired = 2 -> Nuplane.Feeds.Setup.DirectoryFeedRole
+Nuplane.Feeds.Setup.DirectoryFeedRole.DesiredAndCache = 0 -> Nuplane.Feeds.Setup.DirectoryFeedRole
+Nuplane.Feeds.Setup.NuplaneDirectoryFeedSetupOptions
+Nuplane.Feeds.Setup.NuplaneDirectoryFeedSetupOptions.DebounceWindow.get -> System.TimeSpan
+Nuplane.Feeds.Setup.NuplaneDirectoryFeedSetupOptions.DebounceWindow.set -> void
+Nuplane.Feeds.Setup.NuplaneDirectoryFeedSetupOptions.NuplaneDirectoryFeedSetupOptions() -> void
+Nuplane.Feeds.Setup.NuplaneDirectoryFeedSetupOptions.Role.get -> Nuplane.Feeds.Setup.DirectoryFeedRole
+Nuplane.Feeds.Setup.NuplaneDirectoryFeedSetupOptions.Role.set -> void
+Nuplane.Feeds.Setup.NuplaneDirectoryFeedSetupOptions.Watch.get -> bool
+Nuplane.Feeds.Setup.NuplaneDirectoryFeedSetupOptions.Watch.set -> void
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.Credentials.get -> string?
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.Credentials.set -> void
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.Directory.get -> Nuplane.Feeds.Setup.NuplaneDirectoryFeedSetupOptions!
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.Directory.set -> void
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.DirectoryPath.get -> string?
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.DirectoryPath.set -> void
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.IncludeAll.get -> bool
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.IncludeAll.set -> void
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.IncludePatterns.get -> System.Collections.Generic.List<string!>!
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.IncludePatterns.set -> void
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.Name.get -> string!
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.Name.set -> void
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.NuplaneFeedSetupOptions() -> void
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.ServiceIndex.get -> string?
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.ServiceIndex.set -> void
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.Trust.get -> Nuplane.Abstractions.FeedTrustLevel
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.Trust.set -> void
+Nuplane.Hosting.NuplaneStartupReconciliationException
+Nuplane.Hosting.NuplaneStartupReconciliationException.CorrelationId.get -> string!
+Nuplane.Hosting.NuplaneStartupReconciliationException.FailedPackageIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Hosting.NuplaneStartupReconciliationException.NuplaneStartupReconciliationException(string! correlationId, System.Collections.Generic.IReadOnlyList<string!>! failedPackageIds, Nuplane.Reconciliation.Models.ReconciliationRunResult? runResult, System.Exception? innerException = null) -> void
+Nuplane.Hosting.NuplaneStartupReconciliationException.RunResult.get -> Nuplane.Reconciliation.Models.ReconciliationRunResult?
+Nuplane.Metadata.NuplanePackageMetadataReadResult
+Nuplane.Metadata.NuplanePackageMetadataReadResult.<Clone>$() -> Nuplane.Metadata.NuplanePackageMetadataReadResult!
+Nuplane.Metadata.NuplanePackageMetadataReadResult.AdmissionRefusalReason.get -> Nuplane.Abstractions.PackageStoreProtection.PackageStoreAdmissionReason?
+Nuplane.Metadata.NuplanePackageMetadataReadResult.AdmissionRefusalReason.init -> void
+Nuplane.Metadata.NuplanePackageMetadataReadResult.DeclaredSchemaVersion.get -> int?
+Nuplane.Metadata.NuplanePackageMetadataReadResult.DeclaredSchemaVersion.init -> void
+Nuplane.Metadata.NuplanePackageMetadataReadResult.Deconstruct(out bool MetadataFound, out bool IsValid, out Nuplane.Abstractions.NuplanePackageMetadata? Metadata, out string? Diagnostic) -> void
+Nuplane.Metadata.NuplanePackageMetadataReadResult.Diagnostic.get -> string?
+Nuplane.Metadata.NuplanePackageMetadataReadResult.Diagnostic.init -> void
+Nuplane.Metadata.NuplanePackageMetadataReadResult.Equals(Nuplane.Metadata.NuplanePackageMetadataReadResult? other) -> bool
+Nuplane.Metadata.NuplanePackageMetadataReadResult.IsValid.get -> bool
+Nuplane.Metadata.NuplanePackageMetadataReadResult.IsValid.init -> void
+Nuplane.Metadata.NuplanePackageMetadataReadResult.Metadata.get -> Nuplane.Abstractions.NuplanePackageMetadata?
+Nuplane.Metadata.NuplanePackageMetadataReadResult.Metadata.init -> void
+Nuplane.Metadata.NuplanePackageMetadataReadResult.MetadataFound.get -> bool
+Nuplane.Metadata.NuplanePackageMetadataReadResult.MetadataFound.init -> void
+Nuplane.Metadata.NuplanePackageMetadataReadResult.NuplanePackageMetadataReadResult(bool MetadataFound, bool IsValid, Nuplane.Abstractions.NuplanePackageMetadata? Metadata, string? Diagnostic) -> void
+Nuplane.Metadata.NuplanePackageMetadataReader
+Nuplane.Metadata.NuplanePackageMetadataReader.NuplanePackageMetadataReader() -> void
+Nuplane.Metadata.NuplanePackageMetadataReader.Read(string! packageId, string! version, string! installPath) -> Nuplane.Metadata.NuplanePackageMetadataReadResult!
+Nuplane.Metadata.NuplanePackageMetadataReader.ReadForGraphUseLease(string! packageId, string! version, string! installPath, Nuplane.Abstractions.PackageStoreProtection.PackageGraphUseLease! lease) -> Nuplane.Metadata.NuplanePackageMetadataReadResult!
+Nuplane.NuplaneDesiredDescription
+Nuplane.NuplaneDesiredDescription.<Clone>$() -> Nuplane.NuplaneDesiredDescription!
+Nuplane.NuplaneDesiredDescription.CapabilitySelections.get -> System.Collections.Generic.IReadOnlyDictionary<string!, Nuplane.Capabilities.CapabilitySelection!>!
+Nuplane.NuplaneDesiredDescription.CapabilitySelections.init -> void
+Nuplane.NuplaneDesiredDescription.CredentialRefusedFeeds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.NuplaneDesiredDescription.CredentialRefusedFeeds.init -> void
+Nuplane.NuplaneDesiredDescription.Deconstruct(out System.Collections.Generic.IReadOnlyList<Nuplane.DesiredPackageDescription!>! Requests, out System.Collections.Generic.IReadOnlyList<string!>! CredentialRefusedFeeds, out System.Collections.Generic.IReadOnlyDictionary<string!, string!>! SourceErrors, out string! StateFilePath, out string! InstallRoot, out System.Collections.Generic.IReadOnlyDictionary<string!, Nuplane.Capabilities.CapabilitySelection!>! CapabilitySelections) -> void
+Nuplane.NuplaneDesiredDescription.Equals(Nuplane.NuplaneDesiredDescription? other) -> bool
+Nuplane.NuplaneDesiredDescription.InstallRoot.get -> string!
+Nuplane.NuplaneDesiredDescription.InstallRoot.init -> void
+Nuplane.NuplaneDesiredDescription.NuplaneDesiredDescription(System.Collections.Generic.IReadOnlyList<Nuplane.DesiredPackageDescription!>! Requests, System.Collections.Generic.IReadOnlyList<string!>! CredentialRefusedFeeds, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! SourceErrors, string! StateFilePath, string! InstallRoot, System.Collections.Generic.IReadOnlyDictionary<string!, Nuplane.Capabilities.CapabilitySelection!>! CapabilitySelections) -> void
+Nuplane.NuplaneDesiredDescription.Requests.get -> System.Collections.Generic.IReadOnlyList<Nuplane.DesiredPackageDescription!>!
+Nuplane.NuplaneDesiredDescription.Requests.init -> void
+Nuplane.NuplaneDesiredDescription.SourceErrors.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+Nuplane.NuplaneDesiredDescription.SourceErrors.init -> void
+Nuplane.NuplaneDesiredDescription.StateFilePath.get -> string!
+Nuplane.NuplaneDesiredDescription.StateFilePath.init -> void
+Nuplane.NuplaneRestore
+Nuplane.NuplaneRestoreOptions
+Nuplane.NuplaneRestoreOptions.BasePath.get -> string?
+Nuplane.NuplaneRestoreOptions.BasePath.set -> void
+Nuplane.NuplaneRestoreOptions.ConfigureBuilder.get -> System.Action<Nuplane.Builder.NuplaneBuilder!, Microsoft.Extensions.Configuration.IConfiguration!>?
+Nuplane.NuplaneRestoreOptions.ConfigureBuilder.set -> void
+Nuplane.NuplaneRestoreOptions.InstallRoot.get -> string?
+Nuplane.NuplaneRestoreOptions.InstallRoot.set -> void
+Nuplane.NuplaneRestoreOptions.LockFilePath.get -> string?
+Nuplane.NuplaneRestoreOptions.LockFilePath.set -> void
+Nuplane.NuplaneRestoreOptions.LoggerFactory.get -> Microsoft.Extensions.Logging.ILoggerFactory?
+Nuplane.NuplaneRestoreOptions.LoggerFactory.set -> void
+Nuplane.NuplaneRestoreOptions.NuplaneRestoreOptions() -> void
+Nuplane.NuplaneRestoreOptions.RequirePinnedVersions.get -> bool
+Nuplane.NuplaneRestoreOptions.RequirePinnedVersions.set -> void
+Nuplane.NuplaneRestoreOptions.StateFilePath.get -> string?
+Nuplane.NuplaneRestoreOptions.StateFilePath.set -> void
+Nuplane.NuplaneRestoreResult
+Nuplane.NuplaneRestoreResult.<Clone>$() -> Nuplane.NuplaneRestoreResult!
+Nuplane.NuplaneRestoreResult.ActivePackages.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ActivePackage!>!
+Nuplane.NuplaneRestoreResult.ActivePackages.init -> void
+Nuplane.NuplaneRestoreResult.CredentialRefusedFeeds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.NuplaneRestoreResult.CredentialRefusedFeeds.init -> void
+Nuplane.NuplaneRestoreResult.Deconstruct(out bool Skipped, out Nuplane.NuplaneRestoreSkipReason SkipReason, out bool IsDegraded, out System.Collections.Generic.IReadOnlyList<string!>! FailedPackages, out System.Collections.Generic.IReadOnlyList<Nuplane.PackageRefusal!>! Refusals, out System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ActivePackage!>! ActivePackages, out System.Collections.Generic.IReadOnlyList<Nuplane.DesiredPackageDescription!>! UnpinnedRequests, out System.Collections.Generic.IReadOnlyList<string!>! CredentialRefusedFeeds, out string! StateFilePath, out string! InstallRoot) -> void
+Nuplane.NuplaneRestoreResult.Equals(Nuplane.NuplaneRestoreResult? other) -> bool
+Nuplane.NuplaneRestoreResult.FailedPackages.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.NuplaneRestoreResult.FailedPackages.init -> void
+Nuplane.NuplaneRestoreResult.InstallRoot.get -> string!
+Nuplane.NuplaneRestoreResult.InstallRoot.init -> void
+Nuplane.NuplaneRestoreResult.IsDegraded.get -> bool
+Nuplane.NuplaneRestoreResult.IsDegraded.init -> void
+Nuplane.NuplaneRestoreResult.NuplaneRestoreResult(bool Skipped, Nuplane.NuplaneRestoreSkipReason SkipReason, bool IsDegraded, System.Collections.Generic.IReadOnlyList<string!>! FailedPackages, System.Collections.Generic.IReadOnlyList<Nuplane.PackageRefusal!>! Refusals, System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ActivePackage!>! ActivePackages, System.Collections.Generic.IReadOnlyList<Nuplane.DesiredPackageDescription!>! UnpinnedRequests, System.Collections.Generic.IReadOnlyList<string!>! CredentialRefusedFeeds, string! StateFilePath, string! InstallRoot) -> void
+Nuplane.NuplaneRestoreResult.Refusals.get -> System.Collections.Generic.IReadOnlyList<Nuplane.PackageRefusal!>!
+Nuplane.NuplaneRestoreResult.Refusals.init -> void
+Nuplane.NuplaneRestoreResult.SkipReason.get -> Nuplane.NuplaneRestoreSkipReason
+Nuplane.NuplaneRestoreResult.SkipReason.init -> void
+Nuplane.NuplaneRestoreResult.Skipped.get -> bool
+Nuplane.NuplaneRestoreResult.Skipped.init -> void
+Nuplane.NuplaneRestoreResult.StateFilePath.get -> string!
+Nuplane.NuplaneRestoreResult.StateFilePath.init -> void
+Nuplane.NuplaneRestoreResult.UnpinnedRequests.get -> System.Collections.Generic.IReadOnlyList<Nuplane.DesiredPackageDescription!>!
+Nuplane.NuplaneRestoreResult.UnpinnedRequests.init -> void
+Nuplane.NuplaneRestoreSkipReason
+Nuplane.NuplaneRestoreSkipReason.None = 0 -> Nuplane.NuplaneRestoreSkipReason
+Nuplane.NuplaneRestoreSkipReason.StoreLockUnavailable = 1 -> Nuplane.NuplaneRestoreSkipReason
+Nuplane.NuplaneRestoreSkipReason.UnpinnedRequests = 2 -> Nuplane.NuplaneRestoreSkipReason
+Nuplane.NuplaneServiceCollectionExtensions
+Nuplane.NuplaneStore
+Nuplane.NuplaneStoreSnapshotAccess
+Nuplane.Operational.ActivePackageEntry
+Nuplane.Operational.ActivePackageEntry.<Clone>$() -> Nuplane.Operational.ActivePackageEntry!
+Nuplane.Operational.ActivePackageEntry.ActivePackageEntry(string! PackageId, string! Version) -> void
+Nuplane.Operational.ActivePackageEntry.Deconstruct(out string! PackageId, out string! Version) -> void
+Nuplane.Operational.ActivePackageEntry.Equals(Nuplane.Operational.ActivePackageEntry? other) -> bool
+Nuplane.Operational.ActivePackageEntry.PackageId.get -> string!
+Nuplane.Operational.ActivePackageEntry.PackageId.init -> void
+Nuplane.Operational.ActivePackageEntry.Version.get -> string!
+Nuplane.Operational.ActivePackageEntry.Version.init -> void
+Nuplane.Operational.HealthState
+Nuplane.Operational.HealthState.Degraded = 1 -> Nuplane.Operational.HealthState
+Nuplane.Operational.HealthState.Healthy = 0 -> Nuplane.Operational.HealthState
+Nuplane.Operational.IOperationalStateContributor
+Nuplane.Operational.IOperationalStateContributor.ContributeAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Operational.OperationalStateContribution!>!
+Nuplane.Operational.LastReconcileOutcome
+Nuplane.Operational.LastReconcileOutcome.<Clone>$() -> Nuplane.Operational.LastReconcileOutcome!
+Nuplane.Operational.LastReconcileOutcome.CompletedAtUtc.get -> System.DateTimeOffset
+Nuplane.Operational.LastReconcileOutcome.CompletedAtUtc.init -> void
+Nuplane.Operational.LastReconcileOutcome.CorrelationId.get -> string!
+Nuplane.Operational.LastReconcileOutcome.CorrelationId.init -> void
+Nuplane.Operational.LastReconcileOutcome.Deconstruct(out string! CorrelationId, out System.DateTimeOffset CompletedAtUtc, out bool WasSkipped, out bool IsDegraded, out System.Collections.Generic.IReadOnlyList<string!>! FailedPackageIds) -> void
+Nuplane.Operational.LastReconcileOutcome.Equals(Nuplane.Operational.LastReconcileOutcome? other) -> bool
+Nuplane.Operational.LastReconcileOutcome.FailedPackageIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Operational.LastReconcileOutcome.FailedPackageIds.init -> void
+Nuplane.Operational.LastReconcileOutcome.IsDegraded.get -> bool
+Nuplane.Operational.LastReconcileOutcome.IsDegraded.init -> void
+Nuplane.Operational.LastReconcileOutcome.LastReconcileOutcome(string! CorrelationId, System.DateTimeOffset CompletedAtUtc, bool WasSkipped, bool IsDegraded, System.Collections.Generic.IReadOnlyList<string!>! FailedPackageIds) -> void
+Nuplane.Operational.LastReconcileOutcome.WasSkipped.get -> bool
+Nuplane.Operational.LastReconcileOutcome.WasSkipped.init -> void
+Nuplane.Operational.OperationalStateContribution
+Nuplane.Operational.OperationalStateContribution.<Clone>$() -> Nuplane.Operational.OperationalStateContribution!
+Nuplane.Operational.OperationalStateContribution.Contributor.get -> string!
+Nuplane.Operational.OperationalStateContribution.Contributor.init -> void
+Nuplane.Operational.OperationalStateContribution.Deconstruct(out string! Contributor, out System.Collections.Generic.IReadOnlyList<string!>! DegradedReasons) -> void
+Nuplane.Operational.OperationalStateContribution.DegradedReasons.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Operational.OperationalStateContribution.DegradedReasons.init -> void
+Nuplane.Operational.OperationalStateContribution.Equals(Nuplane.Operational.OperationalStateContribution? other) -> bool
+Nuplane.Operational.OperationalStateContribution.IsDegraded.get -> bool
+Nuplane.Operational.OperationalStateContribution.OperationalStateContribution(string! Contributor, System.Collections.Generic.IReadOnlyList<string!>! DegradedReasons) -> void
+Nuplane.Operational.OperationalStateSnapshot
+Nuplane.Operational.OperationalStateSnapshot.<Clone>$() -> Nuplane.Operational.OperationalStateSnapshot!
+Nuplane.Operational.OperationalStateSnapshot.CorrelationId.get -> string!
+Nuplane.Operational.OperationalStateSnapshot.CorrelationId.init -> void
+Nuplane.Operational.OperationalStateSnapshot.Deconstruct(out System.DateTimeOffset SnapshotAtUtc, out Nuplane.Operational.LastReconcileOutcome? LastReconcile, out Nuplane.Operational.HealthState Health, out System.Collections.Generic.IReadOnlyList<string!>! DegradedReasons, out string! CorrelationId) -> void
+Nuplane.Operational.OperationalStateSnapshot.DegradedReasons.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Operational.OperationalStateSnapshot.DegradedReasons.init -> void
+Nuplane.Operational.OperationalStateSnapshot.Equals(Nuplane.Operational.OperationalStateSnapshot? other) -> bool
+Nuplane.Operational.OperationalStateSnapshot.Health.get -> Nuplane.Operational.HealthState
+Nuplane.Operational.OperationalStateSnapshot.Health.init -> void
+Nuplane.Operational.OperationalStateSnapshot.LastReconcile.get -> Nuplane.Operational.LastReconcileOutcome?
+Nuplane.Operational.OperationalStateSnapshot.LastReconcile.init -> void
+Nuplane.Operational.OperationalStateSnapshot.OperationalStateSnapshot(System.DateTimeOffset SnapshotAtUtc, Nuplane.Operational.LastReconcileOutcome? LastReconcile, Nuplane.Operational.HealthState Health, System.Collections.Generic.IReadOnlyList<string!>! DegradedReasons, string! CorrelationId) -> void
+Nuplane.Operational.OperationalStateSnapshot.SnapshotAtUtc.get -> System.DateTimeOffset
+Nuplane.Operational.OperationalStateSnapshot.SnapshotAtUtc.init -> void
+Nuplane.PackageArchives.IPackageArchiveReader
+Nuplane.PackageArchives.IPackageArchiveReader.OpenAsync(Nuplane.Abstractions.ActivePackage! package, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Nuplane.PackageArchives.PackageArchive!>
+Nuplane.PackageArchives.PackageArchive
+Nuplane.PackageArchives.PackageArchive.ArchiveHash.get -> string!
+Nuplane.PackageArchives.PackageArchive.Entries.get -> System.Collections.Generic.IReadOnlyList<Nuplane.PackageArchives.PackageArchiveEntry!>!
+Nuplane.PackageArchives.PackageArchive.GetEntry(string! relativePath) -> Nuplane.PackageArchives.PackageArchiveEntry?
+Nuplane.PackageArchives.PackageArchive.Length.get -> long
+Nuplane.PackageArchives.PackageArchive.PackageId.get -> string!
+Nuplane.PackageArchives.PackageArchive.Version.get -> string!
+Nuplane.PackageArchives.PackageArchiveEntry
+Nuplane.PackageArchives.PackageArchiveEntry.LastWriteTime.get -> System.DateTimeOffset
+Nuplane.PackageArchives.PackageArchiveEntry.Length.get -> long
+Nuplane.PackageArchives.PackageArchiveEntry.Path.get -> string!
+Nuplane.PackageArchives.PackageArchiveEntry.ReadAllBytes() -> byte[]!
+Nuplane.PackageArchives.PackageArchiveException
+Nuplane.PackageArchives.PackageArchiveException.PackageArchiveException(string! packageId, string! version, Nuplane.PackageArchives.PackageArchiveFailureReason reason, string! detail, System.Exception? innerException = null) -> void
+Nuplane.PackageArchives.PackageArchiveException.PackageId.get -> string!
+Nuplane.PackageArchives.PackageArchiveException.Reason.get -> Nuplane.PackageArchives.PackageArchiveFailureReason
+Nuplane.PackageArchives.PackageArchiveException.Version.get -> string!
+Nuplane.PackageArchives.PackageArchiveFailureReason
+Nuplane.PackageArchives.PackageArchiveFailureReason.ArchiveMissing = 1 -> Nuplane.PackageArchives.PackageArchiveFailureReason
+Nuplane.PackageArchives.PackageArchiveFailureReason.ArchiveTooLarge = 2 -> Nuplane.PackageArchives.PackageArchiveFailureReason
+Nuplane.PackageArchives.PackageArchiveFailureReason.ArchiveUnreadable = 3 -> Nuplane.PackageArchives.PackageArchiveFailureReason
+Nuplane.PackageArchives.PackageArchiveFailureReason.HashMismatch = 4 -> Nuplane.PackageArchives.PackageArchiveFailureReason
+Nuplane.PackageArchives.PackageArchiveFailureReason.HashNotRecorded = 0 -> Nuplane.PackageArchives.PackageArchiveFailureReason
+Nuplane.PackageArchives.PackageArchiveFailureReason.InvalidArchive = 5 -> Nuplane.PackageArchives.PackageArchiveFailureReason
+Nuplane.PackageArchives.PackageArchiveReaderOptions
+Nuplane.PackageArchives.PackageArchiveReaderOptions.CacheBytes.get -> long
+Nuplane.PackageArchives.PackageArchiveReaderOptions.CacheBytes.set -> void
+Nuplane.PackageArchives.PackageArchiveReaderOptions.MaximumArchiveBytes.get -> long
+Nuplane.PackageArchives.PackageArchiveReaderOptions.MaximumArchiveBytes.set -> void
+Nuplane.PackageArchives.PackageArchiveReaderOptions.PackageArchiveReaderOptions() -> void
+Nuplane.PackageContent
+Nuplane.PackageContentFile
+Nuplane.PackageContentFile.<Clone>$() -> Nuplane.PackageContentFile!
+Nuplane.PackageContentFile.Content.get -> byte[]!
+Nuplane.PackageContentFile.Content.init -> void
+Nuplane.PackageContentFile.Deconstruct(out string! Name, out byte[]! Content) -> void
+Nuplane.PackageContentFile.Equals(Nuplane.PackageContentFile? other) -> bool
+Nuplane.PackageContentFile.Name.get -> string!
+Nuplane.PackageContentFile.Name.init -> void
+Nuplane.PackageContentFile.PackageContentFile(string! Name, byte[]! Content) -> void
+Nuplane.PackageRefusal
+Nuplane.PackageRefusal.<Clone>$() -> Nuplane.PackageRefusal!
+Nuplane.PackageRefusal.Deconstruct(out string! PackageId, out string! Stage, out string! Message) -> void
+Nuplane.PackageRefusal.Equals(Nuplane.PackageRefusal? other) -> bool
+Nuplane.PackageRefusal.Message.get -> string!
+Nuplane.PackageRefusal.Message.init -> void
+Nuplane.PackageRefusal.PackageId.get -> string!
+Nuplane.PackageRefusal.PackageId.init -> void
+Nuplane.PackageRefusal.PackageRefusal(string! PackageId, string! Stage, string! Message) -> void
+Nuplane.PackageRefusal.Stage.get -> string!
+Nuplane.PackageRefusal.Stage.init -> void
+Nuplane.Reconciliation.Configuration.HostProvidedPackagesOptions
+Nuplane.Reconciliation.Configuration.HostProvidedPackagesOptions.Entries.get -> System.Collections.Generic.ICollection<string!>!
+Nuplane.Reconciliation.Configuration.HostProvidedPackagesOptions.HostProvidedPackagesOptions() -> void
+Nuplane.Reconciliation.Configuration.ReconciliationOptions
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.EnableAutomaticReconciliation.get -> bool
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.EnableAutomaticReconciliation.set -> void
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.EnableSingleFlight.get -> bool
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.EnableSingleFlight.set -> void
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.EnableStoreLock.get -> bool
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.EnableStoreLock.set -> void
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.InitialRetryBackoff.get -> System.TimeSpan
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.InitialRetryBackoff.set -> void
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.MaxRetryAttempts.get -> int
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.MaxRetryAttempts.set -> void
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.MaxRetryBackoff.get -> System.TimeSpan
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.MaxRetryBackoff.set -> void
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.PollInterval.get -> System.TimeSpan
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.PollInterval.set -> void
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.ReconciliationOptions() -> void
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.RequirePinnedContributions.get -> bool
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.RequirePinnedContributions.set -> void
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.StartupFailurePolicy.get -> Nuplane.Reconciliation.Configuration.StartupFailurePolicy
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.StartupFailurePolicy.set -> void
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.StartupRecoveryStoreLockTimeout.get -> System.TimeSpan
+Nuplane.Reconciliation.Configuration.ReconciliationOptions.StartupRecoveryStoreLockTimeout.set -> void
+Nuplane.Reconciliation.Configuration.StartupFailurePolicy
+Nuplane.Reconciliation.Configuration.StartupFailurePolicy.FailHost = 0 -> Nuplane.Reconciliation.Configuration.StartupFailurePolicy
+Nuplane.Reconciliation.Configuration.StartupFailurePolicy.StartDegraded = 1 -> Nuplane.Reconciliation.Configuration.StartupFailurePolicy
+Nuplane.Reconciliation.Configuration.StartupFailurePolicy.UseLastKnownGood = 2 -> Nuplane.Reconciliation.Configuration.StartupFailurePolicy
+Nuplane.Reconciliation.IReconciliationService
+Nuplane.Reconciliation.IReconciliationService.TriggerAsync(Nuplane.Reconciliation.Models.ReconciliationTrigger! trigger, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Reconciliation.Models.ReconciliationRunResult!>!
+Nuplane.Reconciliation.IReconciliationTriggerIngress
+Nuplane.Reconciliation.IReconciliationTriggerIngress.Enqueue(Nuplane.Reconciliation.Models.ReconciliationTrigger! trigger) -> void
+Nuplane.Reconciliation.IReconciliationTriggerIngress.EnqueueAndWaitAsync(Nuplane.Reconciliation.Models.ReconciliationTrigger! trigger, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Reconciliation.Models.ReconciliationRunResult!>!
+Nuplane.Reconciliation.LockFile.LockFileMode
+Nuplane.Reconciliation.LockFile.LockFileMode.Enforce = 1 -> Nuplane.Reconciliation.LockFile.LockFileMode
+Nuplane.Reconciliation.LockFile.LockFileMode.Generate = 0 -> Nuplane.Reconciliation.LockFile.LockFileMode
+Nuplane.Reconciliation.LockFile.LockFileMode.Strict = 2 -> Nuplane.Reconciliation.LockFile.LockFileMode
+Nuplane.Reconciliation.LockFile.LockFileOptions
+Nuplane.Reconciliation.LockFile.LockFileOptions.FailOnHashMismatch.get -> bool
+Nuplane.Reconciliation.LockFile.LockFileOptions.FailOnHashMismatch.set -> void
+Nuplane.Reconciliation.LockFile.LockFileOptions.LockFileOptions() -> void
+Nuplane.Reconciliation.LockFile.LockFileOptions.Mode.get -> Nuplane.Reconciliation.LockFile.LockFileMode
+Nuplane.Reconciliation.LockFile.LockFileOptions.Mode.set -> void
+Nuplane.Reconciliation.LockFile.LockFileOptions.Path.get -> string!
+Nuplane.Reconciliation.LockFile.LockFileOptions.Path.set -> void
+Nuplane.Reconciliation.LockFile.LockFileOptions.RequireEntryInStrictMode.get -> bool
+Nuplane.Reconciliation.LockFile.LockFileOptions.RequireEntryInStrictMode.set -> void
+Nuplane.Reconciliation.ManualReconcileCoordinator
+Nuplane.Reconciliation.ManualReconcileCoordinator.TriggerAsync(string! correlationId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Reconciliation.ManualReconcileOutcome!>!
+Nuplane.Reconciliation.ManualReconcileOutcome
+Nuplane.Reconciliation.ManualReconcileOutcome.<Clone>$() -> Nuplane.Reconciliation.ManualReconcileOutcome!
+Nuplane.Reconciliation.ManualReconcileOutcome.CorrelationId.get -> string!
+Nuplane.Reconciliation.ManualReconcileOutcome.CorrelationId.init -> void
+Nuplane.Reconciliation.ManualReconcileOutcome.Deconstruct(out Nuplane.Reconciliation.ManualReconcileOutcomeCode OutcomeCode, out string! CorrelationId, out Nuplane.Reconciliation.Models.ReconciliationRunResult? RunResult, out string? ReasonCode) -> void
+Nuplane.Reconciliation.ManualReconcileOutcome.Equals(Nuplane.Reconciliation.ManualReconcileOutcome? other) -> bool
+Nuplane.Reconciliation.ManualReconcileOutcome.ManualReconcileOutcome(Nuplane.Reconciliation.ManualReconcileOutcomeCode OutcomeCode, string! CorrelationId, Nuplane.Reconciliation.Models.ReconciliationRunResult? RunResult, string? ReasonCode) -> void
+Nuplane.Reconciliation.ManualReconcileOutcome.OutcomeCode.get -> Nuplane.Reconciliation.ManualReconcileOutcomeCode
+Nuplane.Reconciliation.ManualReconcileOutcome.OutcomeCode.init -> void
+Nuplane.Reconciliation.ManualReconcileOutcome.ReasonCode.get -> string?
+Nuplane.Reconciliation.ManualReconcileOutcome.ReasonCode.init -> void
+Nuplane.Reconciliation.ManualReconcileOutcome.RunResult.get -> Nuplane.Reconciliation.Models.ReconciliationRunResult?
+Nuplane.Reconciliation.ManualReconcileOutcome.RunResult.init -> void
+Nuplane.Reconciliation.ManualReconcileOutcomeCode
+Nuplane.Reconciliation.ManualReconcileOutcomeCode.Accepted = 1 -> Nuplane.Reconciliation.ManualReconcileOutcomeCode
+Nuplane.Reconciliation.ManualReconcileOutcomeCode.Completed = 0 -> Nuplane.Reconciliation.ManualReconcileOutcomeCode
+Nuplane.Reconciliation.ManualReconcileOutcomeCode.Rejected = 2 -> Nuplane.Reconciliation.ManualReconcileOutcomeCode
+Nuplane.Reconciliation.ManualReconcileOutcomeCode.Unavailable = 3 -> Nuplane.Reconciliation.ManualReconcileOutcomeCode
+Nuplane.Reconciliation.Models.DependencyEdge
+Nuplane.Reconciliation.Models.DependencyEdge.<Clone>$() -> Nuplane.Reconciliation.Models.DependencyEdge!
+Nuplane.Reconciliation.Models.DependencyEdge.Deconstruct(out string! FromPackageId, out string! FromVersion, out string! ToPackageId, out string! RequestedVersionRange, out string! SelectedVersion, out string! DependencyGroupTargetFramework, out bool Optional) -> void
+Nuplane.Reconciliation.Models.DependencyEdge.DependencyEdge(string! FromPackageId, string! FromVersion, string! ToPackageId, string! RequestedVersionRange, string! SelectedVersion, string! DependencyGroupTargetFramework, bool Optional) -> void
+Nuplane.Reconciliation.Models.DependencyEdge.DependencyGroupTargetFramework.get -> string!
+Nuplane.Reconciliation.Models.DependencyEdge.DependencyGroupTargetFramework.init -> void
+Nuplane.Reconciliation.Models.DependencyEdge.Equals(Nuplane.Reconciliation.Models.DependencyEdge? other) -> bool
+Nuplane.Reconciliation.Models.DependencyEdge.FromPackageId.get -> string!
+Nuplane.Reconciliation.Models.DependencyEdge.FromPackageId.init -> void
+Nuplane.Reconciliation.Models.DependencyEdge.FromVersion.get -> string!
+Nuplane.Reconciliation.Models.DependencyEdge.FromVersion.init -> void
+Nuplane.Reconciliation.Models.DependencyEdge.Optional.get -> bool
+Nuplane.Reconciliation.Models.DependencyEdge.Optional.init -> void
+Nuplane.Reconciliation.Models.DependencyEdge.RequestedVersionRange.get -> string!
+Nuplane.Reconciliation.Models.DependencyEdge.RequestedVersionRange.init -> void
+Nuplane.Reconciliation.Models.DependencyEdge.SelectedVersion.get -> string!
+Nuplane.Reconciliation.Models.DependencyEdge.SelectedVersion.init -> void
+Nuplane.Reconciliation.Models.DependencyEdge.ToPackageId.get -> string!
+Nuplane.Reconciliation.Models.DependencyEdge.ToPackageId.init -> void
+Nuplane.Reconciliation.Models.FeedObservationKind
+Nuplane.Reconciliation.Models.FeedObservationKind.DirectoryWatcher = 0 -> Nuplane.Reconciliation.Models.FeedObservationKind
+Nuplane.Reconciliation.Models.FeedObservationKind.Notification = 1 -> Nuplane.Reconciliation.Models.FeedObservationKind
+Nuplane.Reconciliation.Models.FeedObservationKind.Polling = 2 -> Nuplane.Reconciliation.Models.FeedObservationKind
+Nuplane.Reconciliation.Models.FeedObservationOrigin
+Nuplane.Reconciliation.Models.FeedObservationOrigin.<Clone>$() -> Nuplane.Reconciliation.Models.FeedObservationOrigin!
+Nuplane.Reconciliation.Models.FeedObservationOrigin.Equals(Nuplane.Reconciliation.Models.FeedObservationOrigin? other) -> bool
+Nuplane.Reconciliation.Models.FeedObservationOrigin.FeedName.get -> string!
+Nuplane.Reconciliation.Models.FeedObservationOrigin.FeedObservationOrigin(string! feedName, Nuplane.Reconciliation.Models.FeedObservationKind kind) -> void
+Nuplane.Reconciliation.Models.FeedObservationOrigin.Kind.get -> Nuplane.Reconciliation.Models.FeedObservationKind
+Nuplane.Reconciliation.Models.FeedResolutionDecision
+Nuplane.Reconciliation.Models.FeedResolutionDecision.<Clone>$() -> Nuplane.Reconciliation.Models.FeedResolutionDecision!
+Nuplane.Reconciliation.Models.FeedResolutionDecision.CacheHit.get -> bool
+Nuplane.Reconciliation.Models.FeedResolutionDecision.CacheHit.init -> void
+Nuplane.Reconciliation.Models.FeedResolutionDecision.CandidateFeeds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Reconciliation.Models.FeedResolutionDecision.CandidateFeeds.init -> void
+Nuplane.Reconciliation.Models.FeedResolutionDecision.CorrelationId.get -> string!
+Nuplane.Reconciliation.Models.FeedResolutionDecision.CorrelationId.init -> void
+Nuplane.Reconciliation.Models.FeedResolutionDecision.DecisionPath.get -> string!
+Nuplane.Reconciliation.Models.FeedResolutionDecision.DecisionPath.init -> void
+Nuplane.Reconciliation.Models.FeedResolutionDecision.Deconstruct(out string! PackageId, out string? RequestedFeed, out System.Collections.Generic.IReadOnlyList<string!>! CandidateFeeds, out string? SelectedFeed, out string? SelectedVersion, out string! DecisionPath, out string! CorrelationId, out bool FeedUnavailable, out string? FailureReason, out int EnumeratedVersionCount, out bool CacheHit) -> void
+Nuplane.Reconciliation.Models.FeedResolutionDecision.EnumeratedVersionCount.get -> int
+Nuplane.Reconciliation.Models.FeedResolutionDecision.EnumeratedVersionCount.init -> void
+Nuplane.Reconciliation.Models.FeedResolutionDecision.Equals(Nuplane.Reconciliation.Models.FeedResolutionDecision? other) -> bool
+Nuplane.Reconciliation.Models.FeedResolutionDecision.FailureReason.get -> string?
+Nuplane.Reconciliation.Models.FeedResolutionDecision.FailureReason.init -> void
+Nuplane.Reconciliation.Models.FeedResolutionDecision.FeedResolutionDecision(string! PackageId, string? RequestedFeed, System.Collections.Generic.IReadOnlyList<string!>! CandidateFeeds, string? SelectedFeed, string? SelectedVersion, string! DecisionPath, string! CorrelationId, bool FeedUnavailable, string? FailureReason, int EnumeratedVersionCount = 0, bool CacheHit = false) -> void
+Nuplane.Reconciliation.Models.FeedResolutionDecision.FeedUnavailable.get -> bool
+Nuplane.Reconciliation.Models.FeedResolutionDecision.FeedUnavailable.init -> void
+Nuplane.Reconciliation.Models.FeedResolutionDecision.PackageId.get -> string!
+Nuplane.Reconciliation.Models.FeedResolutionDecision.PackageId.init -> void
+Nuplane.Reconciliation.Models.FeedResolutionDecision.RequestedFeed.get -> string?
+Nuplane.Reconciliation.Models.FeedResolutionDecision.RequestedFeed.init -> void
+Nuplane.Reconciliation.Models.FeedResolutionDecision.SelectedFeed.get -> string?
+Nuplane.Reconciliation.Models.FeedResolutionDecision.SelectedFeed.init -> void
+Nuplane.Reconciliation.Models.FeedResolutionDecision.SelectedVersion.get -> string?
+Nuplane.Reconciliation.Models.FeedResolutionDecision.SelectedVersion.init -> void
+Nuplane.Reconciliation.Models.PackageNodeRole
+Nuplane.Reconciliation.Models.PackageNodeRole.Dependency = 1 -> Nuplane.Reconciliation.Models.PackageNodeRole
+Nuplane.Reconciliation.Models.PackageNodeRole.Root = 0 -> Nuplane.Reconciliation.Models.PackageNodeRole
+Nuplane.Reconciliation.Models.PackageNodeRole.RootAndDependency = 2 -> Nuplane.Reconciliation.Models.PackageNodeRole
+Nuplane.Reconciliation.Models.PackageSourceKind
+Nuplane.Reconciliation.Models.PackageSourceKind.LocalDirectory = 1 -> Nuplane.Reconciliation.Models.PackageSourceKind
+Nuplane.Reconciliation.Models.PackageSourceKind.RemoteFeed = 0 -> Nuplane.Reconciliation.Models.PackageSourceKind
+Nuplane.Reconciliation.Models.ReconciliationRunResult
+Nuplane.Reconciliation.Models.ReconciliationRunResult.<Clone>$() -> Nuplane.Reconciliation.Models.ReconciliationRunResult!
+Nuplane.Reconciliation.Models.ReconciliationRunResult.ChangeSet.get -> Nuplane.Abstractions.PackageChangeSet!
+Nuplane.Reconciliation.Models.ReconciliationRunResult.ChangeSet.init -> void
+Nuplane.Reconciliation.Models.ReconciliationRunResult.Deconstruct(out bool Skipped, out Nuplane.Abstractions.PackageChangeSet! ChangeSet, out System.Collections.Generic.IReadOnlyList<string!>! FailedPackages, out bool IsDegraded) -> void
+Nuplane.Reconciliation.Models.ReconciliationRunResult.Equals(Nuplane.Reconciliation.Models.ReconciliationRunResult? other) -> bool
+Nuplane.Reconciliation.Models.ReconciliationRunResult.FailedPackages.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Reconciliation.Models.ReconciliationRunResult.FailedPackages.init -> void
+Nuplane.Reconciliation.Models.ReconciliationRunResult.IsDegraded.get -> bool
+Nuplane.Reconciliation.Models.ReconciliationRunResult.IsDegraded.init -> void
+Nuplane.Reconciliation.Models.ReconciliationRunResult.ReconciliationRunResult(bool Skipped, Nuplane.Abstractions.PackageChangeSet! ChangeSet, System.Collections.Generic.IReadOnlyList<string!>! FailedPackages, bool IsDegraded) -> void
+Nuplane.Reconciliation.Models.ReconciliationRunResult.SkipReason.get -> Nuplane.Reconciliation.Models.ReconciliationSkipReason
+Nuplane.Reconciliation.Models.ReconciliationRunResult.SkipReason.init -> void
+Nuplane.Reconciliation.Models.ReconciliationRunResult.Skipped.get -> bool
+Nuplane.Reconciliation.Models.ReconciliationRunResult.Skipped.init -> void
+Nuplane.Reconciliation.Models.ReconciliationSkipReason
+Nuplane.Reconciliation.Models.ReconciliationSkipReason.None = 0 -> Nuplane.Reconciliation.Models.ReconciliationSkipReason
+Nuplane.Reconciliation.Models.ReconciliationSkipReason.SingleFlight = 1 -> Nuplane.Reconciliation.Models.ReconciliationSkipReason
+Nuplane.Reconciliation.Models.ReconciliationSkipReason.StoreLockUnavailable = 2 -> Nuplane.Reconciliation.Models.ReconciliationSkipReason
+Nuplane.Reconciliation.Models.ReconciliationTrigger
+Nuplane.Reconciliation.Models.ReconciliationTrigger.<Clone>$() -> Nuplane.Reconciliation.Models.ReconciliationTrigger!
+Nuplane.Reconciliation.Models.ReconciliationTrigger.CorrelationId.get -> string?
+Nuplane.Reconciliation.Models.ReconciliationTrigger.Equals(Nuplane.Reconciliation.Models.ReconciliationTrigger? other) -> bool
+Nuplane.Reconciliation.Models.ReconciliationTrigger.ObservationKind.get -> Nuplane.Reconciliation.Models.FeedObservationKind?
+Nuplane.Reconciliation.Models.ReconciliationTrigger.ObservedOrigin.get -> Nuplane.Reconciliation.Models.FeedObservationOrigin?
+Nuplane.Reconciliation.Models.ReconciliationTrigger.ReconciliationTrigger(Nuplane.Reconciliation.Models.FeedObservationOrigin! observedOrigin, string? correlationId = null) -> void
+Nuplane.Reconciliation.Models.ReconciliationTrigger.ReconciliationTrigger(Nuplane.Reconciliation.Models.TriggerType type, string? correlationId = null) -> void
+Nuplane.Reconciliation.Models.ReconciliationTrigger.ReconciliationTrigger(Nuplane.Reconciliation.Models.TriggerType type, string? source, string? correlationId, Nuplane.Reconciliation.Models.FeedObservationKind? observationKind) -> void
+Nuplane.Reconciliation.Models.ReconciliationTrigger.Source.get -> string?
+Nuplane.Reconciliation.Models.ReconciliationTrigger.Type.get -> Nuplane.Reconciliation.Models.TriggerType
+Nuplane.Reconciliation.Models.ResolvedPackageGraph
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.<Clone>$() -> Nuplane.Reconciliation.Models.ResolvedPackageGraph!
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.CreateImmutableSnapshot() -> Nuplane.Reconciliation.Models.ResolvedPackageGraph!
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.CreatedAtUtc.get -> System.DateTimeOffset
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.CreatedAtUtc.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.Deconstruct(out string! GraphId, out string! GenerationId, out string! TargetFramework, out System.Collections.Generic.IReadOnlyList<Nuplane.Reconciliation.Models.ResolvedPackageNode!>! Roots, out System.Collections.Generic.IReadOnlyList<Nuplane.Reconciliation.Models.ResolvedPackageNode!>! Nodes, out System.Collections.Generic.IReadOnlyList<Nuplane.Reconciliation.Models.DependencyEdge!>! Edges, out System.Collections.Generic.IReadOnlyList<Nuplane.Reconciliation.Models.FeedResolutionDecision!>! SourceDecisions, out System.DateTimeOffset CreatedAtUtc) -> void
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.Edges.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Reconciliation.Models.DependencyEdge!>!
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.Edges.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.Equals(Nuplane.Reconciliation.Models.ResolvedPackageGraph? other) -> bool
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.GenerationId.get -> string!
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.GenerationId.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.GraphId.get -> string!
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.GraphId.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.Nodes.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Reconciliation.Models.ResolvedPackageNode!>!
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.Nodes.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.ResolvedPackageGraph(string! GraphId, string! GenerationId, string! TargetFramework, System.Collections.Generic.IReadOnlyList<Nuplane.Reconciliation.Models.ResolvedPackageNode!>! Roots, System.Collections.Generic.IReadOnlyList<Nuplane.Reconciliation.Models.ResolvedPackageNode!>! Nodes, System.Collections.Generic.IReadOnlyList<Nuplane.Reconciliation.Models.DependencyEdge!>! Edges, System.Collections.Generic.IReadOnlyList<Nuplane.Reconciliation.Models.FeedResolutionDecision!>! SourceDecisions, System.DateTimeOffset CreatedAtUtc) -> void
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.Roots.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Reconciliation.Models.ResolvedPackageNode!>!
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.Roots.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.SourceDecisions.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Reconciliation.Models.FeedResolutionDecision!>!
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.SourceDecisions.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.TargetFramework.get -> string!
+Nuplane.Reconciliation.Models.ResolvedPackageGraph.TargetFramework.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageNode
+Nuplane.Reconciliation.Models.ResolvedPackageNode.<Clone>$() -> Nuplane.Reconciliation.Models.ResolvedPackageNode!
+Nuplane.Reconciliation.Models.ResolvedPackageNode.Deconstruct(out string! PackageId, out string! Version, out Nuplane.Reconciliation.Models.PackageNodeRole Role, out string? InstallPath, out Nuplane.Reconciliation.Models.PackageSourceKind SourceKind, out string? SourceName, out string? PackageContentHash, out System.Collections.Generic.IReadOnlyList<string!>! RuntimeAssets, out System.Collections.Generic.IReadOnlyList<string!>! DiscoverableAssets, out System.Collections.Generic.IReadOnlyList<string!>! SupportAssets) -> void
+Nuplane.Reconciliation.Models.ResolvedPackageNode.DiscoverableAssets.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Reconciliation.Models.ResolvedPackageNode.DiscoverableAssets.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageNode.Equals(Nuplane.Reconciliation.Models.ResolvedPackageNode? other) -> bool
+Nuplane.Reconciliation.Models.ResolvedPackageNode.InstallPath.get -> string?
+Nuplane.Reconciliation.Models.ResolvedPackageNode.InstallPath.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageNode.PackageContentHash.get -> string?
+Nuplane.Reconciliation.Models.ResolvedPackageNode.PackageContentHash.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageNode.PackageId.get -> string!
+Nuplane.Reconciliation.Models.ResolvedPackageNode.PackageId.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageNode.ResolvedPackageNode(string! PackageId, string! Version, Nuplane.Reconciliation.Models.PackageNodeRole Role, string? InstallPath, Nuplane.Reconciliation.Models.PackageSourceKind SourceKind, string? SourceName, string? PackageContentHash, System.Collections.Generic.IReadOnlyList<string!>! RuntimeAssets, System.Collections.Generic.IReadOnlyList<string!>! DiscoverableAssets, System.Collections.Generic.IReadOnlyList<string!>! SupportAssets) -> void
+Nuplane.Reconciliation.Models.ResolvedPackageNode.Role.get -> Nuplane.Reconciliation.Models.PackageNodeRole
+Nuplane.Reconciliation.Models.ResolvedPackageNode.Role.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageNode.RuntimeAssets.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Reconciliation.Models.ResolvedPackageNode.RuntimeAssets.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageNode.SourceKind.get -> Nuplane.Reconciliation.Models.PackageSourceKind
+Nuplane.Reconciliation.Models.ResolvedPackageNode.SourceKind.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageNode.SourceName.get -> string?
+Nuplane.Reconciliation.Models.ResolvedPackageNode.SourceName.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageNode.SupportAssets.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Reconciliation.Models.ResolvedPackageNode.SupportAssets.init -> void
+Nuplane.Reconciliation.Models.ResolvedPackageNode.Version.get -> string!
+Nuplane.Reconciliation.Models.ResolvedPackageNode.Version.init -> void
+Nuplane.Reconciliation.Models.TriggerType
+Nuplane.Reconciliation.Models.TriggerType.Manual = 2 -> Nuplane.Reconciliation.Models.TriggerType
+Nuplane.Reconciliation.Models.TriggerType.ObservedChange = 1 -> Nuplane.Reconciliation.Models.TriggerType
+Nuplane.Reconciliation.Models.TriggerType.Scheduled = 0 -> Nuplane.Reconciliation.Models.TriggerType
+Nuplane.Reconciliation.Models.TriggerType.Startup = 3 -> Nuplane.Reconciliation.Models.TriggerType
+Nuplane.Setup.NuplaneSetupOptions
+Nuplane.Setup.NuplaneSetupOptions.Feeds.get -> System.Collections.Generic.List<Nuplane.Feeds.Setup.NuplaneFeedSetupOptions!>!
+Nuplane.Setup.NuplaneSetupOptions.Feeds.set -> void
+Nuplane.Setup.NuplaneSetupOptions.NuplaneSetupOptions() -> void
+Nuplane.Sources.Configuration.DesiredStateOptions
+Nuplane.Sources.Configuration.DesiredStateOptions.DesiredStateOptions() -> void
+Nuplane.Sources.Configuration.DesiredStateOptions.GetPriority(string! sourceName) -> int
+Nuplane.Sources.Configuration.DesiredStateOptions.Manifest.get -> Nuplane.Sources.ManifestOptions!
+Nuplane.Sources.Configuration.DesiredStateOptions.SetPriority(string! sourceName, int priority) -> void
+Nuplane.Sources.Configuration.DesiredStateOptions.SourcePriorities.get -> System.Collections.Generic.Dictionary<string!, int>!
+Nuplane.Sources.Directory.Builder.NuplaneBuilderDirectoryExtensions
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Credentials.get -> string?
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Credentials.set -> void
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.DebounceWindow.get -> System.TimeSpan
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.DebounceWindow.set -> void
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Include(string! pattern) -> Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration!
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.IncludeAll() -> Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration!
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.NuplaneDirectoryFeedConfiguration() -> void
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Role.get -> Nuplane.Feeds.Setup.DirectoryFeedRole
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Role.set -> void
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Trust.get -> Nuplane.Abstractions.FeedTrustLevel
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Trust.set -> void
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Watch.get -> bool
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Watch.set -> void
+Nuplane.Sources.ManifestOptions
+Nuplane.Sources.ManifestOptions.Enabled.get -> bool
+Nuplane.Sources.ManifestOptions.Enabled.set -> void
+Nuplane.Sources.ManifestOptions.ManifestOptions() -> void
+Nuplane.Sources.ManifestOptions.Path.get -> string?
+Nuplane.Sources.ManifestOptions.Path.set -> void
+Nuplane.Sources.ManifestOptions.SchemaVersion.get -> string!
+Nuplane.Sources.ManifestOptions.SchemaVersion.set -> void
+Nuplane.Store.Cleanup.CleanupExecutionMode
+Nuplane.Store.Cleanup.CleanupExecutionMode.Automatic = 0 -> Nuplane.Store.Cleanup.CleanupExecutionMode
+Nuplane.Store.Cleanup.CleanupExecutionMode.ManualOnly = 1 -> Nuplane.Store.Cleanup.CleanupExecutionMode
+Nuplane.Store.Cleanup.CleanupPolicyOptions
+Nuplane.Store.Cleanup.CleanupPolicyOptions.CleanupPolicyOptions() -> void
+Nuplane.Store.Cleanup.CleanupPolicyOptions.IsRetainedByUnion(int versionOrdinalFromNewest, int ageInDays) -> bool
+Nuplane.Store.Cleanup.CleanupPolicyOptions.Mode.get -> Nuplane.Store.Cleanup.CleanupExecutionMode
+Nuplane.Store.Cleanup.CleanupPolicyOptions.Mode.set -> void
+Nuplane.Store.Cleanup.CleanupPolicyOptions.ProtectLastKnownGood.get -> bool
+Nuplane.Store.Cleanup.CleanupPolicyOptions.ProtectLastKnownGood.set -> void
+Nuplane.Store.Cleanup.CleanupPolicyOptions.RetainLastNVersions.get -> int?
+Nuplane.Store.Cleanup.CleanupPolicyOptions.RetainLastNVersions.set -> void
+Nuplane.Store.Cleanup.CleanupPolicyOptions.RetainYoungerThanDays.get -> int?
+Nuplane.Store.Cleanup.CleanupPolicyOptions.RetainYoungerThanDays.set -> void
+Nuplane.Store.Coordination.IResolvedPackageGraphUseLeaseAcquisition
+Nuplane.Store.Coordination.IResolvedPackageGraphUseLeaseAcquisition.AcquireForRootAsync(Nuplane.Abstractions.PackageStoreProtection.PackageStoreOperationBorrow! borrow, Nuplane.Reconciliation.Models.ResolvedPackageGraph! graph, System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageRequest!>! originalRootRequests, Nuplane.Abstractions.PackageStoreProtection.PackageGraphUseSnapshotState snapshotState, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Nuplane.Abstractions.PackageStoreProtection.PackageGraphUseLeaseOwner!>
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle.BundleDigest.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle.LogicalMemberId.get -> System.Guid
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle.ParticipantSetDigest.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle.PublicationId.get -> System.Guid
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle.Rows.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundleRootRow!>!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle.SchemaVersion.get -> int
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle.StateBodyDigest.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle.StateGeneration.get -> long
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundleRootRow
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundleRootRow.ActiveClosure.get -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosureV2!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundleRootRow.EnrollmentEpoch.get -> long
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundleRootRow.LegacyUnknownRecovery.get -> bool
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundleRootRow.MemberId.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundleRootRow.ProtectionDigest.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundleRootRow.RecoverableClosure.get -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosureV2!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundleRootRow.RetiredGraphs.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphEvidence!>!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundleRootRow.Revision.get -> long
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundleRootRow.RootIdentity.get -> Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundleRootRow.StateBodyDigest.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundleRootRow.StateGeneration.get -> long
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosure
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosure.Graphs.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshot!>?
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosure.Knowledge.get -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosureKnowledge
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosure.UnknownReason.get -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode?
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosureKnowledge
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosureKnowledge.Known = 1 -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosureKnowledge
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosureKnowledge.Unknown = 0 -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosureKnowledge
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosureV2
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosureV2.Graphs.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshotV2!>?
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosureV2.Knowledge.get -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosureKnowledge
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosureV2.UnknownReason.get -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode?
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionRecord
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionRecord.ActiveClosure.get -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosure!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionRecord.EnrollmentEpoch.get -> long
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionRecord.LegacyUnknownRecovery.get -> bool
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionRecord.MemberId.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionRecord.ProtectionDigest.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionRecord.RecoverableClosure.get -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionClosure!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionRecord.RetiredGraphs.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphEvidence!>!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionRecord.Revision.get -> long
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionRecord.RootIdentity.get -> Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionRecord.SchemaVersion.get -> int
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionRecord.StateBodyDigest.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode.ActiveGraphIncomplete = 2 -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode.LegacyProtectionMissing = 1 -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode.MalformedPersistedProtection = 5 -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode.RecoveryClosureUnavailable = 3 -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode.SerializerNotParticipating = 4 -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode
+Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode.UnsupportedSchemaVersion = 6 -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionUnknownReasonCode
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphDisposition
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphDisposition.Active = 1 -> Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphDisposition
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphDisposition.ActiveAndRecoverable = Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphDisposition.Active | Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphDisposition.Recoverable -> Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphDisposition
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphDisposition.Recoverable = 2 -> Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphDisposition
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphRecoverySelectionEvidence
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphRecoverySelectionEvidence.RecoveryPolicyId.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphRecoverySelectionEvidence.SelectedRootNodeIds.get -> System.Collections.Generic.IReadOnlyList<System.Guid>!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphRecoverySelectionEvidence.SourceRevision.get -> long
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphRecoverySelectionEvidenceV2
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphRecoverySelectionEvidenceV2.RecoveryPolicyId.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphRecoverySelectionEvidenceV2.SelectedRootNodeIds.get -> System.Collections.Generic.IReadOnlyList<System.Guid>!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphRecoverySelectionEvidenceV2.SourceGeneration.get -> long
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshot
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshot.Disposition.get -> Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphDisposition
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshot.Edges.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageStoreProtection.PackageGraphEdgeIdentity!>!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshot.GenerationId.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshot.GraphId.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshot.Nodes.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageStoreProtection.PackageGraphNodeIdentity!>!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshot.RecoverySelectionEvidence.get -> Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphRecoverySelectionEvidence?
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshot.RequestedRoots.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageStoreProtection.PackageGraphRootSelection!>!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshot.Roots.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity!>!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshot.SnapshotId.get -> System.Guid
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshotV2
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshotV2.Disposition.get -> Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphDisposition
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshotV2.Edges.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageStoreProtection.PackageGraphEdgeIdentity!>!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshotV2.GenerationId.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshotV2.GraphId.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshotV2.Nodes.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageStoreProtection.PackageGraphNodeIdentity!>!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshotV2.RecoverySelectionEvidence.get -> Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphRecoverySelectionEvidenceV2?
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshotV2.RequestedRoots.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageStoreProtection.PackageGraphRootSelection!>!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshotV2.Roots.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageStoreProtection.PhysicalRootIdentity!>!
+Nuplane.Store.Coordination.ProtectionRecords.ProtectedGraphSnapshotV2.SnapshotId.get -> System.Guid
+Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphEvidence
+Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphEvidence.GenerationId.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphEvidence.GraphId.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphEvidence.ProofDigest.get -> string!
+Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphEvidence.Reason.get -> Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphReason
+Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphEvidence.RetiringEpoch.get -> long
+Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphEvidence.RetiringRevision.get -> long
+Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphEvidence.SnapshotId.get -> System.Guid
+Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphReason
+Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphReason.QuiescentOperatorRetirement = 2 -> Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphReason
+Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphReason.RecoveryPolicyNoLongerSelects = 1 -> Nuplane.Store.Coordination.ProtectionRecords.RetiredGraphReason
+Nuplane.Store.Maintenance.PackageStoreMaintenanceOptions
+Nuplane.Store.Maintenance.PackageStoreMaintenanceOptions.PackageStoreMaintenanceOptions() -> void
+Nuplane.Store.Maintenance.PackageStoreMaintenanceOptions.RootLabel.get -> string?
+Nuplane.Store.Maintenance.PackageStoreMaintenanceOptions.RootLabel.set -> void
+Nuplane.Store.State.FailureRecord
+Nuplane.Store.State.FailureRecord.<Clone>$() -> Nuplane.Store.State.FailureRecord!
+Nuplane.Store.State.FailureRecord.CorrelationId.get -> string!
+Nuplane.Store.State.FailureRecord.CorrelationId.init -> void
+Nuplane.Store.State.FailureRecord.Deconstruct(out string! PackageId, out string! Stage, out string! Message, out System.DateTimeOffset OccurredAt, out string! CorrelationId) -> void
+Nuplane.Store.State.FailureRecord.Equals(Nuplane.Store.State.FailureRecord? other) -> bool
+Nuplane.Store.State.FailureRecord.FailureRecord(string! PackageId, string! Stage, string! Message, System.DateTimeOffset OccurredAt, string! CorrelationId) -> void
+Nuplane.Store.State.FailureRecord.Message.get -> string!
+Nuplane.Store.State.FailureRecord.Message.init -> void
+Nuplane.Store.State.FailureRecord.OccurredAt.get -> System.DateTimeOffset
+Nuplane.Store.State.FailureRecord.OccurredAt.init -> void
+Nuplane.Store.State.FailureRecord.PackageId.get -> string!
+Nuplane.Store.State.FailureRecord.PackageId.init -> void
+Nuplane.Store.State.FailureRecord.Stage.get -> string!
+Nuplane.Store.State.FailureRecord.Stage.init -> void
+Nuplane.Store.State.GraphActivationFailure
+Nuplane.Store.State.GraphActivationFailure.<Clone>$() -> Nuplane.Store.State.GraphActivationFailure!
+Nuplane.Store.State.GraphActivationFailure.CyclePath.get -> System.Collections.Generic.IReadOnlyList<string!>?
+Nuplane.Store.State.GraphActivationFailure.CyclePath.init -> void
+Nuplane.Store.State.GraphActivationFailure.Deconstruct(out string! FailureStage, out string! ReasonCode, out string! Message, out System.Collections.Generic.IReadOnlyList<string!>? CyclePath, out string? UnsupportedAssetPath) -> void
+Nuplane.Store.State.GraphActivationFailure.Equals(Nuplane.Store.State.GraphActivationFailure? other) -> bool
+Nuplane.Store.State.GraphActivationFailure.FailureStage.get -> string!
+Nuplane.Store.State.GraphActivationFailure.FailureStage.init -> void
+Nuplane.Store.State.GraphActivationFailure.GraphActivationFailure(string! FailureStage, string! ReasonCode, string! Message, System.Collections.Generic.IReadOnlyList<string!>? CyclePath = null, string? UnsupportedAssetPath = null) -> void
+Nuplane.Store.State.GraphActivationFailure.Message.get -> string!
+Nuplane.Store.State.GraphActivationFailure.Message.init -> void
+Nuplane.Store.State.GraphActivationFailure.ReasonCode.get -> string!
+Nuplane.Store.State.GraphActivationFailure.ReasonCode.init -> void
+Nuplane.Store.State.GraphActivationFailure.UnsupportedAssetPath.get -> string?
+Nuplane.Store.State.GraphActivationFailure.UnsupportedAssetPath.init -> void
+Nuplane.Store.State.GraphActivationRecord
+Nuplane.Store.State.GraphActivationRecord.<Clone>$() -> Nuplane.Store.State.GraphActivationRecord!
+Nuplane.Store.State.GraphActivationRecord.ActivatedAtUtc.get -> System.DateTimeOffset
+Nuplane.Store.State.GraphActivationRecord.ActivatedAtUtc.init -> void
+Nuplane.Store.State.GraphActivationRecord.CorrelationId.get -> string!
+Nuplane.Store.State.GraphActivationRecord.CorrelationId.init -> void
+Nuplane.Store.State.GraphActivationRecord.Deconstruct(out string! GraphId, out string! GenerationId, out System.Collections.Generic.IReadOnlyList<string!>! RootPackageIds, out System.Collections.Generic.IReadOnlyList<string!>! NodePackageIds, out System.DateTimeOffset ActivatedAtUtc, out string! CorrelationId, out Nuplane.Store.State.GraphActivationStatus Status, out Nuplane.Store.State.GraphActivationFailure? Failure, out System.Collections.Generic.IReadOnlyDictionary<string!, string!>? NodeVersionsByPackageId) -> void
+Nuplane.Store.State.GraphActivationRecord.Equals(Nuplane.Store.State.GraphActivationRecord? other) -> bool
+Nuplane.Store.State.GraphActivationRecord.Failure.get -> Nuplane.Store.State.GraphActivationFailure?
+Nuplane.Store.State.GraphActivationRecord.Failure.init -> void
+Nuplane.Store.State.GraphActivationRecord.GenerationId.get -> string!
+Nuplane.Store.State.GraphActivationRecord.GenerationId.init -> void
+Nuplane.Store.State.GraphActivationRecord.GraphActivationRecord(string! GraphId, string! GenerationId, System.Collections.Generic.IReadOnlyList<string!>! RootPackageIds, System.Collections.Generic.IReadOnlyList<string!>! NodePackageIds, System.DateTimeOffset ActivatedAtUtc, string! CorrelationId, Nuplane.Store.State.GraphActivationStatus Status, Nuplane.Store.State.GraphActivationFailure? Failure = null, System.Collections.Generic.IReadOnlyDictionary<string!, string!>? NodeVersionsByPackageId = null) -> void
+Nuplane.Store.State.GraphActivationRecord.GraphId.get -> string!
+Nuplane.Store.State.GraphActivationRecord.GraphId.init -> void
+Nuplane.Store.State.GraphActivationRecord.NodePackageIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Store.State.GraphActivationRecord.NodePackageIds.init -> void
+Nuplane.Store.State.GraphActivationRecord.NodeVersionsByPackageId.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+Nuplane.Store.State.GraphActivationRecord.NodeVersionsByPackageId.init -> void
+Nuplane.Store.State.GraphActivationRecord.RootPackageIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Store.State.GraphActivationRecord.RootPackageIds.init -> void
+Nuplane.Store.State.GraphActivationRecord.Status.get -> Nuplane.Store.State.GraphActivationStatus
+Nuplane.Store.State.GraphActivationRecord.Status.init -> void
+Nuplane.Store.State.GraphActivationStatus
+Nuplane.Store.State.GraphActivationStatus.Active = 0 -> Nuplane.Store.State.GraphActivationStatus
+Nuplane.Store.State.GraphActivationStatus.Failed = 2 -> Nuplane.Store.State.GraphActivationStatus
+Nuplane.Store.State.GraphActivationStatus.Replaced = 3 -> Nuplane.Store.State.GraphActivationStatus
+Nuplane.Store.State.GraphActivationStatus.Stale = 1 -> Nuplane.Store.State.GraphActivationStatus
+Nuplane.Store.State.ICoordinatedStoreRegistry
+Nuplane.Store.State.ICoordinatedStoreRegistry.PersistCoordinatedActiveStateAsync(Nuplane.Abstractions.PackageStoreProtection.PackageStoreOperationBorrow! borrow, Nuplane.Store.State.StoreStateRecord! completeNextState, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Store.State.ICoordinatedStoreRegistry.PersistCoordinatedFailureAsync(Nuplane.Abstractions.PackageStoreProtection.PackageStoreOperationBorrow! borrow, string! packageId, string! stage, string! message, string! correlationId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Store.State.ICoordinatedStoreRegistry.PersistCoordinatedSourceSnapshotAsync(Nuplane.Abstractions.PackageStoreProtection.PackageStoreOperationBorrow! borrow, string! sourceName, Nuplane.Store.State.SourceSnapshotRef! snapshot, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Store.State.ICoordinatedStoreRegistry.ReadCoordinatedStateAsync(Nuplane.Abstractions.PackageStoreProtection.PackageStoreOperationBorrow! borrow, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Store.State.StoreStateRecord!>!
+Nuplane.Store.State.IPackageProtectionBundleStatePayloadSerializer
+Nuplane.Store.State.IPackageProtectionStatePayloadSerializer
+Nuplane.Store.State.IPackageProtectionStatePayloadSerializer.ReadPayloadAsync(System.IO.Stream! payload, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Store.State.StoreStateRecord!>!
+Nuplane.Store.State.IPackageProtectionStatePayloadSerializer.WritePayloadAsync(System.IO.Stream! payload, Nuplane.Store.State.StoreStateRecord! state, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Store.State.IPackageProtectionStateSerializer
+Nuplane.Store.State.IStoreRegistry
+Nuplane.Store.State.IStoreRegistry.GetActivePackagesAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyDictionary<string!, Nuplane.Abstractions.ActivePackage!>!>!
+Nuplane.Store.State.IStoreRegistry.GetActiveVersionsAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyDictionary<string!, string!>!>!
+Nuplane.Store.State.IStoreRegistry.GetStateAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Store.State.StoreStateRecord!>!
+Nuplane.Store.State.IStoreRegistry.PersistActiveVersionsAsync(System.Collections.Generic.IReadOnlyDictionary<string!, string!>! activeVersions, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! successfullyApplied, string! correlationId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Store.State.IStoreRegistry.PersistActiveVersionsAsync(System.Collections.Generic.IReadOnlyDictionary<string!, string!>! activeVersions, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! successfullyApplied, string! correlationId, System.Threading.CancellationToken cancellationToken, System.Collections.Generic.IReadOnlyDictionary<string!, Nuplane.Abstractions.ActivePackage!>? activePackages) -> System.Threading.Tasks.Task!
+Nuplane.Store.State.IStoreRegistry.PersistActiveVersionsAsync(System.Collections.Generic.IReadOnlyDictionary<string!, string!>! activeVersions, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! successfullyApplied, string! correlationId, System.Threading.CancellationToken cancellationToken, System.Collections.Generic.IReadOnlyDictionary<string!, Nuplane.Abstractions.ActivePackage!>? activePackages, System.Collections.Generic.IReadOnlyDictionary<string!, Nuplane.Store.State.GraphActivationRecord!>? activeGraphs) -> System.Threading.Tasks.Task!
+Nuplane.Store.State.IStoreRegistry.PersistFailureAsync(string! packageId, string! stage, string! message, string! correlationId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Store.State.IStoreRegistry.PersistSourceSnapshotAsync(string! sourceName, Nuplane.Store.State.SourceSnapshotRef! snapshot, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Store.State.IStoreStateSerializer
+Nuplane.Store.State.IStoreStateSerializer.LoadAsync(string! stateFilePath, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Store.State.StoreStateRecord!>!
+Nuplane.Store.State.IStoreStateSerializer.SaveAsync(string! stateFilePath, Nuplane.Store.State.StoreStateRecord! state, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Nuplane.Store.State.SourceSnapshotRef
+Nuplane.Store.State.SourceSnapshotRef.<Clone>$() -> Nuplane.Store.State.SourceSnapshotRef!
+Nuplane.Store.State.SourceSnapshotRef.CapturedAt.get -> System.DateTimeOffset
+Nuplane.Store.State.SourceSnapshotRef.CapturedAt.init -> void
+Nuplane.Store.State.SourceSnapshotRef.Deconstruct(out string! Version, out System.DateTimeOffset CapturedAt, out System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageRequest!>? Requests) -> void
+Nuplane.Store.State.SourceSnapshotRef.Equals(Nuplane.Store.State.SourceSnapshotRef? other) -> bool
+Nuplane.Store.State.SourceSnapshotRef.Requests.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageRequest!>?
+Nuplane.Store.State.SourceSnapshotRef.Requests.init -> void
+Nuplane.Store.State.SourceSnapshotRef.SourceSnapshotRef(string! Version, System.DateTimeOffset CapturedAt, System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageRequest!>? Requests = null) -> void
+Nuplane.Store.State.SourceSnapshotRef.Version.get -> string!
+Nuplane.Store.State.SourceSnapshotRef.Version.init -> void
+Nuplane.Store.State.StoreRegistryOptions
+Nuplane.Store.State.StoreRegistryOptions.StateFilePath.get -> string?
+Nuplane.Store.State.StoreRegistryOptions.StateFilePath.set -> void
+Nuplane.Store.State.StoreRegistryOptions.StoreRegistryOptions() -> void
+Nuplane.Store.State.StoreRegistryOptions.UseInMemoryStore.get -> bool
+Nuplane.Store.State.StoreRegistryOptions.UseInMemoryStore.set -> void
+Nuplane.Store.State.StoreStateRecord
+Nuplane.Store.State.StoreStateRecord.<Clone>$() -> Nuplane.Store.State.StoreStateRecord!
+Nuplane.Store.State.StoreStateRecord.ActiveGraphsById.get -> System.Collections.Generic.Dictionary<string!, Nuplane.Store.State.GraphActivationRecord!>?
+Nuplane.Store.State.StoreStateRecord.ActiveGraphsById.init -> void
+Nuplane.Store.State.StoreStateRecord.ActiveGraphsByIdNormalized.get -> System.Collections.Generic.Dictionary<string!, Nuplane.Store.State.GraphActivationRecord!>!
+Nuplane.Store.State.StoreStateRecord.ActivePackageDescriptorsById.get -> System.Collections.Generic.Dictionary<string!, Nuplane.Abstractions.ActivePackage!>?
+Nuplane.Store.State.StoreStateRecord.ActivePackageDescriptorsById.init -> void
+Nuplane.Store.State.StoreStateRecord.ActivePackageDescriptorsByIdNormalized.get -> System.Collections.Generic.Dictionary<string!, Nuplane.Abstractions.ActivePackage!>!
+Nuplane.Store.State.StoreStateRecord.ActiveVersionById.get -> System.Collections.Generic.Dictionary<string!, string!>!
+Nuplane.Store.State.StoreStateRecord.ActiveVersionById.init -> void
+Nuplane.Store.State.StoreStateRecord.ArchiveHashesByPackage.get -> System.Collections.Generic.Dictionary<string!, string!>?
+Nuplane.Store.State.StoreStateRecord.ArchiveHashesByPackage.init -> void
+Nuplane.Store.State.StoreStateRecord.Deconstruct(out System.Collections.Generic.Dictionary<string!, string!>! ActiveVersionById, out System.Collections.Generic.Dictionary<string!, string!>! LastKnownGoodById, out System.Collections.Generic.Dictionary<string!, Nuplane.Store.State.FailureRecord!>! LastFailureById, out System.Collections.Generic.Dictionary<string!, Nuplane.Store.State.SourceSnapshotRef!>! LastSuccessfulSourceSnapshots, out System.DateTimeOffset UpdatedAt, out System.Collections.Generic.Dictionary<string!, Nuplane.Abstractions.ActivePackage!>? ActivePackageDescriptorsById, out System.Collections.Generic.Dictionary<string!, Nuplane.Store.State.GraphActivationRecord!>? ActiveGraphsById) -> void
+Nuplane.Store.State.StoreStateRecord.Equals(Nuplane.Store.State.StoreStateRecord? other) -> bool
+Nuplane.Store.State.StoreStateRecord.LastFailureById.get -> System.Collections.Generic.Dictionary<string!, Nuplane.Store.State.FailureRecord!>!
+Nuplane.Store.State.StoreStateRecord.LastFailureById.init -> void
+Nuplane.Store.State.StoreStateRecord.LastKnownGoodById.get -> System.Collections.Generic.Dictionary<string!, string!>!
+Nuplane.Store.State.StoreStateRecord.LastKnownGoodById.init -> void
+Nuplane.Store.State.StoreStateRecord.LastSuccessfulSourceSnapshots.get -> System.Collections.Generic.Dictionary<string!, Nuplane.Store.State.SourceSnapshotRef!>!
+Nuplane.Store.State.StoreStateRecord.LastSuccessfulSourceSnapshots.init -> void
+Nuplane.Store.State.StoreStateRecord.ProtectionBundle.get -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle?
+Nuplane.Store.State.StoreStateRecord.ProtectionBundle.init -> void
+Nuplane.Store.State.StoreStateRecord.ProtectionRecord.get -> Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionRecord?
+Nuplane.Store.State.StoreStateRecord.ProtectionRecord.init -> void
+Nuplane.Store.State.StoreStateRecord.StoreStateRecord(System.Collections.Generic.Dictionary<string!, string!>! ActiveVersionById, System.Collections.Generic.Dictionary<string!, string!>! LastKnownGoodById, System.Collections.Generic.Dictionary<string!, Nuplane.Store.State.FailureRecord!>! LastFailureById, System.Collections.Generic.Dictionary<string!, Nuplane.Store.State.SourceSnapshotRef!>! LastSuccessfulSourceSnapshots, System.DateTimeOffset UpdatedAt, System.Collections.Generic.Dictionary<string!, Nuplane.Abstractions.ActivePackage!>? ActivePackageDescriptorsById = null, System.Collections.Generic.Dictionary<string!, Nuplane.Store.State.GraphActivationRecord!>? ActiveGraphsById = null) -> void
+Nuplane.Store.State.StoreStateRecord.UpdatedAt.get -> System.DateTimeOffset
+Nuplane.Store.State.StoreStateRecord.UpdatedAt.init -> void
+const Nuplane.Metadata.NuplanePackageMetadataReader.MetadataFileName = "nuplane.json" -> string!
+const Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionBundle.CurrentSchemaVersion = 2 -> int
+const Nuplane.Store.Coordination.ProtectionRecords.PackageProtectionRecord.CurrentSchemaVersion = 1 -> int
+override Nuplane.Builder.PackageStoreMemberDeclaration.Equals(object? obj) -> bool
+override Nuplane.Builder.PackageStoreMemberDeclaration.GetHashCode() -> int
+override Nuplane.Builder.PackageStoreMemberDeclaration.ToString() -> string!
+override Nuplane.DesiredPackageDescription.Equals(object? obj) -> bool
+override Nuplane.DesiredPackageDescription.GetHashCode() -> int
+override Nuplane.DesiredPackageDescription.ToString() -> string!
+override Nuplane.Feeds.Configuration.FeedTrustOverride.Equals(object? obj) -> bool
+override Nuplane.Feeds.Configuration.FeedTrustOverride.GetHashCode() -> int
+override Nuplane.Feeds.Configuration.FeedTrustOverride.ToString() -> string!
+override Nuplane.Metadata.NuplanePackageMetadataReadResult.Equals(object? obj) -> bool
+override Nuplane.Metadata.NuplanePackageMetadataReadResult.GetHashCode() -> int
+override Nuplane.Metadata.NuplanePackageMetadataReadResult.ToString() -> string!
+override Nuplane.NuplaneDesiredDescription.Equals(object? obj) -> bool
+override Nuplane.NuplaneDesiredDescription.GetHashCode() -> int
+override Nuplane.NuplaneDesiredDescription.ToString() -> string!
+override Nuplane.NuplaneRestoreResult.Equals(object? obj) -> bool
+override Nuplane.NuplaneRestoreResult.GetHashCode() -> int
+override Nuplane.NuplaneRestoreResult.ToString() -> string!
+override Nuplane.Operational.ActivePackageEntry.Equals(object? obj) -> bool
+override Nuplane.Operational.ActivePackageEntry.GetHashCode() -> int
+override Nuplane.Operational.ActivePackageEntry.ToString() -> string!
+override Nuplane.Operational.LastReconcileOutcome.Equals(object? obj) -> bool
+override Nuplane.Operational.LastReconcileOutcome.GetHashCode() -> int
+override Nuplane.Operational.LastReconcileOutcome.ToString() -> string!
+override Nuplane.Operational.OperationalStateContribution.Equals(object? obj) -> bool
+override Nuplane.Operational.OperationalStateContribution.GetHashCode() -> int
+override Nuplane.Operational.OperationalStateContribution.ToString() -> string!
+override Nuplane.Operational.OperationalStateSnapshot.Equals(object? obj) -> bool
+override Nuplane.Operational.OperationalStateSnapshot.GetHashCode() -> int
+override Nuplane.Operational.OperationalStateSnapshot.ToString() -> string!
+override Nuplane.PackageContentFile.Equals(object? obj) -> bool
+override Nuplane.PackageContentFile.GetHashCode() -> int
+override Nuplane.PackageContentFile.ToString() -> string!
+override Nuplane.PackageRefusal.Equals(object? obj) -> bool
+override Nuplane.PackageRefusal.GetHashCode() -> int
+override Nuplane.PackageRefusal.ToString() -> string!
+override Nuplane.Reconciliation.ManualReconcileOutcome.Equals(object? obj) -> bool
+override Nuplane.Reconciliation.ManualReconcileOutcome.GetHashCode() -> int
+override Nuplane.Reconciliation.ManualReconcileOutcome.ToString() -> string!
+override Nuplane.Reconciliation.Models.DependencyEdge.Equals(object? obj) -> bool
+override Nuplane.Reconciliation.Models.DependencyEdge.GetHashCode() -> int
+override Nuplane.Reconciliation.Models.DependencyEdge.ToString() -> string!
+override Nuplane.Reconciliation.Models.FeedObservationOrigin.Equals(object? obj) -> bool
+override Nuplane.Reconciliation.Models.FeedObservationOrigin.GetHashCode() -> int
+override Nuplane.Reconciliation.Models.FeedObservationOrigin.ToString() -> string!
+override Nuplane.Reconciliation.Models.FeedResolutionDecision.Equals(object? obj) -> bool
+override Nuplane.Reconciliation.Models.FeedResolutionDecision.GetHashCode() -> int
+override Nuplane.Reconciliation.Models.FeedResolutionDecision.ToString() -> string!
+override Nuplane.Reconciliation.Models.ReconciliationRunResult.Equals(object? obj) -> bool
+override Nuplane.Reconciliation.Models.ReconciliationRunResult.GetHashCode() -> int
+override Nuplane.Reconciliation.Models.ReconciliationRunResult.ToString() -> string!
+override Nuplane.Reconciliation.Models.ReconciliationTrigger.Equals(object? obj) -> bool
+override Nuplane.Reconciliation.Models.ReconciliationTrigger.GetHashCode() -> int
+override Nuplane.Reconciliation.Models.ReconciliationTrigger.ToString() -> string!
+override Nuplane.Reconciliation.Models.ResolvedPackageGraph.Equals(object? obj) -> bool
+override Nuplane.Reconciliation.Models.ResolvedPackageGraph.GetHashCode() -> int
+override Nuplane.Reconciliation.Models.ResolvedPackageGraph.ToString() -> string!
+override Nuplane.Reconciliation.Models.ResolvedPackageNode.Equals(object? obj) -> bool
+override Nuplane.Reconciliation.Models.ResolvedPackageNode.GetHashCode() -> int
+override Nuplane.Reconciliation.Models.ResolvedPackageNode.ToString() -> string!
+override Nuplane.Store.State.FailureRecord.Equals(object? obj) -> bool
+override Nuplane.Store.State.FailureRecord.GetHashCode() -> int
+override Nuplane.Store.State.FailureRecord.ToString() -> string!
+override Nuplane.Store.State.GraphActivationFailure.Equals(object? obj) -> bool
+override Nuplane.Store.State.GraphActivationFailure.GetHashCode() -> int
+override Nuplane.Store.State.GraphActivationFailure.ToString() -> string!
+override Nuplane.Store.State.GraphActivationRecord.Equals(object? obj) -> bool
+override Nuplane.Store.State.GraphActivationRecord.GetHashCode() -> int
+override Nuplane.Store.State.GraphActivationRecord.ToString() -> string!
+override Nuplane.Store.State.SourceSnapshotRef.Equals(object? obj) -> bool
+override Nuplane.Store.State.SourceSnapshotRef.GetHashCode() -> int
+override Nuplane.Store.State.SourceSnapshotRef.ToString() -> string!
+override Nuplane.Store.State.StoreStateRecord.Equals(object? obj) -> bool
+override Nuplane.Store.State.StoreStateRecord.GetHashCode() -> int
+override Nuplane.Store.State.StoreStateRecord.ToString() -> string!
+static Nuplane.Builder.PackageStoreMemberDeclaration.operator !=(Nuplane.Builder.PackageStoreMemberDeclaration? left, Nuplane.Builder.PackageStoreMemberDeclaration? right) -> bool
+static Nuplane.Builder.PackageStoreMemberDeclaration.operator ==(Nuplane.Builder.PackageStoreMemberDeclaration? left, Nuplane.Builder.PackageStoreMemberDeclaration? right) -> bool
+static Nuplane.DesiredPackageDescription.operator !=(Nuplane.DesiredPackageDescription? left, Nuplane.DesiredPackageDescription? right) -> bool
+static Nuplane.DesiredPackageDescription.operator ==(Nuplane.DesiredPackageDescription? left, Nuplane.DesiredPackageDescription? right) -> bool
+static Nuplane.Feeds.Configuration.FeedTrustOverride.operator !=(Nuplane.Feeds.Configuration.FeedTrustOverride? left, Nuplane.Feeds.Configuration.FeedTrustOverride? right) -> bool
+static Nuplane.Feeds.Configuration.FeedTrustOverride.operator ==(Nuplane.Feeds.Configuration.FeedTrustOverride? left, Nuplane.Feeds.Configuration.FeedTrustOverride? right) -> bool
+static Nuplane.Metadata.NuplanePackageMetadataReadResult.Invalid(string! diagnostic, int? declaredSchemaVersion = null) -> Nuplane.Metadata.NuplanePackageMetadataReadResult!
+static Nuplane.Metadata.NuplanePackageMetadataReadResult.Missing.get -> Nuplane.Metadata.NuplanePackageMetadataReadResult!
+static Nuplane.Metadata.NuplanePackageMetadataReadResult.Refused(Nuplane.Abstractions.PackageStoreProtection.PackageStoreAdmissionReason reason) -> Nuplane.Metadata.NuplanePackageMetadataReadResult!
+static Nuplane.Metadata.NuplanePackageMetadataReadResult.Valid(Nuplane.Abstractions.NuplanePackageMetadata! metadata) -> Nuplane.Metadata.NuplanePackageMetadataReadResult!
+static Nuplane.Metadata.NuplanePackageMetadataReadResult.operator !=(Nuplane.Metadata.NuplanePackageMetadataReadResult? left, Nuplane.Metadata.NuplanePackageMetadataReadResult? right) -> bool
+static Nuplane.Metadata.NuplanePackageMetadataReadResult.operator ==(Nuplane.Metadata.NuplanePackageMetadataReadResult? left, Nuplane.Metadata.NuplanePackageMetadataReadResult? right) -> bool
+static Nuplane.NuplaneDesiredDescription.operator !=(Nuplane.NuplaneDesiredDescription? left, Nuplane.NuplaneDesiredDescription? right) -> bool
+static Nuplane.NuplaneDesiredDescription.operator ==(Nuplane.NuplaneDesiredDescription? left, Nuplane.NuplaneDesiredDescription? right) -> bool
+static Nuplane.NuplaneRestore.DescribeDesiredAsync(Microsoft.Extensions.Configuration.IConfiguration! configuration, Nuplane.NuplaneRestoreOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.NuplaneDesiredDescription!>!
+static Nuplane.NuplaneRestore.RestoreAsync(Microsoft.Extensions.Configuration.IConfiguration! configuration, Nuplane.NuplaneRestoreOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.NuplaneRestoreResult!>!
+static Nuplane.NuplaneRestoreResult.operator !=(Nuplane.NuplaneRestoreResult? left, Nuplane.NuplaneRestoreResult? right) -> bool
+static Nuplane.NuplaneRestoreResult.operator ==(Nuplane.NuplaneRestoreResult? left, Nuplane.NuplaneRestoreResult? right) -> bool
+static Nuplane.NuplaneServiceCollectionExtensions.AddNuplane(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfiguration! configuration) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Nuplane.NuplaneServiceCollectionExtensions.AddNuplane(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfiguration! configuration, System.Action<Nuplane.Builder.NuplaneBuilder!>? configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Nuplane.NuplaneServiceCollectionExtensions.AddNuplane(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Nuplane.Builder.NuplaneBuilder!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Nuplane.NuplaneStore.GetActivePackages(Nuplane.Store.State.StoreStateRecord! state) -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ActivePackage!>!
+static Nuplane.NuplaneStore.OpenActivePackageSnapshotAsync(Nuplane.NuplaneStoreSnapshotAccess! access, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.AdmittedActivePackageSnapshot!>!
+static Nuplane.NuplaneStore.ReadActivePackagesAsync(Nuplane.Store.State.StoreRegistryOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ActivePackage!>!>!
+static Nuplane.NuplaneStore.ReadActivePackagesAsync(string! stateFilePath, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ActivePackage!>!>!
+static Nuplane.NuplaneStore.ReadStateAsync(Nuplane.Store.State.StoreRegistryOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.Store.State.StoreStateRecord!>!
+static Nuplane.NuplaneStore.ReadStateAsync(string! stateFilePath, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.Store.State.StoreStateRecord!>!
+static Nuplane.Operational.ActivePackageEntry.operator !=(Nuplane.Operational.ActivePackageEntry? left, Nuplane.Operational.ActivePackageEntry? right) -> bool
+static Nuplane.Operational.ActivePackageEntry.operator ==(Nuplane.Operational.ActivePackageEntry? left, Nuplane.Operational.ActivePackageEntry? right) -> bool
+static Nuplane.Operational.LastReconcileOutcome.operator !=(Nuplane.Operational.LastReconcileOutcome? left, Nuplane.Operational.LastReconcileOutcome? right) -> bool
+static Nuplane.Operational.LastReconcileOutcome.operator ==(Nuplane.Operational.LastReconcileOutcome? left, Nuplane.Operational.LastReconcileOutcome? right) -> bool
+static Nuplane.Operational.OperationalStateContribution.operator !=(Nuplane.Operational.OperationalStateContribution? left, Nuplane.Operational.OperationalStateContribution? right) -> bool
+static Nuplane.Operational.OperationalStateContribution.operator ==(Nuplane.Operational.OperationalStateContribution? left, Nuplane.Operational.OperationalStateContribution? right) -> bool
+static Nuplane.Operational.OperationalStateSnapshot.operator !=(Nuplane.Operational.OperationalStateSnapshot? left, Nuplane.Operational.OperationalStateSnapshot? right) -> bool
+static Nuplane.Operational.OperationalStateSnapshot.operator ==(Nuplane.Operational.OperationalStateSnapshot? left, Nuplane.Operational.OperationalStateSnapshot? right) -> bool
+static Nuplane.PackageContent.TryFindByExtension(string! installPath, string! extension) -> Nuplane.PackageContentFile?
+static Nuplane.PackageContent.TryFindByExtension(string! installPath, string! extension, Nuplane.Abstractions.PackageStoreProtection.PackageGraphUseLease! lease) -> Nuplane.PackageContentFile?
+static Nuplane.PackageContent.TryFindByExtension(string! installPath, string! extension, Nuplane.Abstractions.PackageStoreProtection.PackageStoreOperationBorrow! borrow) -> Nuplane.PackageContentFile?
+static Nuplane.PackageContent.TryReadFile(string! installPath, string! relativePath) -> byte[]?
+static Nuplane.PackageContent.TryReadFile(string! installPath, string! relativePath, Nuplane.Abstractions.PackageStoreProtection.PackageGraphUseLease! lease) -> byte[]?
+static Nuplane.PackageContent.TryReadFile(string! installPath, string! relativePath, Nuplane.Abstractions.PackageStoreProtection.PackageStoreOperationBorrow! borrow) -> byte[]?
+static Nuplane.PackageContentFile.operator !=(Nuplane.PackageContentFile? left, Nuplane.PackageContentFile? right) -> bool
+static Nuplane.PackageContentFile.operator ==(Nuplane.PackageContentFile? left, Nuplane.PackageContentFile? right) -> bool
+static Nuplane.PackageRefusal.operator !=(Nuplane.PackageRefusal? left, Nuplane.PackageRefusal? right) -> bool
+static Nuplane.PackageRefusal.operator ==(Nuplane.PackageRefusal? left, Nuplane.PackageRefusal? right) -> bool
+static Nuplane.Reconciliation.Configuration.HostProvidedPackagesOptions.DefaultEntries.get -> System.Collections.Generic.IReadOnlyList<string!>!
+static Nuplane.Reconciliation.ManualReconcileOutcome.operator !=(Nuplane.Reconciliation.ManualReconcileOutcome? left, Nuplane.Reconciliation.ManualReconcileOutcome? right) -> bool
+static Nuplane.Reconciliation.ManualReconcileOutcome.operator ==(Nuplane.Reconciliation.ManualReconcileOutcome? left, Nuplane.Reconciliation.ManualReconcileOutcome? right) -> bool
+static Nuplane.Reconciliation.Models.DependencyEdge.operator !=(Nuplane.Reconciliation.Models.DependencyEdge? left, Nuplane.Reconciliation.Models.DependencyEdge? right) -> bool
+static Nuplane.Reconciliation.Models.DependencyEdge.operator ==(Nuplane.Reconciliation.Models.DependencyEdge? left, Nuplane.Reconciliation.Models.DependencyEdge? right) -> bool
+static Nuplane.Reconciliation.Models.FeedObservationOrigin.DirectoryWatcher(string! feedName) -> Nuplane.Reconciliation.Models.FeedObservationOrigin!
+static Nuplane.Reconciliation.Models.FeedObservationOrigin.Notification(string! feedName) -> Nuplane.Reconciliation.Models.FeedObservationOrigin!
+static Nuplane.Reconciliation.Models.FeedObservationOrigin.Polling(string! feedName) -> Nuplane.Reconciliation.Models.FeedObservationOrigin!
+static Nuplane.Reconciliation.Models.FeedObservationOrigin.operator !=(Nuplane.Reconciliation.Models.FeedObservationOrigin? left, Nuplane.Reconciliation.Models.FeedObservationOrigin? right) -> bool
+static Nuplane.Reconciliation.Models.FeedObservationOrigin.operator ==(Nuplane.Reconciliation.Models.FeedObservationOrigin? left, Nuplane.Reconciliation.Models.FeedObservationOrigin? right) -> bool
+static Nuplane.Reconciliation.Models.FeedResolutionDecision.Failed(Nuplane.Abstractions.PackageRequest! request, System.Collections.Generic.IReadOnlyList<string!>! candidateFeeds, string! correlationId, string! decisionPath, bool feedUnavailable, string! failureReason, string? selectedFeed = null, int enumeratedVersionCount = 0, bool cacheHit = false) -> Nuplane.Reconciliation.Models.FeedResolutionDecision!
+static Nuplane.Reconciliation.Models.FeedResolutionDecision.Resolved(Nuplane.Abstractions.PackageRequest! request, System.Collections.Generic.IReadOnlyList<string!>! candidateFeeds, Nuplane.Abstractions.ResolvedPackage! selected, string! correlationId, string! decisionPath, int enumeratedVersionCount = 0, bool cacheHit = false) -> Nuplane.Reconciliation.Models.FeedResolutionDecision!
+static Nuplane.Reconciliation.Models.FeedResolutionDecision.operator !=(Nuplane.Reconciliation.Models.FeedResolutionDecision? left, Nuplane.Reconciliation.Models.FeedResolutionDecision? right) -> bool
+static Nuplane.Reconciliation.Models.FeedResolutionDecision.operator ==(Nuplane.Reconciliation.Models.FeedResolutionDecision? left, Nuplane.Reconciliation.Models.FeedResolutionDecision? right) -> bool
+static Nuplane.Reconciliation.Models.ReconciliationRunResult.operator !=(Nuplane.Reconciliation.Models.ReconciliationRunResult? left, Nuplane.Reconciliation.Models.ReconciliationRunResult? right) -> bool
+static Nuplane.Reconciliation.Models.ReconciliationRunResult.operator ==(Nuplane.Reconciliation.Models.ReconciliationRunResult? left, Nuplane.Reconciliation.Models.ReconciliationRunResult? right) -> bool
+static Nuplane.Reconciliation.Models.ReconciliationTrigger.Manual(string? correlationId = null) -> Nuplane.Reconciliation.Models.ReconciliationTrigger!
+static Nuplane.Reconciliation.Models.ReconciliationTrigger.Observed(Nuplane.Reconciliation.Models.FeedObservationOrigin! observedOrigin, string? correlationId = null) -> Nuplane.Reconciliation.Models.ReconciliationTrigger!
+static Nuplane.Reconciliation.Models.ReconciliationTrigger.Scheduled(string? correlationId = null) -> Nuplane.Reconciliation.Models.ReconciliationTrigger!
+static Nuplane.Reconciliation.Models.ReconciliationTrigger.Startup(string? correlationId = null) -> Nuplane.Reconciliation.Models.ReconciliationTrigger!
+static Nuplane.Reconciliation.Models.ReconciliationTrigger.operator !=(Nuplane.Reconciliation.Models.ReconciliationTrigger? left, Nuplane.Reconciliation.Models.ReconciliationTrigger? right) -> bool
+static Nuplane.Reconciliation.Models.ReconciliationTrigger.operator ==(Nuplane.Reconciliation.Models.ReconciliationTrigger? left, Nuplane.Reconciliation.Models.ReconciliationTrigger? right) -> bool
+static Nuplane.Reconciliation.Models.ResolvedPackageGraph.CreateGraphId(string! targetFramework, System.Collections.Generic.IEnumerable<Nuplane.Reconciliation.Models.ResolvedPackageNode!>! roots, System.Collections.Generic.IEnumerable<Nuplane.Reconciliation.Models.ResolvedPackageNode!>! nodes, System.Collections.Generic.IEnumerable<Nuplane.Reconciliation.Models.DependencyEdge!>! edges, System.Collections.Generic.IEnumerable<Nuplane.Reconciliation.Models.FeedResolutionDecision!>! sourceDecisions) -> string!
+static Nuplane.Reconciliation.Models.ResolvedPackageGraph.operator !=(Nuplane.Reconciliation.Models.ResolvedPackageGraph? left, Nuplane.Reconciliation.Models.ResolvedPackageGraph? right) -> bool
+static Nuplane.Reconciliation.Models.ResolvedPackageGraph.operator ==(Nuplane.Reconciliation.Models.ResolvedPackageGraph? left, Nuplane.Reconciliation.Models.ResolvedPackageGraph? right) -> bool
+static Nuplane.Reconciliation.Models.ResolvedPackageNode.operator !=(Nuplane.Reconciliation.Models.ResolvedPackageNode? left, Nuplane.Reconciliation.Models.ResolvedPackageNode? right) -> bool
+static Nuplane.Reconciliation.Models.ResolvedPackageNode.operator ==(Nuplane.Reconciliation.Models.ResolvedPackageNode? left, Nuplane.Reconciliation.Models.ResolvedPackageNode? right) -> bool
+static Nuplane.Sources.Directory.Builder.NuplaneBuilderDirectoryExtensions.AddDirectoryFeed(this Nuplane.Builder.NuplaneBuilder! builder, string! name, string! path, System.Action<Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration!>? configure = null) -> Nuplane.Builder.NuplaneBuilder!
+static Nuplane.Store.State.FailureRecord.operator !=(Nuplane.Store.State.FailureRecord? left, Nuplane.Store.State.FailureRecord? right) -> bool
+static Nuplane.Store.State.FailureRecord.operator ==(Nuplane.Store.State.FailureRecord? left, Nuplane.Store.State.FailureRecord? right) -> bool
+static Nuplane.Store.State.GraphActivationFailure.operator !=(Nuplane.Store.State.GraphActivationFailure? left, Nuplane.Store.State.GraphActivationFailure? right) -> bool
+static Nuplane.Store.State.GraphActivationFailure.operator ==(Nuplane.Store.State.GraphActivationFailure? left, Nuplane.Store.State.GraphActivationFailure? right) -> bool
+static Nuplane.Store.State.GraphActivationRecord.operator !=(Nuplane.Store.State.GraphActivationRecord? left, Nuplane.Store.State.GraphActivationRecord? right) -> bool
+static Nuplane.Store.State.GraphActivationRecord.operator ==(Nuplane.Store.State.GraphActivationRecord? left, Nuplane.Store.State.GraphActivationRecord? right) -> bool
+static Nuplane.Store.State.SourceSnapshotRef.operator !=(Nuplane.Store.State.SourceSnapshotRef? left, Nuplane.Store.State.SourceSnapshotRef? right) -> bool
+static Nuplane.Store.State.SourceSnapshotRef.operator ==(Nuplane.Store.State.SourceSnapshotRef? left, Nuplane.Store.State.SourceSnapshotRef? right) -> bool
+static Nuplane.Store.State.StoreStateRecord.Empty() -> Nuplane.Store.State.StoreStateRecord!
+static Nuplane.Store.State.StoreStateRecord.operator !=(Nuplane.Store.State.StoreStateRecord? left, Nuplane.Store.State.StoreStateRecord? right) -> bool
+static Nuplane.Store.State.StoreStateRecord.operator ==(Nuplane.Store.State.StoreStateRecord? left, Nuplane.Store.State.StoreStateRecord? right) -> bool

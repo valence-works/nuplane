@@ -13,4 +13,8 @@ namespace Nuplane.Abstractions;
 public sealed record FeedDefinition(
     string Name,
     Uri ServiceIndex,
-    string? Credentials = null);
+    string? Credentials = null)
+{
+    /// <summary>Gets the feed's trust level. Unspecified feeds are untrusted.</summary>
+    public FeedTrustLevel Trust { get; init; }
+}

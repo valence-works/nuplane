@@ -7,7 +7,7 @@ namespace Nuplane.Feeds;
 /// Resolves package requests by extracting version information from NuGet version range strings
 /// and producing resolved package records with synthetic install paths.
 /// </summary>
-public sealed class NuGetPackageResolver : INuGetPackageResolver
+internal sealed class NuGetPackageResolver : INuGetPackageResolver
 {
     /// <inheritdoc />
     public Task<ResolvedPackage> ResolveAsync(PackageRequest request, CancellationToken cancellationToken)

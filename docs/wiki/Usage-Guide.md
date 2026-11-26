@@ -120,9 +120,9 @@ That split keeps hosts from rebuilding state from event history.
 
 `Nuplane.NuplaneStore` is a static, dependency-injection-free entry point for tooling that needs
 the active package set — every active package's id, version, and install path — without a running
-host, a DI container, or network access. It reports exactly the set a running host's
-`IActivePackageCatalog` reports: active package descriptors whose version matches the state
-file's recorded active version for that package id.
+host, a DI container, or network access. It returns the same `ActivePackage` records as
+`IActivePackageCatalog.GetActivePackagesAsync`. Each package matches the version recorded as
+active for its identifier in the state file.
 
 ```csharp
 var activePackages = await NuplaneStore.ReadActivePackagesAsync("/var/lib/nuplane/.nuplane/store-state.json");
@@ -415,14 +415,7 @@ var result = await NuplaneRestore.RestoreAsync(configuration, new NuplaneRestore
     BasePath = hostContentRoot,
     InstallRoot = "/srv/app/.nuplane/packages",
     StateFilePath = "/srv/app/.nuplane/store-state.json",
-    LoggerFactory = loggerFactory,
-    // Directory feeds belong to Nuplane.Sources.Directory, so the caller adds them. The second
-    // argument is the already-resolved Nuplane configuration — use it, not a captured `configuration`,
-    // or the module registration helper finds nothing when `configuration` is the host's root. A
-    // relative `DirectoryPath` in that configuration resolves against `BasePath` above, not against
-    // this process's own current directory — AddDirectoryFeedsFromConfiguration reads it from the
-    // same NuplaneBuilder this callback receives, so nothing here has to pass it along.
-    ConfigureBuilder = (builder, nuplane) => builder.AddDirectoryFeedsFromConfiguration(nuplane)
+    LoggerFactory = loggerFactory
 });
 
 Console.WriteLine($"restored into {result.InstallRoot}; state at {result.StateFilePath}");
@@ -459,15 +452,12 @@ restoring tool both of those name the tool, so `NuplaneRestore` never falls back
 | Path | Resolution order |
 |---|---|
 | Install root | `NuplaneRestoreOptions.InstallRoot` (must be absolute) → absolute `Nuplane:FeedResolution:PackageInstallRoot` → relative configured value against `BasePath` → `BasePath/.nuplane/packages` → **refused** |
-| State file | `NuplaneRestoreOptions.StateFilePath` (must be absolute) → absolute `Nuplane:StoreRegistry:StateFilePath`, or the `Nuplane:Setup:StateFilePath` shorthand → relative configured value against `BasePath` → `BasePath/.nuplane/store-state.json` → **refused** |
+| State file | `NuplaneRestoreOptions.StateFilePath` (must be absolute) → absolute `Nuplane:StoreRegistry:StateFilePath` → relative configured value against `BasePath` → `BasePath/.nuplane/store-state.json` → **refused** |
 | Package lock file | `NuplaneRestoreOptions.LockFilePath` (must be absolute) → absolute `Nuplane:LockFile:Path` → relative value against `BasePath`, otherwise against the resolved state file's directory |
 
-A directory feed's own `DirectoryPath` is not one of the three paths above — it belongs to
-`Nuplane.Sources.Directory`, not the core package, so it is resolved separately by that module
-against the same `BasePath`, and never refuses: a relative `DirectoryPath` falls back to resolving
-against the current directory instead, exactly like a running host that has not set a base of its
-own. See [Directory feeds as an offline package source](#directory-feeds-as-an-offline-package-source)
-for that resolution, including how a host sets one, in both the host and the host-free case.
+Configured directory feeds are registered automatically. A relative `DirectoryPath` resolves against
+`BasePath` when supplied and against the process's current directory otherwise. See
+[Directory feeds as an offline package source](#directory-feeds-as-an-offline-package-source).
 
 "Refused" is an `InvalidOperationException` naming the path and telling you to set `BasePath` or the
 matching override. A restore that quietly populates the wrong directory reports success and leaves
@@ -528,7 +518,7 @@ The stages a caller can expect, and what each says:
 | `capability-metadata-invalid` | The package's schema-2 `nuplane.json` is invalid. |
 | `capability-contribution-limit` | Contribution rounds did not reach a fixpoint within the bound. |
 | `resolve-feed-unavailable`, `resolve-no-eligible-feed`, `resolve-graph-conflict`, `resolve` | The package itself could not be resolved: the feed could not be reached, no configured feed serves it, or its dependency graph could not be unified. |
-| `lock` | The lock file refused the package; the message is the lock outcome's reason code. |
+| `lock` | The package lock file refused the package; the message is the lock outcome's reason code. |
 | `host-version-unsatisfied` | The package, or a package in its closure, depends on a package declared in `Nuplane:HostProvidedPackages` that the host carries at a version outside the range the dependency requires. The message names the dependent package, the dependency, the required range and the host's version. See [Packages the host already provides](#packages-the-host-already-provides). |
 
 Every `capability-*` stage means the package is on a feed and what is missing is a decision the
@@ -551,9 +541,9 @@ foreach (var request in description.Requests)
 }
 ```
 
-It writes nothing — no install root, no state file, no lock file — and contacts no remote feed. It
+It writes nothing — no install root, no state file, no package lock file — and contacts no remote feed. It
 touches local disk only where a desired source already lives: a directory-backed feed enumerates its
-own `.nupkg` files, and a convergence manifest source reads its manifest. A remote feed's requests
+own `.nupkg` files, and a desired manifest source reads its manifest. A remote feed's requests
 come from its configured include patterns alone, so no service index, version list, or package is
 fetched. A source that throws is reported in `SourceErrors` rather than propagating, so an empty
 request list with an error in it means "could not tell", not "nothing is desired".
@@ -629,11 +619,11 @@ Retrying is the caller's job. A host with automatic reconciliation enabled retri
 A host whose *startup* cycle is skipped this way starts against whatever the store already records
 and — with automatic reconciliation off, which is the default — does not reconcile again on its own;
 startup is not failed for contention, because that would break rolling restarts of replicas sharing
-one store. The warning naming the lock file is the signal to watch for.
+one store. The warning naming the store lock file is the signal to watch for.
 
 Two cases deliberately do not refuse. An in-memory store has no file to lock and behaves exactly as
-before. A store whose lock file cannot be created or opened at all — a read-only state directory, or
-a lock file this process may not write — is reconciled unprotected with a warning rather than refused,
+before. If the store lock file cannot be created or opened at all — a read-only state directory, or
+a store lock file this process may not write — reconciliation continues unprotected with a warning,
 so a deployment that works today keeps working. Set `EnableStoreLock` to `false` to restore the
 pre-lock behaviour exactly.
 
@@ -654,19 +644,10 @@ This avoids positional array merging when `appsettings.json`, environment variab
 configuration files are layered. Feed object order is not semantic; use `DesiredState:SourcePriorities`
 for overlapping desired requests and `FeedResolution:FeedPriorities` for feed resolution candidates.
 
-When the same setting is expressed in both layers, the more specific runtime option section wins
-over the `Nuplane:Setup` shorthand. An explicitly present
-`Reconciliation:EnableAutomaticReconciliation` decides automatic reconciliation in both directions,
-so `false` there disables polling even when `Setup:AutomaticReconciliation` is `true`; the same
-applies to `Reconciliation:PollInterval` over `Setup:PollInterval`.
-
-Store persistence follows the same rule: `StoreRegistry:StateFilePath` and
-`StoreRegistry:UseInMemoryStore` decide over `Setup:StateFilePath` and `Setup:UseInMemoryStore`, so
-`StoreRegistry:UseInMemoryStore: false` keeps state persisted even when the shorthand asks for an
-in-memory store. Because the two persistence settings are mutually exclusive, an explicit choice in
-`StoreRegistry` also suppresses the opposing shorthand instead of combining into a rejected
-configuration. Builder calls run last, so `WithStateFile(...)` and `UseInMemoryStore()` in the
-`AddNuplane` callback still override both configuration layers.
+Enable automatic polling with `Reconciliation:EnableAutomaticReconciliation`. Set
+`Reconciliation:PollInterval` to override the default 60-second interval. Configure persistence with
+`StoreRegistry:StateFilePath` or choose `StoreRegistry:UseInMemoryStore`. Builder calls in the
+`AddNuplane` callback run after configuration binding.
 
 ### Selecting a package capability
 
@@ -716,17 +697,17 @@ The object form says more about the same selection:
 their dependency closure expanded, Nuplane reads `nuplane.json` from each resolved package and turns
 every selected option into an additional **root** package request whose source name is
 `capability:<capability>=<option>`. From there it is an ordinary root: resolved from a trusted feed
-under the same retry policy, evaluated against the lock file, applied in the same transaction,
+under the same retry policy, evaluated against the package lock file, applied in the same transaction,
 recorded in `store-state.json` with `PackageRole = Root` and that source name, reported by
 `NuplaneStore.ReadActivePackagesAsync`, and loaded and discoverable exactly like a root a desired
-source asked for. Nothing bypasses trust, integrity, or the lock file. A dry run includes it,
+source asked for. Nothing bypasses trust, integrity, or the package lock file. A dry run includes it,
 because a dry-run plan is computed from the cycle's own resolved set. An option package that itself
 declares a capability is honoured too: contribution rounds repeat until a round adds nothing,
 bounded at eight rounds. Changing the selection changes the graph, so the next cycle reconciles the
 previous option out of the desired set and the new one in.
 
 **Naming the package by hand still works, and wins.** When one of the option packages is already an
-explicit desired root — a directory-feed drop, an include pattern, a convergence manifest — the
+explicit desired root — a directory-feed drop, an include pattern, a desired manifest — the
 capability is satisfied by that root, nothing is contributed, and the only difference from before
 this feature existed is one Information log line. A selection whose option package is already an
 explicit root contributes nothing either: the explicit root wins. When that explicit root's version
@@ -765,37 +746,23 @@ samples up to 32 archives per batch and shares the default 200 ms interval betwe
 It checks each archive independently for two matching, nonzero file lengths and retries candidates
 that are busy or changing within the existing attempt limit.
 
-**Where a relative `DirectoryPath` resolves from.** Both `AddDirectoryFeed` and
-`AddDirectoryFeedsFromConfiguration` resolve it against `NuplaneBuilder.BasePath` when something has
-set one, and against the process's own current directory otherwise. Nothing sets it by default, so a
-host that composes Nuplane directly and never calls `UseBasePath` keeps resolving it against its own
-current directory exactly as it always has — the right answer only when the host is guaranteed to
-start from its own directory. A host started some other way — as a service from `/`, for example —
-should pass its own content root instead:
+**Where a relative `DirectoryPath` resolves from.** A configured directory uses the base set through
+`NuplaneBuilder.UseBasePath`. A code-first `AddDirectoryFeed` call uses the base already set when it
+runs. Both use the process's current directory when no base is set. A host can pass its content
+root explicitly:
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 var nuplaneConfiguration = builder.Configuration.GetSection("Nuplane");
 
-builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
-{
-    nuplane.UseBasePath(builder.Environment.ContentRootPath);
-    nuplane.AddDirectoryFeedsFromConfiguration(nuplaneConfiguration);
-});
+builder.Services.AddNuplane(nuplaneConfiguration,
+    nuplane => nuplane.UseBasePath(builder.Environment.ContentRootPath));
 ```
 
-`UseBasePath` takes only an absolute path — a relative one throws `ArgumentException` at the point of
-the call, not later when a feed tries to resolve against it — and Nuplane's core package never reads
-`IHostEnvironment` itself, so this stays the host's own line to write rather than a hosting dependency
-Nuplane adds on the host's behalf.
-
-A [host-free restore](#host-free-restore-of-the-package-set) through `NuplaneRestore` sets the same
-`NuplaneBuilder.BasePath` from `NuplaneRestoreOptions.BasePath`, the base its other paths already
-anchor to, before its `ConfigureBuilder` callback runs — so that section's example needs nothing
-beyond what it already shows for `BasePath` to apply to directory feeds too. Because the restore sets
-it first, a `ConfigureBuilder` callback that calls `UseBasePath` itself overrides the restore's base
-rather than being overridden by it; the last call always wins. An already-absolute `DirectoryPath` is
-unaffected by any of this either way.
+`UseBasePath` requires an absolute path. [Host-free restore](#host-free-restore-of-the-package-set)
+sets the builder base from `NuplaneRestoreOptions.BasePath` before calling `ConfigureBuilder`.
+A callback can then set a different base for configured directory feeds. Absolute directory paths
+work with any base.
 
 Resolution reads the directory itself: package identifiers are matched case-insensitively and
 versions are matched in normalized form. A `.nupkg` written by `dotnet restore` under a lower-cased
@@ -838,7 +805,11 @@ install path or the catalog's reserved `default` entry. Additional configured ro
 labels. Blank or padded labels and collisions with additional labels fail options validation at
 startup. This lookup configuration does not enroll roots or enable inspection/pruning APIs.
 
-### Feed credentials
+### Feed trust
+
+Nuplane requires explicit approval of feeds used for acquisition. Set `Trust: Trusted` on approved entries under `Nuplane:Setup:Feeds`, including approved local directory caches. Both omitted and explicit `Untrusted` settings refuse acquisition. A reason-bearing exception can approve one exact package from one named feed under `Nuplane:FeedResolution:TrustOverrides`. See the [feed trust migration](../adr/0003-feed-trust-before-acquisition.md) for the code-first and configuration forms.
+
+## Feed credentials
 
 - **Applicability:** `Core`
 - **Stability note:** `Recently Changed`
@@ -852,6 +823,7 @@ A private feed is configured with a *reference* to its secret, never with the se
       "Feeds": {
         "private-feed": {
           "ServiceIndex": "https://packages.example.com/v3/index.json",
+          "Trust": "Trusted",
           "Credentials": "secrets://env/MY_FEED_TOKEN",
           "IncludePatterns": [ "Acme.Plugins.*" ]
         }

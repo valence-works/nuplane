@@ -6,7 +6,7 @@ namespace Nuplane.Feeds.Credentials;
 /// composition point: feeds reference secrets, providers hold them, and nothing else in Nuplane
 /// knows how a secret is stored.
 /// </summary>
-public interface ISecretReferenceResolver
+internal interface ISecretReferenceResolver
 {
     /// <summary>
     /// Resolves <paramref name="reference"/>.

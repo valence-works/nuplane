@@ -7,5 +7,5 @@ namespace Nuplane.Reconciliation.Models;
 /// </summary>
 /// <param name="ChangeSet">The projected package change set.</param>
 /// <param name="MutatedState">Whether the plan would mutate state (always <see langword="false"/> for dry runs).</param>
-public sealed record DryRunPlan(PackageChangeSet ChangeSet, bool MutatedState);
+internal sealed record DryRunPlan(PackageChangeSet ChangeSet, bool MutatedState);
 

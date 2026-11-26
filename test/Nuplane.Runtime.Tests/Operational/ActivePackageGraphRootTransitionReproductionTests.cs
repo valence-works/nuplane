@@ -194,7 +194,7 @@ public sealed class ActivePackageGraphRootTransitionReproductionTests
         ResolvedPackage packageB,
         Dictionary<string, string> versions,
         IReadOnlyDictionary<string, GraphActivationRecord> records,
-        IReadOnlyDictionary<string, ActivePackageDescriptor> descriptors)
+        IReadOnlyDictionary<string, ActivePackage> descriptors)
     {
         var oldProtection = previous.ProtectionRecord!;
         var currentSnapshot = Assert.Single(CreateProtectionRecord(currentGraph, packageA, packageB).ActiveClosure.Graphs!);

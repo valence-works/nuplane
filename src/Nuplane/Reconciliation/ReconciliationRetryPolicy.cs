@@ -10,7 +10,7 @@ namespace Nuplane.Reconciliation;
 /// <summary>
 /// Implements a resilience-pipeline-backed retry policy for reconciliation operations.
 /// </summary>
-public sealed class ReconciliationRetryPolicy : IPackageStoreRefusalPreservingRetryPolicy
+internal sealed class ReconciliationRetryPolicy : IPackageStoreRefusalPreservingRetryPolicy
 {
     internal const string PipelineName = "nuplane.reconciliation.retry";
 

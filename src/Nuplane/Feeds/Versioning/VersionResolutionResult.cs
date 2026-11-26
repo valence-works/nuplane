@@ -7,7 +7,7 @@ namespace Nuplane.Feeds.Versioning;
 /// <param name="SelectedVersion">The concrete version string selected, or null on failure.</param>
 /// <param name="CandidateCount">The total number of versions evaluated.</param>
 /// <param name="FailureReason">Diagnostic reason when no version matched.</param>
-public sealed record VersionResolutionResult(
+internal sealed record VersionResolutionResult(
     bool Success,
     string? SelectedVersion,
     int CandidateCount,

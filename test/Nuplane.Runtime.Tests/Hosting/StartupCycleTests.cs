@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
@@ -9,7 +11,6 @@ using Nuplane.Hosting;
 using Nuplane.Observability;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Configuration;
-using Nuplane.Reconciliation.Convergence;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Store.State;
@@ -47,6 +48,59 @@ public sealed class StartupCycleTests
         Assert.Equal(TimeSpan.FromSeconds(15), options.PollInterval);
         Assert.Contains(typeof(ReconciliationHostedService), hostedServiceTypes);
         Assert.Contains(typeof(ReconciliationTriggerDispatcherHostedService), hostedServiceTypes);
+    }
+
+    [Fact]
+    public async Task PollEvery_ManifestEnabled_SchedulesUsingBuilderInterval()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["DesiredState:Manifest:Enabled"] = "true",
+            ["DesiredState:Manifest:Path"] = "manifest.json",
+            ["Reconciliation:PollInterval"] = "00:01:00"
+        }).Build();
+        var schedulerLogger = new SchedulerLogger();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<ILogger<ReconciliationHostedService>>(schedulerLogger);
+        services.AddNuplane(configuration, nuplane => nuplane.PollEvery(TimeSpan.FromSeconds(10)));
+
+        await using var provider = services.BuildServiceProvider();
+        var scheduler = Assert.Single(provider.GetServices<IHostedService>().OfType<ReconciliationHostedService>());
+        await scheduler.StartAsync(CancellationToken.None);
+
+        try
+        {
+            Assert.Equal(TimeSpan.FromSeconds(10), await schedulerLogger.PollInterval.WaitAsync(TimeSpan.FromSeconds(5)));
+        }
+        finally
+        {
+            await scheduler.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private sealed class SchedulerLogger : ILogger<ReconciliationHostedService>
+    {
+        private readonly TaskCompletionSource<TimeSpan> _interval = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<TimeSpan> PollInterval => _interval.Task;
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (state is not IEnumerable<KeyValuePair<string, object?>> arguments)
+                return;
+
+            foreach (var argument in arguments)
+            {
+                if (argument is { Key: "PollInterval", Value: TimeSpan interval })
+                    _interval.TrySetResult(interval);
+            }
+        }
     }
 
     [Fact]
@@ -395,7 +449,6 @@ public sealed class StartupCycleTests
             new(
                 queue,
                 new OptionsWrapper<ReconciliationOptions>(options),
-                new OptionsWrapper<ConvergenceOptions>(new()),
                 NullLogger<ReconciliationHostedService>.Instance),
             new(
                 queue,
@@ -424,7 +477,7 @@ public sealed class StartupCycleTests
             },
             "corr-seed",
             CancellationToken.None,
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
             {
                 ["pkg-a"] = new(
                     "pkg-a",

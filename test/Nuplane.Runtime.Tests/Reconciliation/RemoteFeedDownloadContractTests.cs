@@ -37,7 +37,7 @@ public sealed class RemoteFeedDownloadContractTests : IAsyncLifetime
         await using var server = new TestNuGetFeedServer("MyPlugin", "1.0.0", packageBytes);
 
         var options = new FeedResolutionOptions { PackageInstallRoot = Path.Combine(_tempDir, "installed") };
-        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri));
+        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri) { Trust = FeedTrustLevel.Trusted });
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
         var resolver = new MultiFeedPackageResolver(
             new OptionsWrapper<FeedResolutionOptions>(options), policy,
@@ -67,7 +67,7 @@ public sealed class RemoteFeedDownloadContractTests : IAsyncLifetime
             omitPackageBaseTrailingSlash: true);
 
         var options = new FeedResolutionOptions { PackageInstallRoot = Path.Combine(_tempDir, "installed") };
-        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri));
+        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri) { Trust = FeedTrustLevel.Trusted });
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
         var resolver = new MultiFeedPackageResolver(
             new OptionsWrapper<FeedResolutionOptions>(options), policy,
@@ -92,7 +92,7 @@ public sealed class RemoteFeedDownloadContractTests : IAsyncLifetime
         await using var server = new TestNuGetFeedServer("MyPlugin", "1.0.0", packageBytes);
 
         var options = new FeedResolutionOptions { PackageInstallRoot = Path.Combine(_tempDir, "installed") };
-        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri));
+        options.Feeds.Add(new("remote-feed", server.ServiceIndexUri) { Trust = FeedTrustLevel.Trusted });
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(options));
         var resolver = new MultiFeedPackageResolver(
             new OptionsWrapper<FeedResolutionOptions>(options), policy,
@@ -117,7 +117,7 @@ public sealed class RemoteFeedDownloadContractTests : IAsyncLifetime
 
         var options = new FeedResolutionOptions { PackageInstallRoot = Path.Combine(_tempDir, "installed-cache") };
         var acquirer = new NuGetRemotePackageAcquirer(new OptionsWrapper<FeedResolutionOptions>(options));
-        var feed = new FeedDefinition("remote-feed", server.ServiceIndexUri);
+        var feed = new FeedDefinition("remote-feed", server.ServiceIndexUri) { Trust = FeedTrustLevel.Trusted };
 
         var first = await acquirer.AcquireAsync(feed, "MyPlugin", "1.0.0", CancellationToken.None);
         Directory.Delete(first, recursive: true);
@@ -141,7 +141,7 @@ public sealed class RemoteFeedDownloadContractTests : IAsyncLifetime
             PackageBaseAddressCacheTtl = TimeSpan.Zero
         };
         var acquirer = new NuGetRemotePackageAcquirer(new OptionsWrapper<FeedResolutionOptions>(options));
-        var feed = new FeedDefinition("remote-feed", server.ServiceIndexUri);
+        var feed = new FeedDefinition("remote-feed", server.ServiceIndexUri) { Trust = FeedTrustLevel.Trusted };
 
         var first = await acquirer.AcquireAsync(feed, "MyPlugin", "1.0.0", CancellationToken.None);
         Directory.Delete(first, recursive: true);

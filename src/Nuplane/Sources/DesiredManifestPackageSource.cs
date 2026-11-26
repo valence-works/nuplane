@@ -1,19 +1,19 @@
 using Nuplane.Abstractions;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Observability;
-using Nuplane.Reconciliation.Convergence;
+using Nuplane.Sources.Configuration;
 
 namespace Nuplane.Sources;
 
 /// <summary>
 /// An <see cref="IDesiredPackageSource"/> that reads desired package requests from a shared
 /// manifest file. Projects manifest entries into <see cref="PackageRequest"/> instances with
-/// <see cref="PackageUpdatePolicy.Exact"/> to ensure deterministic convergence.
+/// <see cref="PackageUpdatePolicy.Exact"/> to ensure deterministic reconciliation.
 /// </summary>
-public sealed class DesiredManifestPackageSource : IScopedDesiredPackageSource
+internal sealed class DesiredManifestPackageSource : IScopedDesiredPackageSource
 {
     private readonly DesiredManifestReader _reader;
-    private readonly ConvergenceOptions _options;
+    private readonly DesiredStateOptions _options;
     private readonly ReconciliationMetrics? _metrics;
     private DesiredManifestReadResult? _lastReadResult;
 
@@ -24,8 +24,7 @@ public sealed class DesiredManifestPackageSource : IScopedDesiredPackageSource
     public DesiredManifestReadResult? LastReadResult => _lastReadResult;
 
     /// <summary>
-    /// Gets a value indicating whether the manifest source is enabled, i.e. manifest convergence
-    /// is turned on and a manifest path has been configured. This is the single definition of
+    /// Gets a value indicating whether the manifest source is enabled and a path has been configured. This is the single definition of
     /// "enabled" shared between <see cref="GetDesiredAsync(CancellationToken)"/> and consumers that need to decide
     /// whether this source should participate in a reconciliation cycle.
     /// </summary>
@@ -35,9 +34,9 @@ public sealed class DesiredManifestPackageSource : IScopedDesiredPackageSource
     /// Initializes a new instance of <see cref="DesiredManifestPackageSource"/>.
     /// </summary>
     /// <param name="reader">The manifest reader.</param>
-    /// <param name="options">The convergence options containing manifest configuration.</param>
+    /// <param name="options">The desired-state options containing manifest configuration.</param>
     /// <param name="metrics">Optional reconciliation metrics to record manifest read outcomes.</param>
-    public DesiredManifestPackageSource(DesiredManifestReader reader, ConvergenceOptions options, ReconciliationMetrics? metrics = null)
+    public DesiredManifestPackageSource(DesiredManifestReader reader, DesiredStateOptions options, ReconciliationMetrics? metrics = null)
     {
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _options = options ?? throw new ArgumentNullException(nameof(options));

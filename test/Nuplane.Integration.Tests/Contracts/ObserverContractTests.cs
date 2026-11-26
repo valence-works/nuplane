@@ -1,6 +1,9 @@
+using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Abstractions;
 using Nuplane.Events;
+using Nuplane.Observability;
 using Nuplane.Reconciliation.Models;
+using NSubstitute;
 
 namespace Nuplane.Integration.Tests.Contracts;
 
@@ -22,6 +25,39 @@ public sealed class ObserverContractTests
         Assert.NotNull(observer.ChangingCorrelationId);
         Assert.NotNull(observer.ChangedCorrelationId);
         Assert.Equal(observer.ChangingCorrelationId, observer.ChangedCorrelationId);
+    }
+
+    [Fact]
+    public async Task OnPackagesChanged_ObserverImplementsOneCallback_DispatchesAllEventsWithoutErrors()
+    {
+        var services = new ServiceCollection();
+        services.AddNuplane(builder => builder.OnPackagesChanged<ChangedObserver>());
+        var logger = Substitute.For<IReconciliationLogger>();
+        services.AddSingleton(logger);
+        await using var provider = services.BuildServiceProvider();
+        var observer = Assert.IsType<ChangedObserver>(Assert.Single(provider.GetServices<INuplaneObserver>()));
+        var dispatcher = provider.GetRequiredService<IObserverEventDispatcher>();
+        var changeSet = new PackageChangeSet([], [], [], "single-callback", DateTimeOffset.UnixEpoch);
+
+        await dispatcher.PublishChangingAsync(changeSet, CancellationToken.None);
+        await dispatcher.PublishChangedAsync(changeSet, CancellationToken.None);
+        await dispatcher.NotifyPackageFailedAsync("pkg-a", new IOException("package failure"), changeSet.CorrelationId,
+            CancellationToken.None);
+        await dispatcher.PublishReconciledAsync(changeSet, [], CancellationToken.None);
+
+        Assert.Same(changeSet, observer.Received);
+        logger.DidNotReceiveWithAnyArgs().LogObserverError(default!, default!, default!);
+    }
+
+    private sealed class ChangedObserver : INuplaneObserver
+    {
+        public PackageChangeSet? Received { get; private set; }
+
+        public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken cancellationToken)
+        {
+            Received = changeSet;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class StaticSource(IReadOnlyList<PackageRequest> requests) : IDesiredPackageSource

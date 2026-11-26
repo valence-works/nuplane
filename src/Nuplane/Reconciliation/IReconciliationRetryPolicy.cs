@@ -3,7 +3,7 @@ namespace Nuplane.Reconciliation;
 /// <summary>
 /// Defines a retry policy for transient failures during reconciliation operations.
 /// </summary>
-public interface IReconciliationRetryPolicy
+internal interface IReconciliationRetryPolicy
 {
     /// <summary>
     /// Executes an operation with automatic retry on transient failures using exponential backoff.

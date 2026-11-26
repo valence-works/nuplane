@@ -91,7 +91,7 @@ internal sealed class HealthAndMetricsMiddleware(
         var cycleDuration = DateTimeOffset.UtcNow - context.CycleStartedAt;
         var totalFailureCount = applyResult.FailedPackageIds.Count + loaderFailedIds.Length;
         metrics.RecordCycle(changeSet, totalFailureCount, cycleDuration, context.MergedActive!.Count);
-        metrics.RecordConvergenceCycle(isDegraded);
+        metrics.RecordReconciliationCycle(isDegraded);
         if (applyResult.FailedPackageIds.Count > 0)
         {
             metrics.RecordAcquisitionFailed(applyResult.FailedPackageIds.Count);

@@ -6,7 +6,7 @@ namespace Nuplane.Setup;
 /// <summary>
 /// Reads setup feed declarations from an <see cref="IConfiguration"/> source.
 /// </summary>
-public sealed class ConfigurationNuplaneSetupFeedDeclarationSource : INuplaneSetupFeedDeclarationSource
+internal sealed class ConfigurationNuplaneSetupFeedDeclarationSource : INuplaneSetupFeedDeclarationSource
 {
     private readonly Lazy<NuplaneFeedSetupReadResult> _result;
 

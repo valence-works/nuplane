@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Text;
 using Nuplane.Abstractions;
 using Nuplane.Store.State;
 
@@ -6,6 +7,55 @@ namespace Nuplane.Store.Tests.State;
 
 public sealed class StoreStateSerializerTests
 {
+    // Both fixtures were written by the pre-consolidation 0.0.15 serializer.
+    [Fact]
+    public async Task SaveAsync_WhenReadingActivePackagesFrom0015_PreservesExactStateBytes()
+    {
+        var fixturePath = Path.Combine(AppContext.BaseDirectory, "State", "Fixtures", "active-packages-0.0.15.json");
+        var tempRoot = Directory.CreateTempSubdirectory("nuplane-active-packages-roundtrip-");
+        var stateFilePath = Path.Combine(tempRoot.FullName, "store-state.json");
+        var serializer = new StoreStateSerializer();
+
+        try
+        {
+            var expectedBytes = await ReadNativeFixtureAsync(fixturePath);
+            await File.WriteAllBytesAsync(stateFilePath, expectedBytes);
+            var state = await serializer.LoadAsync(stateFilePath, CancellationToken.None);
+
+            await serializer.SaveAsync(stateFilePath, state, CancellationToken.None);
+
+            Assert.Equal(expectedBytes, await File.ReadAllBytesAsync(stateFilePath));
+            Assert.Equal(ActivePackageRole.Dependency, state.ActivePackageDescriptorsByIdNormalized["Plugin.Support"].PackageRole);
+        }
+        finally
+        {
+            tempRoot.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WritePayloadAsync_WhenReadingActivePackagesFrom0015ProtectionBundle_PreservesExactStateBytes()
+    {
+        var fixturePath = Path.Combine(AppContext.BaseDirectory, "State", "Fixtures", "active-packages-v2-0.0.15.json");
+        var expectedBytes = await ReadNativeFixtureAsync(fixturePath);
+        var serializer = new StoreStateSerializer();
+        await using var source = new MemoryStream(expectedBytes);
+        await using var destination = new MemoryStream();
+
+        var state = await serializer.ReadPayloadAsync(source, CancellationToken.None);
+        await serializer.WritePayloadAsync(destination, state, CancellationToken.None);
+
+        Assert.NotNull(state.ProtectionBundle);
+        Assert.Equal(expectedBytes, destination.ToArray());
+    }
+
+    private static async Task<byte[]> ReadNativeFixtureAsync(string path)
+    {
+        // The 0.0.15 indented writer uses the platform newline. Git stores the fixture with LF.
+        var fixture = await File.ReadAllTextAsync(path);
+        return Encoding.UTF8.GetBytes(fixture.ReplaceLineEndings(Environment.NewLine));
+    }
+
     [Fact]
     public async Task SaveAsync_WhenReplacementFails_PreservesDiskAndMemoryAndCleansUniqueTemporaryFiles()
     {

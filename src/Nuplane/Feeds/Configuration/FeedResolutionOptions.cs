@@ -8,10 +8,25 @@ namespace Nuplane.Feeds.Configuration;
 /// </summary>
 public sealed class FeedResolutionOptions
 {
+    private readonly Dictionary<string, string> _trustConfigurationPaths = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>
     /// Gets the list of configured NuGet feed definitions.
     /// </summary>
     public List<FeedDefinition> Feeds { get; } = [];
+
+    /// <summary>Gets package-specific exceptions to the feed trust policy.</summary>
+    public List<FeedTrustOverride> TrustOverrides { get; } = [];
+
+    internal void SetTrustConfigurationPath(string feedName, string? path)
+    {
+        if (path is null)
+            _trustConfigurationPaths.Remove(feedName);
+        else
+            _trustConfigurationPaths[feedName] = path;
+    }
+
+    internal string GetTrustConfigurationPath(string feedName) =>
+        _trustConfigurationPaths.GetValueOrDefault(feedName) ?? $"Nuplane:Setup:Feeds:{feedName}:Trust";
 
     /// <summary>
     /// Gets the dictionary mapping feed names to their priority values (lower is higher priority).

@@ -341,9 +341,9 @@ internal static class CoordinatedActiveStateTransitionProducer
             NodeVersionsByPackageId: snapshot.Nodes.ToDictionary(static node => node.Install.PackageId,
                 static node => node.Install.Version, StringComparer.OrdinalIgnoreCase));
 
-    private static IReadOnlyDictionary<string, ActivePackageDescriptor> BuildExactDescriptors(
+    private static IReadOnlyDictionary<string, ActivePackage> BuildExactDescriptors(
         StoreStateRecord current,
-        IReadOnlyDictionary<string, ActivePackageDescriptor> mappedDescriptors,
+        IReadOnlyDictionary<string, ActivePackage> mappedDescriptors,
         IReadOnlyList<ProtectedGraphSnapshot> snapshots,
         IReadOnlyList<IncomingSelection> incoming,
         IReadOnlyDictionary<string, string> nextActive,
@@ -401,7 +401,7 @@ internal static class CoordinatedActiveStateTransitionProducer
                     _ => throw Refused("A final active graph contains an unprojectable node role.", root)
                 };
 
-                ActivePackageDescriptor priorDescriptor = current.ActivePackageDescriptorsByIdNormalized
+                ActivePackage priorDescriptor = current.ActivePackageDescriptorsByIdNormalized
                     .GetValueOrDefault(install.PackageId)!;
                 PackageLineage lineage;
                 if (incomingByIdentity.TryGetValue(new PackageVersionKey(install.PackageId, install.Version), out var incomingLineage))
@@ -440,7 +440,7 @@ internal static class CoordinatedActiveStateTransitionProducer
         if (projections.Count != nextActive.Count || nextActive.Keys.Any(packageId => !projections.ContainsKey(packageId)))
             throw Refused("The final graph snapshots do not exactly cover every merged active package.", root);
 
-        var result = new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase);
         foreach (var (packageId, projection) in projections)
         {
             if (!mappedDescriptors.TryGetValue(packageId, out var descriptor) || descriptor is null ||

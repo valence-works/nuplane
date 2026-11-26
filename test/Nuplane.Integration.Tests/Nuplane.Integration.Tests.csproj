@@ -15,7 +15,6 @@
     <ProjectReference Include="..\..\src\Nuplane.Admin.Api\Nuplane.Admin.Api.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Loading\Nuplane.Loading.csproj" />
     <ProjectReference Include="..\..\src\Nuplane.Loading.Api\Nuplane.Loading.Api.csproj" />
-    <ProjectReference Include="..\..\src\Nuplane.Sources.Directory\Nuplane.Sources.Directory.csproj" />
   </ItemGroup>
 
   <Target Name="CopyPackageStoreTestHost" AfterTargets="Build">

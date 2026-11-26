@@ -129,7 +129,8 @@ internal sealed class PackageStoreDeletionCandidateBinder
         PackageStoreDeletionJournalStore.DiscoveredJournal discovered,
         PhysicalStoreDirectoryHandle rootHandle,
         Action<CancellationToken> revalidateOperation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        PhysicalFileIdentity? replacementIdentity = null)
     {
         var journal = discovered.Journal;
         if (journal.Phase != PackageStoreDeletionPhase.Finalizing)
@@ -144,12 +145,11 @@ internal sealed class PackageStoreDeletionCandidateBinder
                 "The held store root changed before checking a Finalizing quarantine absence.");
             var parent = OpenPackageParent(discovered, rootHandle, ownedParents, edges,
                 out var parentIdentity, out var parentSemantics, cancellationToken);
-            if (parentIdentity != journal.PackageParentIdentity || parentSemantics != journal.PackageParentSemantics ||
-                _files.InspectChildNoFollow(parent, journal.QuarantineBasename) is not null ||
-                _files.InspectChildNoFollow(parent, journal.OriginalBasename) is not null)
+            if (parentIdentity != journal.PackageParentIdentity || parentSemantics != journal.PackageParentSemantics)
                 throw Refuse(PackageStoreAdmissionReason.UnknownAuthority,
-                    "The Finalizing quarantine is absent only when both its reserved and original names are positively absent.",
-                    journal.StoreRoot);
+                    "The package parent changed before confirming Finalizing quarantine absence.", journal.StoreRoot);
+
+            VerifyTerminalSlots();
 
             foreach (var edge in edges)
             {
@@ -167,6 +167,19 @@ internal sealed class PackageStoreDeletionCandidateBinder
                         journal.StoreRoot);
             }
             revalidateOperation(cancellationToken);
+            VerifyTerminalSlots();
+
+            void VerifyTerminalSlots()
+            {
+                var original = _files.InspectChildNoFollow(parent, journal.OriginalBasename);
+                var originalMatches = replacementIdentity is null
+                    ? original is null
+                    : original is { Kind: PhysicalStoreEntryKind.Directory } && original.Identity == replacementIdentity;
+                if (!originalMatches || _files.InspectChildNoFollow(parent, journal.QuarantineBasename) is not null)
+                    throw Refuse(PackageStoreAdmissionReason.UnknownAuthority,
+                        "The original slot or reserved quarantine name changed during Finalizing absence confirmation.",
+                        journal.StoreRoot);
+            }
         }
         finally
         {

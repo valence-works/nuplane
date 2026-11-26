@@ -11,6 +11,20 @@ The package set Nuplane should make active.
 - Applied in: [Overview](Overview.md), [Getting Started](Getting-Started.md), [Architecture Guide](Architecture-Guide.md)
 - Canonical anchor: `README.md`
 
+### Desired-state source
+
+A provider of desired package requests, such as a feed's include rules, a directory-feed drop, a desired manifest, or a custom `IDesiredPackageSource`. A source describes what the host wants. A feed supplies package files for resolution. `PackageRequest.SourceName` identifies the desired-state source and matches the name used in `Nuplane:DesiredState:SourcePriorities`.
+
+- Applied in: [Usage Guide](Usage-Guide.md#precedence-for-overlapping-desired-sources)
+- Canonical anchors: `IDesiredPackageSource`, `PackageRequest.SourceName`
+
+### Desired manifest
+
+A shared file that supplies exact package requests. Configure the file under `Nuplane:DesiredState:Manifest`; the source is disabled unless explicitly enabled.
+
+- Applied in: [Usage Guide](Usage-Guide.md)
+- Canonical anchor: `DesiredStateOptions.Manifest`
+
 ### Actual state
 
 The package set currently active in the local store and available through Nuplane’s authoritative read surfaces.
@@ -27,7 +41,7 @@ A control-loop cycle that reads desired state, resolves packages, computes the d
 
 ### Feed
 
-A named package source used for resolution. In current repository behavior, a feed can be a NuGet v3 service index or a local directory containing `.nupkg` files.
+A named location that supplies package files for resolution. A feed can be a NuGet v3 service index or a local directory containing `.nupkg` files.
 
 - Applied in: [Getting Started](Getting-Started.md), [Usage Guide](Usage-Guide.md)
 - Canonical anchor: `README.md`
@@ -37,7 +51,35 @@ A named package source used for resolution. In current repository behavior, a fe
 Nuplane’s deterministic on-disk storage area for packages, current-package pointers, staging work, and persisted state.
 
 - Applied in: [Overview](Overview.md), [Architecture Guide](Architecture-Guide.md)
-- Canonical anchors: `README.md`, `src/Nuplane.Store/`
+- Canonical anchors: `README.md`, `src/Nuplane/Store/`
+
+### State file
+
+The persisted record of the active package set and related store state. The default name is `store-state.json`. Set `Nuplane:StoreRegistry:StateFilePath` to use a different path.
+
+- Applied in: [Usage Guide](Usage-Guide.md#host-free-restore-of-the-package-set)
+- Canonical anchor: `StoreRegistryOptions.StateFilePath`
+
+### Package lock file
+
+An optional file that pins package versions and exact archive hashes. Configure it under `Nuplane:LockFile` and select `Generate`, `Enforce`, or `Strict` as appropriate.
+
+- Applied in: [Usage Guide](Usage-Guide.md#host-free-restore-of-the-package-set)
+- Canonical anchor: [Lock-file artifact provenance](../adr/0001-lock-file-artifact-provenance.md)
+
+### Store lock
+
+The cross-process lock beside the state file that serializes reconciliation writers for that state file. Its location follows `Nuplane:StoreRegistry:StateFilePath`.
+
+- Applied in: [Usage Guide](Usage-Guide.md#the-store-lock)
+- Canonical anchor: `StoreRegistryOptions.StateFilePath`
+
+### Restore
+
+A single reconciliation through `NuplaneRestore` that populates the install root and state file without starting a host or loading assemblies.
+
+- Applied in: [Usage Guide](Usage-Guide.md#host-free-restore-of-the-package-set)
+- Canonical anchor: `NuplaneRestore.RestoreAsync`
 
 ### Active package
 
@@ -76,6 +118,20 @@ An opt-in subsystem that loads resolved packages into isolated assembly load con
 - **Applicability:** `Optional Module`
 - Applied in: [Overview](Overview.md), [Getting Started](Getting-Started.md), [Usage Guide](Usage-Guide.md), [Architecture Guide](Architecture-Guide.md)
 - Canonical anchors: `README.md`, `src/Nuplane.Loading/`, `src/Nuplane.Loading.Api/`
+
+### Shared assembly
+
+An assembly that the host and packages resolve to the same host-loaded instance. List it in `Nuplane:Loading:SharedAssemblies` when both sides need the same runtime type identities.
+
+- Applied in: [Usage Guide](Usage-Guide.md#sharing-assemblies-with-the-host)
+- Canonical anchor: `LoadingOptions.SharedAssemblies`
+
+### Host-provided package
+
+A dependency already supplied by the host. Listing it under `Nuplane:HostProvidedPackages` tells resolution to use the host's package version and skip acquiring the dependency. A shared assembly controls assembly binding after package resolution.
+
+- Applied in: [Usage Guide](Usage-Guide.md#packages-the-host-already-provides)
+- Canonical anchor: `Nuplane:HostProvidedPackages`
 
 ### Load-state catalog
 
@@ -153,22 +209,6 @@ An active package assembly loaded in `HostIntegrated` mode so framework code can
 - **Applicability:** `Optional Module`
 - Applied in: [Usage Guide](Usage-Guide.md)
 - Canonical anchors: `README.md`, `src/Nuplane.Loading/HostIntegratedAssemblyResolver.cs`
-
-## Documentation-governance terms
-
-### Hybrid hub
-
-A documentation model where the wiki owns orientation and onboarding but intentionally links to repository docs, samples, and specs for deeper or more volatile detail.
-
-- Applied in: [Home](Home.md), [Architecture Guide](Architecture-Guide.md), [Source References](_Source-References.md)
-- Canonical anchor: `specs/016-nuplane-github-wiki/spec.md`
-
-### Applicability label
-
-A visible label that tells the reader whether a capability is `Core`, `Optional Module`, `Phase-Based`, `Recently Changed`, or `Evolving`.
-
-- Applied in: [_Footer](_Footer.md), [Overview](Overview.md), [Usage Guide](Usage-Guide.md), [Architecture Guide](Architecture-Guide.md)
-- Canonical anchor: `specs/016-nuplane-github-wiki/contracts/wiki-governance-and-labeling-contract.md`
 
 ## Related pages
 

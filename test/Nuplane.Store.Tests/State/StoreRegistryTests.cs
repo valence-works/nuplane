@@ -296,7 +296,7 @@ public sealed class StoreRegistryTests
             .Do(callInfo => savedState = callInfo.ArgAt<StoreStateRecord>(1));
 
         var registry = new StoreRegistry(serializer, "/tmp/state.json");
-        var descriptors = new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+        var descriptors = new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
         {
             ["pkg-a"] = new(
                 "pkg-a",
@@ -332,7 +332,7 @@ public sealed class StoreRegistryTests
             new Dictionary<string, string> { ["Plugin.Root"] = "1.0.0", ["Plugin.Dependency"] = "1.0.0" },
             "corr-graph",
             CancellationToken.None,
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, GraphActivationRecord>(StringComparer.OrdinalIgnoreCase)
             {
                 ["graph-1"] = new(
@@ -362,7 +362,7 @@ public sealed class StoreRegistryTests
             new Dictionary<string, string> { ["Plugin.Root"] = "1.0.0" },
             "corr-graph",
             CancellationToken.None,
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, GraphActivationRecord>(StringComparer.OrdinalIgnoreCase)
             {
                 ["graph-1"] = new(
@@ -392,7 +392,7 @@ public sealed class StoreRegistryTests
                 new Dictionary<string, string> { ["pkg-a"] = "2.0.0" },
                 "corr-roundtrip",
                 CancellationToken.None,
-                new Dictionary<string, ActivePackageDescriptor>
+                new Dictionary<string, ActivePackage>
                 {
                     ["pkg-a"] = new(
                         "pkg-a",

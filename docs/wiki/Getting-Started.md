@@ -4,23 +4,31 @@
 
 This page gets you to your first working dynamic package installation in a .NET application — and then points you to the right next steps.
 
-### What "first use" looks like
+### Install a plugin in the sample host
+
+Run from the repository root:
 
 ```bash
-# 1. Start the sample host
-dotnet run --project samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj
-
-# 2. Pack the sample plugin
-dotnet pack samples/Nuplane.Sample.Plugin/Nuplane.Sample.Plugin.csproj -c Debug
-
-# 3. Drop it into the watched folder
-mkdir -p packages
-cp samples/Nuplane.Sample.Plugin/bin/Debug/Nuplane.Sample.Plugin.1.0.0.nupkg packages/
+dotnet run --project samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj --no-launch-profile -- --urls http://127.0.0.1:5086
 ```
 
-Within about a second, Nuplane detects the new `.nupkg`, resolves and installs it, loads the assemblies, and signals the host. Query `/catalog/plugins` and you'll see `Nuplane.Sample.Plugin.HelloPlugin` in the response — discovered live in the running process, with no restart.
+From a second terminal at the repository root, pack the plugin and copy it into the sample content
+root's watched folder:
 
-That is the core workflow this page helps you understand before you integrate it into your own application.
+```bash
+dotnet pack samples/Nuplane.Sample.Plugin/Nuplane.Sample.Plugin.csproj -c Debug
+mkdir -p samples/Nuplane.Sample.AspNetCore/packages
+cp samples/Nuplane.Sample.Plugin/bin/Debug/Nuplane.Sample.Plugin.1.0.0.nupkg samples/Nuplane.Sample.AspNetCore/packages/
+```
+
+Wait a few seconds for reconciliation and check the running host:
+
+```bash
+curl -fsS http://127.0.0.1:5086/catalog/packages
+curl -fsS http://127.0.0.1:5086/catalog/plugins
+```
+
+Look for `Nuplane.Sample.Plugin` and `Nuplane.Sample.Plugin.HelloPlugin` in the responses.
 
 ## Recommended reading and usage order
 
@@ -69,17 +77,6 @@ Keep references to Nuplane's packages on the same version when upgrading.
 Tagged releases use the release tag as their package version, with an optional leading `v` removed,
 and publish to both nuget.org and Feedz. Release tag versions are independent of the preview base
 version; changing the preview base does not change the version selected by a release tag.
-
-## Copyable onboarding commands
-
-These commands are intentionally small. They point you to the canonical sample and quickstart instead of duplicating the full maintained walkthrough.
-
-```bash
-dotnet run --project samples/Nuplane.Sample.AspNetCore/Nuplane.Sample.AspNetCore.csproj
-dotnet pack samples/Nuplane.Sample.Plugin/Nuplane.Sample.Plugin.csproj -c Debug
-```
-
-After that, continue with the maintained validation flow in [`specs/014-query-package-catalog/quickstart.md`](../../specs/014-query-package-catalog/quickstart.md).
 
 ## How the sample teaches the model
 

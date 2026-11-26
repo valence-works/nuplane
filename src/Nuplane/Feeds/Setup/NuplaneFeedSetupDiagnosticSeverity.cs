@@ -3,7 +3,7 @@ namespace Nuplane.Feeds.Setup;
 /// <summary>
 /// Identifies the severity of a setup feed diagnostic.
 /// </summary>
-public enum NuplaneFeedSetupDiagnosticSeverity
+internal enum NuplaneFeedSetupDiagnosticSeverity
 {
     /// <summary>
     /// The diagnostic describes a non-fatal configuration condition.

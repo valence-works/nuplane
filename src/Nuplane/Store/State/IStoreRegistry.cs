@@ -14,8 +14,8 @@ public interface IStoreRegistry
     /// <summary>Retrieves the complete store state record.</summary>
     Task<StoreStateRecord> GetStateAsync(CancellationToken cancellationToken);
 
-    /// <summary>Retrieves the persisted active package descriptors keyed by package identifier.</summary>
-    async Task<IReadOnlyDictionary<string, ActivePackageDescriptor>> GetActivePackageDescriptorsAsync(CancellationToken cancellationToken)
+    /// <summary>Retrieves the persisted active packages keyed by package identifier.</summary>
+    async Task<IReadOnlyDictionary<string, ActivePackage>> GetActivePackagesAsync(CancellationToken cancellationToken)
     {
         var state = await GetStateAsync(cancellationToken);
         return state.ActivePackageDescriptorsByIdNormalized;
@@ -28,13 +28,13 @@ public interface IStoreRegistry
         string correlationId,
         CancellationToken cancellationToken);
 
-    /// <summary>Persists updated active versions together with their active package descriptors.</summary>
+    /// <summary>Persists updated active versions together with their active packages.</summary>
     Task PersistActiveVersionsAsync(
         IReadOnlyDictionary<string, string> activeVersions,
         IReadOnlyDictionary<string, string> successfullyApplied,
         string correlationId,
         CancellationToken cancellationToken,
-        IReadOnlyDictionary<string, ActivePackageDescriptor>? activePackageDescriptors)
+        IReadOnlyDictionary<string, ActivePackage>? activePackages)
         => PersistActiveVersionsAsync(activeVersions, successfullyApplied, correlationId, cancellationToken);
 
     /// <summary>Persists updated active versions together with package and graph activation metadata.</summary>
@@ -43,7 +43,7 @@ public interface IStoreRegistry
         IReadOnlyDictionary<string, string> successfullyApplied,
         string correlationId,
         CancellationToken cancellationToken,
-        IReadOnlyDictionary<string, ActivePackageDescriptor>? activePackageDescriptors,
+        IReadOnlyDictionary<string, ActivePackage>? activePackages,
         IReadOnlyDictionary<string, GraphActivationRecord>? activeGraphs)
     {
         if (activeGraphs is { Count: > 0 })
@@ -51,7 +51,7 @@ public interface IStoreRegistry
             return Task.FromException(new NotSupportedException("This store registry implementation does not support graph activation metadata."));
         }
 
-        return PersistActiveVersionsAsync(activeVersions, successfullyApplied, correlationId, cancellationToken, activePackageDescriptors);
+        return PersistActiveVersionsAsync(activeVersions, successfullyApplied, correlationId, cancellationToken, activePackages);
     }
 
     /// <summary>Persists a failure record for a package.</summary>

@@ -4,7 +4,6 @@ using Nuplane.Abstractions;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Integration.Tests.Support;
 using Nuplane.Loading;
-using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Loading.Registration;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Sources.Directory;
@@ -87,25 +86,6 @@ public sealed class ModuleRegistrationCompatibilityTests
     }
 
     [Fact]
-    public void LoadingAndDirectoryModules_RegisteredDirectly_CoexistWithoutConflict()
-    {
-        var services = new ServiceCollection();
-
-        // Register both modules directly
-        LoadingRegistrationServices.Register(services);
-        services.AddNuplaneDirectorySource(o =>
-        {
-            o.FeedName = "test-feed";
-            o.DirectoryPath = Path.GetTempPath();
-            o.TriggerReconciliationOnChange = false;
-        });
-
-        // Both modules' services must be present
-        Assert.Contains(services, d => d.ServiceType == typeof(PackageLoader));
-        Assert.Contains(services, d => d.ServiceType == typeof(IDesiredPackageSource));
-    }
-
-    [Fact]
     public void DirectoryModuleBuilderExtension_RegistersFeedAndDesiredSource()
     {
         var root = Path.Combine(Path.GetTempPath(), "nuplane-integration-builder", Guid.NewGuid().ToString("N"));
@@ -119,6 +99,7 @@ public sealed class ModuleRegistrationCompatibilityTests
             {
                 nuplane.AddDirectoryFeed("builder-feed", root, feed =>
                 {
+                    feed.Trust = FeedTrustLevel.Trusted;
                     feed.Include("Test.*");
                 });
             });
@@ -159,6 +140,7 @@ public sealed class ModuleRegistrationCompatibilityTests
             {
                 nuplane.AddDirectoryFeed("dir-feed", root, feed =>
                 {
+                    feed.Trust = FeedTrustLevel.Trusted;
                     feed.IncludeAll();
                 });
                 nuplane.AutoloadPackages();

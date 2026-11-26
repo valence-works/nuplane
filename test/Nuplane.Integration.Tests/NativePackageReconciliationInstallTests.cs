@@ -42,7 +42,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         await using var feed = new AuthenticatedLoopbackNuGetFeed("Root.Second", "3.0.0", packageBytes,
             secret, new AuthenticatedLoopbackNuGetFeed.Dependency("Shared.Dependency", "2.1.0"));
         using var secretScope = new EnvironmentVariableScope(variableName, secret);
-        var remoteFeed = new FeedDefinition("feed", feed.ServiceIndexUri, "secrets://env/" + variableName);
+        var remoteFeed = new FeedDefinition("feed", feed.ServiceIndexUri, "secrets://env/" + variableName) { Trust = FeedTrustLevel.Trusted };
         await using var provider = fixture.CreateProvider("member-b", desiredRequests: [request], remoteFeed: remoteFeed,
             participant: true);
 
@@ -102,13 +102,20 @@ public sealed partial class OverlappingPackageGraphProtectionTests
                 Assert.Equal(expectedHash,
                     await PackageInstallStore.ReadContentHashAsync(installPath, borrow, CancellationToken.None));
 
+                using var sourceArchive = new ZipArchive(new MemoryStream(packageBytes));
+                using var sourceAssembly = sourceArchive.GetEntry("lib/net10.0/Root.Second.dll")!.Open();
+                using var expectedAssembly = new MemoryStream();
+                await sourceAssembly.CopyToAsync(expectedAssembly);
+                Assert.Equal(expectedAssembly.ToArray(),
+                    PackageContent.TryReadFile(installPath, "lib/net10.0/Root.Second.dll", borrow));
+
                 // The protected state records the archive hash for the active install and per package,
                 // and the archive reader serves the coordinated install from its kept archive.
                 var descriptor = state.ActivePackageDescriptorsByIdNormalized["Root.Second"];
                 Assert.Equal(expectedHash, descriptor.ArchiveHash);
                 Assert.Equal(expectedHash, state.ArchiveHashesByPackage![StoreStateRecord.ArchiveHashKey("Root.Second", "3.0.0")]);
                 var archive = await provider.GetRequiredService<IPackageArchiveReader>()
-                    .OpenAsync(descriptor.ToActivePackage());
+                    .OpenAsync(descriptor);
                 Assert.NotNull(archive.GetEntry("lib/net10.0/Root.Second.dll"));
 
                 var activeRecord = Assert.Single(state.ActiveGraphsByIdNormalized.Values);

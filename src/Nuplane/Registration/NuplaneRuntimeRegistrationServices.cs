@@ -24,7 +24,7 @@ namespace Nuplane.Registration;
 /// <summary>
 /// Provides extension methods for registering Nuplane Runtime services, including configuration validators and other runtime-specific dependencies.
 /// </summary>
-public static class NuplaneRuntimeRegistrationServices
+internal static class NuplaneRuntimeRegistrationServices
 {
     /// <summary>
     /// Registers Nuplane Runtime services, including the composite validator for feed resolution options that ensures feed credentials are valid according to the configured trust policies and source trust settings.

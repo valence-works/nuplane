@@ -6,7 +6,7 @@ namespace Nuplane.Feeds.Configuration;
 /// Validates feed credential and trust configuration across feed resolution, trust policy,
 /// and source trust options to ensure consistency and supply-chain safety.
 /// </summary>
-public sealed class FeedCredentialOptionsValidator
+internal sealed class FeedCredentialOptionsValidator
 {
     /// <summary>
     /// Validates the combined feed configuration and returns a list of validation errors.

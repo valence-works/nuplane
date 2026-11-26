@@ -3,7 +3,9 @@ using Nuplane.Observability;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Middleware;
 using Nuplane.Reconciliation.Models;
+using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Sources;
+using Nuplane.Sources.Directory;
 using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Reconciliation.Middleware;
@@ -81,13 +83,111 @@ public sealed class DesiredStateReadMiddlewareTests
         Assert.True(recorder.RecordedCount > 0);
     }
 
+    [Fact]
+    public async Task InvokeAsync_TwoFeedRulesAndRestart_FallsBackOnlyForTheUnavailableFeed()
+    {
+        using var workspace = new TempDirectory();
+        var storePath = Path.Combine(workspace.Path, "store-state.json");
+        var first = new FeedRuleDesiredSource("first", ["Alpha"]);
+        var second = new FeedRuleDesiredSource("second", ["Beta"]);
+        await InvokeAsync([first, second], storePath);
+
+        var afterRestart = await InvokeAsync(
+            [new FeedRuleDesiredSource("second", ["BetaNext"]), new FaultingAdapter(first)], storePath);
+
+        Assert.Equal(["Alpha", "BetaNext"], afterRestart.DesiredRequests.Select(request => request.Id));
+        Assert.False(afterRestart.ReadResult!.AllSourcesFresh);
+        Assert.Equal(1, afterRestart.SourceOutageCount);
+        var persisted = await OpenStore(storePath).GetStateAsync(CancellationToken.None);
+        Assert.Equal(["source-instance:v1:feed-rule:first", "source-instance:v1:feed-rule:second"],
+            persisted.LastSuccessfulSourceSnapshots.Keys.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task InvokeAsync_TwoDirectoryFeedsUnavailableAfterRestart_KeepsBothSnapshotsAndErrors()
+    {
+        using var firstFeed = new TempDirectory();
+        using var secondFeed = new TempDirectory();
+        using var workspace = new TempDirectory();
+        var storePath = Path.Combine(workspace.Path, "store-state.json");
+        NupkgTestBuilder.Create("Alpha", "1.0.0").BuildTo(firstFeed.Path);
+        NupkgTestBuilder.Create("Beta", "1.0.0").BuildTo(secondFeed.Path);
+        var first = new DirectoryNupkgDesiredSource("first", firstFeed.Path, ["*"], feedName: "first");
+        var second = new DirectoryNupkgDesiredSource("second", secondFeed.Path, ["*"], feedName: "second");
+        await InvokeAsync([first, second], storePath);
+
+        var recorder = new FakeFailureRecorder();
+        var failingSources = new FaultingAdapter[] { new(second), new(first) };
+        var afterRestart = await InvokeAsync(failingSources, storePath, recorder);
+        var directAggregate = await new DesiredStateAggregator().AggregateAsync(failingSources, CancellationToken.None);
+
+        Assert.Equal(["Alpha", "Beta"], afterRestart.DesiredRequests.Select(request => request.Id));
+        Assert.Equal(["directory:first", "directory:second"], recorder.Identifiers);
+        Assert.Equal(recorder.Identifiers, directAggregate.SourceErrors.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(2, afterRestart.SourceOutageCount);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_LegacyTypeKeyWithKnownOwner_UsesOnlyThatFeedsSnapshotAndRekeysOnFreshRead()
+    {
+        using var workspace = new TempDirectory();
+        var storePath = Path.Combine(workspace.Path, "store-state.json");
+        var first = new FeedRuleDesiredSource("first", ["Alpha"]);
+        var second = new FeedRuleDesiredSource("second", ["Beta"]);
+        var store = OpenStore(storePath);
+        await store.PersistSourceSnapshotAsync(
+            typeof(FeedRuleDesiredSource).FullName!,
+            new("legacy", DateTimeOffset.UtcNow, await first.GetDesiredAsync(CancellationToken.None)),
+            CancellationToken.None);
+
+        var restored = await InvokeAsync([new FaultingAdapter(first), new FaultingAdapter(second)], storePath);
+        Assert.Equal("Alpha", Assert.Single(restored.DesiredRequests).Id);
+
+        await InvokeAsync([first, second], storePath);
+        var persisted = await OpenStore(storePath).GetStateAsync(CancellationToken.None);
+        Assert.Contains("source-instance:v1:feed-rule:first", persisted.LastSuccessfulSourceSnapshots.Keys);
+        Assert.Contains("source-instance:v1:feed-rule:second", persisted.LastSuccessfulSourceSnapshots.Keys);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_EmptySuccessfulSnapshotAfterRestart_DoesNotReviveLegacyRequests()
+    {
+        using var workspace = new TempDirectory();
+        var storePath = Path.Combine(workspace.Path, "store-state.json");
+        var original = new FeedRuleDesiredSource("first", ["Alpha"]);
+        var current = new FeedRuleDesiredSource("first", []);
+        await OpenStore(storePath).PersistSourceSnapshotAsync(
+            typeof(FeedRuleDesiredSource).FullName!,
+            new("legacy", DateTimeOffset.UtcNow, await original.GetDesiredAsync(CancellationToken.None)),
+            CancellationToken.None);
+        await InvokeAsync([current], storePath);
+
+        var restored = await InvokeAsync([new FaultingAdapter(current)], storePath);
+
+        Assert.True(restored.ReadResult!.UsedFallback);
+        Assert.Empty(restored.DesiredRequests);
+        var persisted = await OpenStore(storePath).GetStateAsync(CancellationToken.None);
+        Assert.Empty(persisted.LastSuccessfulSourceSnapshots["source-instance:v1:feed-rule:first"].Requests!);
+    }
+
+    private static async Task<ReconciliationCycleContext> InvokeAsync(
+        IReadOnlyList<IDesiredPackageSource> sources, string storePath, IFailureRecorder? recorder = null)
+    {
+        var context = Ctx();
+        var middleware = BuildMiddleware(sources, failureRecorder: recorder, store: OpenStore(storePath));
+        await middleware.InvokeAsync(context, () => Task.CompletedTask);
+        return context;
+    }
+
+    private static StoreRegistry OpenStore(string? path) => new(new StoreStateSerializer(), path);
+
     private static DesiredStateReadMiddleware BuildMiddleware(
         IReadOnlyList<IDesiredPackageSource>? sources = null,
         Func<IReadOnlyList<PackageRequest>, DesiredAggregateResult>? aggregatorResult = null,
-        IFailureRecorder? failureRecorder = null)
+        IFailureRecorder? failureRecorder = null,
+        IStoreRegistry? store = null)
     {
-        var fakeStore = new FakeStoreRegistry();
-        var snapshotCache = new DesiredSourceSnapshotCache(fakeStore);
+        var snapshotCache = new DesiredSourceSnapshotCache(store ?? OpenStore(null));
         return new(
             sources ?? [],
             new FakeAggregator(aggregatorResult ?? (req => new(req, Empty))),
@@ -123,6 +223,14 @@ public sealed class DesiredStateReadMiddlewareTests
             Task.FromException<IReadOnlyList<PackageRequest>>(ex);
     }
 
+    private sealed class FaultingAdapter(IDesiredPackageSource source) : IDesiredPackageSource, IDesiredPackageSourceAdapter
+    {
+        public IDesiredPackageSource Source => source;
+
+        public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct) =>
+            Task.FromException<IReadOnlyList<PackageRequest>>(new IOException("Source unavailable."));
+    }
+
     private sealed class FakeAggregator(Func<IReadOnlyList<PackageRequest>, DesiredAggregateResult> factory) : IDesiredStateAggregator
     {
         public Task<DesiredAggregateResult> AggregateAsync(
@@ -144,10 +252,12 @@ public sealed class DesiredStateReadMiddlewareTests
 
     private sealed class FakeFailureRecorder : IFailureRecorder
     {
-        public int RecordedCount { get; private set; }
+        public List<string> Identifiers { get; } = [];
+        public int RecordedCount => Identifiers.Count;
+
         public Task RecordAsync(string packageId, string stage, string message, string correlationId, CancellationToken ct)
         {
-            RecordedCount++;
+            Identifiers.Add(packageId);
             return Task.CompletedTask;
         }
     }
@@ -171,19 +281,5 @@ public sealed class DesiredStateReadMiddlewareTests
         public void LogTrigger(string correlationId, string triggerType, string? triggerSource) { }
         public void LogIdleModeEntered() { }
         public void LogIdleModeExited() { }
-    }
-
-    private sealed class FakeStoreRegistry : IStoreRegistry
-    {
-        public Task<IReadOnlyDictionary<string, string>> GetActiveVersionsAsync(CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
-        public Task<StoreStateRecord> GetStateAsync(CancellationToken ct) =>
-            Task.FromResult(StoreStateRecord.Empty());
-        public Task PersistActiveVersionsAsync(IReadOnlyDictionary<string, string> active, IReadOnlyDictionary<string, string> applied, string correlationId, CancellationToken ct) =>
-            Task.CompletedTask;
-        public Task PersistFailureAsync(string packageId, string stage, string message, string correlationId, CancellationToken ct) =>
-            Task.CompletedTask;
-        public Task PersistSourceSnapshotAsync(string sourceName, SourceSnapshotRef snapshot, CancellationToken ct) =>
-            Task.CompletedTask;
     }
 }

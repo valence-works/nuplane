@@ -93,7 +93,7 @@ public sealed class PersistedStoreStateGraphVerifierTests
     public void Verify_RejectsDescriptorAndActivationRecordMismatchesAgainstProtectedGraphs()
     {
         var fixture = new Fixture();
-        var badDescriptors = new Dictionary<string, ActivePackageDescriptor>(
+        var badDescriptors = new Dictionary<string, ActivePackage>(
             fixture.State.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase)
         {
             ["B"] = fixture.State.ActivePackageDescriptorsByIdNormalized["B"] with
@@ -150,7 +150,7 @@ public sealed class PersistedStoreStateGraphVerifierTests
         var empty = fixture.BuildState(activeVersions: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
             lastKnownGood: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
             activeGraphs: [], recoverableGraphs: [],
-            descriptors: new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase),
+            descriptors: new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase),
             activeGraphRecords: new Dictionary<string, GraphActivationRecord>(StringComparer.OrdinalIgnoreCase));
 
         var verified = PersistedStoreStateGraphVerifier.Verify(empty);
@@ -248,7 +248,7 @@ public sealed class PersistedStoreStateGraphVerifierTests
         internal StoreStateRecord BuildState(
             Dictionary<string, string>? activeVersions = null,
             Dictionary<string, string>? lastKnownGood = null,
-            Dictionary<string, ActivePackageDescriptor>? descriptors = null,
+            Dictionary<string, ActivePackage>? descriptors = null,
             Dictionary<string, GraphActivationRecord>? activeGraphRecords = null,
             IReadOnlyList<ProtectedGraphSnapshot>? activeGraphs = null,
             IReadOnlyList<ProtectedGraphSnapshot>? recoverableGraphs = null,
@@ -393,12 +393,12 @@ public sealed class PersistedStoreStateGraphVerifierTests
         private static GraphEdgeSpec Edge(string sourcePackageId, string targetPackageId, string range)
             => new(sourcePackageId, targetPackageId, range);
 
-        private static Dictionary<string, ActivePackageDescriptor> CreateDescriptors(
+        private static Dictionary<string, ActivePackage> CreateDescriptors(
             IReadOnlyList<ProtectedGraphSnapshot> graphs)
         {
             var a = graphs[0];
             var c = graphs[1];
-            return new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            return new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
             {
                 ["A"] = Descriptor("A", "1.0.0", a, ActivePackageRole.Root, ["A"], []),
                 ["B"] = Descriptor("B", "2.0.0", a, ActivePackageRole.Dependency, ["A", "C"], ["A", "C"], discoverable: false),
@@ -406,7 +406,7 @@ public sealed class PersistedStoreStateGraphVerifierTests
             };
         }
 
-        private static ActivePackageDescriptor Descriptor(
+        private static ActivePackage Descriptor(
             string id,
             string version,
             ProtectedGraphSnapshot graph,

@@ -7,7 +7,7 @@ namespace Nuplane.Reconciliation;
 /// Evaluates a resolved package against the lock file to determine whether
 /// the package version and source should be enforced or overridden.
 /// </summary>
-public interface ILockFileCoordinator
+internal interface ILockFileCoordinator
 {
     /// <summary>
     /// Evaluates the specified resolved package against the lock file.

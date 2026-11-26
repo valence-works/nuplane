@@ -9,7 +9,6 @@ using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Registration;
 using Nuplane.Hosting;
 using Nuplane.Loading;
-using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Setup;
@@ -17,7 +16,6 @@ using Nuplane.Sources;
 using Nuplane.Sources.Configuration;
 using Nuplane.Sources.Directory;
 using Nuplane.Sources.Directory.Builder;
-using Nuplane.Sources.Directory.Configuration;
 using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Configuration;
@@ -206,9 +204,9 @@ public sealed class ConfigurationDrivenRegistrationTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Nuplane:Setup:AutomaticReconciliation"] = "true",
-                    ["Nuplane:Setup:PollInterval"] = "00:00:45",
-                    ["Nuplane:Setup:StateFilePath"] = stateFilePath,
+                    ["Nuplane:Reconciliation:EnableAutomaticReconciliation"] = "true",
+                    ["Nuplane:Reconciliation:PollInterval"] = "00:00:45",
+                    ["Nuplane:StoreRegistry:StateFilePath"] = stateFilePath,
                     ["Nuplane:Setup:Feeds:0:Name"] = "local-packages",
                     ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath,
                     ["Nuplane:Setup:Feeds:0:IncludePatterns:0"] = "*",
@@ -265,10 +263,7 @@ public sealed class ConfigurationDrivenRegistrationTests
 
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
-            {
-                nuplane.AddDirectoryFeedsFromConfiguration(configuration.GetSection("Nuplane"));
-            });
+            services.AddNuplane(configuration.GetSection("Nuplane"));
         }
         finally
         {
@@ -306,10 +301,7 @@ public sealed class ConfigurationDrivenRegistrationTests
 
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
-            {
-                nuplane.AddDirectoryFeedsFromConfiguration(configuration.GetSection("Nuplane"));
-            });
+            services.AddNuplane(configuration.GetSection("Nuplane"));
         }
         finally
         {
@@ -542,7 +534,7 @@ public sealed class ConfigurationDrivenRegistrationTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Nuplane:Setup:UseInMemoryStore"] = "true",
+                    ["Nuplane:StoreRegistry:UseInMemoryStore"] = "true",
                     ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
                     ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
                 })
@@ -586,7 +578,7 @@ public sealed class ConfigurationDrivenRegistrationTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Nuplane:Setup:StateFilePath"] = stateFilePath,
+                    ["Nuplane:StoreRegistry:StateFilePath"] = stateFilePath,
                     ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
                     ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
                 })
@@ -666,7 +658,7 @@ public sealed class ConfigurationDrivenRegistrationTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Nuplane:Setup:StateFilePath"] = stateFilePath,
+                    ["Nuplane:StoreRegistry:StateFilePath"] = stateFilePath,
                     ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
                     ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
                 })
@@ -690,45 +682,7 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
-    public void AddNuplane_StoreRegistryStateFilePathOverridesSetupSection()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "nuplane-precedence", Guid.NewGuid().ToString("N"));
-        var packagesPath = Path.Combine(root, "packages");
-        var setupPath = Path.Combine(root, "setup-state.json");
-        var storeRegistryPath = Path.Combine(root, "store-registry-state.json");
-        Directory.CreateDirectory(packagesPath);
-
-        try
-        {
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["Nuplane:Setup:StateFilePath"] = setupPath,
-                    ["Nuplane:StoreRegistry:StateFilePath"] = storeRegistryPath,
-                    ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
-                    ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
-                })
-                .Build();
-
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddNuplane(configuration.GetSection("Nuplane"));
-
-            using var provider = services.BuildServiceProvider();
-
-            var effectiveSettings = provider.GetRequiredService<EffectiveStorePersistenceSettings>();
-
-            Assert.Equal(StorePersistenceMode.ConfiguredPath, effectiveSettings.Mode);
-            Assert.Equal(Path.GetFullPath(storeRegistryPath), effectiveSettings.ResolvedStateFilePath);
-        }
-        finally
-        {
-            try { Directory.Delete(root, recursive: true); } catch { }
-        }
-    }
-
-    [Fact]
-    public void AddNuplane_SetupUseInMemoryStore_ResolvesInMemoryMode()
+    public void AddNuplane_StoreRegistryUseInMemoryStore_ResolvesInMemoryMode()
     {
         var root = Path.Combine(Path.GetTempPath(), "nuplane-setup-inmemory", Guid.NewGuid().ToString("N"));
         var packagesPath = Path.Combine(root, "packages");
@@ -739,7 +693,7 @@ public sealed class ConfigurationDrivenRegistrationTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Nuplane:Setup:UseInMemoryStore"] = "true",
+                    ["Nuplane:StoreRegistry:UseInMemoryStore"] = "true",
                     ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
                     ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
                 })
@@ -800,41 +754,6 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
-    public void AddNuplane_BlankSetupStateFilePath_FailsOnStartup()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "nuplane-blank-path", Guid.NewGuid().ToString("N"));
-        var packagesPath = Path.Combine(root, "packages");
-        Directory.CreateDirectory(packagesPath);
-
-        try
-        {
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["Nuplane:Setup:StateFilePath"] = "  ",
-                    ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
-                    ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
-                })
-                .Build();
-
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddNuplane(configuration.GetSection("Nuplane"));
-
-            using var provider = services.BuildServiceProvider();
-
-            var ex = Assert.Throws<OptionsValidationException>(() =>
-                provider.GetRequiredService<IOptions<NuplaneSetupOptions>>().Value);
-
-            Assert.Contains("StateFilePath cannot be blank", ex.Message);
-        }
-        finally
-        {
-            try { Directory.Delete(root, recursive: true); } catch { }
-        }
-    }
-
-    [Fact]
     public void AddNuplane_UseInMemoryStoreWithStateFilePath_FailsOnStartup()
     {
         var root = Path.Combine(Path.GetTempPath(), "nuplane-conflict-config", Guid.NewGuid().ToString("N"));
@@ -846,8 +765,8 @@ public sealed class ConfigurationDrivenRegistrationTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Nuplane:Setup:UseInMemoryStore"] = "true",
-                    ["Nuplane:Setup:StateFilePath"] = "./state.json",
+                    ["Nuplane:StoreRegistry:UseInMemoryStore"] = "true",
+                    ["Nuplane:StoreRegistry:StateFilePath"] = "./state.json",
                     ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
                     ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
                 })
@@ -860,7 +779,7 @@ public sealed class ConfigurationDrivenRegistrationTests
             using var provider = services.BuildServiceProvider();
 
             var ex = Assert.Throws<OptionsValidationException>(() =>
-                provider.GetRequiredService<IOptions<NuplaneSetupOptions>>().Value);
+                provider.GetRequiredService<IOptions<StoreRegistryOptions>>().Value);
 
             Assert.Contains("UseInMemoryStore cannot be combined", ex.Message);
         }
@@ -906,60 +825,6 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
-    public void AddNuplaneLoading_DirectRegistration_RegistersLoadingServices()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddNuplaneLoading(options =>
-        {
-            options.Enabled = true;
-            options.DeactivationTimeout = TimeSpan.FromSeconds(30);
-        });
-
-        using var provider = services.BuildServiceProvider();
-
-        var loading = provider.GetRequiredService<IOptions<LoadingOptions>>().Value;
-
-        Assert.True(loading.Enabled);
-        Assert.Equal(TimeSpan.FromSeconds(30), loading.DeactivationTimeout);
-    }
-
-    [Fact]
-    public void AddNuplaneLoading_FollowedByBuilder_LastRegistrationWins()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-
-        // Direct registration enables loading
-        services.AddNuplaneLoading(options => options.Enabled = true);
-
-        // Builder registration disables loading (last wins)
-        services.AddNuplane(nuplane =>
-        {
-            nuplane.AutoloadPackages(load => load.Disable());
-        });
-
-        using var provider = services.BuildServiceProvider();
-
-        var loading = provider.GetRequiredService<IOptions<LoadingOptions>>().Value;
-
-        Assert.False(loading.Enabled);
-    }
-
-    [Fact]
-    public void AddNuplaneLoading_AndBuilder_DoNotDuplicateConcretePackageLoader()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-
-        services.AddNuplaneLoading();
-        services.AddNuplane(nuplane => nuplane.AutoloadPackages());
-
-        var loaderCount = services.Count(d => d.ServiceType == typeof(PackageLoader));
-        Assert.Equal(1, loaderCount);
-    }
-
-    [Fact]
     public void AddDirectoryFeed_FromBuilder_RegistersSourceTrustAndDesiredSource()
     {
         var root = Path.Combine(Path.GetTempPath(), "nuplane-dir-builder-trust", Guid.NewGuid().ToString("N"));
@@ -988,7 +853,7 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
-    public void AddDirectoryFeed_DirectRegistration_FollowedByBuilder_LastSourceWins()
+    public void AddDirectoryFeed_ConfiguredFeedWithSameName_BuilderRegistrationWins()
     {
         var root = Path.Combine(Path.GetTempPath(), "nuplane-dir-direct-builder", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -998,18 +863,18 @@ public sealed class ConfigurationDrivenRegistrationTests
             var services = new ServiceCollection();
             services.AddLogging();
 
-            // Direct registration first
-            services.AddNuplaneDirectorySource(o =>
-            {
-                o.FeedName = "local";
-                o.DirectoryPath = root;
-                o.TriggerReconciliationOnChange = false;
-            });
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Setup:Feeds:local:DirectoryPath"] = root,
+                    ["Setup:Feeds:local:Directory:Watch"] = "true",
+                    ["Setup:Feeds:local:Trust"] = "Trusted"
+                }).Build();
 
-            // Builder registration second (replaces the directory source for same feed)
-            services.AddNuplane(nuplane =>
+            var overridePath = Path.Combine(root, "code-first");
+            services.AddNuplane(configuration, nuplane =>
             {
-                nuplane.AddDirectoryFeed("local", root, feed =>
+                nuplane.AddDirectoryFeed("local", overridePath, feed =>
                 {
                     feed.Watch = false;
                     feed.IncludeAll();
@@ -1018,9 +883,10 @@ public sealed class ConfigurationDrivenRegistrationTests
 
             using var provider = services.BuildServiceProvider();
 
-            // Only one desired source for the feed.
-            var sourceCount = provider.GetFeedDesiredPackageSources().Count();
-            Assert.Equal(1, sourceCount);
+            Assert.Single(provider.GetFeedDesiredPackageSources());
+            var feed = Assert.Single(provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value.Feeds);
+            Assert.Equal(overridePath, feed.ServiceIndex.LocalPath);
+            Assert.DoesNotContain(provider.GetServices<IHostedService>(), item => item is Nuplane.Sources.Directory.Hosting.DirectorySourceReconciliationTriggerHostedService);
         }
         finally
         {
@@ -1029,7 +895,7 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
-    public void AddDirectoryFeed_AndDirectRegistration_DifferentFeeds_BothRegistered()
+    public void AddDirectoryFeed_ConfiguredAndCodeFirstDifferentFeeds_BothAreRegistered()
     {
         var root1 = Path.Combine(Path.GetTempPath(), "nuplane-dir-multi-1", Guid.NewGuid().ToString("N"));
         var root2 = Path.Combine(Path.GetTempPath(), "nuplane-dir-multi-2", Guid.NewGuid().ToString("N"));
@@ -1041,16 +907,15 @@ public sealed class ConfigurationDrivenRegistrationTests
             var services = new ServiceCollection();
             services.AddLogging();
 
-            // Direct registration for feed-a
-            services.AddNuplaneDirectorySource(o =>
-            {
-                o.FeedName = "feed-a";
-                o.DirectoryPath = root1;
-                o.TriggerReconciliationOnChange = false;
-            });
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Setup:Feeds:feed-a:DirectoryPath"] = root1,
+                    ["Setup:Feeds:feed-a:Directory:Watch"] = "false",
+                    ["Setup:Feeds:feed-a:Trust"] = "Trusted"
+                }).Build();
 
-            // Builder registration for feed-b
-            services.AddNuplane(nuplane =>
+            services.AddNuplane(configuration, nuplane =>
             {
                 nuplane.AddDirectoryFeed("feed-b", root2, feed =>
                 {
@@ -1082,8 +947,8 @@ public sealed class ConfigurationDrivenRegistrationTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Nuplane:Convergence:Manifest:Enabled"] = "true",
-                ["Nuplane:Convergence:Manifest:Path"] = manifestFile.Path
+                ["Nuplane:DesiredState:Manifest:Enabled"] = "true",
+                ["Nuplane:DesiredState:Manifest:Path"] = manifestFile.Path
             })
             .Build();
 
@@ -1094,13 +959,34 @@ public sealed class ConfigurationDrivenRegistrationTests
         using var provider = services.BuildServiceProvider();
 
         // DesiredManifestPackageSource is always registered (the manifest gate now lives
-        // solely in ConvergenceOptions.Manifest.Enabled, honored at read time).
+        // solely in DesiredStateOptions.Manifest.Enabled, honored at read time).
         var source = Assert.Single(provider.GetServices<IDesiredPackageSource>()
             .OfType<DesiredManifestPackageSource>());
 
         var desired = await source.GetDesiredAsync(CancellationToken.None);
         var package = Assert.Single(desired);
         Assert.Equal("Lib.Core", package.Id);
+    }
+
+    [Theory]
+    [InlineData("Manifest:Enabled", "true", "Nuplane:DesiredState:Manifest:Enabled")]
+    [InlineData("PollInterval", "00:01:00", "Nuplane:Reconciliation:PollInterval")]
+    public void AddNuplane_RetiredConfiguration_FailsStartupWithMigrationKey(
+        string key, string value, string replacementKey)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            [$"Nuplane:Convergence:{key}"] = value
+        }).Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+        var exception = Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredService<IStartupValidator>().Validate());
+
+        Assert.Contains(replacementKey, exception.Message);
     }
 
     [Fact]

@@ -1,7 +1,7 @@
 namespace Nuplane.Reconciliation;
 
 /// <summary>Contains package-level Loading failures for a deferred graph handoff.</summary>
-public sealed class LeasedPackageGraphLoadingResult
+internal sealed class LeasedPackageGraphLoadingResult
 {
     /// <summary>Creates a result containing the failures observed during Loading.</summary>
     /// <param name="failures">The failed package identifiers and diagnostics.</param>

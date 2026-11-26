@@ -6,7 +6,7 @@ namespace Nuplane.Store.Tests.State;
 
 public sealed class NuplaneStoreTests : IDisposable
 {
-    private static readonly ActivePackageDescriptor DefaultDescriptor = new(
+    private static readonly ActivePackage DefaultDescriptor = new(
         "Contoso.Plugin",
         "1.2.3",
         "trusted-feed",
@@ -278,7 +278,7 @@ public sealed class NuplaneStoreTests : IDisposable
     /// matching <see cref="StoreStateRecord.ActiveVersionById"/> entry, matching how a running
     /// host keeps both dictionaries in sync for an active package.
     /// </summary>
-    private Task<string> WriteActivePackageAsync(ActivePackageDescriptor descriptor, string fileName = "store-state.json")
+    private Task<string> WriteActivePackageAsync(ActivePackage descriptor, string fileName = "store-state.json")
     {
         var state = StoreStateRecord.Empty() with
         {

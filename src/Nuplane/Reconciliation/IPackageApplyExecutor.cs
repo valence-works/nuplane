@@ -7,7 +7,7 @@ namespace Nuplane.Reconciliation;
 /// Resolves package requests and executes transactional package activation,
 /// coordinating between package resolution, transaction execution, and failure recording.
 /// </summary>
-public interface IPackageApplyExecutor
+internal interface IPackageApplyExecutor
 {
     /// <summary>
     /// Resolves desired package requests to concrete packages using the configured resolver.

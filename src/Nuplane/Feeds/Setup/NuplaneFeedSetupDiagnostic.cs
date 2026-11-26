@@ -8,7 +8,7 @@ namespace Nuplane.Feeds.Setup;
 /// <param name="Message">The human-readable diagnostic message.</param>
 /// <param name="ConfigurationPath">The configuration path associated with the diagnostic.</param>
 /// <param name="FeedName">The feed name associated with the diagnostic, when available.</param>
-public sealed record NuplaneFeedSetupDiagnostic(
+internal sealed record NuplaneFeedSetupDiagnostic(
     NuplaneFeedSetupDiagnosticSeverity Severity,
     string Code,
     string Message,

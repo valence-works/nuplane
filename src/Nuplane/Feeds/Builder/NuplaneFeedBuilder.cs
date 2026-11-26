@@ -1,3 +1,5 @@
+using Nuplane.Abstractions;
+
 namespace Nuplane.Feeds.Builder;
 
 /// <summary>
@@ -9,6 +11,8 @@ public sealed class NuplaneFeedBuilder
     internal string Name { get; }
     internal Uri? ServiceIndex { get; private set; }
     internal string? Credentials { get; private set; }
+    internal FeedTrustLevel Trust { get; private set; }
+    internal string? TrustConfigurationPath { get; set; }
     internal List<string> IncludePatterns { get; } = [];
     internal List<string> ExcludePatterns { get; } = [];
 
@@ -33,6 +37,15 @@ public sealed class NuplaneFeedBuilder
 
         ServiceIndex = serviceIndex;
         Credentials = credentials;
+        return this;
+    }
+
+    /// <summary>Sets this feed's trust level. Unspecified feeds are untrusted.</summary>
+    /// <param name="trust">The trust to assign to the feed.</param>
+    /// <returns>This builder.</returns>
+    public NuplaneFeedBuilder WithTrust(FeedTrustLevel trust)
+    {
+        Trust = trust;
         return this;
     }
 

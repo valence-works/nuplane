@@ -31,6 +31,21 @@ native admission provider is required. Unsupported filesystems, custom component
 that cannot participate and uncertain identity/locking evidence refuse access.
 Do not bypass those refusals by deleting control files.
 
+On Linux x64 and arm64, the coordinated store supports ext4, case-sensitive XFS,
+and a writable, case-sensitive Docker overlayfs layer whose entries pass the
+native identity checks. In containers, use an ext4 or XFS volume when state
+must survive container replacement. Keep the package root, state, and
+directory-feed paths on filesystems Nuplane can qualify, including their
+ancestors. Overlayfs can report different device or inode identities for
+objects from different layers. Entries whose identity changes or cannot be
+replayed from the held parent are refused. XFS ASCII case-insensitive mode,
+casefolded overlayfs, btrfs, and tmpfs are outside this coordinated profile.
+
+If enrollment reports an unsupported filesystem, check the detected
+filesystem, native probe, and error in the diagnostic. With an ext4 loop
+mount, the earlier release rejected the container's overlayfs namespace
+root before native traversal could reach the ext4 store.
+
 ## Enroll and upgrade an existing store
 
 1. Call `PreviewEnrollmentAsync(rootLabel)`. The report is a non-quiescent
@@ -111,6 +126,9 @@ when later work fails or cancellation arrives. Cancellation before admission can
 throw normally; after physical work begins it returns observed partial facts.
 Repeat explicit execution can resume verified recovery work. Do not manually erase
 its journal or quarantine.
+Execution retires an exact Finalizing journal once it verifies the quarantine is
+absent. A subsequent install at the same path is evaluated against the current
+state and retention policy.
 
 ## Optional HTTP endpoints
 

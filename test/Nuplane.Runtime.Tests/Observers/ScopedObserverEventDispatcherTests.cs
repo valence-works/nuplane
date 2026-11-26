@@ -68,6 +68,21 @@ public sealed class ScopedObserverEventDispatcherTests
         Assert.Equal(1, observer.LegacyCalls);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task DispatchScopedAsync_ObserverUsesScopedDefaults_DoesNotInvokeOrdinaryCallbacks(int eventKind)
+    {
+        await using var owner = CreateOwner(new HeldOwnership());
+        var observer = new ScopedObserverWithDefaults();
+
+        await DispatchAsync(new ObserverEventDispatcher([observer]), owner, eventKind);
+
+        Assert.Equal(0, observer.LegacyCalls);
+    }
+
     [Fact]
     public async Task DispatchScopedAsync_OwnerCloseWaitsForAwaitedCallbackBorrow()
     {
@@ -221,6 +236,8 @@ public sealed class ScopedObserverEventDispatcherTests
         public Task OnPackagesReconciledAsync(PackageChangeSet changeSet, IReadOnlyList<ResolvedPackage> packages,
             CancellationToken ct) => RecordAsync();
     }
+
+    private sealed class ScopedObserverWithDefaults : RecordingObserver, IScopedNuplaneObserver;
 
     private sealed class IndependentObserver : RecordingObserver, IPackagePathIndependentNuplaneObserver;
 

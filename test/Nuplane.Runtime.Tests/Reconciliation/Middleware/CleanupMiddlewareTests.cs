@@ -178,16 +178,16 @@ public sealed class CleanupMiddlewareTests
             IReadOnlyDictionary<string, string> applied,
             string correlationId,
             CancellationToken cancellationToken,
-            IReadOnlyDictionary<string, ActivePackageDescriptor>? activePackageDescriptors,
+            IReadOnlyDictionary<string, ActivePackage>? activePackages,
             IReadOnlyDictionary<string, GraphActivationRecord>? activeGraphs)
         {
             PersistedGraphs = activeGraphs;
             _state = _state with
             {
                 ActiveVersionById = new(activeVersions, StringComparer.OrdinalIgnoreCase),
-                ActivePackageDescriptorsById = activePackageDescriptors is null
+                ActivePackageDescriptorsById = activePackages is null
                     ? null
-                    : new(activePackageDescriptors, StringComparer.OrdinalIgnoreCase),
+                    : new(activePackages, StringComparer.OrdinalIgnoreCase),
                 ActiveGraphsById = activeGraphs is null
                     ? null
                     : new(activeGraphs, StringComparer.OrdinalIgnoreCase)

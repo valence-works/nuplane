@@ -8,7 +8,7 @@ namespace Nuplane.Sources;
 /// Caches desired-state source snapshots in memory and persists them to the store registry,
 /// providing fallback data when sources are temporarily unavailable.
 /// </summary>
-public sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
+internal sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
 {
     private readonly ConcurrentDictionary<string, IReadOnlyList<PackageRequest>> _snapshots = new(StringComparer.OrdinalIgnoreCase);
     private readonly IStoreRegistry _storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
@@ -48,6 +48,29 @@ public sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
 
     internal void ClearMemoryCache() => _snapshots.Clear();
 
+    internal async Task<IReadOnlyList<PackageRequest>?> LoadForSourceAsync(
+        DesiredPackageSourceEntry entry, CancellationToken cancellationToken)
+    {
+        if (entry.SnapshotKey is not { } key)
+        {
+            return null;
+        }
+
+        var current = await LoadSnapshotAsync(key, cancellationToken);
+        if (current is not null)
+        {
+            return current;
+        }
+
+        if (entry.LegacySnapshotKey is not { } legacyKey || entry.LegacySnapshotVerifier is not { } verifier)
+        {
+            return null;
+        }
+
+        var legacy = await LoadSnapshotAsync(legacyKey, cancellationToken);
+        return legacy is not null && verifier.OwnsLegacySnapshot(legacy) ? legacy : null;
+    }
+
     /// <summary>
     /// Loads a snapshot for the specified source, first checking the in-memory cache,
     /// then falling back to the persisted store state.
@@ -63,7 +86,7 @@ public sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
 
         var state = await _storeRegistry.GetStateAsync(cancellationToken);
         if (state.LastSuccessfulSourceSnapshots.TryGetValue(sourceName, out var snapshotRef) &&
-            snapshotRef.Requests is { Count: > 0 } storedRequests)
+            snapshotRef.Requests is { } storedRequests)
         {
             _snapshots[sourceName] = storedRequests;
             return storedRequests;

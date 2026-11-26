@@ -5,7 +5,7 @@ namespace Nuplane.Feeds.Versioning;
 /// <summary>
 /// Queries a feed for all available versions of a given package.
 /// </summary>
-public interface IFeedVersionEnumerator
+internal interface IFeedVersionEnumerator
 {
     /// <summary>
     /// Enumerates all available versions of the specified package from the given feed.

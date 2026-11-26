@@ -264,6 +264,6 @@ internal sealed partial class RootMembershipRegistry
     }
 
     private sealed record ActiveInstallPathEvidence(
-        Nuplane.Abstractions.ActivePackageDescriptor Descriptor,
+        Nuplane.Abstractions.ActivePackage Descriptor,
         IReadOnlyList<PackageInstallIdentity> AssociatedInstalls);
 }

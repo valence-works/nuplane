@@ -42,4 +42,12 @@ Every restart/resume requires a new explicit Execute request, current configured
 
 ## Qualification
 
+Once an explicit Execute proves a Finalizing quarantine absent, retire the
+exact native journal under the same retained ownership. Reopen and verify
+its canonical name, identity, and exact payload before the native removal.
+After a process stops on either side of retirement, use the current
+namespace as evidence. A same-path completed install is planned
+independently once its predecessor's quarantine is proven absent. A
+replacement beside a still-present quarantine retains its conflict.
+
 Test structural/encoding bounds, every journal field's integrity binding, deterministic round trips, missing/unknown/duplicate fields and malformed tree/marker relationships. Native tests must prove capture and revalidation on real held handles, exact-tree/subset comparison, no rename/unlink before durable baseline, Windows handle-close order, added/replaced survivors, original-name replacements and each phase/publication fault boundary. Controlled process interruption must establish actual partial outcomes and explicit fresh resume; a detached codec or primitive probe cannot accept the executor, recovery or any whole T107/T111/T118 task.

@@ -5,7 +5,7 @@ namespace Nuplane.Feeds.Versioning;
 /// <summary>
 /// Evaluates NuGet version ranges using the NuGet.Versioning library and selects the best match.
 /// </summary>
-public sealed class NuGetVersionRangeEvaluator : IVersionRangeEvaluator
+internal sealed class NuGetVersionRangeEvaluator : IVersionRangeEvaluator
 {
     /// <inheritdoc />
     public VersionResolutionResult SelectBestMatch(string versionRange, IReadOnlyList<string> availableVersions)

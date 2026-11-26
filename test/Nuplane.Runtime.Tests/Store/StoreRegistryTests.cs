@@ -33,7 +33,7 @@ public sealed class StoreRegistryTests : IDisposable
         Assert.Equal(Recorded, reloaded.ArchiveHashesByPackage![StoreStateRecord.ArchiveHashKey("Acme.Addon", "1.0.0")]);
     }
 
-    private Dictionary<string, ActivePackageDescriptor> Descriptors(string hash) => new(StringComparer.OrdinalIgnoreCase)
+    private Dictionary<string, ActivePackage> Descriptors(string hash) => new(StringComparer.OrdinalIgnoreCase)
     {
         ["Acme.Addon"] = new("Acme.Addon", "1.0.0", "feed", "source", Path.Combine(_root, "packages", "feed", "Acme.Addon", "1.0.0"),
             DateTimeOffset.UnixEpoch, "correlation") { ArchiveHash = hash }

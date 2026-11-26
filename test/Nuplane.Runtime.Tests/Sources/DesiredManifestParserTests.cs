@@ -51,7 +51,7 @@ public sealed class DesiredManifestParserTests : IDisposable
         var result = await _reader.ReadAsync(path, CorrelationId, CancellationToken.None);
 
         Assert.Equal(ManifestReadStatus.Succeeded, result.Status);
-        Assert.Equal(ConvergenceReasonCodes.ManifestSucceeded, result.ReasonCode);
+        Assert.Equal(ReconciliationReasonCodes.ManifestSucceeded, result.ReasonCode);
         Assert.NotNull(result.Manifest);
         Assert.Equal(2, result.Manifest!.Packages.Count);
     }
@@ -104,7 +104,7 @@ public sealed class DesiredManifestParserTests : IDisposable
         var result = await _reader.ReadAsync(path, CorrelationId, CancellationToken.None);
 
         Assert.Equal(ManifestReadStatus.Invalid, result.Status);
-        Assert.Equal(ConvergenceReasonCodes.ManifestInvalid, result.ReasonCode);
+        Assert.Equal(ReconciliationReasonCodes.ManifestInvalid, result.ReasonCode);
         Assert.Null(result.Manifest);
     }
 
@@ -125,7 +125,7 @@ public sealed class DesiredManifestParserTests : IDisposable
         var result = await _reader.ReadAsync(path, CorrelationId, CancellationToken.None);
 
         Assert.Equal(ManifestReadStatus.Invalid, result.Status);
-        Assert.Equal(ConvergenceReasonCodes.ManifestInvalid, result.ReasonCode);
+        Assert.Equal(ReconciliationReasonCodes.ManifestInvalid, result.ReasonCode);
     }
 
     [Fact]
@@ -166,7 +166,7 @@ public sealed class DesiredManifestParserTests : IDisposable
         var result = await _reader.ReadAsync(path, CorrelationId, CancellationToken.None);
 
         Assert.Equal(ManifestReadStatus.NotFound, result.Status);
-        Assert.Equal(ConvergenceReasonCodes.ManifestNotFound, result.ReasonCode);
+        Assert.Equal(ReconciliationReasonCodes.ManifestNotFound, result.ReasonCode);
         Assert.Null(result.Manifest);
     }
 
@@ -179,7 +179,7 @@ public sealed class DesiredManifestParserTests : IDisposable
         var result = await _reader.ReadAsync(path, CorrelationId, CancellationToken.None);
 
         Assert.Equal(ManifestReadStatus.Invalid, result.Status);
-        Assert.Equal(ConvergenceReasonCodes.ManifestInvalid, result.ReasonCode);
+        Assert.Equal(ReconciliationReasonCodes.ManifestInvalid, result.ReasonCode);
     }
 
     [Fact]
@@ -321,7 +321,7 @@ public sealed class DesiredManifestParserTests : IDisposable
         var result = await _reader.ReadAsync(path, CorrelationId, CancellationToken.None, expectedSchemaVersion: "2.0");
 
         Assert.Equal(ManifestReadStatus.Invalid, result.Status);
-        Assert.Equal(ConvergenceReasonCodes.ManifestInvalid, result.ReasonCode);
+        Assert.Equal(ReconciliationReasonCodes.ManifestInvalid, result.ReasonCode);
     }
 
     [Fact]

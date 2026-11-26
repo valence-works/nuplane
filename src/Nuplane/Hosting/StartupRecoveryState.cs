@@ -5,7 +5,7 @@ namespace Nuplane.Hosting;
 /// <summary>
 /// Tracks startup last-known-good recovery status for operational-state reporting.
 /// </summary>
-public sealed class StartupRecoveryState
+internal sealed class StartupRecoveryState
 {
     private readonly object _gate = new();
     private OperationalStateContribution _contribution = new("startup-recovery", []);

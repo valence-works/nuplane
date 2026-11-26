@@ -25,7 +25,7 @@ public sealed class MultiFeedPackageResolverScopedTests
         await using var admitted = await CreateAdmission(context).AcquireForInstallPathsAsync(
             [context.SharedInstallPath], PackageStoreAdmissionKind.Loading);
         using var borrow = admitted.BorrowFor(context.SharedInstallPath);
-        var options = OptionsFor(new FeedDefinition("feed", new Uri("https://feed.example/v3/index.json")));
+        var options = OptionsFor(new FeedDefinition("feed", new Uri("https://feed.example/v3/index.json")) { Trust = FeedTrustLevel.Trusted });
         var acquirer = new RecordingScopedAcquirer(context.SharedInstallPath);
         var resolver = CreateResolver(options, acquirer);
 
@@ -47,8 +47,8 @@ public sealed class MultiFeedPackageResolverScopedTests
         using var borrow = admitted.BorrowFor(context.SharedInstallPath);
         var localFeedPath = context.Fixture.CreateDirectory("local-feed");
         var options = OptionsFor(
-            new FeedDefinition("local", new Uri(localFeedPath + Path.DirectorySeparatorChar)),
-            new FeedDefinition("remote", new Uri("https://feed.example/v3/index.json")));
+            new FeedDefinition("local", new Uri(localFeedPath + Path.DirectorySeparatorChar)) { Trust = FeedTrustLevel.Trusted },
+            new FeedDefinition("remote", new Uri("https://feed.example/v3/index.json")) { Trust = FeedTrustLevel.Trusted });
         options.RemoteFallbackMode = RemoteFallbackMode.Always;
         var enumerator = Substitute.For<IFeedVersionEnumerator>();
         var acquirer = new RecordingScopedAcquirer(context.SharedInstallPath);
@@ -74,8 +74,8 @@ public sealed class MultiFeedPackageResolverScopedTests
             [context.SharedInstallPath], PackageStoreAdmissionKind.Loading);
         using var borrow = admitted.BorrowFor(context.SharedInstallPath);
         var options = OptionsFor(
-            new FeedDefinition("first", new Uri("https://first.example/v3/index.json")),
-            new FeedDefinition("second", new Uri("https://second.example/v3/index.json")));
+            new FeedDefinition("first", new Uri("https://first.example/v3/index.json")) { Trust = FeedTrustLevel.Trusted },
+            new FeedDefinition("second", new Uri("https://second.example/v3/index.json")) { Trust = FeedTrustLevel.Trusted });
         options.RemoteFallbackMode = RemoteFallbackMode.Always;
         options.SetPriority("first", 1);
         options.SetPriority("second", 2);
@@ -101,8 +101,8 @@ public sealed class MultiFeedPackageResolverScopedTests
             [context.SharedInstallPath], PackageStoreAdmissionKind.Loading);
         using var borrow = admitted.BorrowFor(context.SharedInstallPath);
         var options = OptionsFor(
-            new FeedDefinition("first", new Uri("https://first.example/v3/index.json")),
-            new FeedDefinition("second", new Uri("https://second.example/v3/index.json")));
+            new FeedDefinition("first", new Uri("https://first.example/v3/index.json")) { Trust = FeedTrustLevel.Trusted },
+            new FeedDefinition("second", new Uri("https://second.example/v3/index.json")) { Trust = FeedTrustLevel.Trusted });
         options.SetPriority("first", 1);
         options.SetPriority("second", 2);
         var refusal = new PackageStoreAdmissionException(
@@ -134,7 +134,7 @@ public sealed class MultiFeedPackageResolverScopedTests
         await using var admitted = await CreateAdmission(context).AcquireForInstallPathsAsync(
             [context.SharedInstallPath], PackageStoreAdmissionKind.Loading);
         using var borrow = admitted.BorrowFor(context.SharedInstallPath);
-        var options = OptionsFor(new FeedDefinition("feed", new Uri("https://feed.example/v3/index.json")));
+        var options = OptionsFor(new FeedDefinition("feed", new Uri("https://feed.example/v3/index.json")) { Trust = FeedTrustLevel.Trusted });
         var acquirer = Substitute.For<IRemotePackageAcquirer>();
         acquirer.AcquireAsync(Arg.Any<FeedDefinition>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(context.SharedInstallPath);

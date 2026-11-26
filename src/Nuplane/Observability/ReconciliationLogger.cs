@@ -7,7 +7,7 @@ namespace Nuplane.Observability;
 /// Structured reconciliation logger backed by <see cref="ILogger{TCategoryName}"/>.
 /// Uses source-generated log methods for high-performance structured logging.
 /// </summary>
-public sealed partial class ReconciliationLogger : IReconciliationLogger
+internal sealed partial class ReconciliationLogger : IReconciliationLogger
 {
     private readonly ILogger<ReconciliationLogger> _logger;
 

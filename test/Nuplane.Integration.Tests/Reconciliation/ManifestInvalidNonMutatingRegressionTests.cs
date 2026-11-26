@@ -2,7 +2,7 @@ using System.Text.Json;
 using Nuplane.Abstractions;
 using Nuplane.Feeds;
 using Nuplane.Reconciliation;
-using Nuplane.Reconciliation.Convergence;
+using Nuplane.Sources.Configuration;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Sources;
 
@@ -39,7 +39,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
     [Fact]
     public async Task ManifestNotFound_ReturnsNonMutating_EmptyChangeSet()
     {
-        var options = new ConvergenceOptions
+        var options = new DesiredStateOptions
         {
             Manifest = { Enabled = true, Path = Path.Combine(_tempDir, "missing.json") }
         };
@@ -60,7 +60,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
         var path = Path.Combine(_tempDir, "invalid.json");
         await File.WriteAllTextAsync(path, "{{ not valid json }}");
 
-        var options = new ConvergenceOptions
+        var options = new DesiredStateOptions
         {
             Manifest = { Enabled = true, Path = path }
         };
@@ -90,7 +90,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
             }
         }));
 
-        var options = new ConvergenceOptions
+        var options = new DesiredStateOptions
         {
             Manifest = { Enabled = true, Path = path }
         };
@@ -119,7 +119,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
             }
         }));
 
-        var options = new ConvergenceOptions
+        var options = new DesiredStateOptions
         {
             Manifest = { Enabled = true, Path = path }
         };
@@ -137,7 +137,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
     [Fact]
     public async Task ManifestDisabled_ReturnsNonMutating_EmptyChangeSet()
     {
-        var options = new ConvergenceOptions
+        var options = new DesiredStateOptions
         {
             Manifest = { Enabled = false, Path = "/does/not/matter" }
         };
@@ -168,7 +168,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
             }
         }));
 
-        var options = new ConvergenceOptions
+        var options = new DesiredStateOptions
         {
             Manifest = { Enabled = true, Path = manifestPath }
         };
@@ -200,7 +200,7 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
         var path = Path.Combine(_tempDir, "bad-schema.json");
         await File.WriteAllTextAsync(path, """{"GeneratedAtUtc":"2025-01-01T00:00:00Z"}""");
 
-        var options = new ConvergenceOptions
+        var options = new DesiredStateOptions
         {
             Manifest = { Enabled = true, Path = path }
         };
@@ -212,6 +212,6 @@ public sealed class ManifestInvalidNonMutatingRegressionTests : IDisposable
 
         Assert.NotNull(source.LastReadResult);
         Assert.Equal(ManifestReadStatus.Invalid, source.LastReadResult!.Status);
-        Assert.Equal(ConvergenceReasonCodes.ManifestInvalid, source.LastReadResult.ReasonCode);
+        Assert.Equal(ReconciliationReasonCodes.ManifestInvalid, source.LastReadResult.ReasonCode);
     }
 }

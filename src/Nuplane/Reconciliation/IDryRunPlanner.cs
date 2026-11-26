@@ -7,7 +7,7 @@ namespace Nuplane.Reconciliation;
 /// Builds a dry-run plan that previews what changes a reconciliation cycle would make
 /// without actually mutating state.
 /// </summary>
-public interface IDryRunPlanner
+internal interface IDryRunPlanner
 {
     /// <summary>
     /// Builds a dry-run plan showing the changes that would result from applying the desired packages.
