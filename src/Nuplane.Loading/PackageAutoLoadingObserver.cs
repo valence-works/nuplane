@@ -141,22 +141,14 @@ internal sealed class PackageAutoLoadingObserver :
         RecordLoadAttempts(graphs.Sum(static graph => graph.Count));
 
         var batch = await loader.StageOrdinaryGraphsAsync(graphs, CreateSharedPolicy(), cancellationToken);
-        try
-        {
-            await RecordOrdinaryLoadFailuresAsync(batch.Result, correlationId, cancellationToken);
-            return CreatePreparation(loader, batch, currentSessions, inertCount, correlationId);
-        }
-        catch
-        {
-            batch.Dispose();
-            throw;
-        }
+        return CreatePreparation(loader, batch, currentSessions, inertCount, correlationId);
     }
 
     bool ICoordinatedPackageLoadingActivation.Enabled => _requiresGraphUseLease && _loadingOptions.Enabled;
 
     async Task<PackageLoadingPreparation> ICoordinatedPackageLoadingActivation.StageAsync(
         LeasedPackageGraphLoadingHandoff handoff,
+        IReadOnlyDictionary<string, string> prospectiveActiveVersions,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(handoff);

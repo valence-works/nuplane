@@ -442,7 +442,7 @@ internal sealed class ReconciliationService : IReconciliationService
 
             if (activationCycle is not null)
             {
-                using var preparation = await stagedLoading!.StageAsync(activationCycle.Handoff, cancellationToken)
+                using var preparation = await stagedLoading!.StageAsync(activationCycle.Handoff, context.MergedActive!, cancellationToken)
                     .ConfigureAwait(false);
                 await CommitCoordinatedActivationAsync(activationCycle, context, preparation, cancellationToken)
                     .ConfigureAwait(false);
@@ -587,12 +587,21 @@ internal sealed class ReconciliationService : IReconciliationService
 
         context.PackageStoreOwner = owner;
         var registry = (ICoordinatedStoreRegistry)_storeRegistry;
-        var driver = _pipelineDefinition.TransitionDriver!;
+        var driver = _pipelineDefinition.TransitionDriver
+            ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "Coordinated activation requires a protected state transition driver.", owner.Root);
         await cycle.ReadUnchangedStateAsync(owner, registry, cancellationToken).ConfigureAwait(false);
-        await cycle.ApplyFailuresAsync(owner, driver, context, preparation.Failures, cancellationToken).ConfigureAwait(false);
-        var candidate = await driver.CreateCandidateForPublicationAsync(owner, context).ConfigureAwait(false);
-        cycle.ValidatePreparedInstalls(candidate, context.ApplyResult!.SuccessfulGraphSelections);
-        preparation.ValidateForCommit(candidate.ActivePackageDescriptorsByIdNormalized.Values.ToArray());
+        StoreStateRecord candidate;
+        while (true)
+        {
+            await cycle.ApplyFailuresAsync(owner, driver, context, preparation.Failures, cancellationToken).ConfigureAwait(false);
+            candidate = await driver.CreateCandidateForPublicationAsync(owner, context).ConfigureAwait(false);
+            cycle.ValidatePreparedInstalls(candidate, context.ApplyResult!.SuccessfulGraphSelections);
+            var newFailures = preparation.ValidateForCommit(
+                candidate.ActivePackageDescriptorsByIdNormalized.Values.ToArray(), context.LoadingRejectedPackageIds);
+            if (newFailures.Count == 0)
+                break;
+        }
         await driver.PersistCandidateAsync(owner, candidate, cancellationToken).ConfigureAwait(false);
         preparation.Commit();
 
@@ -825,7 +834,7 @@ internal sealed class ReconciliationPipelineDefinition
         pipeline.Use(new TransactionExecutionMiddleware(applyExecutor, _desiredActualDiffEngine, dispatcher,
             _transitionDriver));
         pipeline.Use(new CleanupMiddleware(_desiredActualDiffEngine, registry, PackageCleanupService,
-            _cleanupPolicyOptions, _metrics, _transitionDriver, owner is null ? _ordinaryLoadingActivation : null));
+            _cleanupPolicyOptions, _metrics, _transitionDriver, owner is null ? _ordinaryLoadingActivation : null, recorder));
         healthAndMetricsMiddleware = CreateHealthAndMetricsMiddleware(dispatcher);
         pipeline.Use(healthAndMetricsMiddleware);
         return pipeline;

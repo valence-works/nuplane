@@ -14,7 +14,8 @@ internal sealed class CleanupMiddleware(
     CleanupPolicyOptions cleanupPolicyOptions,
     ReconciliationMetrics metrics,
     ICoordinatedActiveStateTransitionDriver? transitionDriver = null,
-    IOrdinaryPackageLoadingActivation? ordinaryLoadingActivation = null) : IReconciliationMiddleware
+    IOrdinaryPackageLoadingActivation? ordinaryLoadingActivation = null,
+    IFailureRecorder? failureRecorder = null) : IReconciliationMiddleware
 {
     public async Task InvokeAsync(ReconciliationCycleContext context, Func<Task> next)
     {
@@ -58,16 +59,57 @@ internal sealed class CleanupMiddleware(
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var failedPackageIds = CoordinatedActiveStateTransitionDriver.BuildFailedPackageIds(
                 context.ResolutionResult?.FailedPackageIds ?? [], applyResult.FailedPackageIds);
-            var candidate = ProjectOrdinaryState();
+            var prospective = ProjectOrdinaryState();
+            var candidate = prospective;
             using var loading = ordinaryLoadingActivation is not null && applyResult.AppliedPackages.Count > 0
                 ? await ordinaryLoadingActivation.PrepareAsync(
-                    applyResult.AppliedPackages, candidate, context.CorrelationId, context.CancellationToken)
+                    applyResult.AppliedPackages, prospective, context.CorrelationId, context.CancellationToken)
                     .ConfigureAwait(false)
                 : null;
 
-            if (loading is { Failures.Count: > 0 })
+            if (loading is not null)
             {
-                var rejected = FindRejectedGraphMembers(loading.Failures.Keys, priorState, candidate);
+                // A retained graph can introduce another assembly-name conflict. Rebuild the
+                // committed projection until no further staged graph has to be rejected.
+                while (true)
+                {
+                    if (loading.Failures.Count > 0)
+                    {
+                        RetainFailedGraphs(loading.Failures.Keys);
+                        candidate = ProjectOrdinaryState();
+                    }
+
+                    var newFailures = loading.ValidateForCommit(
+                        candidate.ActivePackageDescriptorsByIdNormalized.Values.ToArray(), context.LoadingRejectedPackageIds);
+                    if (newFailures.Count == 0)
+                        break;
+                }
+
+                foreach (var (id, reason) in loading.Failures)
+                {
+                    if (failureRecorder is not null)
+                        await failureRecorder.RecordAsync(id, "load", reason, context.CorrelationId, context.CancellationToken).ConfigureAwait(false);
+                    else
+                        await storeRegistry.PersistFailureAsync(id, "load", reason, context.CorrelationId, context.CancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            await storeRegistry.PersistActiveVersionsAsync(
+                context.MergedActive!,
+                desiredActualDiffEngine.BuildNextActiveVersions(applyResult.AppliedPackages),
+                context.CorrelationId,
+                context.CancellationToken,
+                candidate.ActivePackageDescriptorsById,
+                candidate.ActiveGraphsById).ConfigureAwait(false);
+            if (loading is not null)
+            {
+                loading.Commit();
+                context.PublishOrdinaryLoadingAsync = loading.PublishAsync;
+            }
+
+            void RetainFailedGraphs(IEnumerable<string> failedIds)
+            {
+                var rejected = FindRejectedGraphMembers(failedIds, priorState, prospective);
                 context.LoadingRejectedPackageIds = rejected;
                 failedPackageIds.UnionWith(rejected);
 
@@ -92,21 +134,6 @@ internal sealed class CleanupMiddleware(
                 };
                 context.ApplyResult = applyResult;
                 resolvedGraphs = resolvedGraphs.Where(graph => !graph.Nodes.Any(node => rejected.Contains(node.PackageId))).ToArray();
-                candidate = ProjectOrdinaryState();
-            }
-
-            loading?.ValidateForCommit(candidate.ActivePackageDescriptorsByIdNormalized.Values.ToArray());
-            await storeRegistry.PersistActiveVersionsAsync(
-                context.MergedActive!,
-                desiredActualDiffEngine.BuildNextActiveVersions(applyResult.AppliedPackages),
-                context.CorrelationId,
-                context.CancellationToken,
-                candidate.ActivePackageDescriptorsById,
-                candidate.ActiveGraphsById).ConfigureAwait(false);
-            if (loading is not null)
-            {
-                loading.Commit();
-                context.PublishOrdinaryLoadingAsync = loading.PublishAsync;
             }
 
             StoreStateRecord ProjectOrdinaryState()

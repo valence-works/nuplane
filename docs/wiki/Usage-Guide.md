@@ -1058,7 +1058,7 @@ What an operator sees when a gate blocks a graph during a reconcile:
 
 - A `Warning` log per blocking gate, naming the gate type, the graph key, the package identities, and the gate-supplied reason.
 - An ordinary load failure for every package in that graph — the same shape a missing assembly or a resolution error produces: a recorded package failure for the `load` stage, a package-failed loading event, and a degraded reconciliation cycle. Because the graph is refused before it is resolved, that includes graph members a successful load would have skipped as host-provided or assembly-less; they stop being reported as failed as soon as the gates allow the graph.
-- The failed graph is not made active. With automatic loading enabled, Nuplane prepares the whole candidate graph before publishing active or last-known-good state. A rejected replacement keeps the previous graph active. Independent graphs can still complete. The failed candidate can remain installed for retry and appears in reconciliation failures and loading failure events.
+- With automatic loading enabled, Nuplane prepares the whole candidate graph before publishing active or last-known-good state. A rejected replacement keeps the previous graph active. Independent graphs can still complete. The failed candidate can remain installed for retry and appears in reconciliation failures and loading failure events.
 
 At startup the same failure makes the startup cycle degraded, so the configured `StartupFailurePolicy` decides what happens next — gating does not change that policy:
 

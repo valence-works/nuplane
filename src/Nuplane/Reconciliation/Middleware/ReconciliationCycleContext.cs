@@ -54,7 +54,7 @@ internal sealed class ReconciliationCycleContext
     public ReconciliationRunResult? Result { get; set; }
 
     internal Func<IReadOnlyDictionary<string, string>, CancellationToken, Task>? PublishOrdinaryLoadingAsync { get; set; }
-    internal IReadOnlyCollection<string> LoadingRejectedPackageIds { get; set; } = [];
+    internal IReadOnlySet<string> LoadingRejectedPackageIds { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Deferred package-load failures returned after the enrolled cycle releases short locks.</summary>
     public IReadOnlyList<string> DeferredLoadingFailedPackageIds { get; set; } = [];

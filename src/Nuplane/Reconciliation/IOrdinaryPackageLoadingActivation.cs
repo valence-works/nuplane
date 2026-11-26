@@ -15,7 +15,7 @@ internal interface IOrdinaryPackageLoadingActivation
 
 internal sealed record PackageLoadingPreparation(
     IReadOnlyDictionary<string, string> Failures,
-    Action<IReadOnlyList<ActivePackage>> ValidateForCommit,
+    Func<IReadOnlyList<ActivePackage>, IReadOnlySet<string>, IReadOnlyDictionary<string, string>> ValidateForCommit,
     Action Commit,
     IDisposable StagedBatch,
     Func<IReadOnlyDictionary<string, string>, CancellationToken, Task> PublishAsync) : IDisposable
