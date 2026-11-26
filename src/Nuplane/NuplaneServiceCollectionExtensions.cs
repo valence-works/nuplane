@@ -58,15 +58,19 @@ public static class NuplaneServiceCollectionExtensions
     /// </summary>
     /// <example>
     /// <code>
+    /// using Nuplane;
+    /// using Nuplane.Abstractions;
+    /// using Nuplane.Sources.Directory.Builder;
+    ///
     /// services.AddNuplane(nuplane =>
     /// {
     ///     nuplane.PollEvery(TimeSpan.FromSeconds(60));
-    ///     nuplane.AddFeed("local-packages", feed =>
+    ///     nuplane.AddDirectoryFeed("local-packages", "packages", feed =>
     ///     {
-    ///         feed.FromDirectory("packages", dir => { dir.Watch = true; });
+    ///         feed.Trust = FeedTrustLevel.Trusted;
+    ///         feed.Watch = true;
     ///         feed.Include("MyApp.Plugins.*");
     ///     });
-    ///     nuplane.AutoloadPackages();       // from Nuplane.Loading
     ///     nuplane.OnPackagesChanged&lt;MyChangeObserver&gt;();
     /// });
     /// </code>

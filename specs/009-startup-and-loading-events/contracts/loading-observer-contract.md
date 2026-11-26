@@ -1,5 +1,9 @@
 # Loading Observer Contract: IPackageLoadingObserver
 
+> Historical design. Current hosts register `INuplaneObserver` through `OnPackagesChanged<T>()`
+> and query the package or loading catalog for current state. The loading-event interfaces
+> described here are internal. See the [Usage Guide](../../../docs/wiki/Usage-Guide.md#query-first-integration-guidance).
+
 **Feature**: `009-startup-and-loading-events` | **Date**: 2026-03-05
 
 This document describes the `IPackageLoadingObserver` interface introduced by this feature,

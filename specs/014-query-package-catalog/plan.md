@@ -1,7 +1,7 @@
 # Implementation Plan: Queryable Package Catalog
 
-**Branch**: `[014-query-package-catalog]` | **Date**: 2026-04-08 | **Spec**: `/Users/sipke/Projects/ValenceWorks/nuplane/main/specs/014-query-package-catalog/spec.md`
-**Input**: Feature specification from `/Users/sipke/Projects/ValenceWorks/nuplane/main/specs/014-query-package-catalog/spec.md`
+**Branch**: `[014-query-package-catalog]` | **Date**: 2026-04-08 | **Spec**: [spec.md](spec.md)
+**Input**: Feature specification from [spec.md](spec.md)
 
 ## Summary
 

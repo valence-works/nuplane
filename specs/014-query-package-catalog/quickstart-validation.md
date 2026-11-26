@@ -1,5 +1,21 @@
 # Quickstart Validation Evidence — Queryable Package Catalog
 
+## Consumer quickstart replay
+
+On 2026-11-26, the documented repository-root commands started an empty sample store, packed
+`Nuplane.Sample.Plugin` 1.0.0, and dropped it into the sample's watched content-root directory.
+The sample loaded `Nuplane.Sample.Plugin.HelloPlugin` without restarting.
+
+All eight catalog and admin reads and the manual reconciliation request returned HTTP 200. The
+missing-package assembly request returned HTTP 404. Response checks covered active package ID,
+version, and feed, per-package loading state, assembly records, and the discovered plugin type.
+
+Five README C# examples compiled as separate .NET 10 ASP.NET Core projects using locally packed
+Nuplane packages, with zero warnings and errors. These packages were built from the candidate
+source for the replay. See the [current quickstart](quickstart.md) for the commands.
+
+## Historical feature validation
+
 **Feature**: `014-query-package-catalog`  
 **Date**: 2026-04-10  
 **Status**: PASS
