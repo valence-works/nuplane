@@ -9,7 +9,8 @@ namespace Nuplane.PackageArchives;
 /// <remarks>
 /// This reader needs no package-store enrollment and no filesystem qualification: it trusts the archive
 /// bytes only after they match <see cref="ActivePackage.ArchiveHash"/>, so it works on any filesystem
-/// that can store and read a file. A missing, modified or replaced archive is refused with a
+/// that can store and read a file. Cache hits serve the previously verified bytes. On a cold load, a missing,
+/// modified or replaced archive is refused with a
 /// <see cref="PackageArchiveException"/> that names the package and the reason.
 /// </remarks>
 public interface IPackageArchiveReader

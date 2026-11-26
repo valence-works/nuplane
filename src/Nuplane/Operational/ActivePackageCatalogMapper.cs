@@ -425,6 +425,9 @@ internal static class ActivePackageCatalogMapper
                 descriptors.TryGetValue(package.Id, out var existing) &&
                 HasSameActivationShape(existing, nextDescriptor))
             {
+                // Filling in an acquisition hash during an upgrade preserves the original activation.
+                if (existing.ArchiveHash != nextDescriptor.ArchiveHash)
+                    descriptors[package.Id] = existing with { ArchiveHash = nextDescriptor.ArchiveHash };
                 continue;
             }
 
@@ -782,7 +785,6 @@ internal static class ActivePackageCatalogMapper
         string.Equals(existing.FeedName, next.FeedName, StringComparison.Ordinal) &&
         string.Equals(existing.SourceName, next.SourceName, StringComparison.Ordinal) &&
         string.Equals(existing.InstallPath, next.InstallPath, StringComparison.Ordinal) &&
-        string.Equals(existing.ArchiveHash, next.ArchiveHash, StringComparison.Ordinal) &&
         string.Equals(existing.GraphId, next.GraphId, StringComparison.OrdinalIgnoreCase) &&
         HasSameGraphGeneration(existing, next) &&
         existing.PackageRole == next.PackageRole &&

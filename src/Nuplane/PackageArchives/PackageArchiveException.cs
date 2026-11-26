@@ -34,6 +34,6 @@ public sealed class PackageArchiveException : Exception
 
     internal string Detail { get; }
 
-    /// <summary>Creates an equal refusal with its own stack trace, for repeating a remembered refusal.</summary>
+    /// <summary>Creates an equivalent refusal with its own stack trace for each caller.</summary>
     internal PackageArchiveException Repeat() => new(PackageId, Version, Reason, Detail, InnerException);
 }

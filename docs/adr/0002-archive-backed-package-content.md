@@ -100,12 +100,11 @@ Verified archives stay in an in-memory LRU cache keyed by package, version, arch
 - The kept archive is one more root entry. A coordinated install whose package has 1,022 or more root entries exceeds the deletion manifest's 1,024 children per directory, so pruning refuses it as a candidate and keeps it.
 - Entry reads from one cached archive share one parsed zip and run one at a time. The cache budget counts archive bytes; the parsed entry table adds memory on top, several times the archive size for archives of many small entries.
 - A verified archive is held in memory while it is cached or in use.
-- `ArchiveHashesByPackage` keeps one entry per package version the state has activated and never removes entries, so it grows by one line for each version a host activates.
+- `ArchiveHashesByPackage` keeps one entry per package version the state has activated and never removes entries, so it grows by one line for each version a host activates. In the coordinated store this history counts toward the 4 MiB state payload limit. Once the payload exceeds that limit, further state publication is refused.
 - The first activation of a package version trusts that install's acquisition record, as loading its assemblies trusts its extracted files. An install planted in the install root for a version this state has never activated is outside what the reader can detect; Enforce and Strict lock files (ADR-0001) pin that version's hash against the feed.
-- Only the open is bounded. A read that stalls on a hung network or FUSE mount holds the shared load until it completes. Each caller's wait is bounded only by its own cancellation token.
-- A refusal is remembered for five seconds, so a repaired archive is served again after that delay.
-- Installs made before this change have no kept archive and are refused with `ArchiveMissing` until they are reinstalled. Before GA, no backfill of archives is provided.
-- A package activated before this change gets its recorded hash at its next reconciliation, from its acquisition record (first activation rule).
+- The file open has a 30-second bound. A stalled open can leave one worker blocked per normalized archive path. Later loads use their own open deadline to wait for the pending attempt to finish and any late handle to close. If it finishes in time, a load can try a new open within its remaining time. File metadata checks before the open and reads after it can stall on a hung network or FUSE mount. Either can hold the shared load until it completes. Each caller can stop waiting with its own cancellation token.
+- A refusal is remembered for five seconds. After it expires, the next request can retry. Recovery also requires the pending open, if any, to finish and the archive to pass verification.
+- A package activated by an earlier release can initially report `HashNotRecorded`. Reconciliation records its acquisition hash when available. With a recorded hash, a cold read of an older install that lacks its archive reports `ArchiveMissing`. Serving its content requires a fresh acquisition.
 - The reader trusts the state file. A writer who can change the state file can also change which packages are active, so this matches the existing trust boundary.
 
 ## Validation

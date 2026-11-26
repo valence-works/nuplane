@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -19,6 +20,7 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
     private readonly LinkedList<CacheEntry> _recency = new();
     private readonly Dictionary<CacheKey, Task<PackageArchive>> _loading = new();
     private readonly Dictionary<CacheKey, (PackageArchiveException Error, long ExpiresAt)> _refusals = new();
+    private readonly Dictionary<string, TaskCompletionSource> _opening = new(StringComparer.Ordinal);
     private readonly TimeSpan _refusalRetention;
     private readonly TimeSpan _openTimeout;
     private readonly Func<string, FileStream> _openArchive;
@@ -78,7 +80,7 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
                 _refusals.Remove(key);
             }
 
-            if (recordedHash is not null && !_loading.TryGetValue(key, out load))
+            if (!_loading.TryGetValue(key, out load))
             {
                 // Task.Run starts the load on the thread pool, away from any caller SynchronizationContext.
                 // Its cleanup takes _sync, so it cannot remove the entry before it is added here.
@@ -90,26 +92,27 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
             }
         }
 
-        if (recordedHash is null)
+        try
         {
-            // Built and logged outside the lock; a concurrent duplicate is harmless.
-            var unrecorded = Refuse(package, PackageArchiveFailureReason.HashNotRecorded,
-                "the active package record has no canonical sha512 archive hash; reconcile again, or reinstall the package with this Nuplane version.");
-            lock (_sync)
-                RememberRefusal(key, unrecorded);
-            throw unrecorded;
+            return await load.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
-
-        return await load!.WaitAsync(cancellationToken).ConfigureAwait(false);
+        catch (PackageArchiveException refusal)
+        {
+            throw refusal.Repeat();
+        }
     }
 
     private static string ResolveArchivePath(string installPath) =>
         Path.GetFullPath(PackageInstallStore.GetArchivePath(installPath));
 
-    private async Task<PackageArchive> LoadAsync(ActivePackage package, string archivePath, string recordedHash, CacheKey key)
+    private async Task<PackageArchive> LoadAsync(ActivePackage package, string archivePath, string? recordedHash, CacheKey key)
     {
         try
         {
+            if (recordedHash is null)
+                throw Refuse(package, PackageArchiveFailureReason.HashNotRecorded,
+                    "the active package record has no canonical sha512 archive hash; reconcile again, or reinstall the package with this Nuplane version.");
+
             var bytes = await ReadArchiveAsync(package, archivePath).ConfigureAwait(false);
             var actualHash = "sha512:" + Convert.ToBase64String(SHA512.HashData(bytes));
 
@@ -184,6 +187,11 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
                     $"'{archivePath}' was truncated while it was read.", exception);
             }
 
+            // Require EOF on the same handle. A growing archive may still have the expected prefix.
+            if (await stream.ReadAsync(new byte[1]).ConfigureAwait(false) != 0)
+                throw Refuse(package, PackageArchiveFailureReason.HashMismatch,
+                    $"'{archivePath}' grew while it was read.");
+
             return bytes;
         }
         catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
@@ -225,23 +233,85 @@ internal sealed partial class PackageArchiveReader : IPackageArchiveReader
     // FIFO blocks until a writer appears. Bound the open so such a swap is refused instead of hanging the load.
     private async Task<FileStream> OpenBoundedAsync(ActivePackage package, string archivePath)
     {
-        var open = Task.Run(() => _openArchive(archivePath));
+        var startedAt = Stopwatch.GetTimestamp();
+        var ownsOpen = false;
+        Task<FileStream>? open = null;
         try
         {
-            return await open.WaitAsync(_openTimeout).ConfigureAwait(false);
+            await ReserveArchiveOpenAsync(archivePath, startedAt).ConfigureAwait(false);
+            ownsOpen = true;
+            var remaining = GetOpenTimeRemaining(startedAt);
+            open = Task.Run(() => _openArchive(archivePath));
+            var stream = await open.WaitAsync(remaining).ConfigureAwait(false);
+            open = null; // The caller now owns the handle.
+            return stream;
         }
         catch (TimeoutException exception)
         {
-            _ = open.ContinueWith(static task =>
-            {
-                if (task.IsCompletedSuccessfully)
-                    task.Result.Dispose();
-                else
-                    _ = task.Exception;
-            }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
             throw Refuse(package, PackageArchiveFailureReason.ArchiveUnreadable,
-                $"'{archivePath}' did not open within {_openTimeout.TotalSeconds:0} seconds; it is not a regular file.", exception);
+                $"'{archivePath}' did not open within {_openTimeout.TotalSeconds:0} seconds.", exception);
         }
+        finally
+        {
+            if (open is not null)
+                _ = FinishUnclaimedOpenAsync(open, archivePath);
+            else if (ownsOpen)
+                ReleaseArchiveOpen(archivePath);
+        }
+    }
+
+    // Each open has one owner. Later loads of the same path wait for its completion before starting their own.
+    private async Task ReserveArchiveOpenAsync(string archivePath, long startedAt)
+    {
+        while (true)
+        {
+            Task pending;
+            lock (_sync)
+            {
+                if (!_opening.TryGetValue(archivePath, out var completion))
+                {
+                    _opening.Add(archivePath, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+                    return;
+                }
+
+                pending = completion.Task;
+            }
+
+            await pending.WaitAsync(GetOpenTimeRemaining(startedAt)).ConfigureAwait(false);
+        }
+    }
+
+    private TimeSpan GetOpenTimeRemaining(long startedAt)
+    {
+        var remaining = _openTimeout - Stopwatch.GetElapsedTime(startedAt);
+        return remaining > TimeSpan.Zero ? remaining : throw new TimeoutException();
+    }
+
+    private async Task FinishUnclaimedOpenAsync(Task<FileStream> open, string archivePath)
+    {
+        try
+        {
+            using var stream = await open.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // The load has already received the failure or timed out. Observe any late open or disposal failure.
+        }
+        finally
+        {
+            ReleaseArchiveOpen(archivePath);
+        }
+    }
+
+    private void ReleaseArchiveOpen(string archivePath)
+    {
+        TaskCompletionSource completion;
+        lock (_sync)
+        {
+            completion = _opening[archivePath];
+            _opening.Remove(archivePath);
+        }
+        completion.SetResult();
     }
 
     // Called under _sync. Expired refusals are swept here, so keys that are never retried do not accumulate.

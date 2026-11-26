@@ -601,7 +601,7 @@ if (archive.GetEntry("staticwebassets/module.js") is { Length: <= MaxBytes } ent
   install, another feed serving the same version, or the install root reached through another spelling is
   verified against that record, so replacing an archive together with the hash file beside it is refused.
   The same version with different bytes from any feed is refused; publish a new version instead.
-* A modified, replaced, truncated or missing archive is refused with `PackageArchiveException`, which
+* On a cold load, a modified, replaced, truncated or missing archive is refused with `PackageArchiveException`, which
   names the package, the version and a `Reason` (`HashNotRecorded`, `ArchiveMissing`, `ArchiveUnreadable`,
   `ArchiveTooLarge`, `HashMismatch` or `InvalidArchive`). A refusal is logged as a warning when it is
   made; repeats within the five seconds it is remembered are not logged again.
@@ -612,13 +612,17 @@ if (archive.GetEntry("staticwebassets/module.js") is { Length: <= MaxBytes } ent
   the package: rooted paths, empty, `.` or `..` segments, `:` and NUL are refused. When two entries share a
   path after normalization, neither is exposed.
 * Verified archives stay in a bounded in-memory cache, so each archive is verified once until it is
-  evicted. An archive larger than `CacheBytes` is never cached, so every open reads and verifies it
+  evicted. A cache hit serves the previously verified bytes even if the on-disk file has since changed.
+  An archive larger than `CacheBytes` is never cached, so every open reads and verifies it
   again. Size `CacheBytes` to the archives a host serves, or verified archives are evicted and
   re-read. Each archive being read holds up to `MaximumArchiveBytes` in memory until it is verified.
   Configure the bounds under `Nuplane:PackageArchives`: `CacheBytes` (64 MiB by default, 0 turns the
   cache off) and `MaximumArchiveBytes` (256 MiB by default).
-* Installs made by a Nuplane version without archive retention have no kept archive. Reinstall them,
-  for example by removing the install root and state file.
+* Installs created before archive retention need a fresh acquisition to serve content. Keep the
+  store state and its recorded hashes. For a live or enrolled store, keep the old install available
+  while active, last-known-good or in use. A newly published package version can be acquired
+  alongside it and takes effect through normal reconciliation. A disposable development host can
+  start with a fresh store and its existing trusted lock file.
 
 The extracted-store reader, `PackageContent` with an operation borrow or graph-use lease, stays
 available for hosts that enroll the coordinated package store (see

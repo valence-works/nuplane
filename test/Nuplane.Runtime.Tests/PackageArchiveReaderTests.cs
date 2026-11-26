@@ -109,8 +109,11 @@ public sealed class PackageArchiveReaderTests : IDisposable
         }
         else
         {
-            using var mkfifo = System.Diagnostics.Process.Start("mkfifo",
-                replacement == "fifo" ? ArchivePath(package) : target);
+            var startInfo = new System.Diagnostics.ProcessStartInfo("mkfifo")
+            {
+                ArgumentList = { replacement == "fifo" ? ArchivePath(package) : target }
+            };
+            using var mkfifo = System.Diagnostics.Process.Start(startInfo)!;
             await mkfifo.WaitForExitAsync();
             Assert.Equal(0, mkfifo.ExitCode);
         }
@@ -184,6 +187,71 @@ public sealed class PackageArchiveReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task OpenAsync_PendingPhysicalOpen_ReusesItAcrossRefusalWindows()
+    {
+        var package = Install("Acme.Addon", "1.0.0", CreateArchive(("content/a.txt", "a"u8.ToArray())));
+        var changedPackage = package with { ArchiveHash = Hash("different archive"u8.ToArray()) };
+        var openStarted = new TaskCompletionSource<FileStream>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseOpen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var openAttempts = 0;
+        var reader = new PackageArchiveReader(Options.Create(new PackageArchiveReaderOptions()),
+            NullLogger<PackageArchiveReader>.Instance, TimeSpan.Zero, TimeSpan.FromSeconds(1), path =>
+            {
+                var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+                if (Interlocked.Increment(ref openAttempts) == 1)
+                {
+                    openStarted.SetResult(stream);
+                    releaseOpen.Task.GetAwaiter().GetResult();
+                }
+
+                return stream;
+            });
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        FileStream originalStream;
+        try
+        {
+            var first = reader.OpenAsync(package, timeout.Token).AsTask();
+            originalStream = await openStarted.Task.WaitAsync(timeout.Token);
+            var initialRefusal = await Assert.ThrowsAsync<PackageArchiveException>(() => first);
+            Assert.Equal(PackageArchiveFailureReason.ArchiveUnreadable, initialRefusal.Reason);
+            Assert.IsType<TimeoutException>(initialRefusal.InnerException);
+
+            // The refusal cache is disabled. A different recorded hash also changes the load key.
+            foreach (var retry in new[] { package, changedPackage, package })
+            {
+                var refusal = await Assert.ThrowsAsync<PackageArchiveException>(() => reader.OpenAsync(retry, timeout.Token).AsTask());
+                Assert.Equal(PackageArchiveFailureReason.ArchiveUnreadable, refusal.Reason);
+            }
+
+            Assert.Equal(1, Volatile.Read(ref openAttempts));
+        }
+        finally
+        {
+            releaseOpen.SetResult();
+        }
+
+        PackageArchive opened;
+        // The original open completes on a worker, which may still be cleaning up when the test resumes.
+        while (true)
+        {
+            try
+            {
+                opened = await reader.OpenAsync(package, timeout.Token);
+                break;
+            }
+            catch (PackageArchiveException exception) when (exception.Reason == PackageArchiveFailureReason.ArchiveUnreadable)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(10), timeout.Token);
+            }
+        }
+
+        Assert.Equal(2, Volatile.Read(ref openAttempts));
+        Assert.False(originalStream.CanRead);
+        Assert.Equal("a"u8.ToArray(), opened.GetEntry("content/a.txt")!.ReadAllBytes());
+    }
+
+    [Fact]
     public async Task OpenAsync_RefusalAfterItsRetention_ReadsTheRepairedArchive()
     {
         var archive = CreateArchive(("content/a.txt", "repaired"u8.ToArray()));
@@ -209,6 +277,85 @@ public sealed class PackageArchiveReaderTests : IDisposable
         var opened = await Task.WhenAll(Enumerable.Range(0, 32).Select(_ => Task.Run(() => reader.OpenAsync(package).AsTask())));
 
         Assert.All(opened, archive => Assert.Same(opened[0], archive));
+    }
+
+    [Fact]
+    public async Task OpenAsync_ConcurrentOpensWithDifferentKeysAtTheSamePath_VerifyBothArchives()
+    {
+        var package = Install("Acme.Addon", "1.0.0", CreateArchive(("content/a.txt", "a"u8.ToArray())));
+        var otherPackage = package with { PackageId = "Acme.Other" };
+        var openStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseOpen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var openAttempts = 0;
+        var reader = new PackageArchiveReader(Options.Create(new PackageArchiveReaderOptions()),
+            NullLogger<PackageArchiveReader>.Instance, TimeSpan.Zero, TimeSpan.FromSeconds(30), path =>
+            {
+                if (Interlocked.Increment(ref openAttempts) == 1)
+                {
+                    openStarted.SetResult();
+                    releaseOpen.Task.GetAwaiter().GetResult();
+                }
+
+                return File.OpenRead(path);
+            });
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var first = reader.OpenAsync(package, timeout.Token).AsTask();
+        Task<PackageArchive> second;
+        try
+        {
+            await openStarted.Task.WaitAsync(timeout.Token);
+            second = reader.OpenAsync(otherPackage, timeout.Token).AsTask();
+        }
+        finally
+        {
+            releaseOpen.SetResult();
+        }
+
+        var opened = await Task.WhenAll(first, second);
+
+        Assert.Equal(package.PackageId, opened[0].PackageId);
+        Assert.Equal(otherPackage.PackageId, opened[1].PackageId);
+        Assert.Equal(2, Volatile.Read(ref openAttempts));
+    }
+
+    [Fact]
+    public async Task OpenAsync_ConcurrentRefusedOpens_ThrowIndependentExceptions()
+    {
+        var package = Install("Acme.Addon", "1.0.0", CreateArchive(("content/a.txt", "a"u8.ToArray())));
+        var openStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseOpen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var openAttempts = 0;
+        var reader = new PackageArchiveReader(Options.Create(new PackageArchiveReaderOptions()),
+            NullLogger<PackageArchiveReader>.Instance, TimeSpan.Zero, TimeSpan.FromSeconds(30), _ =>
+            {
+                Interlocked.Increment(ref openAttempts);
+                openStarted.TrySetResult();
+                releaseOpen.Task.GetAwaiter().GetResult();
+                throw new IOException("Synthetic open failure.");
+            });
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var first = reader.OpenAsync(package, timeout.Token).AsTask();
+        Task<PackageArchive> second;
+        try
+        {
+            await openStarted.Task.WaitAsync(timeout.Token);
+            second = reader.OpenAsync(package, timeout.Token).AsTask();
+        }
+        finally
+        {
+            releaseOpen.SetResult();
+        }
+
+        var firstRefusal = await Assert.ThrowsAsync<PackageArchiveException>(() => first);
+        var secondRefusal = await Assert.ThrowsAsync<PackageArchiveException>(() => second);
+
+        Assert.Equal(1, Volatile.Read(ref openAttempts));
+        Assert.Equal(PackageArchiveFailureReason.ArchiveUnreadable, firstRefusal.Reason);
+        Assert.Equal(firstRefusal.Reason, secondRefusal.Reason);
+        Assert.Equal(firstRefusal.Message, secondRefusal.Message);
+        Assert.NotSame(firstRefusal, secondRefusal);
     }
 
     [Theory]
@@ -237,6 +384,20 @@ public sealed class PackageArchiveReaderTests : IDisposable
             CreateReader(new PackageArchiveReaderOptions { MaximumArchiveBytes = archive.Length - 1 }).OpenAsync(package).AsTask());
 
         Assert.Equal(PackageArchiveFailureReason.ArchiveTooLarge, error.Reason);
+    }
+
+    [Fact]
+    public async Task OpenAsync_StreamLongerThanReportedLength_RefusesWithHashMismatch()
+    {
+        var archive = CreateArchive(("content/a.txt", "a"u8.ToArray()));
+        var package = Install("Acme.Addon", "1.0.0", [.. archive, 0]) with { ArchiveHash = Hash(archive) };
+        var reader = new PackageArchiveReader(Options.Create(new PackageArchiveReaderOptions()),
+            NullLogger<PackageArchiveReader>.Instance, TimeSpan.Zero, TimeSpan.FromSeconds(30),
+            path => new ReportedLengthFileStream(path, archive.Length));
+
+        var refusal = await Assert.ThrowsAsync<PackageArchiveException>(() => reader.OpenAsync(package).AsTask());
+
+        Assert.Equal(PackageArchiveFailureReason.HashMismatch, refusal.Reason);
     }
 
     [Fact]
@@ -351,5 +512,11 @@ public sealed class PackageArchiveReaderTests : IDisposable
         }
 
         return stream.ToArray();
+    }
+
+    private sealed class ReportedLengthFileStream(string path, long reportedLength)
+        : FileStream(path, FileMode.Open, FileAccess.Read)
+    {
+        public override long Length => reportedLength;
     }
 }

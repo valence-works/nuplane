@@ -44,5 +44,16 @@ public sealed class ActivePackageCatalogMapperTests
             DateTimeOffset.UnixEpoch);
 
         Assert.Equal(FromDisk, descriptors["Acme.Addon"].ArchiveHash);
+
+        // Upgrading an otherwise unchanged activation fills only its missing hash.
+        var existing = descriptors["Acme.Addon"] with { ArchiveHash = null };
+        var priorState = StoreStateRecord.Empty() with
+        {
+            ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase) { [package.Id] = existing }
+        };
+        var upgraded = ActivePackageCatalogMapper.BuildNextDescriptors(priorState, versions, [package],
+            new PackageChangeSet([], [], [], "upgrade", DateTimeOffset.UnixEpoch.AddDays(1)), "upgrade",
+            DateTimeOffset.UnixEpoch.AddDays(1));
+        Assert.Equal(existing with { ArchiveHash = FromDisk }, upgraded[package.Id]);
     }
 }
