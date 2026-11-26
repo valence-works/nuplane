@@ -20,6 +20,8 @@ See the [End-to-End ASP.NET Plugin Demo](#end-to-end-aspnet-plugin-demo) below f
 
 Nuplane handles the infrastructure: feed resolution, deterministic storage, transactional updates, last-known-good fallback, isolated assembly loading, and structured change events. Your host decides what the loaded packages mean.
 
+Nuplane 1.x requires .NET 10 or later. .NET 10 LTS is the supported baseline. If your host targets .NET 8 or 9, upgrade it to .NET 10 before moving to Nuplane 1.0. See the [0.0.16 migration notes](https://github.com/valence-works/nuplane/releases/tag/0.0.16) when upgrading from 0.0.15 or earlier.
+
 ## 📖 Start With The Wiki
 
 If you are evaluating or onboarding to Nuplane, start with the repository-owned wiki under [`docs/wiki/`](docs/wiki/):

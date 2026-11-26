@@ -63,10 +63,7 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: |
-            8.0.x
-            9.0.x
-            10.0.x
+          dotnet-version: 10.0.x
 
       - name: Qualify Darwin native stat ABI on the actual runner architecture
         if: startsWith(matrix.os, 'macos-')
@@ -171,111 +168,105 @@ jobs:
             (Join-Path $env:RUNNER_TEMP 'state-files-results')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify protection serialization and canonical digests on every supported framework
+      - name: Verify protection serialization and canonical digests
         shell: bash
         run: |
           set -euo pipefail
-          for framework in net8.0 net9.0 net10.0; do
-            dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
-              --configuration Release -p:NuplaneProtectionFrameworkMatrix=true --framework "$framework" \
-              --filter "FullyQualifiedName~GraphUsePayloadSerializerTests|FullyQualifiedName~ProtectionStateSerializationTests|FullyQualifiedName~ProtectionStatePayloadSerializerTests|FullyQualifiedName~ProtectionDigestTests|FullyQualifiedName~RootMembershipPayloadSerializerTests|FullyQualifiedName~PersistedStoreStateGraphVerifierTests" \
-              --logger "trx;LogFileName=protection-$framework.trx" \
-              --results-directory "$RUNNER_TEMP/protection-results/$framework"
-            python3 - "$RUNNER_TEMP/protection-results/$framework/protection-$framework.trx" <<'GRAPHUSE'
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~GraphUsePayloadSerializerTests|FullyQualifiedName~ProtectionStateSerializationTests|FullyQualifiedName~ProtectionStatePayloadSerializerTests|FullyQualifiedName~ProtectionDigestTests|FullyQualifiedName~RootMembershipPayloadSerializerTests|FullyQualifiedName~PersistedStoreStateGraphVerifierTests" \
+            --logger "trx;LogFileName=protection.trx" \
+            --results-directory "$RUNNER_TEMP/protection-results"
+          python3 - "$RUNNER_TEMP/protection-results/protection.trx" <<'GRAPHUSE'
           import collections
           import sys
           import xml.etree.ElementTree as ET
           rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
           required = [
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Constructor_RejectsGraphInstallOnAnotherNativeVolume',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Constructor_RequiresRootMembershipAndNativeVolumeAgreement',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsDigestTamperingTruncationAndOversize',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsDuplicatePropertiesAtEveryDepth',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingNestedFieldsAndNullRequiredValues',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "diagnosticProcessId")',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "enrollmentEpoch")',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "graphSnapshot")',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "lifetimeKind")',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "payloadDigest")',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "rootIdentity")',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "schemaVersion")',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "sentinelIdentity")',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "snapshotState")',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "useId")',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnknownAndCaseMismatchedProperties',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnsupportedOrInvalidScalarValues(property: "diagnosticProcessId", value: 0)',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnsupportedOrInvalidScalarValues(property: "lifetimeKind", value: 2)',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnsupportedOrInvalidScalarValues(property: "schemaVersion", value: 2)',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnsupportedOrInvalidScalarValues(property: "snapshotState", value: 99)',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Digest_BindsEveryVariableRecordField',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.GraphDigest_IsIndependentOfSetInputOrder',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.GraphDigest_MatchesIndependentRevisionOneGoldenVector',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.RoundTrip_PreservesCandidateAndCopiesTheFullGraph',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Serialize_RejectsCandidateWithMismatchedDigest',
-              'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Serialize_RejectsPayloadLargerThanBound',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Constructor_RejectsGraphInstallOnAnotherNativeVolume',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Constructor_RequiresRootMembershipAndNativeVolumeAgreement',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsDigestTamperingTruncationAndOversize',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsDuplicatePropertiesAtEveryDepth',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingNestedFieldsAndNullRequiredValues',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "diagnosticProcessId")',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "enrollmentEpoch")',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "graphSnapshot")',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "lifetimeKind")',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "payloadDigest")',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "rootIdentity")',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "schemaVersion")',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "sentinelIdentity")',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "snapshotState")',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsMissingRequiredFields(property: "useId")',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnknownAndCaseMismatchedProperties',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnsupportedOrInvalidScalarValues(property: "diagnosticProcessId", value: 0)',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnsupportedOrInvalidScalarValues(property: "lifetimeKind", value: 2)',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnsupportedOrInvalidScalarValues(property: "schemaVersion", value: 2)',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Deserialize_RejectsUnsupportedOrInvalidScalarValues(property: "snapshotState", value: 99)',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Digest_BindsEveryVariableRecordField',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.GraphDigest_IsIndependentOfSetInputOrder',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.GraphDigest_MatchesIndependentRevisionOneGoldenVector',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.RoundTrip_PreservesCandidateAndCopiesTheFullGraph',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Serialize_RejectsCandidateWithMismatchedDigest',
+            'Nuplane.Store.Tests.Coordination.GraphUsePayloadSerializerTests.Serialize_RejectsPayloadLargerThanBound',
           ]
           codec_rows = [row for row in rows if '.GraphUsePayloadSerializerTests.' in row.attrib['testName']]
           if collections.Counter(row.attrib['testName'] for row in codec_rows) != collections.Counter(required):
-              raise SystemExit('graph-use-record-codec: required scenario names or multiplicity differ.')
+            raise SystemExit('graph-use-record-codec: required scenario names or multiplicity differ.')
           legacy_classes = {
-              'Nuplane.Store.Tests.State.ProtectionStateSerializationTests': 29,
-              'Nuplane.Store.Tests.State.ProtectionStatePayloadSerializerTests': 7,
-              'Nuplane.Store.Tests.Coordination.ProtectionDigestTests': 29,
-              'Nuplane.Store.Tests.Coordination.RootMembershipPayloadSerializerTests': 28,
-              'Nuplane.Store.Tests.Coordination.PersistedStoreStateGraphVerifierTests': 10,
+            'Nuplane.Store.Tests.State.ProtectionStateSerializationTests': 29,
+            'Nuplane.Store.Tests.State.ProtectionStatePayloadSerializerTests': 7,
+            'Nuplane.Store.Tests.Coordination.ProtectionDigestTests': 29,
+            'Nuplane.Store.Tests.Coordination.RootMembershipPayloadSerializerTests': 28,
+            'Nuplane.Store.Tests.Coordination.PersistedStoreStateGraphVerifierTests': 10,
           }
           legacy_rows = [row for row in rows if row not in codec_rows]
           observed_classes = collections.Counter(row.attrib['testName'].split('(', 1)[0].rsplit('.', 1)[0] for row in legacy_rows)
           if observed_classes != collections.Counter(legacy_classes):
-              raise SystemExit('Existing serialization/digest suites must retain their required scenario counts.')
+            raise SystemExit('Existing serialization/digest suites must retain their required scenario counts.')
           if len({row.attrib['testName'] for row in rows}) != len(rows):
-              raise SystemExit('Serialization/digest scenario names must be unique.')
+            raise SystemExit('Serialization/digest scenario names must be unique.')
           group_models = {
-              'RoundTrip_Schema2MixedLedger_PreservesV1MembersAndV2RootRow',
-              'RoundTrip_GroupIntent_IsImmutableAndRetainsLocalPriorTuple',
-              'GroupPending_BindingAndResolutionCannotMoveBackwards',
-              'GroupDescriptor_RejectsRevisionJumpsMixedPriorFilesAndSkippedInitialGeneration',
-              'GroupDescriptor_RejectsV2PriorHeaderThatDoesNotMatchParticipantSet',
+            'RoundTrip_Schema2MixedLedger_PreservesV1MembersAndV2RootRow',
+            'RoundTrip_GroupIntent_IsImmutableAndRetainsLocalPriorTuple',
+            'GroupPending_BindingAndResolutionCannotMoveBackwards',
+            'GroupDescriptor_RejectsRevisionJumpsMixedPriorFilesAndSkippedInitialGeneration',
+            'GroupDescriptor_RejectsV2PriorHeaderThatDoesNotMatchParticipantSet',
           }
           for name in group_models:
-              expected = 'Nuplane.Store.Tests.Coordination.RootMembershipPayloadSerializerTests.' + name
-              if sum(row.attrib['testName'] == expected for row in rows) != 1:
-                  raise SystemExit('Missing required group membership scenario: ' + name)
+            expected = 'Nuplane.Store.Tests.Coordination.RootMembershipPayloadSerializerTests.' + name
+            if sum(row.attrib['testName'] == expected for row in rows) != 1:
+                raise SystemExit('Missing required group membership scenario: ' + name)
           if len(rows) != 129 or any(row.attrib.get('outcome') != 'Passed' for row in rows):
-              raise SystemExit('All 26 graph-use codec, 98 existing and five group membership cases must pass without skips.')
+            raise SystemExit('All 26 graph-use codec, 98 existing and five group membership cases must pass without skips.')
           print('Qualified all 129 serialization/digest cases with no skips.')
           GRAPHUSE
-          done
 
-      - name: Qualify detached deletion journals on every framework
+      - name: Qualify detached deletion journals
         shell: bash
         run: |
           set -euo pipefail
-          for framework in net8.0 net9.0 net10.0; do
-            dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
-              --configuration Release -p:NuplaneProtectionFrameworkMatrix=true --framework "$framework" \
-              --filter "FullyQualifiedName~PackageStoreDeletionJournalTests" \
-              --blame-hang-timeout 3m \
-              --logger "trx;LogFileName=deletion-journal-$framework.trx" \
-              --results-directory "$RUNNER_TEMP/deletion-journal/$framework"
-            python3 build/verify-required-trx.py "$RUNNER_TEMP/deletion-journal/$framework/deletion-journal-$framework.trx" \
-              build/test-cases/deletion-journal-codec.json
-          done
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~PackageStoreDeletionJournalTests" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=deletion-journal.trx" \
+            --results-directory "$RUNNER_TEMP/deletion-journal"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/deletion-journal/deletion-journal.trx" \
+            build/test-cases/deletion-journal-codec.json
 
-      - name: Qualify multiroot protection encoding and legacy writer refusal on every framework
+      - name: Qualify multiroot protection encoding and legacy writer refusal
         shell: bash
         run: |
           set -euo pipefail
-          for framework in net8.0 net9.0 net10.0; do
-            dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
-              --configuration Release -p:NuplaneProtectionFrameworkMatrix=true --framework "$framework" \
-              --filter "FullyQualifiedName~PackageProtectionBundleSerializationTests|FullyQualifiedName~BindDeclaredMembersAsync_ProtectedOrMalformedPriorStateRemainsDeclared" \
-              --blame-hang-timeout 3m \
-              --logger "trx;LogFileName=multiroot-v2-$framework.trx" \
-              --results-directory "$RUNNER_TEMP/multiroot-v2/$framework"
-            python3 build/verify-required-trx.py "$RUNNER_TEMP/multiroot-v2/$framework/multiroot-v2-$framework.trx" \
-              build/test-cases/multiroot-v2-encoding.json
-          done
+          dotnet test test/Nuplane.Store.Tests/Nuplane.Store.Tests.csproj \
+            --configuration Release --framework net10.0 \
+            --filter "FullyQualifiedName~PackageProtectionBundleSerializationTests|FullyQualifiedName~BindDeclaredMembersAsync_ProtectedOrMalformedPriorStateRemainsDeclared" \
+            --blame-hang-timeout 3m \
+            --logger "trx;LogFileName=multiroot-v2.trx" \
+            --results-directory "$RUNNER_TEMP/multiroot-v2"
+          python3 build/verify-required-trx.py "$RUNNER_TEMP/multiroot-v2/multiroot-v2.trx" \
+            build/test-cases/multiroot-v2-encoding.json
 
       - name: Qualify trusted package-store root composition
         shell: bash
@@ -1534,10 +1525,7 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: |
-            8.0.x
-            9.0.x
-            10.0.x
+          dotnet-version: 10.0.x
 
       - name: Mount an owned ${{ matrix.filesystem }} test root
         shell: bash
@@ -1582,10 +1570,7 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: |
-            8.0.x
-            9.0.x
-            10.0.x
+          dotnet-version: 10.0.x
 
       - name: Setup Python for the TRX verifier
         uses: actions/setup-python@v7

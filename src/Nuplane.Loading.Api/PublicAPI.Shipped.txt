@@ -1,0 +1,3 @@
+#nullable enable
+Nuplane.Loading.Api.NuplaneLoadStateEndpointExtensions
+static Nuplane.Loading.Api.NuplaneLoadStateEndpointExtensions.MapNuplaneLoadState(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! prefix = "/nuplane/admin") -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!

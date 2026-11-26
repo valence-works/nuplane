@@ -34,7 +34,7 @@ This document defines the coding standards and conventions for the Nuplane proje
 
 ## Public API
 
-Types in `Nuplane` and `Nuplane.Admin` are internal by default. Keep a type public when a
+Types in Nuplane packages are internal by default. Keep a type public when a
 supported host, package author, or extension needs to call or implement it, or when a supported
 public signature uses it. First-party modules may share implementation types through scoped
 `InternalsVisibleTo` declarations.
@@ -55,10 +55,11 @@ that composed these classes directly can use `AddNuplane`, `NuplaneRestore`, or 
 for the host or offline workflow it needs.
 
 `Microsoft.CodeAnalysis.PublicApiAnalyzers` checks the `PublicAPI.Shipped.txt` and
-`PublicAPI.Unshipped.txt` manifests in both projects during ordinary builds. Review the API diff
+`PublicAPI.Unshipped.txt` manifests in every packable project during ordinary builds. Review the API diff
 with any intentional addition or change. Record new or changed signatures in the unshipped
 manifest and promote reviewed entries to the shipped manifest with the release. The manifest
-includes nullability and supports the same API on .NET 8, .NET 9, and .NET 10.
+includes nullability. Package builds also run .NET SDK package validation. The publication
+workflow uses the configured stable NuGet.org version as a binary compatibility baseline.
 
 ## Naming Conventions
 
@@ -406,7 +407,7 @@ Nuplane.Loading.Api (ASP.NET Core)
 
 ### Multi-Targeting
 
-The solution targets `net8.0`, `net9.0`, and `net10.0`. Ensure all code compiles against all targets. Use `#if` directives only when absolutely necessary for API differences.
+The solution targets `net10.0`. Use the .NET 10 SDK to build and test it.
 
 ### Build Policy
 
