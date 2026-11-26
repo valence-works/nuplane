@@ -276,6 +276,24 @@ public async Task TriggerManualAsync_WhenSourcesEmpty_ReturnsEmptyChangeSet()
 - Prefer `Assert.Single` over `Assert.Equal(1, collection.Count())`.
 - Use `Assert.ThrowsAsync<T>` for expected exceptions.
 
+### Documentation and sample walkthroughs
+
+Validate maintained links whenever you move or rename a repository path. The same CI job compiles
+each README C# example in an external web project and runs the sample against the package-drop
+and query walkthroughs in the README, Getting Started guide, and query catalog quickstart.
+
+```bash
+fixture="$(mktemp -d)/nuplane-docs"
+python3 build/check-docs.py links
+python3 build/check-docs.py restore "$fixture"
+python3 build/check-docs.py snippets "$fixture"
+python3 build/check-docs.py sample "$fixture"
+```
+
+Use the .NET 10 SDK and Python 3.9 or later on Linux or macOS. Only restore needs access to NuGet.
+The sample uses a fresh store and an OS-assigned loopback port for each walkthrough. Remove the
+temporary fixture when you finish.
+
 ---
 
 ## Reconciliation Engine Patterns

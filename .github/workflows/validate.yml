@@ -1587,6 +1587,34 @@ jobs:
           fi
           bash build/qualify-package-archives.sh "$RUNNER_TEMP/package-archives-arm64"
 
+  documentation:
+    name: Documentation and sample walkthroughs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout candidate commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore isolated documentation fixture
+        run: python3 build/check-docs.py restore "$RUNNER_TEMP/nuplane-docs"
+
+      - name: Check documentation and sample with loopback only
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo unshare --net -- bash -euc '
+            ip link set lo up
+            exec sudo -u "$1" env "PATH=$2" python3 build/check-docs.py verify "$3"
+          ' bash "$(id -un)" "$PATH" "$RUNNER_TEMP/nuplane-docs"
+
   build-test:
     needs:
       - darwin-native-shim
