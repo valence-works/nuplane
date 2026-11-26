@@ -5,6 +5,7 @@ using Nuplane.Feeds.Configuration;
 using Nuplane.Integration.Tests.Support;
 using Nuplane.Loading;
 using Nuplane.Loading.Registration;
+using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Sources.Directory;
 using Nuplane.Sources.Directory.Builder;
@@ -51,8 +52,12 @@ public sealed class ModuleRegistrationCompatibilityTests
     [Fact]
     public async Task CoreRuntime_WithLoadingOptions_ReconcilesCycleWithoutErrors()
     {
-        var service = ReconciliationServiceFactory.Create(
-            loadingOptions: new LoadingOptions { Enabled = false });
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(builder => builder.UseInMemoryStore().AutoloadPackages());
+        services.PostConfigure<LoadingOptions>(options => options.Enabled = false);
+        await using var provider = services.BuildServiceProvider();
+        var service = provider.GetRequiredService<IReconciliationService>();
 
         var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);
 

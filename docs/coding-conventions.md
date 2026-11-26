@@ -282,20 +282,18 @@ public async Task TriggerManualAsync_WhenSourcesEmpty_ReturnsEmptyChangeSet()
 
 ### Middleware Pipeline
 
-The reconciliation engine uses a middleware pipeline (`ReconciliationPipeline`) with discrete stages:
+`ReconciliationComposition` assembles the middleware stages in this order:
 
-1. **LockFileCycleMiddleware** — Capture one immutable lock snapshot for the cycle and, in Generate mode, atomically publish a complete lock only after successful completion
-2. **DesiredStateReadMiddleware** — Read desired package state from sources
-3. **PackageResolutionMiddleware** — Resolve packages from feeds using the captured lock constraints
-4. **TrustAndLockGateMiddleware** — Report trust/lock outcomes from the captured snapshot; version, feed, and artifact constraints are already applied during resolution
-5. **PackageLoadingMiddleware** — Load assemblies via ALCs
-6. **DiffAndChangeEventMiddleware** — Compute diff and emit change events
-7. **TransactionExecutionMiddleware** — Execute atomic state mutations
-8. **UnloadMiddleware** — Unload obsolete assemblies
-9. **CleanupMiddleware** — Clean up old package versions
-10. **HealthAndMetricsMiddleware** — Evaluate health and record metrics
+1. **LockFileCycleMiddleware** — If the lock coordinator supports a cycle snapshot, capture it and publish a generated lock only after successful completion.
+2. **DesiredStateReadMiddleware** — Read and aggregate desired state from sources.
+3. **PackageResolutionMiddleware** — Resolve packages and dependencies using the cycle's available lock constraints.
+4. **TrustAndLockGateMiddleware** — Report trust and lock outcomes.
+5. **DiffAndChangeEventMiddleware** — Compute the diff and publish planned changes.
+6. **TransactionExecutionMiddleware** — Apply resolved package transactions and calculate the proposed active versions.
+7. **CleanupMiddleware** — Publish active state and evaluate cleanup policy. Ordinary stores with automatic loading prepare candidate graphs before they publish active state.
+8. **HealthAndMetricsMiddleware** — Dispatch committed changes, evaluate cycle health, and record metrics.
 
-Each middleware receives a `ReconciliationCycleContext` and must call `next()` to continue the pipeline.
+Each middleware receives a `ReconciliationCycleContext` and calls `next()` unless it intentionally ends the cycle. Coordinated stores with staged loading defer active-state publication, cleanup, and observer completion. Loading runs outside the short root and state lock scopes. Reconciliation reacquires admission and verifies the state revision and protected graph before it publishes the transition.
 
 ### Single-Flight Protection
 

@@ -1,7 +1,7 @@
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Models;
 
-namespace Nuplane.Runtime.Tests;
+namespace Nuplane.Tests.Shared;
 
 internal static class ReconciliationServiceTestExtensions
 {

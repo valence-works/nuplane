@@ -4,6 +4,8 @@ internal sealed class ReconciliationPipeline
 {
     private readonly List<IReconciliationMiddleware> _middlewares = [];
 
+    internal IEnumerable<Type> StageTypes => _middlewares.Select(stage => stage.GetType());
+
     public ReconciliationPipeline Use(IReconciliationMiddleware middleware)
     {
         ArgumentNullException.ThrowIfNull(middleware);

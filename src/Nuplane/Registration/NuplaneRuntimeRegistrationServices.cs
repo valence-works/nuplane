@@ -13,9 +13,7 @@ using Nuplane.Operational;
 using Nuplane.PackageArchives;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Configuration;
-using Nuplane.Sources;
 using Nuplane.Store.Coordination;
-using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
 using Polly;
 
@@ -181,37 +179,8 @@ internal static class NuplaneRuntimeRegistrationServices
                     packageResolver,
                     capabilityContributor.MetadataReader);
             }
-            return new ReconciliationService(
-            sp.GetServices<IDesiredPackageSource>(),
-            sp.GetRequiredService<IDesiredStateAggregator>(),
-            sp.GetRequiredService<IDesiredActualDiffEngine>(),
-            packageResolver,
-            sp.GetRequiredService<IStoreRegistry>(),
-            sp.GetRequiredService<IOptions<ReconciliationOptions>>(),
-            sp.GetRequiredService<IObserverEventDispatcher>(),
-            sp.GetRequiredService<IReconciliationHealthEvaluator>(),
-            sp.GetRequiredService<IReconciliationLogger>(),
-            sp.GetRequiredService<ReconciliationMetrics>(),
-            sp.GetRequiredService<IOptions<FeedResolutionOptions>>(),
-            sp.GetRequiredService<ILockFileCoordinator>(),
-            sp.GetRequiredService<IOptions<CleanupPolicyOptions>>(),
-            sp.GetRequiredService<IReconciliationRetryPolicy>(),
-            sp.GetRequiredService<IDryRunPlanner>(),
-            sp.GetRequiredService<IPackageCleanupService>(),
-            sp.GetRequiredService<IFailureRecorder>(),
-            sp.GetRequiredService<ObservationDegradationTracker>(),
-            sp.GetService<ICycleFailureContributor>(),
-            sp.GetService<StartupRecoveryState>(),
-            sp.GetService<IStoreLock>(),
-            sp.GetServices<IDesiredStateContributor>(),
-            sp.GetRequiredService<IOptions<HostProvidedPackagesOptions>>(),
-            admission,
-            composition.IsParticipant && loadingObserver is not null
-                ? sp.GetService<IResolvedPackageGraphUseLeaseAcquisition>()
-                : null,
-            composition.IsParticipant ? loadingObserver : null,
-            composition,
-            composition.IsParticipant ? null : sp.GetService<IOrdinaryPackageLoadingActivation>());
+            return new ReconciliationService(ReconciliationComposition.FromServices(
+                sp, packageResolver, admission, composition, loadingObserver));
         });
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
     }

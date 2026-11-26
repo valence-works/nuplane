@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Events;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Credentials;
@@ -12,12 +13,9 @@ using Nuplane.Reconciliation.Models;
 using Nuplane.Registration;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Sources;
-using Nuplane.Store.Activation;
 using Nuplane.Store.Cleanup;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.State;
-using Nuplane.Store.Transactions;
-using Nuplane.Abstractions.PackageStoreProtection;
 
 namespace Nuplane.Reconciliation;
 
@@ -28,7 +26,8 @@ internal sealed class ReconciliationService : IReconciliationService
 
     private readonly ReconciliationOptions _reconciliationOptions;
     private readonly ReconciliationPipeline _pipeline;
-    private readonly ReconciliationPipelineDefinition _pipelineDefinition;
+    private readonly ReconciliationComposition _composition;
+    private readonly ICoordinatedActiveStateTransitionDriver? _transitionDriver;
     private readonly SemaphoreSlim _cycleLock = new(1, 1);
     private readonly IStoreLock? _storeLock;
     private readonly IStoreRegistry _storeRegistry;
@@ -137,8 +136,7 @@ internal sealed class ReconciliationService : IReconciliationService
 
     /// <summary>
     /// Initializes a new instance of the reconciliation service with the runtime collaborators,
-    /// policies, optional loading services, and the cross-process store lock. Used by dependency
-    /// injection, which always supplies <paramref name="storeLock"/>.
+    /// policies, optional loading services, and the cross-process store lock.
     /// </summary>
     /// <param name="sources">The desired package sources.</param>
     /// <param name="desiredStateAggregator">The desired state aggregator.</param>
@@ -209,74 +207,59 @@ internal sealed class ReconciliationService : IReconciliationService
         ILeasedPackageGraphLoadingObserver? leasedPackageGraphLoadingObserver = null,
         PackageStoreCompositionSnapshot? composition = null,
         IOrdinaryPackageLoadingActivation? ordinaryLoadingActivation = null)
+        : this(new ReconciliationComposition
+        {
+            Sources = sources ?? throw new ArgumentNullException(nameof(sources)),
+            Options = (reconciliationOptions ?? throw new ArgumentNullException(nameof(reconciliationOptions))).Value,
+            FeedOptions = (feedResolutionOptions ?? throw new ArgumentNullException(nameof(feedResolutionOptions))).Value,
+            CleanupOptions = (cleanupPolicyOptions ?? throw new ArgumentNullException(nameof(cleanupPolicyOptions))).Value,
+            DesiredStateAggregator = desiredStateAggregator ?? throw new ArgumentNullException(nameof(desiredStateAggregator)),
+            DiffEngine = desiredActualDiffEngine ?? throw new ArgumentNullException(nameof(desiredActualDiffEngine)),
+            StoreRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry)),
+            ObserverDispatcher = observerEventDispatcher ?? throw new ArgumentNullException(nameof(observerEventDispatcher)),
+            HealthEvaluator = healthEvaluator ?? throw new ArgumentNullException(nameof(healthEvaluator)),
+            Logger = logger ?? throw new ArgumentNullException(nameof(logger)),
+            Metrics = metrics ?? throw new ArgumentNullException(nameof(metrics)),
+            FailureRecorder = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder)),
+            LockFileCoordinator = lockFileCoordinator ?? throw new ArgumentNullException(nameof(lockFileCoordinator)),
+            RetryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy)),
+            DryRunPlanner = dryRunPlanner ?? throw new ArgumentNullException(nameof(dryRunPlanner)),
+            CleanupService = packageCleanupService ?? throw new ArgumentNullException(nameof(packageCleanupService)),
+            PackageResolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver)),
+            ObservationDegradationTracker = observationDegradationTracker,
+            CycleFailureContributor = cycleFailureContributor,
+            StartupRecoveryState = startupRecoveryState,
+            Contributors = desiredStateContributors ?? [],
+            HostProvidedPackages = hostProvidedPackagesOptions?.Value,
+            StoreLock = storeLock,
+            StoreAdmission = packageStoreAdmission,
+            GraphUseLeaseAcquisition = graphUseLeaseAcquisition,
+            LeasedLoadingObserver = leasedPackageGraphLoadingObserver,
+            StoreComposition = composition,
+            OrdinaryLoadingActivation = ordinaryLoadingActivation
+        })
     {
-        _storeLock = storeLock;
-
-        // DesiredManifestPackageSource is always registered so code-based and configuration-based
-        // hosts behave identically; it is excluded here when disabled so it leaves no
-        // snapshot/state footprint on hosts that never opted into the desired manifest.
-        var sourcesList = (sources ?? throw new ArgumentNullException(nameof(sources)))
-            .Where(source => source is not DesiredManifestPackageSource { IsEnabled: false })
-            .ToArray();
-        var reconciliationOpts = (reconciliationOptions ?? throw new ArgumentNullException(nameof(reconciliationOptions))).Value;
-        var feedResOpts = (feedResolutionOptions ?? throw new ArgumentNullException(nameof(feedResolutionOptions))).Value;
-        var cleanupOpts = (cleanupPolicyOptions ?? throw new ArgumentNullException(nameof(cleanupPolicyOptions))).Value; ;
-
-        var desiredStateAgg = desiredStateAggregator ?? throw new ArgumentNullException(nameof(desiredStateAggregator));
-        var diffEngine = desiredActualDiffEngine ?? throw new ArgumentNullException(nameof(desiredActualDiffEngine));
-        var storeReg = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));
-        _storeRegistry = storeReg;
-        _reconciliationOptions = reconciliationOpts;
-        var eventDispatcher = observerEventDispatcher ?? throw new ArgumentNullException(nameof(observerEventDispatcher));
-        _postLoadingObserverEventDispatcher = eventDispatcher as IPostLoadingObserverEventDispatcher;
-        var healthEval = healthEvaluator ?? throw new ArgumentNullException(nameof(healthEvaluator));
-        var loggerInstance = logger ?? throw new ArgumentNullException(nameof(logger));
-        _reconciliationLogger = loggerInstance;
-        var metricsInstance = metrics ?? throw new ArgumentNullException(nameof(metrics));
-        var failureRec = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));
-        var lockCoordinator = lockFileCoordinator ?? throw new ArgumentNullException(nameof(lockFileCoordinator));
-        var retry = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
-        var dryRun = dryRunPlanner ?? throw new ArgumentNullException(nameof(dryRunPlanner));
-        var cleanupService = packageCleanupService ?? throw new ArgumentNullException(nameof(packageCleanupService));
-        _packageStoreAdmission = packageStoreAdmission;
-        _coordinatedParticipantRoute = composition?.IsParticipant == true || packageStoreAdmission is not null;
-        var transitionDriver = _packageStoreAdmission is PackageStoreAdmission builtInAdmission &&
-                               storeReg is ICoordinatedStoreRegistry coordinatedStore
-            ? new CoordinatedActiveStateTransitionDriver(
-                builtInAdmission.Registry.Files, builtInAdmission.Registry, coordinatedStore)
-            : null;
-
-        var resolver = packageResolver ?? throw new ArgumentNullException(nameof(packageResolver));
-        var contributors = desiredStateContributors?.ToArray() ?? [];
-        _pipelineDefinition = new ReconciliationPipelineDefinition(
-            sourcesList,
-            desiredStateAgg,
-            diffEngine,
-            resolver,
-            storeReg,
-            eventDispatcher,
-            healthEval,
-            loggerInstance,
-            metricsInstance,
-            feedResOpts,
-            lockCoordinator,
-            cleanupOpts,
-            retry,
-            dryRun,
-            cleanupService,
-            failureRec,
-            observationDegradationTracker,
-            cycleFailureContributor,
-            startupRecoveryState,
-            contributors,
-            hostProvidedPackagesOptions?.Value,
-            transitionDriver,
-            ordinaryLoadingActivation);
-        _pipeline = _pipelineDefinition.Create(null, out var legacyCache, out _);
-        _sourceSnapshotCache = legacyCache;
-        _graphUseLeaseAcquisition = graphUseLeaseAcquisition;
-        _leasedPackageGraphLoadingObserver = leasedPackageGraphLoadingObserver;
     }
+
+    internal ReconciliationService(ReconciliationComposition composition)
+    {
+        _composition = composition;
+        _storeLock = composition.StoreLock;
+        _storeRegistry = composition.StoreRegistry;
+        _reconciliationOptions = composition.Options;
+        _postLoadingObserverEventDispatcher = composition.ObserverDispatcher as IPostLoadingObserverEventDispatcher;
+        _reconciliationLogger = composition.Logger;
+        _packageStoreAdmission = composition.StoreAdmission;
+        _coordinatedParticipantRoute = composition.IsCoordinated;
+        _transitionDriver = composition.CreateTransitionDriver();
+        var ordinary = composition.CreatePipeline(owner: null, _transitionDriver);
+        _pipeline = ordinary.Pipeline;
+        _sourceSnapshotCache = ordinary.SourceCache;
+        _graphUseLeaseAcquisition = composition.GraphUseLeaseAcquisition;
+        _leasedPackageGraphLoadingObserver = composition.LeasedLoadingObserver;
+    }
+
+    internal IEnumerable<Type> PipelineStageTypes => _pipeline.StageTypes;
 
     /// <inheritdoc />
     public async Task<ReconciliationRunResult> TriggerAsync(ReconciliationTrigger trigger, CancellationToken cancellationToken)
@@ -337,23 +320,7 @@ internal sealed class ReconciliationService : IReconciliationService
                         "The selected coordinated participant root did not pass complete member admission.", rootAdmission?.Root);
 
                 if (owner is not null)
-                {
-                    CoordinatedReconciliationAdapters.ValidateParticipants(
-                        _pipelineDefinition.Sources,
-                        _pipelineDefinition.PackageResolver,
-                        _pipelineDefinition.Contributors,
-                        _pipelineDefinition.StoreRegistry,
-                        _pipelineDefinition.FailureRecorder,
-                        _pipelineDefinition.ObserverEventDispatcher,
-                        _pipelineDefinition.PackageCleanupService,
-                        _pipelineDefinition.CycleFailureContributor,
-                        _pipelineDefinition.DesiredActualDiffEngine,
-                        _pipelineDefinition.DryRunPlanner,
-                        _pipelineDefinition.LockFileCoordinator,
-                        _pipelineDefinition.RetryPolicy,
-                        _leasedPackageGraphLoadingObserver,
-                        _graphUseLeaseAcquisition);
-                }
+                    _composition.ValidateParticipants();
 
                 using var storeLock = _storeLock?.Acquire() ?? StoreLockHandle.NotRequired();
                 if (!storeLock.CanProceed)
@@ -362,12 +329,14 @@ internal sealed class ReconciliationService : IReconciliationService
                 ReconciliationPipeline pipeline;
                 if (owner is not null)
                 {
-                    if (_pipelineDefinition.StoreRegistry is not ICoordinatedStoreRegistry coordinated)
+                    if (_storeRegistry is not ICoordinatedStoreRegistry coordinated)
                         throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
                             "The enrolled store registry has no coordinated member-state operations.", owner.Root);
                     using (var borrow = owner.Borrow())
                         await coordinated.ReadCoordinatedStateAsync(borrow, cancellationToken).ConfigureAwait(false);
-                    pipeline = _pipelineDefinition.Create(owner, out _, out completionMiddleware);
+                    var scoped = _composition.CreatePipeline(owner, _transitionDriver);
+                    pipeline = scoped.Pipeline;
+                    completionMiddleware = scoped.Completion;
                 }
                 else
                 {
@@ -508,7 +477,7 @@ internal sealed class ReconciliationService : IReconciliationService
                     "The enrolled reconciliation pipeline did not provide cycle completion.")).CompleteCycle(context);
                 cycleFailuresDrained = true;
                 await LockFileCycleMiddleware.GenerateIfSuccessfulAsync(
-                    _pipelineDefinition.LockFileCoordinator as ILockFileCycleCoordinator,
+                    _composition.LockFileCoordinator as ILockFileCycleCoordinator,
                     context).ConfigureAwait(false);
             }
 
@@ -527,7 +496,7 @@ internal sealed class ReconciliationService : IReconciliationService
             {
                 try
                 {
-                    _pipelineDefinition.CycleFailureContributor?.TakeFailedPackageIds(cycleFailureCorrelationId);
+                    _composition.CycleFailureContributor?.TakeFailedPackageIds(cycleFailureCorrelationId);
                 }
                 catch (Exception exception)
                 {
@@ -587,7 +556,7 @@ internal sealed class ReconciliationService : IReconciliationService
 
         context.PackageStoreOwner = owner;
         var registry = (ICoordinatedStoreRegistry)_storeRegistry;
-        var driver = _pipelineDefinition.TransitionDriver
+        var driver = _transitionDriver
             ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
                 "Coordinated activation requires a protected state transition driver.", owner.Root);
         await cycle.ReadUnchangedStateAsync(owner, registry, cancellationToken).ConfigureAwait(false);
@@ -605,7 +574,7 @@ internal sealed class ReconciliationService : IReconciliationService
         await driver.PersistCandidateAsync(owner, candidate, cancellationToken).ConfigureAwait(false);
         preparation.Commit();
 
-        var (cleanup, events) = _pipelineDefinition.CoordinatedCompletion(owner);
+        var (cleanup, events) = _composition.CreateCoordinatedCompletion(owner);
         await cleanup.CleanupCommittedAsync(context).ConfigureAwait(false);
         await events.PublishCommittedChangesAsync(context).ConfigureAwait(false);
     }
@@ -643,7 +612,7 @@ internal sealed class ReconciliationService : IReconciliationService
             return null;
 
         using var storeLock = _storeLock?.Acquire() ?? StoreLockHandle.NotRequired();
-        if (!storeLock.CanProceed || _pipelineDefinition.StoreRegistry is not ICoordinatedStoreRegistry coordinated)
+        if (!storeLock.CanProceed || _storeRegistry is not ICoordinatedStoreRegistry coordinated)
             return null;
 
         using var borrow = admission.Owner.Borrow();
@@ -672,7 +641,7 @@ internal sealed class ReconciliationService : IReconciliationService
         }
 
         using var storeLock = _storeLock?.Acquire() ?? StoreLockHandle.NotRequired();
-        if (!storeLock.CanProceed || _pipelineDefinition.StoreRegistry is not ICoordinatedStoreRegistry coordinated)
+        if (!storeLock.CanProceed || _storeRegistry is not ICoordinatedStoreRegistry coordinated)
         {
             _reconciliationLogger.LogObserverError(correlationId, "PersistDeferredLoadingFailures",
                 "The current store lock or coordinated state writer is unavailable; loading failures were retained for cycle health only.");
@@ -694,144 +663,4 @@ internal sealed class ReconciliationService : IReconciliationService
 
     private static ReconciliationRunResult Skipped(ReconciliationSkipReason reason) =>
         new(true, EmptyChangeSet, [], IsDegraded: false) { SkipReason = reason };
-}
-
-internal sealed class ReconciliationPipelineDefinition
-{
-    private readonly IDesiredStateAggregator _desiredStateAggregator;
-    private readonly IDesiredActualDiffEngine _desiredActualDiffEngine;
-    private readonly IReconciliationHealthEvaluator _healthEvaluator;
-    private readonly IReconciliationLogger _logger;
-    private readonly ReconciliationMetrics _metrics;
-    private readonly FeedResolutionOptions _feedResolutionOptions;
-    private readonly ILockFileCoordinator _lockFileCoordinator;
-    private readonly CleanupPolicyOptions _cleanupPolicyOptions;
-    private readonly IReconciliationRetryPolicy _retryPolicy;
-    private readonly IDryRunPlanner _dryRunPlanner;
-    private readonly ObservationDegradationTracker _observationDegradationTracker;
-    private readonly StartupRecoveryState? _startupRecoveryState;
-    private readonly HostProvidedPackagesOptions? _hostProvidedPackagesOptions;
-    private readonly ICoordinatedActiveStateTransitionDriver? _transitionDriver;
-    private readonly IOrdinaryPackageLoadingActivation? _ordinaryLoadingActivation;
-
-    internal ReconciliationPipelineDefinition(
-        IReadOnlyList<IDesiredPackageSource> sources,
-        IDesiredStateAggregator desiredStateAggregator,
-        IDesiredActualDiffEngine desiredActualDiffEngine,
-        IPackageResolver packageResolver,
-        IStoreRegistry storeRegistry,
-        IObserverEventDispatcher observerEventDispatcher,
-        IReconciliationHealthEvaluator healthEvaluator,
-        IReconciliationLogger logger,
-        ReconciliationMetrics metrics,
-        FeedResolutionOptions feedResolutionOptions,
-        ILockFileCoordinator lockFileCoordinator,
-        CleanupPolicyOptions cleanupPolicyOptions,
-        IReconciliationRetryPolicy retryPolicy,
-        IDryRunPlanner dryRunPlanner,
-        IPackageCleanupService packageCleanupService,
-        IFailureRecorder failureRecorder,
-        ObservationDegradationTracker observationDegradationTracker,
-        ICycleFailureContributor? cycleFailureContributor,
-        StartupRecoveryState? startupRecoveryState,
-        IReadOnlyList<IDesiredStateContributor> contributors,
-        HostProvidedPackagesOptions? hostProvidedPackagesOptions,
-        ICoordinatedActiveStateTransitionDriver? transitionDriver,
-        IOrdinaryPackageLoadingActivation? ordinaryLoadingActivation = null)
-    {
-        Sources = sources;
-        PackageResolver = packageResolver;
-        StoreRegistry = storeRegistry;
-        FailureRecorder = failureRecorder;
-        ObserverEventDispatcher = observerEventDispatcher;
-        PackageCleanupService = packageCleanupService;
-        CycleFailureContributor = cycleFailureContributor;
-        Contributors = contributors;
-        _desiredStateAggregator = desiredStateAggregator;
-        _desiredActualDiffEngine = desiredActualDiffEngine;
-        _healthEvaluator = healthEvaluator;
-        _logger = logger;
-        _metrics = metrics;
-        _feedResolutionOptions = feedResolutionOptions;
-        _lockFileCoordinator = lockFileCoordinator;
-        _cleanupPolicyOptions = cleanupPolicyOptions;
-        _retryPolicy = retryPolicy;
-        _dryRunPlanner = dryRunPlanner;
-        _observationDegradationTracker = observationDegradationTracker;
-        _startupRecoveryState = startupRecoveryState;
-        _hostProvidedPackagesOptions = hostProvidedPackagesOptions;
-        _transitionDriver = transitionDriver;
-        _ordinaryLoadingActivation = ordinaryLoadingActivation;
-    }
-
-    internal IReadOnlyList<IDesiredPackageSource> Sources { get; }
-    internal IPackageResolver PackageResolver { get; }
-    internal IStoreRegistry StoreRegistry { get; }
-    internal IFailureRecorder FailureRecorder { get; }
-    internal IObserverEventDispatcher ObserverEventDispatcher { get; }
-    internal IPackageCleanupService PackageCleanupService { get; }
-    internal ICycleFailureContributor? CycleFailureContributor { get; }
-    internal IReadOnlyList<IDesiredStateContributor> Contributors { get; }
-    internal IDesiredActualDiffEngine DesiredActualDiffEngine => _desiredActualDiffEngine;
-    internal IDryRunPlanner DryRunPlanner => _dryRunPlanner;
-    internal ILockFileCoordinator LockFileCoordinator => _lockFileCoordinator;
-    internal IReconciliationRetryPolicy RetryPolicy => _retryPolicy;
-    internal ICoordinatedActiveStateTransitionDriver? TransitionDriver => _transitionDriver;
-
-    internal (CleanupMiddleware Cleanup, HealthAndMetricsMiddleware Events) CoordinatedCompletion(PackageStoreOperationOwner owner)
-    {
-        var registry = CoordinatedReconciliationAdapters.BindStoreRegistry(StoreRegistry, owner);
-        var dispatcher = CoordinatedReconciliationAdapters.BindObserverEventDispatcher(ObserverEventDispatcher, owner);
-        return (new(_desiredActualDiffEngine, registry, PackageCleanupService, _cleanupPolicyOptions, _metrics),
-            CreateHealthAndMetricsMiddleware(dispatcher));
-    }
-
-    internal ReconciliationPipeline Create(
-        PackageStoreOperationOwner? owner,
-        out DesiredSourceSnapshotCache snapshotCache,
-        out HealthAndMetricsMiddleware healthAndMetricsMiddleware)
-    {
-        var registry = owner is null ? StoreRegistry : CoordinatedReconciliationAdapters.BindStoreRegistry(StoreRegistry, owner);
-        var recorder = owner is null ? FailureRecorder : CoordinatedReconciliationAdapters.BindFailureRecorder(FailureRecorder, owner);
-        var resolver = owner is null ? PackageResolver : CoordinatedReconciliationAdapters.BindPackageResolver(PackageResolver, owner);
-        var dispatcher = owner is null
-            ? ObserverEventDispatcher
-            : CoordinatedReconciliationAdapters.BindObserverEventDispatcher(ObserverEventDispatcher, owner);
-        var sources = owner is null ? Sources : CoordinatedReconciliationAdapters.BindSources(Sources, owner);
-        var contributors = owner is null ? Contributors : CoordinatedReconciliationAdapters.BindContributors(Contributors, owner);
-        snapshotCache = new DesiredSourceSnapshotCache(registry);
-
-        var transactionCoordinator = new PackageTransactionCoordinator(new AtomicPointerSwitcher(), recorder);
-        var applyExecutor = new PackageApplyExecutor(
-            resolver,
-            transactionCoordinator,
-            _retryPolicy,
-            recorder,
-            contributors,
-            _logger,
-            _hostProvidedPackagesOptions);
-        var lockFileCycleCoordinator = _lockFileCoordinator as ILockFileCycleCoordinator;
-
-        var pipeline = new ReconciliationPipeline();
-        if (lockFileCycleCoordinator is not null)
-            pipeline.Use(new LockFileCycleMiddleware(lockFileCycleCoordinator));
-        pipeline.Use(new DesiredStateReadMiddleware(sources, _desiredStateAggregator, _retryPolicy,
-            snapshotCache, recorder, _logger, _metrics));
-        pipeline.Use(new PackageResolutionMiddleware(applyExecutor, _logger, lockFileCycleCoordinator));
-        pipeline.Use(new TrustAndLockGateMiddleware(_lockFileCoordinator, _retryPolicy, recorder,
-            _logger, lockFileCycleCoordinator));
-        pipeline.Use(new DiffAndChangeEventMiddleware(_desiredActualDiffEngine, _dryRunPlanner, _retryPolicy,
-            registry, dispatcher, _metrics, _transitionDriver));
-        pipeline.Use(new TransactionExecutionMiddleware(applyExecutor, _desiredActualDiffEngine, dispatcher,
-            _transitionDriver));
-        pipeline.Use(new CleanupMiddleware(_desiredActualDiffEngine, registry, PackageCleanupService,
-            _cleanupPolicyOptions, _metrics, _transitionDriver, owner is null ? _ordinaryLoadingActivation : null, recorder));
-        healthAndMetricsMiddleware = CreateHealthAndMetricsMiddleware(dispatcher);
-        pipeline.Use(healthAndMetricsMiddleware);
-        return pipeline;
-    }
-
-    private HealthAndMetricsMiddleware CreateHealthAndMetricsMiddleware(IObserverEventDispatcher dispatcher)
-        => new(_healthEvaluator, dispatcher, _logger, _metrics, _feedResolutionOptions,
-            _observationDegradationTracker, CycleFailureContributor, _startupRecoveryState);
 }

@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <Using Include="Nuplane.Tests.Shared" />
+    <Compile Include="..\Shared\ReconciliationServiceFactory.cs" Link="Shared\ReconciliationServiceFactory.cs" />
+    <Compile Include="..\Shared\ReconciliationServiceTestExtensions.cs" Link="Shared\ReconciliationServiceTestExtensions.cs" />
     <Compile Include="..\Shared\ProtectedReconciliationServices.cs" Link="Shared\ProtectedReconciliationServices.cs" />
     <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
