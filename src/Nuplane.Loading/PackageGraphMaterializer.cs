@@ -3,6 +3,7 @@ using System.Runtime.Loader;
 using Microsoft.Extensions.Logging;
 using Nuplane.Abstractions;
 using Nuplane.Abstractions.PackageStoreProtection;
+using static Nuplane.Loading.PackageProjection;
 
 namespace Nuplane.Loading;
 
@@ -212,8 +213,6 @@ internal sealed class PackageGraphMaterializer(
 
         return true;
     }
-
-    private static string BuildKey(string packageId, string version) => $"{packageId}@{version}";
 }
 
 internal sealed record LoadableGraphPackage(
@@ -234,13 +233,26 @@ internal sealed record GraphPackageResolution(
     IReadOnlyList<GraphPackage> FailedPackages,
     Exception? ResolutionFailure)
 {
-    public IReadOnlyList<string> SkippedInstallPaths => SkippedPackages.Select(static package => package.InstallPath).ToArray();
-
     /// <summary>
     /// Gets the graph members that were evaluated successfully but contribute no assemblies to load,
     /// either because they contain none or because the host runtime already provides them.
     /// </summary>
     public IEnumerable<GraphPackage> InertPackages => SkippedPackages.Concat(HostRuntimePackages);
+
+    internal void ThrowIfUnusable(string graphKey)
+    {
+        if (ResolutionFailure is not null)
+            throw ResolutionFailure;
+
+        if (LoadablePackages.Count != 0 || (SkippedPackages.Count == 0 && HostRuntimePackages.Count > 0))
+            return;
+
+        var paths = SkippedPackages.Count == 0
+            ? "<none>"
+            : string.Join(", ", SkippedPackages.Select(static package => $"'{package.InstallPath}'"));
+        throw new NoLoadableAssemblyException(
+            $"No loadable assembly found in graph '{graphKey}'. Scanned install paths: {paths}.");
+    }
 }
 
 internal static class HostRuntimeAssemblyCatalog
