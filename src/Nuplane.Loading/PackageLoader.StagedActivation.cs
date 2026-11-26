@@ -231,14 +231,18 @@ internal sealed partial class PackageLoader
                 Failures[package.Id] = message;
         }
 
-        internal void ValidateForCommit(IReadOnlyList<ActivePackage> activePackages)
+        internal IReadOnlyDictionary<string, string> ValidateForCommit(
+            IReadOnlyList<ActivePackage> activePackages,
+            IReadOnlySet<string> rejectedPackageIds)
         {
             ArgumentNullException.ThrowIfNull(activePackages);
+            ArgumentNullException.ThrowIfNull(rejectedPackageIds);
             ObjectDisposedException.ThrowIf(_disposed, this);
 
             var active = activePackages.ToDictionary(
                 static package => BuildKey(package.PackageId, package.Version), StringComparer.OrdinalIgnoreCase);
-            var acceptedGraphs = Graphs.Where(graph => graph.Packages.All(projection => Matches(projection, active)))
+            var acceptedGraphs = Graphs.Where(graph => graph.Packages.All(projection =>
+                    Matches(projection, active) && !rejectedPackageIds.Contains(active[projection.PackageKey].PackageId)))
                 .ToArray();
             var replacedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var graph in acceptedGraphs)
@@ -267,10 +271,33 @@ internal sealed partial class PackageLoader
                     .Concat(_loader._sessions.Keys.Where(key => !active.ContainsKey(key)))
                     .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
                 var catalog = _loader._hostIntegratedResolutionCatalog.PrepareActiveProjection(retainedKeys,
-                    acceptedGraphs.SelectMany(static graph => graph.CatalogEntries).ToArray());
+                    acceptedGraphs.SelectMany(static graph => graph.CatalogEntries).ToArray(), out var conflicts);
+                var rejectedGraphs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (catalog is null)
+                {
+                    foreach (var graph in acceptedGraphs)
+                    {
+                        var errors = graph.Packages.Where(package => conflicts.ContainsKey(package.PackageKey))
+                            .Select(package => conflicts[package.PackageKey]).Distinct(StringComparer.Ordinal).ToArray();
+                        if (errors.Length == 0)
+                            continue;
 
-                _projection = new(acceptedGraphs, invalidKeys, catalog);
-                _loader._validatedActivationBatch = this;
+                        var message = string.Join(" ", errors);
+                        foreach (var package in graph.Packages)
+                        {
+                            var packageId = active[package.PackageKey].PackageId;
+                            Failures[packageId] = message;
+                            rejectedGraphs[packageId] = message;
+                        }
+                    }
+                }
+                else
+                {
+                    _projection = new(acceptedGraphs, invalidKeys, catalog);
+                    _loader._validatedActivationBatch = this;
+                }
+
+                return rejectedGraphs;
             }
 
             bool ShouldRetain(PackageProjection projection) =>

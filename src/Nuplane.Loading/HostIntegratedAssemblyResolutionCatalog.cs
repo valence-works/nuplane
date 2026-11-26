@@ -95,10 +95,13 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
     internal static void ValidateGraphCandidates(IReadOnlyList<HostIntegratedAssemblyResolutionCandidate> candidates) =>
         ValidateNoConflicts(candidates.Select(ToConflictCandidate));
 
-    internal ActiveProjection PrepareActiveProjection(
+    internal ActiveProjection? PrepareActiveProjection(
         IReadOnlySet<string> retainedKeys,
-        IReadOnlyList<HostIntegratedAssemblyResolutionEntry> additions)
+        IReadOnlyList<HostIntegratedAssemblyResolutionEntry> additions,
+        out IReadOnlyDictionary<string, string> conflictsByPackageKey)
     {
+        var conflicts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        conflictsByPackageKey = conflicts;
         lock (_gate)
         {
             var retained = _entries.Where(entry =>
@@ -108,8 +111,24 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
 
             var generation = _generation + 1;
             var proposed = OrderEntries(retained.Concat(additions.Select(entry => entry with { Generation = generation })));
-            ValidateNoConflicts(proposed);
-            return new(proposed, generation);
+            var additionKeys = additions.Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // Existing entries keep their identity if still selected. When two additions conflict,
+            // reject both rather than arbitrating based on graph order.
+            foreach (var conflict in FindConflicts(proposed.Select(ToConflictCandidate)))
+            {
+                var conflictingAdditions = conflict.Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
+                    .Where(additionKeys.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                var message = FormatConflict(conflict);
+                if (conflictingAdditions.Length == 0)
+                    throw new InvalidOperationException(message);
+
+                foreach (var key in conflictingAdditions)
+                    conflicts[key] = conflicts.TryGetValue(key, out var previous) ? $"{previous} {message}" : message;
+            }
+
+            return conflicts.Count == 0 ? new(proposed, generation) : null;
         }
     }
 
@@ -237,44 +256,33 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
     private static ConflictCandidate ToConflictCandidate(HostIntegratedAssemblyResolutionCandidate candidate) =>
         new(candidate.AssemblySimpleName, candidate.Version, candidate.PackageId, candidate.PackageVersion, candidate.CultureName);
 
+    private static ConflictCandidate ToConflictCandidate(HostIntegratedAssemblyResolutionEntry entry) =>
+        new(entry.AssemblySimpleName, entry.Version, entry.PackageId, entry.PackageVersion,
+            entry.Assembly.GetName().CultureName);
+
     private static void ValidateNoConflicts(IEnumerable<HostIntegratedAssemblyResolutionEntry> proposedEntries) =>
-        ValidateNoConflicts(proposedEntries.Select(static entry => new ConflictCandidate(
-            entry.AssemblySimpleName,
-            entry.Version,
-            entry.PackageId,
-            entry.PackageVersion,
-            entry.Assembly.GetName().CultureName)));
+        ValidateNoConflicts(proposedEntries.Select(ToConflictCandidate));
 
     private static void ValidateNoConflicts(IEnumerable<ConflictCandidate> proposedEntries)
     {
-        var conflict = proposedEntries
-            .GroupBy(static entry => new AssemblyNameCultureKey(entry.AssemblySimpleName, entry.CultureName))
-            .Select(group => new
-            {
-                SimpleName = group.First().AssemblySimpleName,
-                group.Key.CultureName,
-                Versions = group
-                    .Select(static entry => entry.Version?.ToString() ?? string.Empty)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray(),
-                PackageKeys = group
-                    .Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray(),
-                Entries = group.ToArray()
-            })
-            .FirstOrDefault(group => group.Versions.Length > 1 || group.PackageKeys.Length > 1);
+        if (FindConflicts(proposedEntries).FirstOrDefault() is { } conflict)
+            throw new InvalidOperationException(FormatConflict(conflict));
+    }
 
-        if (conflict is null)
-        {
-            return;
-        }
+    private static IEnumerable<IGrouping<AssemblyNameCultureKey, ConflictCandidate>> FindConflicts(
+        IEnumerable<ConflictCandidate> proposedEntries) =>
+        proposedEntries.GroupBy(static entry => new AssemblyNameCultureKey(entry.AssemblySimpleName, entry.CultureName))
+            .Where(group => group.Select(static entry => entry.Version).Distinct().Skip(1).Any() ||
+                group.Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Skip(1).Any());
 
-        var packages = string.Join(", ", conflict.Entries
+    private static string FormatConflict(IGrouping<AssemblyNameCultureKey, ConflictCandidate> conflict)
+    {
+        var packages = string.Join(", ", conflict
             .OrderBy(static entry => entry.PackageId, StringComparer.OrdinalIgnoreCase)
             .Select(static entry => $"{entry.PackageId}@{entry.PackageVersion} ({entry.Version})"));
-        throw new InvalidOperationException(
-            $"Host-integrated assembly conflict for '{conflict.SimpleName}' (culture '{conflict.CultureName}'): active packages expose ambiguous assembly identities. Candidates: {packages}.");
+        return $"Host-integrated assembly conflict for '{conflict.First().AssemblySimpleName}' " +
+            $"(culture '{conflict.Key.CultureName}'): active packages expose ambiguous assembly identities. Candidates: {packages}.";
     }
 
     private static string FormatCandidate(HostIntegratedAssemblyResolutionEntry entry) =>
