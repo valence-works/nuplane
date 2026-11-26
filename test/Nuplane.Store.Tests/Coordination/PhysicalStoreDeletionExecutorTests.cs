@@ -289,6 +289,46 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
         Assert.Empty(EnumerateJournalPaths(fixture.Context.RootAPath));
     }
 
+    [SupportedPhysicalStoreFact]
+    public async Task ExecuteEligibleCandidates_KeepAll_RetiresAbsentJournalAndPreservesInstalledPackages()
+    {
+        const string packageId = "executor-retire-with-keep-all";
+        using var fixture = await ExecutionFixture.CreateAsync(
+            deletionExecutionCheckpoint: InterruptAfterQuarantineRemoval(packageId));
+        CreateInactiveInstall(fixture.Context.RootAPath, packageId);
+        await Assert.ThrowsAsync<IOException>(() => DeleteOneAsync(fixture, packageId));
+        Assert.Single(EnumerateJournalPaths(fixture.Context.RootAPath));
+        var livePath = CreateInactiveInstall(fixture.Context.RootAPath, "executor-retain-under-keep-all");
+
+        var outcome = await fixture.Service.ExecuteEligibleCandidatesAsync(
+            "root-0", 1, keepNewestInactiveVersionsPerPackage: null);
+
+        Assert.Equal(PackageStoreExecutionRequestStatus.Completed, outcome.Status);
+        Assert.True(Directory.Exists(livePath));
+        Assert.Empty(EnumerateJournalPaths(fixture.Context.RootAPath));
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task ExecuteEligibleCandidates_TerminalRetirementRefusal_PreservesVerifiedDeletionReceipt()
+    {
+        const string packageId = "executor-retirement-refused";
+        using var fixture = await ExecutionFixture.CreateAsync(journalPublicationCheckpoint: (point, journal) =>
+        {
+            if (point == PackageStoreDeletionJournalPublicationPoint.BeforeTerminalRemoval &&
+                journal.OriginalInstall.PackageId == packageId)
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
+                    "terminal journal identity changed");
+        });
+        var originalPath = CreateInactiveInstall(fixture.Context.RootAPath, packageId);
+
+        var outcome = await fixture.Service.ExecuteEligibleCandidatesAsync("root-0", 1, 0);
+
+        Assert.Equal(PackageStoreExecutionRequestStatus.Refused, outcome.Status);
+        Assert.Equal(PackageStoreExecutionPhysicalOutcome.Deleted, OutcomeFor(outcome, packageId).PhysicalOutcome);
+        Assert.False(Directory.Exists(originalPath));
+        Assert.Single(EnumerateJournalPaths(fixture.Context.RootAPath));
+    }
+
     [SupportedPhysicalStoreTheory]
     [InlineData(false)]
     [InlineData(true)]

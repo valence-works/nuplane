@@ -152,7 +152,10 @@ internal sealed class PackageStoreExecutionService(
                     foreach (var row in plan.Entries.OrderByDescending(context.IsTerminalJournalRow))
                     {
                         if (row.Classification != PackageStoreRetentionClassification.Eligible)
+                        {
+                            context.RetireRetainedTerminalJournal(row, token);
                             continue;
+                        }
 
                         try
                         {
@@ -211,6 +214,12 @@ internal sealed class PackageStoreExecutionService(
 
         internal bool IsTerminalJournalRow(PackageStoreRetentionPlanEntry row)
             => _executionJoin.TryFind(row.Install, out var binding) && binding.QuarantinePositivelyAbsent;
+
+        internal void RetireRetainedTerminalJournal(PackageStoreRetentionPlanEntry row, CancellationToken cancellationToken)
+        {
+            if (_executionJoin.TryFind(row.Install, out var binding) && binding.QuarantinePositivelyAbsent)
+                _executionJoin.RetireTerminalJournal(binding, cancellationToken);
+        }
 
         internal PhysicalStoreDirectoryHandle RootHandle
         {
@@ -475,6 +484,7 @@ internal sealed class PackageStoreExecutionService(
         {
             ArgumentNullException.ThrowIfNull(exactRow);
             PackageStoreQuarantinedCandidate? activeQuarantine = null;
+            var deletionVerified = false;
             try
             {
                 RequireEligibleRow(exactRow, cancellationToken);
@@ -530,11 +540,12 @@ internal sealed class PackageStoreExecutionService(
                     PublishDeletingPhase, PublishFinalizingPhase,
                     token => RequireBoundEligibleJournal(binding, quarantine, token),
                     cancellationToken);
+                deletionVerified = true;
                 outcomeBuilder?.RecordDeleted(exactRow, quarantine.Manifest);
                 _executionJoin.RetireTerminalJournal(binding, cancellationToken);
                 return PackageStoreDeletionExecutionStatus.Deleted;
             }
-            catch (Exception candidateFailure)
+            catch (Exception candidateFailure) when (!deletionVerified)
             {
                 if (activeQuarantine is null &&
                     candidateFailure is not PackageStoreAdmissionException and not AggregateException)
