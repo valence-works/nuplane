@@ -1,3 +1,4 @@
+using Nuplane.Abstractions;
 using Nuplane.Feeds.Setup;
 
 namespace Nuplane.Sources.Directory.Builder;
@@ -31,6 +32,11 @@ public sealed class NuplaneDirectoryFeedConfiguration
     /// Gets or sets optional secret reference for authenticated feed access.
     /// </summary>
     public string? Credentials { get; set; }
+
+    /// <summary>Gets or sets the trust level. Unspecified feeds are untrusted.</summary>
+    public FeedTrustLevel Trust { get; set; }
+
+    internal string? TrustConfigurationPath { get; set; }
 
     internal bool HasExplicitUnrestrictedPackageSelection =>
         IncludePatterns.Any(static p => string.Equals(p, "*", StringComparison.Ordinal));

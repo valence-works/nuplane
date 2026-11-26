@@ -78,6 +78,12 @@ public sealed class FeedResolutionPolicy(IOptions<FeedResolutionOptions> options
             .First();
     }
 
+    internal string? GetTrustOverrideReason(FeedDefinition feed, PackageRequest request) =>
+        _options.TrustOverrides.FirstOrDefault(rule =>
+            string.Equals(rule.FeedName, feed.Name, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(rule.PackageId, request.Id, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(rule.Reason))?.Reason;
+
     private static bool IsLocalDirectoryFeed(FeedDefinition feed) =>
         feed.ServiceIndex.Scheme.Equals("file", StringComparison.OrdinalIgnoreCase);
 

@@ -39,6 +39,8 @@ public static class NuplaneBuilderDirectoryExtensions
         var dirOptions = new NuplaneDirectoryFeedOptions
         {
             DirectoryPath = path,
+            Trust = config.Trust,
+            TrustConfigurationPath = config.TrustConfigurationPath,
             Role = config.Role,
             Watch = config.Watch,
             DebounceWindow = config.DebounceWindow,

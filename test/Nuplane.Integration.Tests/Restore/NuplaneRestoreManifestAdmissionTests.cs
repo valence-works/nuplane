@@ -39,6 +39,7 @@ public sealed class NuplaneRestoreManifestAdmissionTests
             builder.Services.AddSingleton(reader);
             builder.AddDirectoryFeed("local-feed", directoryFeedPath, feed =>
             {
+                feed.Trust = FeedTrustLevel.Trusted;
                 feed.Include("Directory.Package");
                 feed.Watch = false;
             });
@@ -203,6 +204,7 @@ public sealed class NuplaneRestoreManifestAdmissionTests
             builder.Services.AddSingleton(reader);
             builder.AddDirectoryFeed("disabled-feed", feedDirectory, feed =>
             {
+                feed.Trust = FeedTrustLevel.Trusted;
                 feed.Include("No.Package");
                 feed.Watch = false;
             });
@@ -302,6 +304,7 @@ public sealed class NuplaneRestoreManifestAdmissionTests
             builder.Services.AddSingleton<IDesiredPackageSource>(observedDirectorySource);
             builder.AddDirectoryFeed("local-feed", feedDirectory, feed =>
             {
+                feed.Trust = FeedTrustLevel.Trusted;
                 feed.Include("Directory.Package");
                 feed.Watch = false;
             });
@@ -353,6 +356,7 @@ public sealed class NuplaneRestoreManifestAdmissionTests
         if (includeUnpinnedRequest)
         {
             values["Nuplane:Setup:Feeds:preflight:ServiceIndex"] = "https://packages.example.com/v3/index.json";
+            values["Nuplane:Setup:Feeds:preflight:Trust"] = "Trusted";
             values["Nuplane:Setup:Feeds:preflight:IncludePatterns:0"] = "Unpinned.Package";
         }
 

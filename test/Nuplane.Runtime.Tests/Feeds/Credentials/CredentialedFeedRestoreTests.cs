@@ -277,6 +277,7 @@ public sealed class CredentialedFeedRestoreTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 [$"Setup:Feeds:{FeedName}:ServiceIndex"] = server.ServiceIndexUri.AbsoluteUri,
+                [$"Setup:Feeds:{FeedName}:Trust"] = "Trusted",
                 [$"Setup:Feeds:{FeedName}:Credentials"] = declareCredentials
                     ? reference ?? $"secrets://env/{_variableName}"
                     : null,

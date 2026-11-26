@@ -43,7 +43,8 @@ public static class NuplaneFeedRegistrationServices
             {
                 if (!opts.Feeds.Any(f => string.Equals(f.Name, feed.Name, StringComparison.OrdinalIgnoreCase)))
                 {
-                    opts.Feeds.Add(new(feed.Name, serviceIndex, feed.Credentials));
+                    opts.Feeds.Add(new(feed.Name, serviceIndex, feed.Credentials) { Trust = feed.Trust });
+                    opts.SetTrustConfigurationPath(feed.Name, feed.TrustConfigurationPath);
                 }
             });
 

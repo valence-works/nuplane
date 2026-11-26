@@ -1,3 +1,4 @@
+using Nuplane.Abstractions;
 using Nuplane.Feeds.Setup;
 
 namespace Nuplane.Sources.Directory.Builder;
@@ -8,6 +9,8 @@ namespace Nuplane.Sources.Directory.Builder;
 public sealed class NuplaneDirectoryFeedOptions
 {
     internal string DirectoryPath { get; set; } = string.Empty;
+    internal FeedTrustLevel Trust { get; set; }
+    internal string? TrustConfigurationPath { get; set; }
 
     /// <summary>
     /// Gets or sets how the directory participates in resolution and desired-state discovery.

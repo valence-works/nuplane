@@ -838,7 +838,11 @@ install path or the catalog's reserved `default` entry. Additional configured ro
 labels. Blank or padded labels and collisions with additional labels fail options validation at
 startup. This lookup configuration does not enroll roots or enable inspection/pruning APIs.
 
-### Feed credentials
+### Feed trust
+
+Nuplane requires explicit approval of feeds used for acquisition. Set `Trust: Trusted` on approved entries under `Nuplane:Setup:Feeds`, including approved local directory caches. Both omitted and explicit `Untrusted` settings refuse acquisition. A reason-bearing exception can approve one exact package from one named feed under `Nuplane:FeedResolution:TrustOverrides`. See the [feed trust migration](../adr/0003-feed-trust-before-acquisition.md) for the code-first and configuration forms.
+
+## Feed credentials
 
 - **Applicability:** `Core`
 - **Stability note:** `Recently Changed`
@@ -852,6 +856,7 @@ A private feed is configured with a *reference* to its secret, never with the se
       "Feeds": {
         "private-feed": {
           "ServiceIndex": "https://packages.example.com/v3/index.json",
+          "Trust": "Trusted",
           "Credentials": "secrets://env/MY_FEED_TOKEN",
           "IncludePatterns": [ "Acme.Plugins.*" ]
         }

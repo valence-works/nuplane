@@ -146,6 +146,7 @@ public sealed class LockFileWorkflowTests : IDisposable
         services.AddNuplane(configuration, nuplane =>
             nuplane.AddDirectoryFeed(FeedName, FeedPath, feed =>
             {
+                feed.Trust = FeedTrustLevel.Trusted;
                 feed.Include(RootPackage);
                 feed.Watch = false;
             }));

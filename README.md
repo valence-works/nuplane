@@ -266,6 +266,7 @@ builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
       "Feeds": {
         "local-packages": {
           "DirectoryPath": "packages",
+          "Trust": "Trusted",
           "IncludePatterns": [
             "*"
           ],
@@ -276,6 +277,7 @@ builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
         },
         "nuget.org": {
           "ServiceIndex": "https://api.nuget.org/v3/index.json",
+          "Trust": "Trusted",
           "IncludePatterns": [
             "Elsa.*"
           ]
@@ -444,6 +446,7 @@ Example configuration:
       "Feeds": {
         "nuget.org": {
           "ServiceIndex": "https://api.nuget.org/v3/index.json",
+          "Trust": "Trusted",
           "IncludePatterns": [
             "*"
           ]
@@ -544,6 +547,7 @@ builder.Services.AddNuplane(nuplane =>
     nuplane.PollEvery(TimeSpan.FromSeconds(60));
     nuplane.AddDirectoryFeed("local-packages", "packages", dir =>
     {
+        dir.Trust = FeedTrustLevel.Trusted;
         dir.Watch = true;
         dir.DebounceWindow = TimeSpan.FromSeconds(1);
         dir.IncludeAll();
@@ -665,6 +669,7 @@ builder.Services.AddNuplane(nuplane =>
 {
     nuplane.AddDirectoryFeed("local-packages", "packages", dir =>
     {
+        dir.Trust = FeedTrustLevel.Trusted;
         dir.Watch = true;
         dir.DebounceWindow = TimeSpan.FromSeconds(1);
         dir.Include("MyApp.Plugins.*");
@@ -737,8 +742,8 @@ To trigger another cycle, update/remove packages in `packages`.
 Use these conventions when enabling advanced feed governance:
 
 - Configure deterministic feed priorities and keep names stable across environments.
-- Set trust explicitly per feed: `Trusted`, `Restricted`, or `Untrusted`.
-- Use untrusted overrides only with scoped intent (`package` or `feed-rule`) and always provide an operator reason.
+- Set `Trust: Trusted` for each approved acquisition feed. Unspecified and explicitly untrusted feeds are refused before acquisition.
+- For an approved exception on an untrusted feed, supply one exact feed name, one package ID, and a reason under `FeedResolution:TrustOverrides`. See [feed trust and migration](docs/adr/0003-feed-trust-before-acquisition.md).
 - Enable strict outage handling only when you want impacted packages to fail fast while unrelated packages continue.
 
 ### Lock-file conventions

@@ -23,7 +23,8 @@ internal static class NuplaneFeedSetupConfiguration
 
             builder.AddFeed(declaration.Name, configuredFeed =>
             {
-                configuredFeed.FromUri(serviceIndex, feed.Credentials);
+                configuredFeed.FromUri(serviceIndex, feed.Credentials).WithTrust(feed.Trust);
+                configuredFeed.TrustConfigurationPath = $"{declaration.ConfigurationPath}:Trust";
 
                 if (feed.IncludeAll)
                 {

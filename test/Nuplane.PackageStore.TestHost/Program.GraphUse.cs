@@ -288,7 +288,7 @@ internal static partial class Program
         services.Configure<FeedResolutionOptions>(options =>
         {
             options.PackageInstallRoot = request.RootPath;
-            options.Feeds.Add(new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")));
+            options.Feeds.Add(new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")) { Trust = FeedTrustLevel.Trusted });
         });
         services.Configure<LockFileOptions>(options =>
         {

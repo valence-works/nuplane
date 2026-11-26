@@ -64,7 +64,8 @@ public static class DirectorySourceRegistrationServices
             opts.Feeds.RemoveAll(f => string.Equals(f.Name, feedName, StringComparison.OrdinalIgnoreCase));
             if (ResolvesPackages(options.Role))
             {
-                opts.Feeds.Add(new(feedName, feedUri, credentials));
+                opts.Feeds.Add(new(feedName, feedUri, credentials) { Trust = options.Trust });
+                opts.SetTrustConfigurationPath(feedName, options.TrustConfigurationPath);
             }
         });
 

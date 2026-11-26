@@ -316,6 +316,7 @@ public sealed class NuplaneRestoreTests : IDisposable
     {
         var configuration = Configure(
             ("Nuplane:Setup:Feeds:private-feed:ServiceIndex", "https://packages.example.com/v3/index.json"),
+            ("Nuplane:Setup:Feeds:private-feed:Trust", "Trusted"),
             ("Nuplane:Setup:Feeds:private-feed:Credentials", "secrets://packages/token"),
             ("Nuplane:Setup:Feeds:private-feed:IncludePatterns:0", "Ghost.Package [1.0.0]"));
 
@@ -334,6 +335,7 @@ public sealed class NuplaneRestoreTests : IDisposable
         // the refusal would fail loudly instead of this test passing by luck or by timing out.
         var configuration = Configure(
             ("Nuplane:Setup:Feeds:private-feed:ServiceIndex", "https://credentialed.invalid/index.json"),
+            ("Nuplane:Setup:Feeds:private-feed:Trust", "Trusted"),
             ("Nuplane:Setup:Feeds:private-feed:Credentials", "secrets://packages/token"),
             ("Nuplane:Setup:Feeds:private-feed:IncludePatterns:0", "Ghost.Package [1.0.0]"));
         var versionEnumerator = Substitute.For<IFeedVersionEnumerator>();
@@ -367,6 +369,7 @@ public sealed class NuplaneRestoreTests : IDisposable
     {
         var configuration = Configure(
             ("Nuplane:Setup:Feeds:private-feed:ServiceIndex", "https://packages.example.com/v3/index.json"),
+            ("Nuplane:Setup:Feeds:private-feed:Trust", "Trusted"),
             ("Nuplane:Setup:Feeds:private-feed:Credentials", "secrets://packages/token"),
             ("Nuplane:Setup:Feeds:private-feed:IncludePatterns:0", "Ghost.Package [1.0.0]"));
 
@@ -407,6 +410,7 @@ public sealed class NuplaneRestoreTests : IDisposable
     {
         var configuration = Configure(
             ("Nuplane:Setup:Feeds:remote:ServiceIndex", "https://packages.example.com/v3/index.json"),
+            ("Nuplane:Setup:Feeds:remote:Trust", "Trusted"),
             ("Nuplane:Setup:Feeds:remote:IncludePatterns:0", "Pinned.Package [1.2.3]"),
             ("Nuplane:Setup:Feeds:remote:IncludePatterns:1", "Bare.Package"),
             ("Nuplane:Setup:Feeds:remote:IncludePatterns:2", "Ranged.Package [1.0.0,2.0.0)"),
@@ -464,6 +468,7 @@ public sealed class NuplaneRestoreTests : IDisposable
         HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory);
         var configuration = Configure(
             ("Nuplane:Setup:Feeds:remote:ServiceIndex", "https://packages.example.com/v3/index.json"),
+            ("Nuplane:Setup:Feeds:remote:Trust", "Trusted"),
             ("Nuplane:Setup:Feeds:remote:IncludePatterns:0", "Unpinned.Package"));
 
         var result = await NuplaneRestore.RestoreAsync(
@@ -597,6 +602,7 @@ public sealed class NuplaneRestoreTests : IDisposable
             new Dictionary<string, string?>
             {
                 ["Setup:Feeds:" + FeedName + ":DirectoryPath"] = _feedDirectory,
+                ["Setup:Feeds:" + FeedName + ":Trust"] = "Trusted",
                 ["Setup:Feeds:" + FeedName + ":IncludeAll"] = "true",
                 ["Setup:Feeds:" + FeedName + ":Directory:Watch"] = "false"
             },
@@ -616,6 +622,7 @@ public sealed class NuplaneRestoreTests : IDisposable
         HostFreeRestoreTestSupport.WriteNupkg(_feedDirectory);
         var root = ConfigureAsRoot(
             ("Nuplane:Setup:Feeds:remote:ServiceIndex", "https://packages.example.com/v3/index.json"),
+            ("Nuplane:Setup:Feeds:remote:Trust", "Trusted"),
             ("Nuplane:Setup:Feeds:remote:IncludePatterns:0", "Ghost.Package [1.0.0]"));
 
         var description = await NuplaneRestore.DescribeDesiredAsync(root, Options());
@@ -691,6 +698,7 @@ public sealed class NuplaneRestoreTests : IDisposable
             new Dictionary<string, string?>
             {
                 ["Nuplane:Setup:Feeds:" + FeedName + ":DirectoryPath"] = _feedDirectory,
+                ["Nuplane:Setup:Feeds:" + FeedName + ":Trust"] = "Trusted",
                 ["Nuplane:Setup:Feeds:" + FeedName + ":IncludeAll"] = "true",
                 ["Nuplane:Setup:Feeds:" + FeedName + ":Directory:Watch"] = "false",
                 ["Logging:LogLevel:Default"] = "Information"
@@ -708,6 +716,7 @@ public sealed class NuplaneRestoreTests : IDisposable
             new Dictionary<string, string?>
             {
                 ["Nuplane:Setup:Feeds:" + FeedName + ":DirectoryPath"] = relativeDirectoryPath,
+                ["Nuplane:Setup:Feeds:" + FeedName + ":Trust"] = "Trusted",
                 ["Nuplane:Setup:Feeds:" + FeedName + ":IncludeAll"] = "true",
                 ["Nuplane:Setup:Feeds:" + FeedName + ":Directory:Watch"] = "false"
             },

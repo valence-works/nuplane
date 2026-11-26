@@ -62,7 +62,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         await using var feed = new AuthenticatedLoopbackNuGetFeed("Root.Second", "3.0.0", packageBytes,
             secret, new AuthenticatedLoopbackNuGetFeed.Dependency("Shared.Dependency", "2.1.0"));
         using var secretScope = new EnvironmentVariableScope(variableName, secret);
-        var remoteFeed = new FeedDefinition("feed", feed.ServiceIndexUri, "secrets://env/" + variableName);
+        var remoteFeed = new FeedDefinition("feed", feed.ServiceIndexUri, "secrets://env/" + variableName) { Trust = FeedTrustLevel.Trusted };
         await using var provider = fixture.CreateProvider("member-b", desiredRequests: [request], remoteFeed: remoteFeed,
             participant: true);
 

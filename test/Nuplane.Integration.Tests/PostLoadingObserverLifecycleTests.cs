@@ -191,8 +191,8 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         var expectedHash = "sha512:" + Convert.ToBase64String(SHA512.HashData(packageBytes));
         var request = new PackageRequest("ROOT.SECOND", "[2.0.0,4.0.0)", "feed",
             PackageUpdatePolicy.Range, "post-loading-test");
-        var localFeed = new FeedDefinition("local-cache", new Uri(feedPath + Path.DirectorySeparatorChar));
-        var remoteFeed = new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json"));
+        var localFeed = new FeedDefinition("local-cache", new Uri(feedPath + Path.DirectorySeparatorChar)) { Trust = FeedTrustLevel.Trusted };
+        var remoteFeed = new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")) { Trust = FeedTrustLevel.Trusted };
         var provider = fixture.CreateProvider("member-b", desiredRequests: [request], remoteFeed: remoteFeed,
             additionalFeeds: [localFeed], participant: true, observer: observer,
             configureServices: services =>

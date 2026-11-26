@@ -276,7 +276,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
                 services.AddSingleton<IDesiredPackageSource>(new StaticDesiredSource(desiredRequests));
                 services.Configure<FeedResolutionOptions>(options =>
                 {
-                    options.Feeds.Add(remoteFeed ?? new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")));
+                    options.Feeds.Add(remoteFeed ?? new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")) { Trust = FeedTrustLevel.Trusted });
                     if (additionalFeeds is not null)
                         options.Feeds.AddRange(additionalFeeds);
                 });

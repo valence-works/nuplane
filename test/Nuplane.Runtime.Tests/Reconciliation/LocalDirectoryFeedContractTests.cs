@@ -38,7 +38,7 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
     private FeedResolutionOptions CreateLocalFeedOptions()
     {
         var options = new FeedResolutionOptions { PackageInstallRoot = _installRoot };
-        options.Feeds.Add(new("local-drop", new("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'))));
+        options.Feeds.Add(new("local-drop", new("file:///" + _tempDir.Replace('\\', '/').TrimStart('/'))) { Trust = FeedTrustLevel.Trusted });
         return options;
     }
 
@@ -136,6 +136,7 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
         {
             nuplane.AddDirectoryFeed("local-cache", _tempDir, feed =>
             {
+                feed.Trust = FeedTrustLevel.Trusted;
                 feed.Role = DirectoryFeedRole.Cache;
                 feed.Watch = false;
             });
@@ -165,9 +166,11 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
         {
             nuplane.AddFeed("nuget.org", feed => feed
                 .FromUri(new("https://api.nuget.org/v3/index.json"))
+                .WithTrust(FeedTrustLevel.Trusted)
                 .Include("BakedPlugin [1.2.3]"));
             nuplane.AddDirectoryFeed("baked-packages", _tempDir, feed =>
             {
+                feed.Trust = FeedTrustLevel.Trusted;
                 feed.Role = DirectoryFeedRole.Cache;
                 feed.Watch = false;
             });
@@ -239,7 +242,7 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
         NupkgTestBuilder.Create("MyPlugin", "1.0.0").BuildTo(_tempDir);
         var before = FeedDirectoryEntries();
         var options = CreateLocalFeedOptions();
-        options.Feeds.Add(new("nuget.org", new("https://api.nuget.org/v3/index.json")));
+        options.Feeds.Add(new("nuget.org", new("https://api.nuget.org/v3/index.json")) { Trust = FeedTrustLevel.Trusted });
         var resolver = CreateResolver(options);
 
         var result = await resolver.ResolveAsync(
@@ -339,7 +342,7 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
         NupkgTestBuilder.Create("sourcegear.sqlite3", "1.0.0").BuildTo(_tempDir);
 
         var options = CreateLocalFeedOptions();
-        options.Feeds.Add(new("nuget.org", new("https://api.nuget.org/v3/index.json")));
+        options.Feeds.Add(new("nuget.org", new("https://api.nuget.org/v3/index.json")) { Trust = FeedTrustLevel.Trusted });
         var enumerator = Substitute.For<IFeedVersionEnumerator>();
         enumerator.EnumerateVersionsAsync(Arg.Any<FeedDefinition>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns<Task<PackageVersionList>>(_ => throw new InvalidOperationException(
@@ -360,7 +363,7 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
         NupkgTestBuilder.Create("OtherPlugin", "1.0.0").BuildTo(_tempDir);
 
         var options = CreateLocalFeedOptions();
-        options.Feeds.Add(new("nuget.org", new("https://api.nuget.org/v3/index.json")));
+        options.Feeds.Add(new("nuget.org", new("https://api.nuget.org/v3/index.json")) { Trust = FeedTrustLevel.Trusted });
         var enumerator = Substitute.For<IFeedVersionEnumerator>();
         enumerator.EnumerateVersionsAsync(Arg.Any<FeedDefinition>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns<Task<PackageVersionList>>(_ => throw new InvalidOperationException("Unable to load the service index."));
@@ -392,7 +395,7 @@ public sealed class LocalDirectoryFeedContractTests : IDisposable
     [Fact]
     public void OrderCandidates_LocalFileUriFeed_IncludedInCandidates()
     {
-        var localFeed = new FeedDefinition("local-drop", new("file:///packages/local"));
+        var localFeed = new FeedDefinition("local-drop", new("file:///packages/local")) { Trust = FeedTrustLevel.Trusted };
         var opts = new FeedResolutionOptions();
         opts.Feeds.Add(localFeed);
         var policy = new FeedResolutionPolicy(new OptionsWrapper<FeedResolutionOptions>(opts));

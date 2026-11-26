@@ -118,6 +118,7 @@ public sealed class ModuleRegistrationCompatibilityTests
             {
                 nuplane.AddDirectoryFeed("builder-feed", root, feed =>
                 {
+                    feed.Trust = FeedTrustLevel.Trusted;
                     feed.Include("Test.*");
                 });
             });
@@ -158,6 +159,7 @@ public sealed class ModuleRegistrationCompatibilityTests
             {
                 nuplane.AddDirectoryFeed("dir-feed", root, feed =>
                 {
+                    feed.Trust = FeedTrustLevel.Trusted;
                     feed.IncludeAll();
                 });
                 nuplane.AutoloadPackages();

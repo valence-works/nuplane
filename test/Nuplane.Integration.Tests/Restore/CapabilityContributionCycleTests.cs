@@ -369,9 +369,11 @@ public sealed class CapabilityContributionCycleTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     [$"Nuplane:Setup:Feeds:{ModuleFeedName}:DirectoryPath"] = _moduleFeedDirectory,
+                    [$"Nuplane:Setup:Feeds:{ModuleFeedName}:Trust"] = "Trusted",
                     [$"Nuplane:Setup:Feeds:{ModuleFeedName}:IncludeAll"] = "true",
                     [$"Nuplane:Setup:Feeds:{ModuleFeedName}:Directory:Watch"] = "false",
                     [$"Nuplane:Setup:Feeds:{EngineFeedName}:DirectoryPath"] = _engineFeedDirectory,
+                    [$"Nuplane:Setup:Feeds:{EngineFeedName}:Trust"] = "Trusted",
                     [$"Nuplane:Setup:Feeds:{EngineFeedName}:IncludeAll"] = "true",
                     [$"Nuplane:Setup:Feeds:{EngineFeedName}:Directory:Watch"] = "false",
                     // Resolves packages, produces no desired roots: the option packages are

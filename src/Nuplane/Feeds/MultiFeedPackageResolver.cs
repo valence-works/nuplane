@@ -20,7 +20,7 @@ namespace Nuplane.Feeds;
 /// Resolves packages across multiple feeds using priority ordering and feed availability
 /// tracking, recording resolution decisions for observability.
 /// </summary>
-public sealed class MultiFeedPackageResolver : IScopedPackageResolver
+public sealed partial class MultiFeedPackageResolver : IScopedPackageResolver
 {
     private readonly FeedResolutionOptions _options;
     private readonly FeedResolutionPolicy _policy;
@@ -121,6 +121,36 @@ public sealed class MultiFeedPackageResolver : IScopedPackageResolver
                 lastFailure = Accumulate(lastFailure, disabledDecision, seenFailureKeys);
                 _decisions[request.Id] = lastFailure;
                 continue;
+            }
+
+            if (candidate.Trust != FeedTrustLevel.Trusted)
+            {
+                var overrideReason = _policy.GetTrustOverrideReason(candidate, request);
+                if (overrideReason is null)
+                {
+                    var configurationPath = _options.GetTrustConfigurationPath(candidate.Name);
+                    LogFeedTrustRefused(_logger, candidate.Name, request.Id, configurationPath);
+
+                    lastFailure = Accumulate(lastFailure, FeedResolutionDecision.Failed(
+                        request,
+                        candidateNames,
+                        correlationId: string.Empty,
+                        decisionPath: "feed-trust-refused",
+                        feedUnavailable: false,
+                        failureReason: $"Feed '{candidate.Name}' is untrusted for package '{request.Id}'. " +
+                                       $"Set '{configurationPath}' to Trusted only if the feed is approved for acquisition.",
+                        selectedFeed: candidate.Name), seenFailureKeys);
+                    _decisions[request.Id] = lastFailure;
+
+                    if (ShouldStopAfterCandidateFailure(request, candidates.Count))
+                    {
+                        break;
+                    }
+
+                    continue;
+                }
+
+                LogFeedTrustOverride(_logger, candidate.Name, request.Id, overrideReason);
             }
 
             var unavailable = _options.UnavailableFeeds.Contains(candidate.Name);
@@ -571,6 +601,15 @@ public sealed class MultiFeedPackageResolver : IScopedPackageResolver
 
         return installDirectory;
     }
+
+    [LoggerMessage(EventName = "FeedTrustRefused", Level = LogLevel.Warning,
+        Message = "Untrusted feed {FeedName} refused for package {PackageId}. Review trust setting {ConfigurationPath}.")]
+    private static partial void LogFeedTrustRefused(
+        ILogger logger, string feedName, string packageId, string configurationPath);
+
+    [LoggerMessage(EventName = "FeedTrustOverride", Level = LogLevel.Warning,
+        Message = "Untrusted feed {FeedName} permitted for package {PackageId} by an explicit override. Reason: {Reason}")]
+    private static partial void LogFeedTrustOverride(ILogger logger, string feedName, string packageId, string reason);
 
     private static bool IsLocalDirectoryFeed(FeedDefinition feed) =>
         feed.ServiceIndex.Scheme.Equals("file", StringComparison.OrdinalIgnoreCase);

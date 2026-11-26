@@ -50,7 +50,7 @@ public sealed class DesiredStateReconciliationTests
         var feedResolutionOptions = new FeedResolutionOptions();
         feedResolutionOptions.Feeds.Add(new(
             "feed-untrusted",
-            new("https://feed-untrusted.example/v3/index.json")));
+            new("https://feed-untrusted.example/v3/index.json")) { Trust = FeedTrustLevel.Trusted });
 
         var service = ReconciliationServiceFactory.Create(sources: [source], feedResolutionOptions: feedResolutionOptions);
         var result = await service.TriggerAsync(new(TriggerType.Manual), CancellationToken.None);

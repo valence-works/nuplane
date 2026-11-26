@@ -399,11 +399,13 @@ public sealed class DesiredSourcePrecedenceIntegrationTests
                     {
                         nuplane.AddDirectoryFeed("renewal-demo-baseline", baselineDirectory, feed =>
                         {
+                            feed.Trust = FeedTrustLevel.Trusted;
                             feed.Include("Activities").Include("Renewals");
                             feed.Watch = false;
                         });
                         nuplane.AddDirectoryFeed("renewal-demo-updates", updatesDirectory, feed =>
                         {
+                            feed.Trust = FeedTrustLevel.Trusted;
                             feed.Include("Activities").Include("Renewals");
                             feed.Watch = watchFeeds;
                             feed.DebounceWindow = TimeSpan.FromMilliseconds(100);

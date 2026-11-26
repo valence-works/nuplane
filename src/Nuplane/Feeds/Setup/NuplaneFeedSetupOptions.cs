@@ -1,3 +1,5 @@
+using Nuplane.Abstractions;
+
 namespace Nuplane.Feeds.Setup;
 
 /// <summary>
@@ -32,6 +34,9 @@ public sealed class NuplaneFeedSetupOptions
     /// appears in configuration.
     /// </summary>
     public string? Credentials { get; set; }
+
+    /// <summary>Gets or sets the trust level. Unspecified feeds are untrusted.</summary>
+    public FeedTrustLevel Trust { get; set; }
 
     /// <summary>
     /// Gets or sets whether all packages from this feed should be accepted.

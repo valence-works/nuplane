@@ -40,6 +40,8 @@ public static class NuplaneDirectoryFeedSetupConfiguration
 
             builder.AddDirectoryFeed(feedName, directoryPath, feed =>
             {
+                feed.Trust = feedOptions.Trust;
+                feed.TrustConfigurationPath = $"{declaration.ConfigurationPath}:Trust";
                 feed.Role = feedOptions.Directory.Role;
                 feed.Watch = feedOptions.Directory.Watch;
                 feed.DebounceWindow = feedOptions.Directory.DebounceWindow;
