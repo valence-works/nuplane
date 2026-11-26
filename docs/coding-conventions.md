@@ -58,8 +58,10 @@ for the host or offline workflow it needs.
 `PublicAPI.Unshipped.txt` manifests in every packable project during ordinary builds. Review the API diff
 with any intentional addition or change. Record new or changed signatures in the unshipped
 manifest and promote reviewed entries to the shipped manifest with the release. The manifest
-includes nullability. Package builds also run .NET SDK package validation. The publication
-workflow uses the configured stable NuGet.org version as a binary compatibility baseline.
+includes nullability. Package builds also run .NET SDK package validation. When the
+`NUPLANE_PACKAGE_VALIDATION_BASELINE` repository variable names a stable version on NuGet.org,
+the publication workflow compares packages against that binary compatibility baseline. Set
+the variable once the first stable release is available on NuGet.org.
 
 ## Naming Conventions
 
