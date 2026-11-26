@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Text;
 using Nuplane.Abstractions;
 using Nuplane.Store.State;
 
@@ -17,8 +18,8 @@ public sealed class StoreStateSerializerTests
 
         try
         {
-            File.Copy(fixturePath, stateFilePath);
-            var expectedBytes = await File.ReadAllBytesAsync(fixturePath);
+            var expectedBytes = await ReadNativeFixtureAsync(fixturePath);
+            await File.WriteAllBytesAsync(stateFilePath, expectedBytes);
             var state = await serializer.LoadAsync(stateFilePath, CancellationToken.None);
 
             await serializer.SaveAsync(stateFilePath, state, CancellationToken.None);
@@ -36,7 +37,7 @@ public sealed class StoreStateSerializerTests
     public async Task WritePayloadAsync_WhenReadingActivePackagesFrom0015ProtectionBundle_PreservesExactStateBytes()
     {
         var fixturePath = Path.Combine(AppContext.BaseDirectory, "State", "Fixtures", "active-packages-v2-0.0.15.json");
-        var expectedBytes = await File.ReadAllBytesAsync(fixturePath);
+        var expectedBytes = await ReadNativeFixtureAsync(fixturePath);
         var serializer = new StoreStateSerializer();
         await using var source = new MemoryStream(expectedBytes);
         await using var destination = new MemoryStream();
@@ -46,6 +47,13 @@ public sealed class StoreStateSerializerTests
 
         Assert.NotNull(state.ProtectionBundle);
         Assert.Equal(expectedBytes, destination.ToArray());
+    }
+
+    private static async Task<byte[]> ReadNativeFixtureAsync(string path)
+    {
+        // The 0.0.15 indented writer uses the platform newline. Git stores the fixture with LF.
+        var fixture = await File.ReadAllTextAsync(path);
+        return Encoding.UTF8.GetBytes(fixture.ReplaceLineEndings(Environment.NewLine));
     }
 
     [Fact]
