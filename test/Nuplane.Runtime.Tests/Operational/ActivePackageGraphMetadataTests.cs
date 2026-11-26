@@ -17,7 +17,7 @@ public sealed class ActivePackageGraphMetadataTests
             new Dictionary<string, FailureRecord>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, SourceSnapshotRef>(StringComparer.OrdinalIgnoreCase),
             activatedAtUtc,
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase));
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase));
         var resolvedPackage = new ResolvedPackage(
             "Plugin.Root",
             "1.0.0",
@@ -90,34 +90,6 @@ public sealed class ActivePackageGraphMetadataTests
     }
 
     [Fact]
-    public void ToActivePackage_WithDependencyDescriptor_PreservesGraphMetadata()
-    {
-        var descriptor = new ActivePackageDescriptor(
-            "Plugin.Dependency",
-            "1.0.0",
-            "feed-a",
-            "source-a",
-            "/packages/dependency",
-            DateTimeOffset.Parse("2026-05-05T10:00:00Z"),
-            "corr-1",
-            "graph-1",
-            "generation-1",
-            ActivePackageRole.Dependency,
-            ["Plugin.Root"],
-            ["Plugin.Root"],
-            Discoverable: false);
-
-        var package = descriptor.ToActivePackage();
-
-        Assert.Equal("graph-1", package.GraphId);
-        Assert.Equal("generation-1", package.GraphGenerationId);
-        Assert.Equal(ActivePackageRole.Dependency, package.PackageRole);
-        Assert.False(package.Discoverable);
-        Assert.Equal(["Plugin.Root"], package.RootPackageIds);
-        Assert.Equal(["Plugin.Root"], package.DependencyOfPackageIds);
-    }
-
-    [Fact]
     public void BuildNextDescriptors_WithDependencyGraph_MarksDependencyNodesSupportOnly()
     {
         var activatedAtUtc = DateTimeOffset.Parse("2026-05-05T10:00:00Z");
@@ -127,7 +99,7 @@ public sealed class ActivePackageGraphMetadataTests
             new Dictionary<string, FailureRecord>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, SourceSnapshotRef>(StringComparer.OrdinalIgnoreCase),
             activatedAtUtc,
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase));
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase));
         var root = new ResolvedPackage("Plugin.Root", "1.0.0", "feed-a", "/packages/root", activatedAtUtc, "source-a");
         var dependency = new ResolvedPackage("Plugin.Dependency", "1.0.0", "feed-a", "/packages/dependency", activatedAtUtc, "dependency-of:Plugin.Root");
         var rootNode = Node(root, PackageNodeRole.Root);
@@ -272,7 +244,7 @@ public sealed class ActivePackageGraphMetadataTests
             new Dictionary<string, FailureRecord>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, SourceSnapshotRef>(StringComparer.OrdinalIgnoreCase),
             activatedAtUtc,
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase));
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase));
         var rootA = new ResolvedPackage("Plugin.RootA", "1.0.0", "feed-a", "/packages/root-a", activatedAtUtc, "source-a");
         var rootB = new ResolvedPackage("Plugin.RootB", "1.0.0", "feed-a", "/packages/root-b", activatedAtUtc, "source-a");
         var dependency = new ResolvedPackage("Plugin.Dependency", "1.0.0", "feed-a", "/packages/dependency", activatedAtUtc, "source-a");

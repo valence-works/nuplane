@@ -17,7 +17,7 @@ public sealed class ActivePackageCatalogRestartIntegrationTests
         try
         {
             var storeBeforeRestart = new StoreRegistry(new StoreStateSerializer(), stateFilePath);
-            var descriptor = new ActivePackageDescriptor(
+            var descriptor = new ActivePackage(
                 "pkg-a",
                 "1.2.3",
                 "feed-a",
@@ -37,17 +37,17 @@ public sealed class ActivePackageCatalogRestartIntegrationTests
                 },
                 descriptor.ActivationCorrelationId,
                 CancellationToken.None,
-                new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+                new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
                 {
                     [descriptor.PackageId] = descriptor
                 });
 
             var catalogBeforeRestart = CreateCatalog(storeBeforeRestart);
-            var beforeRestart = await catalogBeforeRestart.GetSnapshotAsync(CancellationToken.None);
+            var beforeRestart = await catalogBeforeRestart.GetActivePackagesAsync(CancellationToken.None);
 
             var storeAfterRestart = new StoreRegistry(new StoreStateSerializer(), stateFilePath);
             var catalogAfterRestart = CreateCatalog(storeAfterRestart);
-            var afterRestart = await catalogAfterRestart.GetSnapshotAsync(CancellationToken.None);
+            var afterRestart = await catalogAfterRestart.GetActivePackagesAsync(CancellationToken.None);
 
             var beforeDescriptor = Assert.Single(beforeRestart.Packages);
             var afterDescriptor = Assert.Single(afterRestart.Packages);

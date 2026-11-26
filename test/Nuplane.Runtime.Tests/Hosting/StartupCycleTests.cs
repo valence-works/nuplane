@@ -424,7 +424,7 @@ public sealed class StartupCycleTests
             },
             "corr-seed",
             CancellationToken.None,
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
             {
                 ["pkg-a"] = new(
                     "pkg-a",

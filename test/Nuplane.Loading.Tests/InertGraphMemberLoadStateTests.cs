@@ -117,7 +117,7 @@ public sealed class InertGraphMemberLoadStateTests : IDisposable
             new ReconciliationMetrics(new ReconciliationTelemetry()));
 
     private StubActivePackageCatalog CreateActivePackageCatalog(params ResolvedPackage[] additionalPackages) =>
-        new(new ActivePackageCatalogSnapshot(
+        new(new ActivePackagesSnapshot(
             Now,
             Now,
             new[] { _root, _facade, _nativeFacade }
@@ -153,15 +153,15 @@ public sealed class InertGraphMemberLoadStateTests : IDisposable
             }
         };
 
-    private static ActivePackageDescriptor Descriptor(ResolvedPackage package) =>
-        ActivePackageDescriptor.FromActivePackage(new ActivePackage(
+    private static ActivePackage Descriptor(ResolvedPackage package) =>
+        new(
             package.Id,
             package.Version,
             package.FeedName,
             package.SourceName,
             package.InstallPath,
             Now,
-            "corr-active"));
+            "corr-active");
 
     private string CreateAssemblyPackageInstall(string packageId)
     {
@@ -182,12 +182,10 @@ public sealed class InertGraphMemberLoadStateTests : IDisposable
         return Path.Combine(_tempRoot, packageId, "10.0.9");
     }
 
-    private sealed class StubActivePackageCatalog(ActivePackageCatalogSnapshot snapshot) : IActivePackageCatalog
+    private sealed class StubActivePackageCatalog(ActivePackagesSnapshot snapshot) : IActivePackageCatalog
     {
         public Task<ActivePackagesSnapshot> GetActivePackagesAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(snapshot.ToActivePackagesSnapshot());
-
-        public Task<ActivePackageCatalogSnapshot> GetSnapshotAsync(CancellationToken cancellationToken) => Task.FromResult(snapshot);
+            Task.FromResult(snapshot);
     }
 
     private sealed class StubStoreRegistry(StoreStateRecord state) : IStoreRegistry

@@ -126,15 +126,15 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyDictionary<string, ActivePackageDescriptor>> GetActivePackageDescriptorsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyDictionary<string, ActivePackage>> GetActivePackagesAsync(CancellationToken cancellationToken)
     {
         RefuseUnscopedStateAccess();
         await _gate.WaitAsync(cancellationToken);
         try
         {
             await EnsureLoadedUnderLockAsync(cancellationToken);
-            return new ReadOnlyDictionary<string, ActivePackageDescriptor>(
-                new Dictionary<string, ActivePackageDescriptor>(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase));
+            return new ReadOnlyDictionary<string, ActivePackage>(
+                new Dictionary<string, ActivePackage>(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase));
         }
         finally
         {
@@ -171,7 +171,7 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
         IReadOnlyDictionary<string, string> successfullyApplied,
         string correlationId,
         CancellationToken cancellationToken)
-        => PersistActiveVersionsAsync(activeVersions, successfullyApplied, correlationId, cancellationToken, activePackageDescriptors: null);
+        => PersistActiveVersionsAsync(activeVersions, successfullyApplied, correlationId, cancellationToken, activePackages: null);
 
     /// <inheritdoc />
     public async Task PersistActiveVersionsAsync(
@@ -179,13 +179,13 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
         IReadOnlyDictionary<string, string> successfullyApplied,
         string correlationId,
         CancellationToken cancellationToken,
-        IReadOnlyDictionary<string, ActivePackageDescriptor>? activePackageDescriptors = null)
+        IReadOnlyDictionary<string, ActivePackage>? activePackages = null)
         => await PersistActiveVersionsAsync(
             activeVersions,
             successfullyApplied,
             correlationId,
             cancellationToken,
-            activePackageDescriptors,
+            activePackages,
             activeGraphs: null);
 
     /// <inheritdoc />
@@ -194,7 +194,7 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
         IReadOnlyDictionary<string, string> successfullyApplied,
         string correlationId,
         CancellationToken cancellationToken,
-        IReadOnlyDictionary<string, ActivePackageDescriptor>? activePackageDescriptors,
+        IReadOnlyDictionary<string, ActivePackage>? activePackages,
         IReadOnlyDictionary<string, GraphActivationRecord>? activeGraphs)
     {
         RefuseUnscopedStateAccess();
@@ -210,9 +210,9 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
             var now = DateTimeOffset.UtcNow;
             var nextActive = new Dictionary<string, string>(activeVersions, StringComparer.OrdinalIgnoreCase);
             var nextLkg = new Dictionary<string, string>(currentState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase);
-            var nextDescriptors = activePackageDescriptors is null
-                ? new Dictionary<string, ActivePackageDescriptor>(currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase)
-                : new Dictionary<string, ActivePackageDescriptor>(activePackageDescriptors, StringComparer.OrdinalIgnoreCase);
+            var nextDescriptors = activePackages is null
+                ? new Dictionary<string, ActivePackage>(currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, ActivePackage>(activePackages, StringComparer.OrdinalIgnoreCase);
             var nextGraphs = activeGraphs is null
                 ? new Dictionary<string, GraphActivationRecord>(currentState.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, GraphActivationRecord>(activeGraphs, StringComparer.OrdinalIgnoreCase);

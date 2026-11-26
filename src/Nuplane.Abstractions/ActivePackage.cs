@@ -1,7 +1,7 @@
 namespace Nuplane.Abstractions;
 
 /// <summary>
-/// The canonical host-facing representation of one currently active reconciled package.
+/// The host-facing representation of one currently active reconciled package.
 /// </summary>
 /// <param name="PackageId">The package identifier.</param>
 /// <param name="Version">The active package version.</param>
@@ -56,18 +56,4 @@ public sealed record ActivePackage(
     /// recorded when the package was activated. <see langword="null"/> when it was not recorded.
     /// </summary>
     public string? ArchiveHash { get; init; }
-
-    /// <summary>
-    /// Creates the canonical active-package model from the legacy descriptor model.
-    /// </summary>
-    public static ActivePackage FromDescriptor(ActivePackageDescriptor descriptor)
-    {
-        ArgumentNullException.ThrowIfNull(descriptor);
-        return descriptor.ToActivePackage();
-    }
-
-    /// <summary>
-    /// Converts this canonical active-package model back to the legacy descriptor model.
-    /// </summary>
-    public ActivePackageDescriptor ToDescriptor() => ActivePackageDescriptor.FromActivePackage(this);
 }

@@ -224,7 +224,7 @@ internal static class CoordinatedReconciliationAdapters
             return await _registry.ReadCoordinatedStateAsync(borrow, cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task<IReadOnlyDictionary<string, ActivePackageDescriptor>> GetActivePackageDescriptorsAsync(
+        public async Task<IReadOnlyDictionary<string, ActivePackage>> GetActivePackagesAsync(
             CancellationToken cancellationToken)
             => (await GetStateAsync(cancellationToken).ConfigureAwait(false)).ActivePackageDescriptorsByIdNormalized;
 
@@ -232,19 +232,19 @@ internal static class CoordinatedReconciliationAdapters
             IReadOnlyDictionary<string, string> successfullyApplied, string correlationId,
             CancellationToken cancellationToken)
             => PersistActiveVersionsAsync(activeVersions, successfullyApplied, correlationId, cancellationToken,
-                activePackageDescriptors: null, activeGraphs: null);
+                activePackages: null, activeGraphs: null);
 
         public Task PersistActiveVersionsAsync(IReadOnlyDictionary<string, string> activeVersions,
             IReadOnlyDictionary<string, string> successfullyApplied, string correlationId,
             CancellationToken cancellationToken,
-            IReadOnlyDictionary<string, ActivePackageDescriptor>? activePackageDescriptors)
+            IReadOnlyDictionary<string, ActivePackage>? activePackages)
             => PersistActiveVersionsAsync(activeVersions, successfullyApplied, correlationId, cancellationToken,
-                activePackageDescriptors, activeGraphs: null);
+                activePackages, activeGraphs: null);
 
         public async Task PersistActiveVersionsAsync(IReadOnlyDictionary<string, string> activeVersions,
             IReadOnlyDictionary<string, string> successfullyApplied, string correlationId,
             CancellationToken cancellationToken,
-            IReadOnlyDictionary<string, ActivePackageDescriptor>? activePackageDescriptors,
+            IReadOnlyDictionary<string, ActivePackage>? activePackages,
             IReadOnlyDictionary<string, GraphActivationRecord>? activeGraphs)
         {
             ArgumentNullException.ThrowIfNull(activeVersions);

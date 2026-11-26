@@ -19,7 +19,7 @@ public sealed class ActivePackageCatalogTests
             new Dictionary<string, FailureRecord>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, SourceSnapshotRef>(StringComparer.OrdinalIgnoreCase),
             DateTimeOffset.Parse("2026-04-08T15:00:00Z"),
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
             {
                 ["SamplePackage"] = new("SamplePackage", "0.0.1", "local-packages", "local-packages", "/app/packages/.installed/SamplePackage/0.0.1", DateTimeOffset.UtcNow, "old-corr")
             });
@@ -60,7 +60,7 @@ public sealed class ActivePackageCatalogTests
             new Dictionary<string, FailureRecord>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, SourceSnapshotRef>(StringComparer.OrdinalIgnoreCase),
             DateTimeOffset.Parse("2026-04-08T15:00:00Z"),
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
             {
                 ["orphaned"] = new("orphaned", "9.9.9", "feed-x", "source-x", "/packages/orphaned", DateTimeOffset.UtcNow, "corr-orphan"),
                 ["zeta"] = new("zeta", "3.0.0", "feed-z", "source-z", "/packages/zeta", DateTimeOffset.UtcNow, "corr-z"),
@@ -88,7 +88,7 @@ public sealed class ActivePackageCatalogTests
             new Dictionary<string, FailureRecord>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, SourceSnapshotRef>(StringComparer.OrdinalIgnoreCase),
             DateTimeOffset.Parse("2026-04-08T16:00:00Z"),
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
             {
                 ["pkg-a"] = new("pkg-a", "1.0.0", "trusted-feed", "manifest-a", "/packages/pkg-a", DateTimeOffset.UtcNow, "corr-a")
             });

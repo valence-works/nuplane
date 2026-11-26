@@ -120,9 +120,9 @@ That split keeps hosts from rebuilding state from event history.
 
 `Nuplane.NuplaneStore` is a static, dependency-injection-free entry point for tooling that needs
 the active package set — every active package's id, version, and install path — without a running
-host, a DI container, or network access. It reports exactly the set a running host's
-`IActivePackageCatalog` reports: active package descriptors whose version matches the state
-file's recorded active version for that package id.
+host, a DI container, or network access. It returns the same `ActivePackage` records as
+`IActivePackageCatalog.GetActivePackagesAsync`. Each package matches the version recorded as
+active for its identifier in the state file.
 
 ```csharp
 var activePackages = await NuplaneStore.ReadActivePackagesAsync("/var/lib/nuplane/.nuplane/store-state.json");

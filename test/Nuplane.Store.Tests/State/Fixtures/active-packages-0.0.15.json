@@ -1,0 +1,54 @@
+{
+  "activeVersionById": {
+    "Plugin.Root": "1.0.0",
+    "Plugin.Support": "2.0.0"
+  },
+  "lastKnownGoodById": {
+    "Plugin.Root": "1.0.0"
+  },
+  "lastFailureById": {},
+  "lastSuccessfulSourceSnapshots": {},
+  "updatedAt": "2026-11-26T10:00:00+00:00",
+  "activePackageDescriptorsById": {
+    "Plugin.Root": {
+      "packageId": "Plugin.Root",
+      "version": "1.0.0",
+      "feedName": "feed",
+      "sourceName": "source",
+      "installPath": "/packages/plugin.root/1.0.0",
+      "activatedAtUtc": "2026-11-26T10:00:00+00:00",
+      "activationCorrelationId": "cycle",
+      "packageRole": 0,
+      "discoverable": true,
+      "graphId": "plugin-graph",
+      "graphGenerationId": "generation-1",
+      "rootPackageIds": [
+        "Plugin.Root"
+      ],
+      "dependencyOfPackageIds": [],
+      "archiveHash": "sha512:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    },
+    "Plugin.Support": {
+      "packageId": "Plugin.Support",
+      "version": "2.0.0",
+      "feedName": "feed",
+      "installPath": "/packages/plugin.support/2.0.0",
+      "activatedAtUtc": "2026-11-26T10:00:00+00:00",
+      "activationCorrelationId": "cycle",
+      "packageRole": 1,
+      "discoverable": false,
+      "graphId": "plugin-graph",
+      "graphGenerationId": "generation-1",
+      "rootPackageIds": [
+        "Plugin.Root"
+      ],
+      "dependencyOfPackageIds": [
+        "Plugin.Root"
+      ]
+    }
+  },
+  "activeGraphsById": {},
+  "archiveHashesByPackage": {
+    "plugin.root/1.0.0": "sha512:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+  }
+}

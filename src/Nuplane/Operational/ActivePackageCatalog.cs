@@ -55,12 +55,6 @@ public sealed class ActivePackageCatalog : IActivePackageCatalog
         return snapshot;
     }
 
-    /// <summary>
-    /// Reads the current active package catalog snapshot using legacy naming.
-    /// </summary>
-    public async Task<ActivePackageCatalogSnapshot> GetSnapshotAsync(CancellationToken cancellationToken) =>
-        (await GetActivePackagesAsync(cancellationToken).ConfigureAwait(false)).ToLegacySnapshot();
-
     private async Task<StoreStateRecord> ReadCurrentStateAsync(CancellationToken cancellationToken)
     {
         if (_packageStoreAdmission is null)

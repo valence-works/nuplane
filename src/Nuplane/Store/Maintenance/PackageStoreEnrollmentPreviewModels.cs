@@ -121,7 +121,7 @@ internal sealed class PackageStoreEnrollmentPreviewMember
     internal string? StateBodyDigest { get; }
     internal IReadOnlyDictionary<string, string> ActiveVersionById { get; }
     internal IReadOnlyDictionary<string, string> LastKnownGoodById { get; }
-    internal IReadOnlyDictionary<string, ActivePackageDescriptor> ActivePackageDescriptorsById { get; }
+    internal IReadOnlyDictionary<string, ActivePackage> ActivePackageDescriptorsById { get; }
     internal IReadOnlyDictionary<string, GraphActivationRecord> ActivationHistoryById { get; }
     internal DateTimeOffset? StateUpdatedAtUtc { get; }
     internal PackageStoreEnrollmentPreviewClosure ActiveClosure { get; }
@@ -142,15 +142,15 @@ internal sealed class PackageStoreEnrollmentPreviewMember
             ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, string>(map, StringComparer.OrdinalIgnoreCase));
 
-    private static IReadOnlyDictionary<string, ActivePackageDescriptor> CopyDescriptors(
-        Dictionary<string, ActivePackageDescriptor>? descriptors)
+    private static IReadOnlyDictionary<string, ActivePackage> CopyDescriptors(
+        Dictionary<string, ActivePackage>? descriptors)
     {
         var copied = (descriptors ?? []).ToDictionary(static pair => pair.Key, static pair => pair.Value with
         {
             RootPackageIds = Array.AsReadOnly(pair.Value.RootPackageIds.ToArray()),
             DependencyOfPackageIds = Array.AsReadOnly(pair.Value.DependencyOfPackageIds.ToArray())
         }, StringComparer.OrdinalIgnoreCase);
-        return new ReadOnlyDictionary<string, ActivePackageDescriptor>(copied);
+        return new ReadOnlyDictionary<string, ActivePackage>(copied);
     }
 
     private static IReadOnlyDictionary<string, GraphActivationRecord> CopyActivationHistory(

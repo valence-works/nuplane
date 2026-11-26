@@ -10,16 +10,7 @@ internal sealed class AssemblyScanCandidateProjector(PackageLoader packageLoader
     private readonly PackageLoader _packageLoader = packageLoader ?? throw new ArgumentNullException(nameof(packageLoader));
 
     /// <summary>
-    /// Projects deterministic scan candidates for the supplied active package descriptor.
-    /// </summary>
-    public IReadOnlyList<PackageAssemblyReference> Project(ActivePackageDescriptor package)
-    {
-        ArgumentNullException.ThrowIfNull(package);
-        return ProjectCandidates(_packageLoader.BuildScanCandidates(package.PackageId, package.InstallPath));
-    }
-
-    /// <summary>
-    /// Projects deterministic assembly references for the supplied canonical active package model.
+    /// Projects deterministic assembly references for the supplied active package.
     /// </summary>
     public IReadOnlyList<PackageAssemblyReference> Project(ActivePackage package)
     {

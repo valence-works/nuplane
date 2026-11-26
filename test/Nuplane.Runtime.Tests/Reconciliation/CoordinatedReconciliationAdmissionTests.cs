@@ -1534,7 +1534,7 @@ public sealed partial class CoordinatedReconciliationAdmissionTests
             {
                 ActiveVersionById = versions,
                 LastKnownGoodById = new Dictionary<string, string>(versions, StringComparer.OrdinalIgnoreCase),
-                ActivePackageDescriptorsById = new Dictionary<string, ActivePackageDescriptor>(descriptors,
+                ActivePackageDescriptorsById = new Dictionary<string, ActivePackage>(descriptors,
                     StringComparer.OrdinalIgnoreCase),
                 ActiveGraphsById = new Dictionary<string, GraphActivationRecord>(graphRecords,
                     StringComparer.OrdinalIgnoreCase),

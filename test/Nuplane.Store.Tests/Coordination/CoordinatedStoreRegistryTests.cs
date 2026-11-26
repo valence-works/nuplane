@@ -181,7 +181,7 @@ public sealed class CoordinatedStoreRegistryTests
         var key = StoreStateRecord.ArchiveHashKey(descriptor.PackageId, descriptor.Version);
         var originalHash = "sha512:" + Convert.ToBase64String(SHA512.HashData("original"u8));
         var otherHash = "sha512:" + Convert.ToBase64String(SHA512.HashData("other"u8));
-        var descriptors = new Dictionary<string, ActivePackageDescriptor>(
+        var descriptors = new Dictionary<string, ActivePackage>(
             prior.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase)
         {
             [descriptor.PackageId] = descriptor with { ArchiveHash = originalHash }
@@ -199,7 +199,7 @@ public sealed class CoordinatedStoreRegistryTests
         });
         await registry.PersistCoordinatedActiveStateAsync(borrow, recorded, CancellationToken.None);
 
-        var inconsistentDescriptors = new Dictionary<string, ActivePackageDescriptor>(descriptors, StringComparer.OrdinalIgnoreCase)
+        var inconsistentDescriptors = new Dictionary<string, ActivePackage>(descriptors, StringComparer.OrdinalIgnoreCase)
         {
             [descriptor.PackageId] = descriptor with { ArchiveHash = otherHash }
         };

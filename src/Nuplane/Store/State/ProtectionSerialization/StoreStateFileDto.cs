@@ -27,7 +27,7 @@ internal sealed class StoreStateFileDto
 
     public DateTimeOffset? UpdatedAt { get; set; }
 
-    public Dictionary<string, ActivePackageDescriptor>? ActivePackageDescriptorsById { get; set; }
+    public Dictionary<string, ActivePackage>? ActivePackageDescriptorsById { get; set; }
 
     public Dictionary<string, GraphActivationRecord>? ActiveGraphsById { get; set; }
 

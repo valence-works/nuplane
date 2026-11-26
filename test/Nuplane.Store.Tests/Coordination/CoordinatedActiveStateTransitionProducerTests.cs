@@ -273,7 +273,7 @@ public sealed class CoordinatedActiveStateTransitionProducerTests
             var closure = new PackageProtectionClosure(PackageProtectionClosureKnowledge.Known, null, [snapshot]);
             var nextState = priorState with
             {
-                ActivePackageDescriptorsById = new Dictionary<string, ActivePackageDescriptor>(descriptors,
+                ActivePackageDescriptorsById = new Dictionary<string, ActivePackage>(descriptors,
                     StringComparer.OrdinalIgnoreCase),
                 ActiveGraphsById = new Dictionary<string, GraphActivationRecord>(graphRecords,
                     StringComparer.OrdinalIgnoreCase)

@@ -326,7 +326,7 @@ public sealed class HistoricalGraphRetentionPreparationTests
             return emptyBody with { ProtectionRecord = protection };
         }
 
-        private static Dictionary<string, ActivePackageDescriptor> BuildDescriptors(IReadOnlyList<ProtectedGraphSnapshot> graphs)
+        private static Dictionary<string, ActivePackage> BuildDescriptors(IReadOnlyList<ProtectedGraphSnapshot> graphs)
         {
             var projections = new Dictionary<string, DescriptorProjection>(StringComparer.OrdinalIgnoreCase);
             foreach (var graph in graphs)
@@ -367,7 +367,7 @@ public sealed class HistoricalGraphRetentionPreparationTests
             return projections.ToDictionary(static pair => pair.Key, pair =>
             {
                 var projection = pair.Value;
-                return new ActivePackageDescriptor(projection.Install.PackageId, projection.Install.Version,
+                return new ActivePackage(projection.Install.PackageId, projection.Install.Version,
                     "feed", "source", $"/{projection.Install.RootRelativeInstallPath}", DateTimeOffset.UnixEpoch,
                     "fixture", projection.GraphId, projection.GenerationId, projection.Role,
                     projection.RootPackageIds.OrderBy(static id => id, StringComparer.OrdinalIgnoreCase).ToArray(),

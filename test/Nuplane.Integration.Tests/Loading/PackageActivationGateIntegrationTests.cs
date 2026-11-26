@@ -130,7 +130,7 @@ public sealed class PackageActivationGateIntegrationTests : IAsyncDisposable
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [PackageId] = Version },
             CorrelationId,
             CancellationToken.None,
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
             {
                 [PackageId] = new(
                     PackageId,

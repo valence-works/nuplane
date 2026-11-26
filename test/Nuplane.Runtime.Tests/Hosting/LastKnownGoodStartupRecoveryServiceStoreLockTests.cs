@@ -121,7 +121,7 @@ public sealed class LastKnownGoodStartupRecoveryServiceStoreLockTests : IDisposa
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["pkg-a"] = "2.0.0" },
             "corr-newer-version",
             CancellationToken.None,
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
             {
                 ["pkg-a"] = new(
                     "pkg-a",
@@ -168,7 +168,7 @@ public sealed class LastKnownGoodStartupRecoveryServiceStoreLockTests : IDisposa
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["pkg-a"] = "1.0.0" },
             "corr-seed",
             CancellationToken.None,
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
             {
                 ["pkg-a"] = new(
                     "pkg-a",

@@ -227,7 +227,7 @@ public sealed class ProtectionStateSerializationTests : IDisposable
             new() { ["Other"] = new FailureRecord("Other", "resolve", "message", time, "correlation") },
             new() { ["source"] = new SourceSnapshotRef("snapshot", time, [new PackageRequest("Module", "[1.0.0,3.0.0)", null, PackageUpdatePolicy.Range, "source")]) },
             time,
-            new() { ["Module"] = new ActivePackageDescriptor("Module", "2.0.0", "feed", "source", "/descriptive/module", time,
+            new() { ["Module"] = new ActivePackage("Module", "2.0.0", "feed", "source", "/descriptive/module", time,
                 "correlation", "graph", "generation", ActivePackageRole.Dependency, ["Root"], ["support"], false) },
             new() { ["graph"] = new GraphActivationRecord("graph", "generation", ["Module"], ["Module", "Support"], time, "correlation", GraphActivationStatus.Stale,
                 new GraphActivationFailure("load", "reason", "message", ["cycle"], "native/library"), new Dictionary<string, string> { ["Module"] = "1.0.0" }) })

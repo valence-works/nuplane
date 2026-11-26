@@ -24,13 +24,13 @@ public sealed class ActivePackageCatalogConsistencyIntegrationTests
             },
             "corr-initial",
             CancellationToken.None,
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
             {
                 ["pkg-a"] = CreateDescriptor("pkg-a", "1.0.0", "/packages/pkg-a/1.0.0", "corr-initial")
             });
 
         var catalog = CreateCatalog(store);
-        var initialSnapshot = await catalog.GetSnapshotAsync(CancellationToken.None);
+        var initialSnapshot = await catalog.GetActivePackagesAsync(CancellationToken.None);
         Assert.Equal("1.0.0", Assert.Single(initialSnapshot.Packages).Version);
 
         serializer.BlockNextSave();
@@ -46,14 +46,14 @@ public sealed class ActivePackageCatalogConsistencyIntegrationTests
             },
             "corr-updated",
             CancellationToken.None,
-            new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase)
             {
                 ["pkg-a"] = CreateDescriptor("pkg-a", "2.0.0", "/packages/pkg-a/2.0.0", "corr-updated")
             });
 
         await serializer.WaitForSaveToStartAsync();
 
-        var readWhilePersistingTask = catalog.GetSnapshotAsync(CancellationToken.None);
+        var readWhilePersistingTask = catalog.GetActivePackagesAsync(CancellationToken.None);
         await Task.Delay(100);
         Assert.False(readWhilePersistingTask.IsCompleted, "Read should wait until the store write completes so no partial package/version state leaks through.");
 
@@ -68,7 +68,7 @@ public sealed class ActivePackageCatalogConsistencyIntegrationTests
         Assert.Equal("corr-updated", descriptor.ActivationCorrelationId);
     }
 
-    private static ActivePackageDescriptor CreateDescriptor(string id, string version, string installPath, string correlationId) =>
+    private static ActivePackage CreateDescriptor(string id, string version, string installPath, string correlationId) =>
         new(id, version, "feed-a", "source-a", installPath, DateTimeOffset.UtcNow, correlationId);
 
     private static ActivePackageCatalog CreateCatalog(IStoreRegistry storeRegistry) =>

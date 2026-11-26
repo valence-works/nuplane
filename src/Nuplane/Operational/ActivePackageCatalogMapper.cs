@@ -352,7 +352,7 @@ internal static class ActivePackageCatalogMapper
         internal IReadOnlyDictionary<string, string> RequiredRetainedVersionsByPackageId { get; }
     }
 
-    public static IReadOnlyDictionary<string, ActivePackageDescriptor> BuildNextDescriptors(
+    public static IReadOnlyDictionary<string, ActivePackage> BuildNextDescriptors(
         StoreStateRecord currentState,
         IReadOnlyDictionary<string, string> nextActiveVersions,
         IReadOnlyList<ResolvedPackage> appliedPackages,
@@ -368,7 +368,7 @@ internal static class ActivePackageCatalogMapper
         ArgumentNullException.ThrowIfNull(changeSet);
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
 
-        var descriptors = new Dictionary<string, ActivePackageDescriptor>(
+        var descriptors = new Dictionary<string, ActivePackage>(
             currentState.ActivePackageDescriptorsByIdNormalized,
             StringComparer.OrdinalIgnoreCase);
 
@@ -769,7 +769,7 @@ internal static class ActivePackageCatalogMapper
         return true;
     }
 
-    private static ActivePackageDescriptor ApplyProjection(ActivePackageDescriptor descriptor, GraphNodeProjection projection) =>
+    private static ActivePackage ApplyProjection(ActivePackage descriptor, GraphNodeProjection projection) =>
         descriptor with
         {
             GraphId = projection.GraphId,
@@ -780,7 +780,7 @@ internal static class ActivePackageCatalogMapper
             Discoverable = projection.Role is not ActivePackageRole.Dependency
         };
 
-    private static bool HasSameActivationShape(ActivePackageDescriptor existing, ActivePackageDescriptor next) =>
+    private static bool HasSameActivationShape(ActivePackage existing, ActivePackage next) =>
         string.Equals(existing.Version, next.Version, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(existing.FeedName, next.FeedName, StringComparison.Ordinal) &&
         string.Equals(existing.SourceName, next.SourceName, StringComparison.Ordinal) &&
@@ -792,11 +792,11 @@ internal static class ActivePackageCatalogMapper
         SetEquals(existing.RootPackageIds, next.RootPackageIds) &&
         SetEquals(existing.DependencyOfPackageIds, next.DependencyOfPackageIds);
 
-    private static bool HasSameGraphGeneration(ActivePackageDescriptor existing, ActivePackageDescriptor next) =>
+    private static bool HasSameGraphGeneration(ActivePackage existing, ActivePackage next) =>
         IsLegacyRootDescriptor(existing) && IsLegacyRootDescriptor(next) ||
         string.Equals(existing.GraphGenerationId, next.GraphGenerationId, StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsLegacyRootDescriptor(ActivePackageDescriptor descriptor) =>
+    private static bool IsLegacyRootDescriptor(ActivePackage descriptor) =>
         string.Equals(descriptor.GraphId, descriptor.PackageId, StringComparison.OrdinalIgnoreCase) &&
         descriptor.PackageRole == ActivePackageRole.Root &&
         SetEquals(descriptor.RootPackageIds, [descriptor.PackageId]) &&
@@ -837,13 +837,12 @@ internal static class ActivePackageCatalogMapper
                 && string.Equals(version, package.Version, StringComparison.OrdinalIgnoreCase))
             .OrderBy(package => package.PackageId, StringComparer.OrdinalIgnoreCase)
             .ThenBy(package => package.Version, StringComparer.OrdinalIgnoreCase)
-            .Select(static package => package.ToActivePackage())
             .ToArray();
     }
 
     private static string? Sanitize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
-    private static ActivePackageDescriptor CreateDescriptor(
+    private static ActivePackage CreateDescriptor(
         string packageId,
         string version,
         string? feedName,
@@ -856,7 +855,7 @@ internal static class ActivePackageCatalogMapper
     {
         if (!graphNodesByPackageId.TryGetValue(packageId, out var graphNode))
         {
-            return new ActivePackageDescriptor(
+            return new ActivePackage(
                 packageId,
                 version,
                 feedName,
@@ -869,7 +868,7 @@ internal static class ActivePackageCatalogMapper
             };
         }
 
-        return new ActivePackageDescriptor(
+        return new ActivePackage(
             packageId,
             version,
             feedName,

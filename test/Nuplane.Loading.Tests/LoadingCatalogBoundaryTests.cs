@@ -18,10 +18,10 @@ public sealed class LoadingCatalogBoundaryTests
         refreshTracker.MarkRefreshed("refresh-active-only");
 
         var catalog = CreateCatalog(
-            new ActivePackageCatalogSnapshot(
+            new ActivePackagesSnapshot(
                 DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow,
-                [new ActivePackageDescriptor(activePackage.Id, activePackage.Version, activePackage.FeedName, activePackage.SourceName, activePackage.InstallPath, DateTimeOffset.UtcNow, "corr-active")],
+                [new ActivePackage(activePackage.Id, activePackage.Version, activePackage.FeedName, activePackage.SourceName, activePackage.InstallPath, DateTimeOffset.UtcNow, "corr-active")],
                 "read-active-only"),
             loader,
             refreshTracker);
@@ -44,10 +44,10 @@ public sealed class LoadingCatalogBoundaryTests
         refreshTracker.MarkRefreshed("refresh-candidates");
 
         var catalog = CreateCatalog(
-            new ActivePackageCatalogSnapshot(
+            new ActivePackagesSnapshot(
                 DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow,
-                [new ActivePackageDescriptor(package.Id, package.Version, package.FeedName, package.SourceName, package.InstallPath, DateTimeOffset.UtcNow, "corr-candidate")],
+                [new ActivePackage(package.Id, package.Version, package.FeedName, package.SourceName, package.InstallPath, DateTimeOffset.UtcNow, "corr-candidate")],
                 "read-candidates"),
             loader,
             refreshTracker);
@@ -109,10 +109,10 @@ public sealed class LoadingCatalogBoundaryTests
         refreshTracker.MarkRefreshed("refresh-selected-framework-only");
 
         var catalog = CreateCatalog(
-            new ActivePackageCatalogSnapshot(
+            new ActivePackagesSnapshot(
                 DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow,
-                [new ActivePackageDescriptor(package.Id, package.Version, package.FeedName, package.SourceName, package.InstallPath, DateTimeOffset.UtcNow, "corr-multi-target")],
+                [new ActivePackage(package.Id, package.Version, package.FeedName, package.SourceName, package.InstallPath, DateTimeOffset.UtcNow, "corr-multi-target")],
                 "read-selected-framework-only"),
             loader,
             refreshTracker);
@@ -130,7 +130,7 @@ public sealed class LoadingCatalogBoundaryTests
     }
 
     private static LoadingCatalog CreateCatalog(
-        ActivePackageCatalogSnapshot snapshot,
+        ActivePackagesSnapshot snapshot,
         PackageLoader loader,
         LoadingCatalogRefreshTracker refreshTracker)
     {
@@ -218,12 +218,10 @@ public sealed class LoadingCatalogBoundaryTests
             : "net472";
     }
 
-    private sealed class StubActivePackageCatalog(ActivePackageCatalogSnapshot snapshot) : IActivePackageCatalog
+    private sealed class StubActivePackageCatalog(ActivePackagesSnapshot snapshot) : IActivePackageCatalog
     {
         public Task<ActivePackagesSnapshot> GetActivePackagesAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(snapshot.ToActivePackagesSnapshot());
-
-        public Task<ActivePackageCatalogSnapshot> GetSnapshotAsync(CancellationToken cancellationToken) => Task.FromResult(snapshot);
+            Task.FromResult(snapshot);
     }
 }
 

@@ -18,7 +18,7 @@ public sealed class LoadingCatalogIntegrationTests
         try
         {
             var stateFilePath = Path.Combine(tempRoot, "store-state.json");
-            var persistedDescriptor = new ActivePackageDescriptor(
+            var persistedDescriptor = new ActivePackage(
                 "pkg-a",
                 "1.0.0",
                 "feed-a",
@@ -33,7 +33,7 @@ public sealed class LoadingCatalogIntegrationTests
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [persistedDescriptor.PackageId] = persistedDescriptor.Version },
                 persistedDescriptor.ActivationCorrelationId,
                 CancellationToken.None,
-                new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase) { [persistedDescriptor.PackageId] = persistedDescriptor });
+                new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase) { [persistedDescriptor.PackageId] = persistedDescriptor });
 
             var storeAfterRestart = new StoreRegistry(new StoreStateSerializer(), stateFilePath);
             var logger = new ReconciliationLogger();
@@ -78,7 +78,7 @@ public sealed class LoadingCatalogIntegrationTests
 
         try
         {
-            var descriptor = new ActivePackageDescriptor(
+            var descriptor = new ActivePackage(
                 "pkg-failed",
                 "1.0.0",
                 "feed-a",
@@ -93,7 +93,7 @@ public sealed class LoadingCatalogIntegrationTests
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [descriptor.PackageId] = descriptor.Version },
                 descriptor.ActivationCorrelationId,
                 CancellationToken.None,
-                new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase) { [descriptor.PackageId] = descriptor });
+                new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase) { [descriptor.PackageId] = descriptor });
 
             var logger = new ReconciliationLogger();
             var metrics = new ReconciliationMetrics(new ReconciliationTelemetry());

@@ -14,7 +14,7 @@ namespace Nuplane.Store.State;
 /// <param name="LastFailureById">Dictionary mapping package identifiers to their most recent failure records.</param>
 /// <param name="LastSuccessfulSourceSnapshots">Dictionary mapping source names to their snapshot references.</param>
 /// <param name="UpdatedAt">The time at which the state was last updated.</param>
-/// <param name="ActivePackageDescriptorsById">Dictionary mapping active package identifiers to their persisted descriptors.</param>
+/// <param name="ActivePackageDescriptorsById">Dictionary mapping active package identifiers to their persisted packages. Retains its historic name for state file compatibility.</param>
 /// <param name="ActiveGraphsById">Dictionary mapping graph identifiers to their persisted activation records.</param>
 public sealed record StoreStateRecord(
     Dictionary<string, string> ActiveVersionById,
@@ -22,7 +22,7 @@ public sealed record StoreStateRecord(
     Dictionary<string, FailureRecord> LastFailureById,
     Dictionary<string, SourceSnapshotRef> LastSuccessfulSourceSnapshots,
     DateTimeOffset UpdatedAt,
-    Dictionary<string, ActivePackageDescriptor>? ActivePackageDescriptorsById = null,
+    Dictionary<string, ActivePackage>? ActivePackageDescriptorsById = null,
     Dictionary<string, GraphActivationRecord>? ActiveGraphsById = null)
 {
     /// <summary>Gets or initializes the optional validated package-protection metadata.</summary>
@@ -69,7 +69,7 @@ public sealed record StoreStateRecord(
     /// <summary>
     /// Gets the persisted active package descriptors, normalizing older state files to an empty dictionary.
     /// </summary>
-    public Dictionary<string, ActivePackageDescriptor> ActivePackageDescriptorsByIdNormalized =>
+    public Dictionary<string, ActivePackage> ActivePackageDescriptorsByIdNormalized =>
         ActivePackageDescriptorsById ?? new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -119,13 +119,13 @@ public sealed record StoreStateRecord(
     /// Returns the descriptors with each archive hash set to the value recorded for its package version, so a
     /// persisted descriptor never carries a hash that differs from the record.
     /// </summary>
-    internal static Dictionary<string, ActivePackageDescriptor> WithRecordedArchiveHashes(
-        IReadOnlyDictionary<string, ActivePackageDescriptor> descriptors,
+    internal static Dictionary<string, ActivePackage> WithRecordedArchiveHashes(
+        IReadOnlyDictionary<string, ActivePackage> descriptors,
         IReadOnlyDictionary<string, string>? recorded)
     {
         ArgumentNullException.ThrowIfNull(descriptors);
         var index = IndexArchiveHashes(recorded);
-        var result = new Dictionary<string, ActivePackageDescriptor>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, ActivePackage>(StringComparer.OrdinalIgnoreCase);
         foreach (var (packageId, descriptor) in descriptors)
         {
             result[packageId] = index.TryGetValue(ArchiveHashKey(descriptor.PackageId, descriptor.Version), out var hash) &&
@@ -138,7 +138,7 @@ public sealed record StoreStateRecord(
     }
 
     /// <summary>Records the archive hash of every active descriptor that has no record yet; recorded values are kept.</summary>
-    internal Dictionary<string, string>? NextArchiveHashes(IEnumerable<ActivePackageDescriptor> activeDescriptors)
+    internal Dictionary<string, string>? NextArchiveHashes(IEnumerable<ActivePackage> activeDescriptors)
     {
         ArgumentNullException.ThrowIfNull(activeDescriptors);
         var next = CopyArchiveHashes() ?? new Dictionary<string, string>(StringComparer.Ordinal);

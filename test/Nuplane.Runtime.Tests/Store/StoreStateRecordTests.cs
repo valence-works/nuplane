@@ -64,12 +64,12 @@ public sealed class StoreStateRecordTests
         var descriptor = Descriptor("Acme.Addon", "1.0.0+build.7", Other);
 
         var descriptors = StoreStateRecord.WithRecordedArchiveHashes(
-            new Dictionary<string, ActivePackageDescriptor> { ["Acme.Addon"] = descriptor }, recorded);
+            new Dictionary<string, ActivePackage> { ["Acme.Addon"] = descriptor }, recorded);
 
         Assert.Equal(descriptor with { ArchiveHash = Recorded }, descriptors["Acme.Addon"]);
     }
 
-    private static ActivePackageDescriptor Descriptor(string packageId, string version, string hash) =>
+    private static ActivePackage Descriptor(string packageId, string version, string hash) =>
         new(packageId, version, "feed", "source", $"/packages/feed/{packageId}/{version}", DateTimeOffset.UnixEpoch, "correlation")
         {
             ArchiveHash = hash

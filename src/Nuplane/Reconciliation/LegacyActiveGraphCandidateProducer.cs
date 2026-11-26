@@ -338,7 +338,7 @@ internal static class LegacyActiveGraphCandidateProducer
     private static ResolvedPackage ResolveRoot(
         PackageRequest request,
         IReadOnlyDictionary<string, ResolvedPackage> packages,
-        IReadOnlyDictionary<string, ActivePackageDescriptor> descriptors,
+        IReadOnlyDictionary<string, ActivePackage> descriptors,
         CancellationToken cancellationToken,
         PhysicalRootIdentity root)
     {
@@ -354,7 +354,7 @@ internal static class LegacyActiveGraphCandidateProducer
     private static ResolvedPackage ResolveDependency(
         PackageRequest request,
         IReadOnlyDictionary<string, ResolvedPackage> packages,
-        IReadOnlyDictionary<string, ActivePackageDescriptor> descriptors,
+        IReadOnlyDictionary<string, ActivePackage> descriptors,
         CancellationToken cancellationToken,
         PhysicalRootIdentity root)
     {
@@ -370,7 +370,7 @@ internal static class LegacyActiveGraphCandidateProducer
     private static void ValidateReconstructedGraph(
         ResolvedPackageGraph graph,
         LegacyGraphShape shape,
-        IReadOnlyDictionary<string, ActivePackageDescriptor> descriptors,
+        IReadOnlyDictionary<string, ActivePackage> descriptors,
         PhysicalRootIdentity root)
     {
         var nodes = graph.Nodes.ToDictionary(static node => node.PackageId, StringComparer.OrdinalIgnoreCase);
@@ -414,7 +414,7 @@ internal static class LegacyActiveGraphCandidateProducer
         }
     }
 
-    private static string GetExactInstallSuffix(ActivePackageDescriptor descriptor)
+    private static string GetExactInstallSuffix(ActivePackage descriptor)
     {
         if (!Path.IsPathFullyQualified(descriptor.InstallPath))
             throw Refused("A legacy install path must be fully qualified.");
@@ -431,7 +431,7 @@ internal static class LegacyActiveGraphCandidateProducer
         return string.Join('/', suffix);
     }
 
-    private static ResolvedPackage ToResolvedPackage(ActivePackageDescriptor descriptor, DateTimeOffset installedAt) =>
+    private static ResolvedPackage ToResolvedPackage(ActivePackage descriptor, DateTimeOffset installedAt) =>
         new(descriptor.PackageId, descriptor.Version, descriptor.FeedName!, descriptor.InstallPath,
             installedAt, descriptor.SourceName ?? string.Empty);
 
@@ -508,7 +508,7 @@ internal static class LegacyActiveGraphCandidateProducer
 
         internal BoundInstall(
             string exactPath,
-            ActivePackageDescriptor descriptor,
+            ActivePackage descriptor,
             string rootRelativePath,
             ResolvedPackageStorePath resolved,
             PackageInstallIdentityReader.PackageInstallIdentityObservation observation,
@@ -523,7 +523,7 @@ internal static class LegacyActiveGraphCandidateProducer
         }
 
         internal string ExactPath { get; }
-        internal ActivePackageDescriptor Descriptor { get; }
+        internal ActivePackage Descriptor { get; }
         internal string RootRelativePath { get; }
         internal PackageInstallIdentityReader.PackageInstallIdentityObservation Observation { get; }
         internal PhysicalStoreDirectoryHandle InstallDirectory => Observation.InstallDirectory;

@@ -200,7 +200,7 @@ public sealed partial class StoreRegistry
             new Dictionary<string, FailureRecord>(state.LastFailureById, StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, SourceSnapshotRef>(state.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
             state.UpdatedAt,
-            new Dictionary<string, ActivePackageDescriptor>(state.ActivePackageDescriptorsByIdNormalized,
+            new Dictionary<string, ActivePackage>(state.ActivePackageDescriptorsByIdNormalized,
                 StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, GraphActivationRecord>(state.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase))
         {

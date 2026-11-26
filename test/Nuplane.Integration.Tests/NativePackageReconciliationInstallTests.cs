@@ -135,7 +135,7 @@ public sealed partial class OverlappingPackageGraphProtectionTests
                 Assert.Equal(expectedHash, descriptor.ArchiveHash);
                 Assert.Equal(expectedHash, state.ArchiveHashesByPackage![StoreStateRecord.ArchiveHashKey("Root.Second", "3.0.0")]);
                 var archive = await provider.GetRequiredService<IPackageArchiveReader>()
-                    .OpenAsync(descriptor.ToActivePackage());
+                    .OpenAsync(descriptor);
                 Assert.NotNull(archive.GetEntry("lib/net10.0/Root.Second.dll"));
 
                 var activeRecord = Assert.Single(state.ActiveGraphsByIdNormalized.Values);
