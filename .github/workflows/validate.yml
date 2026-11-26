@@ -1606,7 +1606,7 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - name: Restore isolated documentation fixture
         run: python3 build/check-docs.py restore "$RUNNER_TEMP/nuplane-docs"
