@@ -13,21 +13,31 @@ internal sealed partial class PackageLoader
 
     internal async Task<OrdinaryLoadBatch> StageOrdinaryGraphsAsync(
         IReadOnlyList<IReadOnlyList<ResolvedPackage>> graphs,
+        IReadOnlyDictionary<string, string> prospectiveActiveVersions,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(graphs);
+        ArgumentNullException.ThrowIfNull(prospectiveActiveVersions);
         ArgumentNullException.ThrowIfNull(sharedPolicy);
         RefuseUnscopedRead();
 
         var packages = graphs.Select(static graph => graph.ToArray()).ToArray();
         var policy = sharedPolicy.ToArray();
+        var targetKeys = GetActiveKeys(prospectiveActiveVersions);
         var batch = BeginActivationBatch();
         try
         {
+            var plans = new List<StagedGraphPlan>();
             foreach (var graph in packages)
-                await StageGraphAsync(batch, graph, CreatePackageProjections(graph), policy, null, cancellationToken)
+            {
+                var plan = await PlanGraphAsync(batch, graph, CreatePackageProjections(graph), policy, null, cancellationToken)
                     .ConfigureAwait(false);
+                if (plan is not null)
+                    plans.Add(plan);
+            }
+
+            StagePlannedGraphs(batch, plans, targetKeys, policy, cancellationToken);
             return batch;
         }
         catch
@@ -39,10 +49,12 @@ internal sealed partial class PackageLoader
 
     internal async Task<OrdinaryLoadBatch> StageLeasedGraphsAsync(
         IReadOnlyList<ScopedResolvedPackageGraph> graphs,
+        IReadOnlyDictionary<string, string> prospectiveActiveVersions,
         IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(graphs);
+        ArgumentNullException.ThrowIfNull(prospectiveActiveVersions);
         ArgumentNullException.ThrowIfNull(sharedPolicy);
 
         var work = graphs.Select(graph => graph is null
@@ -50,6 +62,7 @@ internal sealed partial class PackageLoader
             : new LeasedGraphWorkItem(graph.Packages, graph.LeaseOwner,
                 () => ScopedResolvedPackageGraphValidator.Validate(graph))).ToArray();
         var policy = sharedPolicy.ToArray();
+        var targetKeys = GetActiveKeys(prospectiveActiveVersions);
         var readPins = new List<IDisposable>();
         var batch = BeginActivationBatch();
         try
@@ -64,12 +77,17 @@ internal sealed partial class PackageLoader
                 }
 
                 PrepareLeasedGraphReads(work, readPins);
+                var plans = new List<StagedGraphPlan>();
                 foreach (var graph in work)
                 {
                     var selected = graph!;
-                    await StageGraphAsync(batch, selected.Packages, selected.PackageProjections!, policy,
+                    var plan = await PlanGraphAsync(batch, selected.Packages, selected.PackageProjections!, policy,
                         selected.LeaseOwner, cancellationToken).ConfigureAwait(false);
+                    if (plan is not null)
+                        plans.Add(plan);
                 }
+
+                StagePlannedGraphs(batch, plans, targetKeys, policy, cancellationToken);
             }
             finally
             {
@@ -104,7 +122,10 @@ internal sealed partial class PackageLoader
         _activationProjectionVersion++;
     }
 
-    private async Task StageGraphAsync(
+    private static HashSet<string> GetActiveKeys(IReadOnlyDictionary<string, string> versions) =>
+        versions.Select(static version => BuildKey(version.Key, version.Value)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private async Task<StagedGraphPlan?> PlanGraphAsync(
         OrdinaryLoadBatch batch,
         IReadOnlyList<ResolvedPackage> packages,
         IReadOnlyDictionary<string, PackageProjection> projections,
@@ -114,7 +135,7 @@ internal sealed partial class PackageLoader
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (packages.Count == 0)
-            return;
+            return null;
 
         var graphKey = BuildGraphKey(packages);
         var lease = leaseOwner?.Lease;
@@ -134,7 +155,7 @@ internal sealed partial class PackageLoader
                     batch.Loaded.Add(_sessions[BuildKey(packages[0].Id, packages[0].Version)]);
                 else if (TryGetLoadedGraphSessions(graphKey, mode, projections.Values, out var sessions))
                     batch.Loaded.AddRange(sessions);
-                return;
+                return null;
             }
         }
 
@@ -143,7 +164,7 @@ internal sealed partial class PackageLoader
         if (block is not null)
         {
             batch.RecordFailure(packages, block);
-            return;
+            return null;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -159,20 +180,66 @@ internal sealed partial class PackageLoader
                     $"No loadable assembly found in graph '{graphKey}'. Scanned install paths: {FormatQuotedList(resolved.SkippedInstallPaths)}.");
             }
 
-            var inert = resolved.InertPackages.Select(package => projections[BuildKey(package.Id, package.Version)])
-                .ToArray();
-            if (resolved.LoadablePackages.Count == 0)
+            var candidates = mode == PackageLoadMode.HostIntegrated
+                ? BuildHostIntegratedResolutionCandidates(graphKey, resolved.LoadablePackages, sharedPolicy)
+                : [];
+            return new(packages, projections, graphKey, mode, usesPerPackageContext,
+                resolved, decision, candidates, leaseOwner);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            batch.RecordFailure(packages, exception.Message);
+            return null;
+        }
+    }
+
+    private void StagePlannedGraphs(
+        OrdinaryLoadBatch batch,
+        IReadOnlyList<StagedGraphPlan> plans,
+        IReadOnlySet<string> targetKeys,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        CancellationToken cancellationToken)
+    {
+        // Exclude retiring entries and projected replacements before constructing any
+        // non-collectible context. A later fallback can change the retained projection,
+        // so the final materialized catalog is checked again before persistence.
+        var selected = plans.Where(plan => plan.Projections.Keys.All(targetKeys.Contains)).ToArray();
+        var replaced = selected.SelectMany(static plan => plan.Projections.Keys).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var retained = targetKeys.Where(key => !replaced.Contains(key)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var candidates = selected.SelectMany(static plan => plan.Candidates).ToArray();
+        var conflicts = _hostIntegratedResolutionCatalog.FindProspectiveCandidateConflicts(retained, candidates);
+
+        foreach (var plan in selected)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var error = GetGraphConflict(plan.Projections.Keys, conflicts);
+            if (error is not null)
             {
-                batch.Graphs.Add(new(graphKey, projections.Values.ToArray(), inert, null, [], null, []));
-                return;
+                batch.RecordFailure(plan.Packages, error);
+                continue;
             }
 
-            if (mode == PackageLoadMode.HostIntegrated)
-            {
-                var candidates = BuildHostIntegratedResolutionCandidates(graphKey, resolved.LoadablePackages, sharedPolicy);
-                HostIntegratedAssemblyResolutionCatalog.ValidateGraphCandidates(candidates);
-            }
+            StagePlannedGraph(batch, plan, sharedPolicy);
+        }
+    }
 
+    private void StagePlannedGraph(
+        OrdinaryLoadBatch batch,
+        StagedGraphPlan plan,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy)
+    {
+        var (packages, projections, graphKey, mode, usesPerPackageContext, resolved, decision, _, leaseOwner) = plan;
+        var inert = resolved.InertPackages.Select(package => projections[BuildKey(package.Id, package.Version)]).ToArray();
+        if (resolved.LoadablePackages.Count == 0)
+        {
+            batch.Graphs.Add(new(graphKey, projections.Values.ToArray(), inert, null, [], null, []));
+            return;
+        }
+
+        var lease = leaseOwner?.Lease;
+        using var readCheckpoint = lease is null ? null : PackageAssemblyReadCheckpoint.EnterGraph(lease.Snapshot);
+        try
+        {
             var contextKey = usesPerPackageContext ? BuildKey(packages[0].Id, packages[0].Version) : graphKey;
             var context = CreateGraphLoadContext(contextKey, mode, resolved.LoadablePackages,
                 packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, leaseOwner);
@@ -201,6 +268,23 @@ internal sealed partial class PackageLoader
             batch.RecordFailure(packages, exception.Message);
         }
     }
+
+    private static string? GetGraphConflict(IEnumerable<string> packageKeys, IReadOnlyDictionary<string, string> conflicts)
+    {
+        var errors = packageKeys.Where(conflicts.ContainsKey).Select(key => conflicts[key]).Distinct(StringComparer.Ordinal).ToArray();
+        return errors.Length == 0 ? null : string.Join(" ", errors);
+    }
+
+    private sealed record StagedGraphPlan(
+        IReadOnlyList<ResolvedPackage> Packages,
+        IReadOnlyDictionary<string, PackageProjection> Projections,
+        string GraphKey,
+        PackageLoadMode Mode,
+        bool UsesPerPackageContext,
+        GraphPackageResolution Assets,
+        PackageGraphLoadModeDecision Decision,
+        IReadOnlyList<HostIntegratedAssemblyResolutionCandidate> Candidates,
+        PackageGraphUseLeaseOwner? LeaseOwner);
 
     internal sealed class OrdinaryLoadBatch : IDisposable
     {
@@ -277,12 +361,11 @@ internal sealed partial class PackageLoader
                 {
                     foreach (var graph in acceptedGraphs)
                     {
-                        var errors = graph.Packages.Where(package => conflicts.ContainsKey(package.PackageKey))
-                            .Select(package => conflicts[package.PackageKey]).Distinct(StringComparer.Ordinal).ToArray();
-                        if (errors.Length == 0)
+                        var packageKeys = graph.Packages.Select(static package => package.PackageKey);
+                        var message = GetGraphConflict(packageKeys, conflicts);
+                        if (message is null)
                             continue;
 
-                        var message = string.Join(" ", errors);
                         foreach (var package in graph.Packages)
                         {
                             var packageId = active[package.PackageKey].PackageId;

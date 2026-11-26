@@ -92,44 +92,65 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
         return additions;
     }
 
-    internal static void ValidateGraphCandidates(IReadOnlyList<HostIntegratedAssemblyResolutionCandidate> candidates) =>
-        ValidateNoConflicts(candidates.Select(ToConflictCandidate));
+    internal IReadOnlyDictionary<string, string> FindProspectiveCandidateConflicts(
+        IReadOnlySet<string> retainedKeys,
+        IReadOnlyList<HostIntegratedAssemblyResolutionCandidate> candidates)
+    {
+        lock (_gate)
+        {
+            return FindAdditionConflicts(GetRetainedEntries(retainedKeys).Select(ToConflictCandidate),
+                candidates.Select(ToConflictCandidate));
+        }
+    }
 
     internal ActiveProjection? PrepareActiveProjection(
         IReadOnlySet<string> retainedKeys,
         IReadOnlyList<HostIntegratedAssemblyResolutionEntry> additions,
         out IReadOnlyDictionary<string, string> conflictsByPackageKey)
     {
-        var conflicts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        conflictsByPackageKey = conflicts;
         lock (_gate)
         {
-            var retained = _entries.Where(entry =>
-                retainedKeys.Contains(BuildPackageKey(entry.PackageId, entry.PackageVersion))).ToArray();
+            var retained = GetRetainedEntries(retainedKeys).ToArray();
+            conflictsByPackageKey = FindAdditionConflicts(retained.Select(ToConflictCandidate),
+                additions.Select(ToConflictCandidate));
+            if (conflictsByPackageKey.Count != 0)
+                return null;
             if (retained.Length == _entries.Count && additions.Count == 0)
                 return new(_entries, _generation);
 
             var generation = _generation + 1;
             var proposed = OrderEntries(retained.Concat(additions.Select(entry => entry with { Generation = generation })));
-            var additionKeys = additions.Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            // Existing entries keep their identity if still selected. When two additions conflict,
-            // reject both rather than arbitrating based on graph order.
-            foreach (var conflict in FindConflicts(proposed.Select(ToConflictCandidate)))
-            {
-                var conflictingAdditions = conflict.Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
-                    .Where(additionKeys.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-                var message = FormatConflict(conflict);
-                if (conflictingAdditions.Length == 0)
-                    throw new InvalidOperationException(message);
-
-                foreach (var key in conflictingAdditions)
-                    conflicts[key] = conflicts.TryGetValue(key, out var previous) ? $"{previous} {message}" : message;
-            }
-
-            return conflicts.Count == 0 ? new(proposed, generation) : null;
+            return new(proposed, generation);
         }
+    }
+
+    private IEnumerable<HostIntegratedAssemblyResolutionEntry> GetRetainedEntries(IReadOnlySet<string> retainedKeys) =>
+        _entries.Where(entry => retainedKeys.Contains(BuildPackageKey(entry.PackageId, entry.PackageVersion)));
+
+    private static IReadOnlyDictionary<string, string> FindAdditionConflicts(
+        IEnumerable<ConflictCandidate> retained,
+        IEnumerable<ConflictCandidate> additions)
+    {
+        var newCandidates = additions.ToArray();
+        var additionKeys = newCandidates.Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var conflicts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        // Preserve an active identity that remains selected. Reject both new graphs when their
+        // additions conflict, so graph enumeration order does not decide which graph can load.
+        foreach (var conflict in FindConflicts(retained.Concat(newCandidates)))
+        {
+            var conflictingAdditions = conflict.Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
+                .Where(additionKeys.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            var message = FormatConflict(conflict);
+            if (conflictingAdditions.Length == 0)
+                throw new InvalidOperationException(message);
+
+            foreach (var key in conflictingAdditions)
+                conflicts[key] = conflicts.TryGetValue(key, out var previous) ? $"{previous} {message}" : message;
+        }
+
+        return conflicts;
     }
 
     internal void CommitActiveProjection(ActiveProjection projection)

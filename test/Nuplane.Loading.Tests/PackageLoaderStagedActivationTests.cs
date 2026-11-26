@@ -24,7 +24,7 @@ public sealed class PackageLoaderStagedActivationTests : IDisposable
         var oldContext = ContextOf(loader, dependency);
         var oldSession = loader.Sessions["dependency@3.0.0"];
 
-        using var batch = await loader.StageOrdinaryGraphsAsync([[failedRoot, dependency]], [], CancellationToken.None);
+        using var batch = await loader.StageOrdinaryGraphsAsync([[failedRoot, dependency]], Versions(failedRoot, dependency), [], CancellationToken.None);
         Assert.Equal(["dependency", "plugin"], batch.Result.FailedByPackageId.Keys.Order(StringComparer.Ordinal));
         Assert.Empty(batch.Result.Loaded);
         Assert.Empty(batch.ValidateForCommit([ToActive(firstRoot), ToActive(dependency)], NoRejectedPackages));
@@ -45,7 +45,7 @@ public sealed class PackageLoaderStagedActivationTests : IDisposable
         var replacement = Install(first.Id, "2.0.0", typeof(FixtureMarker).Assembly);
         await loader.EnsureGraphLoadedAsync([[first]], [], CancellationToken.None);
         var oldContext = ContextOf(loader, first);
-        using var batch = await loader.StageOrdinaryGraphsAsync([[replacement]], [], CancellationToken.None);
+        using var batch = await loader.StageOrdinaryGraphsAsync([[replacement]], Versions(replacement), [], CancellationToken.None);
         var stagedContext = Assert.Single(batch.StagedContexts);
         var unloaded = false;
         stagedContext.Unloading += _ => unloaded = true;
@@ -72,7 +72,7 @@ public sealed class PackageLoaderStagedActivationTests : IDisposable
         var originalDependency = ContextOf(loader, dependency);
         Assert.NotSame(originalRoot, originalDependency);
 
-        using var batch = await loader.StageOrdinaryGraphsAsync([[root, dependency]], [], CancellationToken.None);
+        using var batch = await loader.StageOrdinaryGraphsAsync([[root, dependency]], Versions(root, dependency), [], CancellationToken.None);
         Assert.Empty(batch.Result.FailedByPackageId);
         Assert.Equal(2, batch.Result.Loaded.Count);
         Assert.Empty(batch.ValidateForCommit([ToActive(root), ToActive(dependency)],
@@ -95,7 +95,7 @@ public sealed class PackageLoaderStagedActivationTests : IDisposable
         var unloaded = false;
         context.Unloading += _ => unloaded = true;
 
-        using var batch = await loader.StageOrdinaryGraphsAsync([], [], CancellationToken.None);
+        using var batch = await loader.StageOrdinaryGraphsAsync([], Versions(), [], CancellationToken.None);
         Assert.Empty(batch.ValidateForCommit([], NoRejectedPackages));
         batch.Commit();
 
@@ -120,7 +120,7 @@ public sealed class PackageLoaderStagedActivationTests : IDisposable
         var publishedGeneration = catalog.Generation;
         Assert.True(catalog.TryResolve(assemblyName, out var oldAssembly, out _));
 
-        using var batch = await loader.StageOrdinaryGraphsAsync([[replacement]], [], CancellationToken.None);
+        using var batch = await loader.StageOrdinaryGraphsAsync([[replacement]], Versions(replacement), [], CancellationToken.None);
         Assert.Empty(batch.Result.FailedByPackageId);
         Assert.Single(batch.Result.Loaded);
         Assert.Empty(batch.ValidateForCommit([ToActive(replacement)], NoRejectedPackages));
@@ -156,17 +156,15 @@ public sealed class PackageLoaderStagedActivationTests : IDisposable
         var originalContext = ContextOf(loader, previous);
         var initialGeneration = catalog.Generation;
 
-        using var batch = await loader.StageOrdinaryGraphsAsync([[replacement], [collidesWithFallback], [independent]], [],
+        using var batch = await loader.StageOrdinaryGraphsAsync([[replacement], [collidesWithFallback], [independent]], Versions(replacement, retained, collidesWithFallback, independent), [],
             CancellationToken.None);
         var liveFailures = batch.Result.FailedByPackageId;
-        Assert.Empty(liveFailures);
-        var rejected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var firstFailures = batch.ValidateForCommit(
-            [ToActive(replacement), ToActive(retained), ToActive(collidesWithFallback), ToActive(independent)], rejected);
-        var firstFailure = Assert.Single(firstFailures);
+        var firstFailure = Assert.Single(liveFailures);
         Assert.Equal(replacement.Id, firstFailure.Key);
         Assert.Contains(typeof(PackageLoaderStagedActivationTests).Assembly.GetName().Name!, firstFailure.Value);
-        rejected.UnionWith(firstFailures.Keys);
+        Assert.DoesNotContain(batch.StagedContexts, context => context.Name == PackageLoader.BuildGraphKey([replacement]));
+        Assert.Equal(2, batch.StagedContexts.Count);
+        var rejected = liveFailures.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var secondFailures = batch.ValidateForCommit(
             [ToActive(previous), ToActive(retained), ToActive(collidesWithFallback), ToActive(independent)], rejected);
@@ -190,7 +188,7 @@ public sealed class PackageLoaderStagedActivationTests : IDisposable
     }
 
     [Fact]
-    public async Task ValidateForCommit_WhenBothStagedGraphsExposeTheSameAssembly_RejectsBothGraphs()
+    public async Task StageOrdinaryGraphsAsync_WhenBothCandidateGraphsExposeTheSameAssembly_RejectsBeforeCreatingContexts()
     {
         var catalog = new HostIntegratedAssemblyResolutionCatalog();
         var loader = new PackageLoader(
@@ -200,12 +198,12 @@ public sealed class PackageLoaderStagedActivationTests : IDisposable
         var firstDependency = Install("dependency", "1.0.0", typeof(PackageLoaderStagedActivationTests).Assembly);
         var second = Install("plugin-b", "1.0.0", typeof(FixtureMarker).Assembly);
 
-        using var batch = await loader.StageOrdinaryGraphsAsync([[first, firstDependency], [second]], [], CancellationToken.None);
-        var failures = batch.ValidateForCommit(
-            [ToActive(first), ToActive(firstDependency), ToActive(second)], NoRejectedPackages);
+        using var batch = await loader.StageOrdinaryGraphsAsync([[first, firstDependency], [second]], Versions(first, firstDependency, second), [], CancellationToken.None);
+        var failures = batch.Result.FailedByPackageId;
 
         Assert.Equal(["dependency", "plugin-a", "plugin-b"], failures.Keys.Order(StringComparer.Ordinal));
         Assert.All(failures.Values, message => Assert.Contains(typeof(FixtureMarker).Assembly.GetName().Name!, message));
+        Assert.Empty(batch.StagedContexts);
         Assert.Equal(0, catalog.Generation);
         Assert.Empty(loader.Sessions);
     }
@@ -216,6 +214,9 @@ public sealed class PackageLoaderStagedActivationTests : IDisposable
         File.Copy(assembly.Location, Path.Combine(dir.FullName, Path.GetFileName(assembly.Location)));
         return new(packageId, version, "feed", dir.FullName, DateTimeOffset.UtcNow);
     }
+
+    private static IReadOnlyDictionary<string, string> Versions(params ResolvedPackage[] packages) =>
+        packages.ToDictionary(static package => package.Id, static package => package.Version, StringComparer.OrdinalIgnoreCase);
 
     private static ActivePackage ToActive(ResolvedPackage package) =>
         new(package.Id, package.Version, package.FeedName, package.SourceName, package.InstallPath,
