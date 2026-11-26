@@ -18,7 +18,7 @@ namespace Nuplane.Sources.Directory.Registration;
 /// Registers directory-backed source services and optional watcher hosting for Nuplane feeds.
 /// Re-registration of the same feed name replaces the earlier registration deterministically.
 /// </summary>
-public static class DirectorySourceRegistrationServices
+internal static class DirectorySourceRegistrationServices
 {
     /// <summary>
     /// Registers a directory-backed feed and its desired-state source.
@@ -36,13 +36,15 @@ public static class DirectorySourceRegistrationServices
     /// <see cref="NuplaneBuilder"/> pass <see cref="NuplaneBuilder.BasePath"/>, which is
     /// <see langword="null"/> for a normally-composed host and set by a host-free restore.
     /// </param>
-    public static void RegisterFeed(
+    /// <param name="configuredBasePath">Resolves the final builder base for a configured feed.</param>
+    internal static void RegisterFeed(
         IServiceCollection services,
         string feedName,
         NuplaneDirectoryFeedOptions options,
         IEnumerable<string> includePatterns,
         string? credentials,
-        string? basePath = null)
+        string? basePath = null,
+        Func<string?>? configuredBasePath = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentException.ThrowIfNullOrWhiteSpace(feedName);
@@ -56,14 +58,14 @@ public static class DirectorySourceRegistrationServices
         // ── Replace prior registration for the same feed name ─────────────────────
         RemovePriorFeedRegistration(services, feedName);
 
-        var normalizedPath = ResolveDirectoryPath(options.DirectoryPath, basePath);
-        var feedUri = new Uri("file:///" + normalizedPath.Replace('\\', '/').TrimStart('/'));
+        var normalizedPath = ResolveRegistrationPath(options.DirectoryPath, basePath, configuredBasePath);
 
         services.PostConfigure<FeedResolutionOptions>(opts =>
         {
             opts.Feeds.RemoveAll(f => string.Equals(f.Name, feedName, StringComparison.OrdinalIgnoreCase));
             if (ResolvesPackages(options.Role))
             {
+                var feedUri = new Uri("file:///" + normalizedPath.Value.Replace('\\', '/').TrimStart('/'));
                 opts.Feeds.Add(new(feedName, feedUri, credentials) { Trust = options.Trust });
                 opts.SetTrustConfigurationPath(feedName, options.TrustConfigurationPath);
             }
@@ -80,7 +82,7 @@ public static class DirectorySourceRegistrationServices
                 var probe = probeLogger is not null ? new NupkgFileStabilityProbe(probeLogger) : null;
                 return new DirectoryNupkgDesiredSource(
                     feedName,
-                    normalizedPath,
+                    normalizedPath.Value,
                     capturedPatterns,
                     sp.GetService<ILogger<DirectoryNupkgDesiredSource>>(),
                     feedName,
@@ -93,18 +95,14 @@ public static class DirectorySourceRegistrationServices
 
         if (options.Watch)
         {
-            var directorySourceOptions = new DirectorySourceOptions
-            {
-                DirectoryPath = normalizedPath,
-                FeedName = feedName,
-                SourceName = feedName,
-                TriggerReconciliationOnChange = true,
-                DebounceWindow = options.DebounceWindow,
-            };
-
             var hostedDescriptor = ServiceDescriptor.Singleton<IHostedService>(sp =>
                 new DirectorySourceReconciliationTriggerHostedService(
-                    directorySourceOptions,
+                    new DirectorySourceOptions
+                    {
+                        DirectoryPath = normalizedPath.Value,
+                        FeedName = feedName,
+                        DebounceWindow = options.DebounceWindow
+                    },
                     sp.GetRequiredService<IReconciliationTriggerIngress>(),
                     sp.GetRequiredService<ILogger<DirectorySourceReconciliationTriggerHostedService>>(),
                     sp.GetRequiredService<ObservationDegradationTracker>()));
@@ -118,7 +116,7 @@ public static class DirectorySourceRegistrationServices
     /// <summary>
     /// Adds a registration marker for a feed defined outside of the builder API, such as through configuration. This allows the module to track feeds that were registered through other means and ensure their patterns are included in the source trust configuration.
     /// </summary>
-    public static void AddRegistrationMarkerFromModule(
+    internal static void AddRegistrationMarker(
         IServiceCollection services,
         string feedName,
         IEnumerable<string> includePatterns,
@@ -155,6 +153,21 @@ public static class DirectorySourceRegistrationServices
         }
 
         services.Remove(markerDescriptor);
+    }
+
+    private static Lazy<string> ResolveRegistrationPath(
+        string directoryPath,
+        string? basePath,
+        Func<string?>? configuredBasePath)
+    {
+        if (configuredBasePath is null || Path.IsPathRooted(directoryPath))
+        {
+            return new(ResolveDirectoryPath(directoryPath, basePath));
+        }
+
+        // Preserve registration order while allowing the host's callback to set UseBasePath.
+        var defaultBasePath = basePath ?? System.IO.Directory.GetCurrentDirectory();
+        return new(() => ResolveDirectoryPath(directoryPath, configuredBasePath() ?? defaultBasePath));
     }
 
     /// <summary>

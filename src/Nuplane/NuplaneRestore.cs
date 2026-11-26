@@ -47,13 +47,9 @@ namespace Nuplane;
 /// contract, throws a typed package-store admission refusal before source callbacks.
 /// </description></item>
 /// <item><description>
-/// <b>Module feeds come from the caller.</b> Core <c>AddNuplane</c> skips every configured feed that
-/// declares a directory path, because directory feeds belong to <c>Nuplane.Sources.Directory</c>.
-/// <see cref="NuplaneRestoreOptions.ConfigureBuilder"/> is how a caller that references that module
-/// adds them, without the core package depending on it — its second argument is the resolved
-/// Nuplane configuration a module registration helper such as
-/// <c>AddDirectoryFeedsFromConfiguration</c> expects, whether the caller passed the root or the
-/// section to the entry point itself.
+/// <b>Directory feeds use the host configuration.</b> Configured directory feeds are registered
+/// automatically. Relative directory paths resolve against <see cref="NuplaneRestoreOptions.BasePath"/>
+/// when given.
 /// </description></item>
 /// <item><description>
 /// <b>Either configuration shape is accepted.</b> The <c>configuration</c> parameter on

@@ -26,7 +26,7 @@ Nuplane’s architecture centers on a deterministic control loop:
 | `src/Nuplane.Store/` | Deterministic package store | `Core` | Owns transactional storage, activation pointers, and LKG safety |
 | `src/Nuplane.NuGet/` | Feed resolution and acquisition | `Core` | Integrates with NuGet feeds and package acquisition |
 | `src/Nuplane.Abstractions/` | Shared contracts | `Core` | Keeps common interfaces and models lightweight |
-| `src/Nuplane.Sources.Directory/` | Directory-backed desired source | `Core` | Adds local `.nupkg` directory feed behavior |
+| `src/Nuplane/Sources/Directory/` | Directory-backed desired source | `Core` | Adds local `.nupkg` directory feed behavior |
 | `src/Nuplane.Admin/` + `src/Nuplane.Admin.Api/` | Admin and HTTP read surfaces | `Core` | Exposes management and read routes for package and operational state |
 | `src/Nuplane.Loading/` + `src/Nuplane.Loading.Api/` | Optional runtime loading | `Optional Module` | Adds load-state and assembly-loading behavior when the host opts in |
 
@@ -53,7 +53,7 @@ Nuplane’s architecture centers on a deterministic control loop:
 |----------------|-------------------|
 | Host-neutral runtime control plane | `README.md`, `src/Nuplane.Runtime/` |
 | Deterministic store and LKG semantics | `README.md`, `src/Nuplane.Store/` |
-| Feed-backed desired state | `README.md`, `src/Nuplane.NuGet/`, `src/Nuplane.Sources.Directory/` |
+| Feed-backed desired state | `README.md`, `src/Nuplane.NuGet/`, `src/Nuplane/Sources/Directory/` |
 | Query-first package and operational reads | `README.md`, `src/Nuplane.Admin/`, `src/Nuplane.Admin.Api/` |
 | Optional load-state and assembly access | `README.md`, `src/Nuplane.Loading/`, `src/Nuplane.Loading.Api/` |
 | Staged feature evolution | `docs/roadmap.md`, accepted specs under `specs/` |

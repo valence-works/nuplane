@@ -86,25 +86,6 @@ public sealed class ModuleRegistrationCompatibilityTests
     }
 
     [Fact]
-    public void LoadingAndDirectoryModules_RegisteredDirectly_CoexistWithoutConflict()
-    {
-        var services = new ServiceCollection();
-
-        // Register both modules directly
-        LoadingRegistrationServices.Register(services);
-        services.AddNuplaneDirectorySource(o =>
-        {
-            o.FeedName = "test-feed";
-            o.DirectoryPath = Path.GetTempPath();
-            o.TriggerReconciliationOnChange = false;
-        });
-
-        // Both modules' services must be present
-        Assert.Contains(services, d => d.ServiceType == typeof(PackageLoader));
-        Assert.Contains(services, d => d.ServiceType == typeof(IDesiredPackageSource));
-    }
-
-    [Fact]
     public void DirectoryModuleBuilderExtension_RegistersFeedAndDesiredSource()
     {
         var root = Path.Combine(Path.GetTempPath(), "nuplane-integration-builder", Guid.NewGuid().ToString("N"));

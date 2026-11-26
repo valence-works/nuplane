@@ -125,8 +125,7 @@ public sealed class DirectoryObservationContractTests : IAsyncDisposable
         {
             FeedName = feedName,
             DirectoryPath = _tempDir.Path,
-            DebounceWindow = debounceWindow,
-            TriggerReconciliationOnChange = true
+            DebounceWindow = debounceWindow
         };
 
         _service = new DirectorySourceReconciliationTriggerHostedService(

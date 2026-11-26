@@ -4,13 +4,13 @@ using Nuplane.Sources.Directory.Registration;
 namespace Nuplane.Sources.Directory.Builder;
 
 /// <summary>
-/// Module-owned builder extensions for configuring directory-backed Nuplane feeds
+/// Builder extensions for configuring directory-backed Nuplane feeds
 /// from the <see cref="NuplaneBuilder"/> fluent API.
 /// </summary>
 public static class NuplaneBuilderDirectoryExtensions
 {
     /// <summary>
-    /// Registers a directory-backed feed and installs the directory source module.
+    /// Registers a directory-backed feed.
     /// </summary>
     /// <param name="builder">The Nuplane builder to extend.</param>
     /// <param name="name">The unique name of the feed.</param>
@@ -19,15 +19,21 @@ public static class NuplaneBuilderDirectoryExtensions
     /// <returns>The same <see cref="NuplaneBuilder"/> for chaining.</returns>
     /// <remarks>
     /// A relative <paramref name="path"/> resolves against <see cref="NuplaneBuilder.BasePath"/> when
-    /// the builder has one, and against the current directory otherwise — the same resolution
-    /// <c>AddDirectoryFeedsFromConfiguration</c> gets by calling this method, so a host-free restore's
-    /// <c>BasePath</c> applies without either caller doing anything extra for it.
+    /// the builder has one, and against the current directory otherwise.
     /// </remarks>
     public static NuplaneBuilder AddDirectoryFeed(
         this NuplaneBuilder builder,
         string name,
         string path,
-        Action<NuplaneDirectoryFeedConfiguration>? configure = null)
+        Action<NuplaneDirectoryFeedConfiguration>? configure = null) =>
+        AddDirectoryFeed(builder, name, path, configure, configuredBasePath: null);
+
+    internal static NuplaneBuilder AddDirectoryFeed(
+        this NuplaneBuilder builder,
+        string name,
+        string path,
+        Action<NuplaneDirectoryFeedConfiguration>? configure,
+        Func<string?>? configuredBasePath)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -52,9 +58,10 @@ public static class NuplaneBuilderDirectoryExtensions
             dirOptions,
             config.IncludePatterns,
             config.Credentials,
-            builder.BasePath);
+            builder.BasePath,
+            configuredBasePath);
 
-        DirectorySourceRegistrationServices.AddRegistrationMarkerFromModule(
+        DirectorySourceRegistrationServices.AddRegistrationMarker(
             builder.Services,
             name,
             config.IncludePatterns,

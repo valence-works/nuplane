@@ -8,6 +8,10 @@ Define the supported public registration surfaces for optional Nuplane modules a
 - Module registration APIs must not hide or duplicate core runtime composition.
 
 ## Directory-source module contract
+> Superseded by [#117](https://github.com/valence-works/nuplane/issues/117) and
+> [#125](https://github.com/valence-works/nuplane/issues/125). Core `AddNuplane` registers configured
+> directory feeds. Code-first registration uses `AddDirectoryFeed`. The contracts below are historical.
+
 - Owning implementation project: `src/Nuplane.Sources.Directory`
 - Required direct surface: `services.AddNuplaneDirectorySource(Action<DirectorySourceOptions> configure)`
 - Builder integration project: `src/Nuplane.Sources.Directory.Hosting`
@@ -49,4 +53,4 @@ The original contract follows for reference.
 - Core compatibility wrappers may exist only while the replacement module-owned surface is being introduced.
 - By feature completion, superseded core wrappers for module-specific registration must be removed.
 - Documentation must identify the replacement module-owned surface before wrapper removal.
-- **Status**: Complete. `NuplaneFeedBuilder.FromDirectory(...)` removed from core. Core `Nuplane` no longer references `Nuplane.Sources.Directory`. See `docs/coding-conventions.md` for migration guidance.
+- **Historical status**: `NuplaneFeedBuilder.FromDirectory(...)` was removed. Directory feed registration later moved into core, as described above.

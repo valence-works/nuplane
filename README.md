@@ -251,14 +251,12 @@ Use the `Nuplane` configuration section for infrastructure, then keep host-owned
 ```csharp
 using Nuplane;
 using Nuplane.Loading;
-using Nuplane.Sources.Directory.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 var nuplaneConfiguration = builder.Configuration.GetSection("Nuplane");
 
 builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
 {
-    nuplane.AddDirectoryFeedsFromConfiguration(nuplaneConfiguration);
     nuplane.AutoloadPackages(nuplaneConfiguration.GetSection("Loading"));
     nuplane.OnPackagesChanged<PackageChangeObserver>();
     nuplane.OnPackagesLoaded<PluginDiscoveryObserver>();
@@ -388,6 +386,11 @@ Older `Setup` keys fail startup validation. Migrate them as follows.
 | `Setup:PollInterval` | `Reconciliation:PollInterval` |
 | `Setup:StateFilePath` | `StoreRegistry:StateFilePath` |
 | `Setup:UseInMemoryStore` | `StoreRegistry:UseInMemoryStore` |
+
+Directory-backed feeds are part of the core `Nuplane` package. Remove the old
+`Nuplane.Sources.Directory` package reference and the separate directory configuration call when
+upgrading. Use `Nuplane:Setup:Feeds` for configuration or `AddDirectoryFeed(...)` from
+`Nuplane.Sources.Directory.Builder` for code-first registration.
 
 For unrestricted feeds, prefer one of these explicit forms:
 
@@ -856,7 +859,6 @@ Nuplane is modular:
 
 * `Nuplane` — control plane: reconciliation loop, deterministic package store, NuGet feed integration, and DI/Generic Host registration
 * `Nuplane.Abstractions` — contracts and data models shared across packages
-* `Nuplane.Sources.Directory` — directory-backed feed with local `.nupkg` discovery and change monitoring
 * `Nuplane.Loading` (optional) — assembly loading with collectible load contexts, with contracts in `Nuplane.Loading.Abstractions`
 * `Nuplane.Admin` (optional) — snapshots and manual reconciliation triggers
 * `Nuplane.Admin.Api` / `Nuplane.Loading.Api` (optional) — ASP.NET Core endpoints for the admin and loading catalog surfaces

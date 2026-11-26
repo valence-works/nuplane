@@ -6,7 +6,7 @@ namespace Nuplane.Sources.Directory.Builder;
 /// <summary>
 /// Configuration options for a directory-backed local feed when using the builder API.
 /// </summary>
-public sealed class NuplaneDirectoryFeedOptions
+internal sealed class NuplaneDirectoryFeedOptions
 {
     internal string DirectoryPath { get; set; } = string.Empty;
     internal FeedTrustLevel Trust { get; set; }

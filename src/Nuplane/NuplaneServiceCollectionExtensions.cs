@@ -16,7 +16,7 @@ public static class NuplaneServiceCollectionExtensions
     /// <summary>
     /// Registers Nuplane from a configuration root or the <c>Setup</c> subsection itself.
     /// Runtime options are bound from their own sections. Feed declarations are translated from
-    /// <c>Setup:Feeds</c>.
+    /// <c>Setup:Feeds</c>, including directory-backed feeds.
     /// </summary>
     public static IServiceCollection AddNuplane(
         this IServiceCollection services,
@@ -30,6 +30,13 @@ public static class NuplaneServiceCollectionExtensions
     public static IServiceCollection AddNuplane(
         this IServiceCollection services,
         IConfiguration configuration,
+        Action<NuplaneBuilder>? configure) =>
+        services.AddNuplane(configuration, basePath: null, configure);
+
+    internal static IServiceCollection AddNuplane(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        string? basePath,
         Action<NuplaneBuilder>? configure)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -37,9 +44,12 @@ public static class NuplaneServiceCollectionExtensions
 
         return services.AddNuplane(builder =>
         {
+            builder.BasePath = basePath;
+            var configuredDirectoryBasePath = basePath;
             var setupSection = NuplaneOptionsRegistrationServices.BindConfiguredOptions(builder.Services, configuration);
-            NuplaneFeedSetupConfiguration.ApplyConfiguredFeeds(builder, setupSection);
+            NuplaneFeedSetupConfiguration.ApplyConfiguredFeeds(builder, setupSection, () => configuredDirectoryBasePath);
             configure?.Invoke(builder);
+            configuredDirectoryBasePath = builder.BasePath;
         });
     }
 

@@ -9,7 +9,6 @@ using Nuplane.Sources.Configuration;
 using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Sources;
 using Nuplane.Sources.Directory.Builder;
-using Nuplane.Sources.Directory.Configuration;
 
 namespace Nuplane.Runtime.Tests.Configuration;
 
@@ -79,7 +78,7 @@ public sealed class DirectoryBuilderIntegrationTests
     }
 
     [Fact]
-    public void AddDirectoryFeedsFromConfiguration_WithoutRole_RegistersDesiredPackageSource()
+    public void AddNuplane_WithoutRole_RegistersDesiredPackageSource()
     {
         var root = CreateTempDir("config-default-role");
 
@@ -96,10 +95,7 @@ public sealed class DirectoryBuilderIntegrationTests
 
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
-            {
-                nuplane.AddDirectoryFeedsFromConfiguration(configuration.GetSection("Nuplane"));
-            });
+            services.AddNuplane(configuration.GetSection("Nuplane"));
 
             Assert.Contains(services, d => d.ServiceType == typeof(IDesiredPackageSource));
         }

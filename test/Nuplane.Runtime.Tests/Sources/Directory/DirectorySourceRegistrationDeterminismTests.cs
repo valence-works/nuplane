@@ -109,29 +109,6 @@ public sealed class DirectorySourceRegistrationDeterminismTests
             descriptor.ServiceType == typeof(IDesiredPackageSource));
     }
 
-    [Fact]
-    public void AddNuplaneDirectorySource_CalledTwice_SameConfig_DoesNotDuplicateSource()
-    {
-        var services = new ServiceCollection();
-
-        services.AddNuplaneDirectorySource(o =>
-        {
-            o.FeedName = "test-feed";
-            o.DirectoryPath = TestPath;
-        });
-
-        services.AddNuplaneDirectorySource(o =>
-        {
-            o.FeedName = "test-feed";
-            o.DirectoryPath = TestPath;
-        });
-
-        var sourceCount = services.Count(d =>
-            d.ServiceType == typeof(IDesiredPackageSource));
-
-        Assert.Equal(1, sourceCount);
-    }
-
     private static NuplaneDirectoryFeedOptions CreateOptions(
         bool watch = false,
         DirectoryFeedRole role = DirectoryFeedRole.DesiredAndCache) =>

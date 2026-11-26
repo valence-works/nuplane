@@ -9,7 +9,7 @@ namespace Nuplane.Sources.Directory.Hosting;
 /// <summary>
 /// A hosted service that monitors a directory source and queues reconciliation triggers when it changes.
 /// </summary>
-public sealed class DirectorySourceReconciliationTriggerHostedService(
+internal sealed class DirectorySourceReconciliationTriggerHostedService(
     DirectorySourceOptions options,
     IReconciliationTriggerIngress triggerSink,
     ILogger<DirectorySourceReconciliationTriggerHostedService> logger,

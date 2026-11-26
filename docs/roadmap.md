@@ -61,7 +61,7 @@ Normalizes optional-module ownership across Nuplane so that directory-source and
 - Duplicate registration follows last-registration-wins semantics with deterministic service-graph deduplication.
 - Superseded core wrappers for module-specific registration are removed once module-owned replacements are in place.
 
-> **Migration note**: Consumers previously using `NuplaneFeedBuilder.FromDirectory(...)` from core should switch to the module-owned builder extensions in `Nuplane.Sources.Directory.Hosting`. Consumers using `AddNuplaneDirectorySource(...)` or `AutoloadPackages(...)` are unaffected.
+> **Current directory-feed migration:** Core `AddNuplane` registers directory entries in `Setup:Feeds` directly. Code-first hosts use `AddDirectoryFeed(...)` from `Nuplane.Sources.Directory.Builder`. See [#117](https://github.com/valence-works/nuplane/issues/117).
 
 ## Queryable Package Catalog (014)
 

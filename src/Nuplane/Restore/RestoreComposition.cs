@@ -76,28 +76,12 @@ internal sealed class RestoreComposition : IAsyncDisposable
             services.AddSingleton<ILoggerFactory>(new NonDisposingLoggerFactory(options.LoggerFactory));
         }
 
-        // Loading is deliberately not registered: PackageAutoLoadingObserver is only ever added by
-        // Nuplane.Loading's AutoloadPackages, so a composition that never calls it loads nothing.
-        // The callback is handed the already-resolved Nuplane configuration, not the value the
-        // caller passed in, so a closure that captured the caller's unresolved root — the trap
-        // NuplaneRestoreOptions.ConfigureBuilder's docs warn about — is never the reason a module
-        // registration helper finds nothing.
-        //
-        // NuplaneBuilder.BasePath is set before the callback runs, not after, so a module
-        // registration helper the callback calls — AddDirectoryFeedsFromConfiguration is the current
-        // one — resolves its own relative configured paths against the host's BasePath without the
-        // callback having to forward it itself. Setting it first rather than last also means a
-        // callback that calls NuplaneBuilder.UseBasePath itself overrides this restore's base
-        // instead of being silently overridden by it.
-        services.AddNuplane(nuplaneConfiguration, builder =>
-        {
-            builder.BasePath = paths.BasePath;
-            options.ConfigureBuilder?.Invoke(builder, nuplaneConfiguration);
-        });
+        // Compose the same configured feeds as the host, with relative directory paths
+        // anchored to the restore's base. Provide the resolved section to custom registrations.
+        services.AddNuplane(nuplaneConfiguration, paths.BasePath,
+            builder => options.ConfigureBuilder?.Invoke(builder, nuplaneConfiguration));
 
-        // These post-configure callbacks are registered after AddNuplane, and therefore run after
-        // every Configure and PostConfigure the configuration and the builder callback registered —
-        // including the directory module's, which adds its feeds through PostConfigure.
+        // Resolve final store and lock paths after configuration and builder overrides.
         services.PostConfigure<StoreRegistryOptions>(storeOptions =>
         {
             if (storeOptions.UseInMemoryStore)

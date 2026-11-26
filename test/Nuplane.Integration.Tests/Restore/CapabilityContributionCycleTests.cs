@@ -5,7 +5,6 @@ using Nuplane.Abstractions;
 using Nuplane.Builder;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Models;
-using Nuplane.Sources.Directory.Configuration;
 using Nuplane.Store.State;
 
 namespace Nuplane.Integration.Tests.Restore;
@@ -356,11 +355,7 @@ public sealed class CapabilityContributionCycleTests : IDisposable
                 options.RequirePinnedVersions = pinnedOnly;
                 if (configureBuilder is not null)
                 {
-                    options.ConfigureBuilder = (builder, configuration) =>
-                    {
-                        builder.AddDirectoryFeedsFromConfiguration(configuration);
-                        configureBuilder(builder);
-                    };
+                    options.ConfigureBuilder = (builder, _) => configureBuilder(builder);
                 }
             }));
 
@@ -390,8 +385,7 @@ public sealed class CapabilityContributionCycleTests : IDisposable
         {
             InstallRoot = _installRoot,
             StateFilePath = _stateFilePath,
-            LockFilePath = _lockFilePath,
-            ConfigureBuilder = static (builder, configuration) => builder.AddDirectoryFeedsFromConfiguration(configuration)
+            LockFilePath = _lockFilePath
         };
 
         configure?.Invoke(options);

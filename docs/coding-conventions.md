@@ -201,7 +201,6 @@ test/
   Nuplane.Runtime.Tests/            — Unit tests for the core Nuplane package
   Nuplane.Store.Tests/              — Unit tests for Store
   Nuplane.NuGet.Tests/              — Unit tests for NuGet feed integration
-  Nuplane.Sources.Directory.Tests/  — Unit tests for the directory source
   Nuplane.Loading.Tests/            — Unit tests for Loading (fixtures in Nuplane.Loading.Tests.Fixtures.*)
   Nuplane.Integration.Tests/        — Integration / contract tests
 ```
@@ -355,9 +354,6 @@ private static partial void CycleStarted(ILogger logger, string correlationId, i
 Nuplane (consumer package)
   └── Nuplane.Abstractions
 
-Nuplane.Sources.Directory
-  └── Nuplane
-
 Nuplane.Loading (optional)
   ├── Nuplane
   └── Nuplane.Loading.Abstractions
@@ -408,7 +404,7 @@ Each optional or source-specific capability (e.g., directory-source, loading) is
 
 | Concern | Owner |
 |---------|-------|
-| Options classes | Module implementation package (`Nuplane.Loading`, `Nuplane.Sources.Directory`) |
+| Options classes | Module implementation package (`Nuplane.Loading`) |
 | Registration services | Module implementation package |
 | Hosted services | Module implementation package (`Hosting/`) |
 | Direct `IServiceCollection` extensions | Module implementation package |
@@ -420,31 +416,14 @@ Each optional or source-specific capability (e.g., directory-source, loading) is
 - Every module MUST expose at least one `IServiceCollection.Add{Module}(...)` extension method for direct registration.
 - Module-specific `NuplaneBuilder` extensions (fluent builder APIs) live in the module package's `Builder/` folder.
 - Duplicate registration follows **last-registration-wins** semantics using `TryAdd` / replace patterns.
-- Core `Nuplane` retains only generic runtime composition, feed abstractions, and URI-based feed registration.
+- Core `Nuplane` owns runtime composition and both remote and directory-backed feed registration.
 
 ### Builder Integration Pattern
 
-Module builder extensions delegate to module-owned registration services:
-
-```csharp
-// Nuplane.Sources.Directory.Builder
-public static NuplaneBuilder AddDirectoryFeed(
-    this NuplaneBuilder builder, string name, string path,
-    Action<NuplaneDirectoryFeedConfiguration>? configure = null)
-{
-    // Delegates to DirectorySourceRegistrationServices.RegisterFeed(...)
-}
-```
-
-For configuration-driven directory feeds, call `AddDirectoryFeedsFromConfiguration`:
-
-```csharp
-services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
-{
-    nuplane.AddDirectoryFeedsFromConfiguration(configuration.GetSection("Nuplane"));
-    nuplane.AutoloadPackages(configuration.GetSection("Nuplane"));
-});
-```
+Loading builder extensions delegate to loading-owned registration services. Directory feeds are
+registered by core `AddNuplane` from `Setup:Feeds`, or in code through
+`Nuplane.Sources.Directory.Builder.AddDirectoryFeed`. Both paths share one directory feed
+registration and validation path.
 
 ### Adding a New Module
 

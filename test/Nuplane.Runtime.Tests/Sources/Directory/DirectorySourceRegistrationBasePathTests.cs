@@ -85,6 +85,23 @@ public sealed class DirectorySourceRegistrationBasePathTests
     }
 
     [Fact]
+    public void AddNuplane_RelativeConfiguredDirectoryFeed_UsesBasePathFromBuilderCallback()
+    {
+        var basePath = CreateTempDirectoryPath("configured-base");
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            [$"Setup:Feeds:{FeedName}:DirectoryPath"] = RelativeDirectoryPath,
+            [$"Setup:Feeds:{FeedName}:Directory:Watch"] = "false"
+        }).Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        services.AddNuplane(configuration, nuplane => nuplane.UseBasePath(basePath));
+
+        Assert.Equal(Path.GetFullPath(Path.Combine(basePath, RelativeDirectoryPath)), ResolvedPath(services));
+    }
+
+    [Fact]
     public void UseBasePath_WithANonAbsolutePath_ThrowsArgumentExceptionAtTheCallItself()
     {
         var services = new ServiceCollection();

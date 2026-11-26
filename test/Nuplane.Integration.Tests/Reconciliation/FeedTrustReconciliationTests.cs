@@ -9,7 +9,6 @@ using Nuplane.Feeds.Versioning;
 using Nuplane.Integration.Tests.Restore;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Models;
-using Nuplane.Sources.Directory.Configuration;
 
 namespace Nuplane.Integration.Tests.Reconciliation;
 
@@ -115,7 +114,7 @@ public sealed class FeedTrustReconciliationTests : IDisposable
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build().GetSection("Nuplane");
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddNuplane(configuration, nuplane => nuplane.AddDirectoryFeedsFromConfiguration(configuration));
+        services.AddNuplane(configuration);
         configure?.Invoke(services);
         return services.BuildServiceProvider();
     }

@@ -109,7 +109,7 @@ public sealed class HostFreeGraphGroupingParityTests : IDisposable
             "grouping-list",
             typeof(Nuplane.Admin.Api.NuplaneAdminEndpointExtensions).Assembly,
             typeof(Nuplane.Loading.Api.NuplaneLoadStateEndpointExtensions).Assembly,
-            typeof(Nuplane.Sources.Directory.DirectorySourceOptions).Assembly);
+            typeof(NuplaneServiceCollectionExtensions).Assembly);
         var activePackages = await NuplaneStore.ReadActivePackagesAsync(fixture.StateFilePath);
 
         // Act

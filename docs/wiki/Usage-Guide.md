@@ -415,14 +415,7 @@ var result = await NuplaneRestore.RestoreAsync(configuration, new NuplaneRestore
     BasePath = hostContentRoot,
     InstallRoot = "/srv/app/.nuplane/packages",
     StateFilePath = "/srv/app/.nuplane/store-state.json",
-    LoggerFactory = loggerFactory,
-    // Directory feeds belong to Nuplane.Sources.Directory, so the caller adds them. The second
-    // argument is the already-resolved Nuplane configuration — use it, not a captured `configuration`,
-    // or the module registration helper finds nothing when `configuration` is the host's root. A
-    // relative `DirectoryPath` in that configuration resolves against `BasePath` above, not against
-    // this process's own current directory — AddDirectoryFeedsFromConfiguration reads it from the
-    // same NuplaneBuilder this callback receives, so nothing here has to pass it along.
-    ConfigureBuilder = (builder, nuplane) => builder.AddDirectoryFeedsFromConfiguration(nuplane)
+    LoggerFactory = loggerFactory
 });
 
 Console.WriteLine($"restored into {result.InstallRoot}; state at {result.StateFilePath}");
@@ -462,12 +455,9 @@ restoring tool both of those name the tool, so `NuplaneRestore` never falls back
 | State file | `NuplaneRestoreOptions.StateFilePath` (must be absolute) → absolute `Nuplane:StoreRegistry:StateFilePath` → relative configured value against `BasePath` → `BasePath/.nuplane/store-state.json` → **refused** |
 | Package lock file | `NuplaneRestoreOptions.LockFilePath` (must be absolute) → absolute `Nuplane:LockFile:Path` → relative value against `BasePath`, otherwise against the resolved state file's directory |
 
-A directory feed's own `DirectoryPath` is not one of the three paths above — it belongs to
-`Nuplane.Sources.Directory`, not the core package, so it is resolved separately by that module
-against the same `BasePath`, and never refuses: a relative `DirectoryPath` falls back to resolving
-against the current directory instead, exactly like a running host that has not set a base of its
-own. See [Directory feeds as an offline package source](#directory-feeds-as-an-offline-package-source)
-for that resolution, including how a host sets one, in both the host and the host-free case.
+Configured directory feeds are registered automatically. A relative `DirectoryPath` resolves against
+`BasePath` when supplied and against the process's current directory otherwise. See
+[Directory feeds as an offline package source](#directory-feeds-as-an-offline-package-source).
 
 "Refused" is an `InvalidOperationException` naming the path and telling you to set `BasePath` or the
 matching override. A restore that quietly populates the wrong directory reports success and leaves
@@ -756,37 +746,23 @@ samples up to 32 archives per batch and shares the default 200 ms interval betwe
 It checks each archive independently for two matching, nonzero file lengths and retries candidates
 that are busy or changing within the existing attempt limit.
 
-**Where a relative `DirectoryPath` resolves from.** Both `AddDirectoryFeed` and
-`AddDirectoryFeedsFromConfiguration` resolve it against `NuplaneBuilder.BasePath` when something has
-set one, and against the process's own current directory otherwise. Nothing sets it by default, so a
-host that composes Nuplane directly and never calls `UseBasePath` keeps resolving it against its own
-current directory exactly as it always has — the right answer only when the host is guaranteed to
-start from its own directory. A host started some other way — as a service from `/`, for example —
-should pass its own content root instead:
+**Where a relative `DirectoryPath` resolves from.** A configured directory uses the base set through
+`NuplaneBuilder.UseBasePath`. A code-first `AddDirectoryFeed` call uses the base already set when it
+runs. Both use the process's current directory when no base is set. A host can pass its content
+root explicitly:
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 var nuplaneConfiguration = builder.Configuration.GetSection("Nuplane");
 
-builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
-{
-    nuplane.UseBasePath(builder.Environment.ContentRootPath);
-    nuplane.AddDirectoryFeedsFromConfiguration(nuplaneConfiguration);
-});
+builder.Services.AddNuplane(nuplaneConfiguration,
+    nuplane => nuplane.UseBasePath(builder.Environment.ContentRootPath));
 ```
 
-`UseBasePath` takes only an absolute path — a relative one throws `ArgumentException` at the point of
-the call, not later when a feed tries to resolve against it — and Nuplane's core package never reads
-`IHostEnvironment` itself, so this stays the host's own line to write rather than a hosting dependency
-Nuplane adds on the host's behalf.
-
-A [host-free restore](#host-free-restore-of-the-package-set) through `NuplaneRestore` sets the same
-`NuplaneBuilder.BasePath` from `NuplaneRestoreOptions.BasePath`, the base its other paths already
-anchor to, before its `ConfigureBuilder` callback runs — so that section's example needs nothing
-beyond what it already shows for `BasePath` to apply to directory feeds too. Because the restore sets
-it first, a `ConfigureBuilder` callback that calls `UseBasePath` itself overrides the restore's base
-rather than being overridden by it; the last call always wins. An already-absolute `DirectoryPath` is
-unaffected by any of this either way.
+`UseBasePath` requires an absolute path. [Host-free restore](#host-free-restore-of-the-package-set)
+sets the builder base from `NuplaneRestoreOptions.BasePath` before calling `ConfigureBuilder`.
+A callback can then set a different base for configured directory feeds. Absolute directory paths
+work with any base.
 
 Resolution reads the directory itself: package identifiers are matched case-insensitively and
 versions are matched in normalized form. A `.nupkg` written by `dotnet restore` under a lower-cased

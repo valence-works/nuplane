@@ -16,7 +16,6 @@ using Nuplane.Sources;
 using Nuplane.Sources.Configuration;
 using Nuplane.Sources.Directory;
 using Nuplane.Sources.Directory.Builder;
-using Nuplane.Sources.Directory.Configuration;
 using Nuplane.Store.State;
 
 namespace Nuplane.Runtime.Tests.Configuration;
@@ -264,10 +263,7 @@ public sealed class ConfigurationDrivenRegistrationTests
 
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
-            {
-                nuplane.AddDirectoryFeedsFromConfiguration(configuration.GetSection("Nuplane"));
-            });
+            services.AddNuplane(configuration.GetSection("Nuplane"));
         }
         finally
         {
@@ -305,10 +301,7 @@ public sealed class ConfigurationDrivenRegistrationTests
 
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddNuplane(configuration.GetSection("Nuplane"), nuplane =>
-            {
-                nuplane.AddDirectoryFeedsFromConfiguration(configuration.GetSection("Nuplane"));
-            });
+            services.AddNuplane(configuration.GetSection("Nuplane"));
         }
         finally
         {
@@ -860,7 +853,7 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
-    public void AddDirectoryFeed_DirectRegistration_FollowedByBuilder_LastSourceWins()
+    public void AddDirectoryFeed_ConfiguredFeedWithSameName_BuilderRegistrationWins()
     {
         var root = Path.Combine(Path.GetTempPath(), "nuplane-dir-direct-builder", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -870,18 +863,18 @@ public sealed class ConfigurationDrivenRegistrationTests
             var services = new ServiceCollection();
             services.AddLogging();
 
-            // Direct registration first
-            services.AddNuplaneDirectorySource(o =>
-            {
-                o.FeedName = "local";
-                o.DirectoryPath = root;
-                o.TriggerReconciliationOnChange = false;
-            });
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Setup:Feeds:local:DirectoryPath"] = root,
+                    ["Setup:Feeds:local:Directory:Watch"] = "true",
+                    ["Setup:Feeds:local:Trust"] = "Trusted"
+                }).Build();
 
-            // Builder registration second (replaces the directory source for same feed)
-            services.AddNuplane(nuplane =>
+            var overridePath = Path.Combine(root, "code-first");
+            services.AddNuplane(configuration, nuplane =>
             {
-                nuplane.AddDirectoryFeed("local", root, feed =>
+                nuplane.AddDirectoryFeed("local", overridePath, feed =>
                 {
                     feed.Watch = false;
                     feed.IncludeAll();
@@ -890,9 +883,10 @@ public sealed class ConfigurationDrivenRegistrationTests
 
             using var provider = services.BuildServiceProvider();
 
-            // Only one desired source for the feed.
-            var sourceCount = provider.GetFeedDesiredPackageSources().Count();
-            Assert.Equal(1, sourceCount);
+            Assert.Single(provider.GetFeedDesiredPackageSources());
+            var feed = Assert.Single(provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value.Feeds);
+            Assert.Equal(overridePath, feed.ServiceIndex.LocalPath);
+            Assert.DoesNotContain(provider.GetServices<IHostedService>(), item => item is Nuplane.Sources.Directory.Hosting.DirectorySourceReconciliationTriggerHostedService);
         }
         finally
         {
@@ -901,7 +895,7 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
-    public void AddDirectoryFeed_AndDirectRegistration_DifferentFeeds_BothRegistered()
+    public void AddDirectoryFeed_ConfiguredAndCodeFirstDifferentFeeds_BothAreRegistered()
     {
         var root1 = Path.Combine(Path.GetTempPath(), "nuplane-dir-multi-1", Guid.NewGuid().ToString("N"));
         var root2 = Path.Combine(Path.GetTempPath(), "nuplane-dir-multi-2", Guid.NewGuid().ToString("N"));
@@ -913,16 +907,15 @@ public sealed class ConfigurationDrivenRegistrationTests
             var services = new ServiceCollection();
             services.AddLogging();
 
-            // Direct registration for feed-a
-            services.AddNuplaneDirectorySource(o =>
-            {
-                o.FeedName = "feed-a";
-                o.DirectoryPath = root1;
-                o.TriggerReconciliationOnChange = false;
-            });
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Setup:Feeds:feed-a:DirectoryPath"] = root1,
+                    ["Setup:Feeds:feed-a:Directory:Watch"] = "false",
+                    ["Setup:Feeds:feed-a:Trust"] = "Trusted"
+                }).Build();
 
-            // Builder registration for feed-b
-            services.AddNuplane(nuplane =>
+            services.AddNuplane(configuration, nuplane =>
             {
                 nuplane.AddDirectoryFeed("feed-b", root2, feed =>
                 {
