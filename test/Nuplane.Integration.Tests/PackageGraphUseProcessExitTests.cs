@@ -260,7 +260,10 @@ public sealed partial class OverlappingPackageGraphProtectionTests
                 var live = await InspectUseStateAsync(admission, fixture, GraphUseRecordOwnershipState.Live, deadline.Token);
                 Assert.Equal(participant.ProcessId, live.Record.DiagnosticProcessId);
                 Assert.Equal(GraphUseLifetimeKind.OsExclusiveSentinel, live.Record.LifetimeKind);
-                Assert.Equal(PackageGraphUseSnapshotState.Committed, live.Record.SnapshotState);
+                var issuedState = mode == ParticipantGraphUseProcessMode.OrdinaryReconciliation
+                    ? PackageGraphUseSnapshotState.Pending
+                    : PackageGraphUseSnapshotState.Committed;
+                Assert.Equal(issuedState, live.Record.SnapshotState);
                 AssertGraphUseMatchesFixture(live.Record.GraphSnapshot, fixture, inventoryBefore);
 
                 var idlePersistence = CapturePersistenceEvidence(fixture);
