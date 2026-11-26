@@ -25,6 +25,7 @@ public sealed class ActivePackageCatalogRestartIntegrationTests
                 Path.Combine(tempRoot, "packages", "pkg-a", "1.2.3"),
                 DateTimeOffset.UtcNow,
                 "corr-before-restart");
+            Directory.CreateDirectory(descriptor.InstallPath);
 
             await storeBeforeRestart.PersistActiveVersionsAsync(
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -51,7 +52,15 @@ public sealed class ActivePackageCatalogRestartIntegrationTests
 
             var beforeDescriptor = Assert.Single(beforeRestart.Packages);
             var afterDescriptor = Assert.Single(afterRestart.Packages);
+            var persisted = await storeAfterRestart.GetStateAsync(CancellationToken.None);
+            var offlineDescriptor = Assert.Single(await NuplaneStore.ReadActivePackagesAsync(stateFilePath, CancellationToken.None));
 
+            Assert.False(Directory.Exists(Path.Combine(tempRoot, "current")));
+            Assert.Equal(descriptor.Version, persisted.LastKnownGoodById[descriptor.PackageId]);
+            Assert.Equal(afterDescriptor.PackageId, offlineDescriptor.PackageId);
+            Assert.Equal(afterDescriptor.Version, offlineDescriptor.Version);
+            Assert.Equal(afterDescriptor.InstallPath, offlineDescriptor.InstallPath);
+            Assert.Equal(afterDescriptor.GraphGenerationId, offlineDescriptor.GraphGenerationId);
             Assert.Equal(beforeDescriptor.PackageId, afterDescriptor.PackageId);
             Assert.Equal(beforeDescriptor.Version, afterDescriptor.Version);
             Assert.Equal(beforeDescriptor.FeedName, afterDescriptor.FeedName);

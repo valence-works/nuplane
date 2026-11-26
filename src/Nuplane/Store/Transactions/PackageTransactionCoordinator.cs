@@ -21,10 +21,18 @@ internal sealed class PackageTransactionCoordinator(AtomicPointerSwitcher pointe
     /// <returns>The transaction result.</returns>
     public Task<PackageTransactionResult> ExecuteAsync(
         PackageTransactionRequest request,
-        CancellationToken cancellationToken) => ExecuteInternalAsync(request, cancellationToken);
+        CancellationToken cancellationToken) => ExecuteInternalAsync(request, publishPointer: true, cancellationToken);
+
+    internal Task<PackageTransactionResult> PrepareGraphNodeAsync(
+        PackageTransactionRequest request,
+        CancellationToken cancellationToken) => ExecuteInternalAsync(request, publishPointer: false, cancellationToken);
+
+    internal void PublishPreparedGraph(IEnumerable<KeyValuePair<string, string>> versions, CancellationToken cancellationToken)
+        => _pointerSwitcher.SwitchGraph(versions, cancellationToken);
 
     private async Task<PackageTransactionResult> ExecuteInternalAsync(
         PackageTransactionRequest request,
+        bool publishPointer,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -41,6 +49,7 @@ internal sealed class PackageTransactionCoordinator(AtomicPointerSwitcher pointe
                     request with { PolicyFailureMessage = "Lock hash mismatch detected during validation." },
                     currentPointer,
                     PackageTransactionStage.LockFileGate,
+                    publishPointer,
                     cancellationToken);
             }
 
@@ -50,6 +59,7 @@ internal sealed class PackageTransactionCoordinator(AtomicPointerSwitcher pointe
                     request,
                     currentPointer,
                     PackageTransactionStage.TrustPolicyGate,
+                    publishPointer,
                     cancellationToken);
             }
 
@@ -59,6 +69,7 @@ internal sealed class PackageTransactionCoordinator(AtomicPointerSwitcher pointe
                     request,
                     currentPointer,
                     PackageTransactionStage.LockFileGate,
+                    publishPointer,
                     cancellationToken);
             }
 
@@ -66,7 +77,8 @@ internal sealed class PackageTransactionCoordinator(AtomicPointerSwitcher pointe
             await ExecuteStageAsync(request, PackageTransactionStage.Validate, cancellationToken);
             await ExecuteStageAsync(request, PackageTransactionStage.PublishImmutable, cancellationToken);
             await ExecuteStageAsync(request, PackageTransactionStage.AtomicSwitch, cancellationToken);
-            await _pointerSwitcher.SwitchAsync(request.PackageId, request.Version, cancellationToken);
+            if (publishPointer)
+                await _pointerSwitcher.SwitchAsync(request.PackageId, request.Version, cancellationToken);
             await ExecuteStageAsync(request, PackageTransactionStage.PersistState, cancellationToken);
 
             return new(
@@ -90,7 +102,7 @@ internal sealed class PackageTransactionCoordinator(AtomicPointerSwitcher pointe
                 request.CorrelationId,
                 cancellationToken);
 
-            if (!string.IsNullOrWhiteSpace(currentPointer))
+            if (publishPointer && !string.IsNullOrWhiteSpace(currentPointer))
             {
                 await _pointerSwitcher.SwitchAsync(request.PackageId, currentPointer, cancellationToken);
             }
@@ -109,6 +121,7 @@ internal sealed class PackageTransactionCoordinator(AtomicPointerSwitcher pointe
         PackageTransactionRequest request,
         string? currentPointer,
         PackageTransactionStage stage,
+        bool publishPointer,
         CancellationToken cancellationToken)
     {
         var message = string.IsNullOrWhiteSpace(request.PolicyFailureMessage)
@@ -122,7 +135,7 @@ internal sealed class PackageTransactionCoordinator(AtomicPointerSwitcher pointe
             request.CorrelationId,
             cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(currentPointer))
+        if (publishPointer && !string.IsNullOrWhiteSpace(currentPointer))
         {
             await _pointerSwitcher.SwitchAsync(request.PackageId, currentPointer, cancellationToken);
         }

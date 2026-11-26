@@ -8,8 +8,12 @@ internal sealed class DesiredStateOptionsValidator : IValidateOptions<DesiredSta
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        return options.Manifest.Enabled && string.IsNullOrWhiteSpace(options.Manifest.Path)
-            ? ValidateOptionsResult.Fail("Nuplane:DesiredState:Manifest:Path must be provided when Nuplane:DesiredState:Manifest:Enabled is true.")
-            : ValidateOptionsResult.Success;
+        if (options.Manifest.Enabled && string.IsNullOrWhiteSpace(options.Manifest.Path))
+            return ValidateOptionsResult.Fail("Nuplane:DesiredState:Manifest:Path must be provided when Nuplane:DesiredState:Manifest:Enabled is true.");
+
+        if (options.SourcePriorities.Keys.Any(string.IsNullOrWhiteSpace))
+            return ValidateOptionsResult.Fail("Nuplane:DesiredState:SourcePriorities keys must contain a source name.");
+
+        return ValidateOptionsResult.Success;
     }
 }

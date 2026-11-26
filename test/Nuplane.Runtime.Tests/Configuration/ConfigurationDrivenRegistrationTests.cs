@@ -43,6 +43,25 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
+    public void AddNuplane_FromConfiguration_RefusesWhitespaceSourcePriorityKey()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Nuplane:DesiredState:SourcePriorities:   "] = "10"
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+        using var provider = services.BuildServiceProvider();
+
+        var error = Assert.Throws<OptionsValidationException>(() =>
+            provider.GetRequiredService<IOptions<DesiredStateOptions>>().Value);
+
+        Assert.Contains("DesiredState:SourcePriorities", error.Message);
+    }
+
+    [Fact]
     public void AddNuplane_CodeConfiguration_OverridesDesiredStateSourcePriority()
     {
         var configuration = new ConfigurationBuilder()

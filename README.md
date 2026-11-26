@@ -89,8 +89,8 @@ When more than one desired source contributes the same package ID, configure sou
 `Nuplane:DesiredState:SourcePriorities`. Lower numbers win and an unlisted source has the lowest
 precedence (`int.MaxValue`). Source names are matched case-insensitively, and the name used here is
 the `PackageRequest.SourceName` emitted by the source. A directory registration sets that source name
-to its feed name, while a custom source can use a different stable name. A source's CLR type name is
-not used for precedence.
+to its feed name, while a custom source can use a different stable name. Priority keys must contain
+a source name. You can configure a name before that source emits its first request.
 
 ```json
 {
@@ -182,8 +182,8 @@ Reconciliation can be manual, startup-triggered, or periodic.
 
 ### Package store
 
-Nuplane's deterministic on-disk storage area for downloaded packages, current-package pointers, staging work, and persisted state.
-It is designed so updates are atomic and safe to retry.
+Nuplane's deterministic on-disk storage area for downloaded packages, staging work, and persisted state.
+File-backed hosts use the configured state file, `store-state.json` by default, as the authority for active versions and last-known-good state across restarts.
 
 ### Active version
 

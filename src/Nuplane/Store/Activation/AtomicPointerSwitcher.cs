@@ -1,14 +1,12 @@
-using System.Collections.Concurrent;
-
 namespace Nuplane.Store.Activation;
 
 /// <summary>
-/// Provides atomic version pointer switching for packages, enabling transactional
-/// activation with rollback to the last-known-good version on failure.
+/// Tracks provisional package versions within the apply pipeline.
 /// </summary>
 internal sealed class AtomicPointerSwitcher
 {
-    private readonly ConcurrentDictionary<string, string> _currentByPackage = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _gate = new();
+    private readonly Dictionary<string, string> _currentByPackage = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Atomically switches the active version pointer for a package.
@@ -20,10 +18,29 @@ internal sealed class AtomicPointerSwitcher
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(version);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        _currentByPackage[packageId] = version;
+        lock (_gate)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _currentByPackage[packageId] = version;
+        }
         return Task.CompletedTask;
+    }
+
+    internal void SwitchGraph(IEnumerable<KeyValuePair<string, string>> versions, CancellationToken cancellationToken)
+    {
+        var changes = versions.ToArray();
+        foreach (var (id, version) in changes)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(id);
+            ArgumentException.ThrowIfNullOrWhiteSpace(version);
+        }
+
+        lock (_gate)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var (id, version) in changes)
+                _currentByPackage[id] = version;
+        }
     }
 
     /// <summary>
@@ -34,6 +51,7 @@ internal sealed class AtomicPointerSwitcher
     public string? GetCurrentVersion(string packageId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
-        return _currentByPackage.GetValueOrDefault(packageId);
+        lock (_gate)
+            return _currentByPackage.GetValueOrDefault(packageId);
     }
 }

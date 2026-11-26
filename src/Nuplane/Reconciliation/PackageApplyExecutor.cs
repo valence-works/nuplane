@@ -683,7 +683,7 @@ internal sealed class PackageApplyExecutor(
                     continue;
                 }
 
-                var transaction = await _transactionCoordinator.ExecuteAsync(
+                var transaction = await _transactionCoordinator.PrepareGraphNodeAsync(
                     CreateTransactionRequest(resolved, resolutionResult, correlationId),
                     cancellationToken);
 
@@ -701,6 +701,9 @@ internal sealed class PackageApplyExecutor(
 
             if (graphFailures.Count == 0)
             {
+                _transactionCoordinator.PublishPreparedGraph(
+                    graphApplied.Select(static package => KeyValuePair.Create(package.Id, package.Version)),
+                    cancellationToken);
                 foreach (var graphPackage in graphApplied)
                 {
                     appliedByKey[BuildKey(graphPackage.Id, graphPackage.Version)] = graphPackage;

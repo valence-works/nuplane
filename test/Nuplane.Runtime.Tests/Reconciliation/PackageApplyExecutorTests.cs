@@ -71,6 +71,57 @@ public sealed class PackageApplyExecutorTests : IDisposable
         Assert.Empty(scenario.FailureRecorder.Records);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("1.0.0")]
+    public async Task ExecuteTransactionsAsync_LaterNodeFails_PreservesEveryPreviousGraphPointer(string? priorVersion)
+    {
+        var dependency = CreateInstalledPackage("A.Dependency", "2.0.0");
+        var root = CreateInstalledPackage("Z.Root", "2.0.0", dependency.Id, "[2.0.0]") with { PackageContentHash = HashA };
+        var resolver = new StubPackageResolver(new Dictionary<string, ResolvedPackage>
+        {
+            [dependency.Id] = dependency,
+            [root.Id] = root
+        });
+        var recorder = new RecordingFailureRecorder();
+        var pointers = new AtomicPointerSwitcher();
+        var executor = new PackageApplyExecutor(
+            resolver, new PackageTransactionCoordinator(pointers, recorder), new PassthroughRetryPolicy(), recorder);
+        if (priorVersion is not null)
+        {
+            await pointers.SwitchAsync(dependency.Id, priorVersion, CancellationToken.None);
+            await pointers.SwitchAsync(root.Id, priorVersion, CancellationToken.None);
+        }
+
+        var request = new PackageRequest(root.Id, "[2.0.0]", "test-feed", PackageUpdatePolicy.Exact, "test-source");
+        var selection = await executor.ResolveAsync([request], "corr-graph", CancellationToken.None);
+        var graph = Assert.Single(selection.ResolvedGraphs);
+        Assert.Equal([dependency.Id, root.Id], graph.Nodes.Select(node => node.PackageId));
+        var refused = selection with
+        {
+            ExpectedArtifactHashes = new Dictionary<string, string>
+            {
+                [root.Id] = $"sha512:{Convert.ToBase64String(Enumerable.Repeat((byte)1, 64).ToArray())}"
+            }
+        };
+
+        var failed = await executor.ExecuteTransactionsAsync(refused, "corr-failed", CancellationToken.None);
+
+        Assert.Empty(failed.AppliedPackages);
+        Assert.Empty(failed.SuccessfulGraphSelections);
+        Assert.Contains(dependency.Id, failed.FailedPackageIds);
+        Assert.Contains(root.Id, failed.FailedPackageIds);
+        Assert.Equal(priorVersion, pointers.GetCurrentVersion(dependency.Id));
+        Assert.Equal(priorVersion, pointers.GetCurrentVersion(root.Id));
+
+        var retried = await executor.ExecuteTransactionsAsync(selection, "corr-retry", CancellationToken.None);
+
+        Assert.Single(retried.SuccessfulGraphSelections);
+        Assert.Empty(retried.FailedPackageIds);
+        Assert.Equal(dependency.Version, pointers.GetCurrentVersion(dependency.Id));
+        Assert.Equal(root.Version, pointers.GetCurrentVersion(root.Id));
+    }
+
     [Fact]
     public async Task ExecuteTransactionsAsync_InconsistentExplicitGraphSelection_RefusesBeforeApplicationMutation()
     {

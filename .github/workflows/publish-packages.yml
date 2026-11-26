@@ -55,7 +55,7 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - name: Download verified Darwin native shim
         uses: actions/download-artifact@v4
@@ -144,10 +144,15 @@ jobs:
     needs:
       - build-test-pack
     steps:
+      - name: Checkout SDK config
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - name: Download package artifacts
         uses: actions/download-artifact@v4
@@ -182,10 +187,15 @@ jobs:
     needs:
       - build-test-pack
     steps:
+      - name: Checkout SDK config
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - name: Download package artifacts
         uses: actions/download-artifact@v4

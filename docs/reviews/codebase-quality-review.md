@@ -79,7 +79,10 @@ Stage 2 evidence is recorded separately from the audited Stage 1 baseline above.
 | 3 | AR-004 | 0.0.16 | Explicit feed trust, scoped overrides, refusal before acquisition, and last-known-good regression coverage. [ADR-0003](../adr/0003-feed-trust-before-acquisition.md) · [#138](https://github.com/valence-works/nuplane/issues/138) · [Delivery and validation](https://github.com/valence-works/nuplane/pull/149) |
 | 4 | CQ-001, CQ-002, TST-001 | 0.0.16 | Per-instance source snapshots, proven legacy fallback, empty snapshot restoration, and file-backed restart coverage. [#139](https://github.com/valence-works/nuplane/issues/139) · [Delivery and validation](https://github.com/valence-works/nuplane/pull/149) |
 | 5 | DX-001–DX-004 | 0.0.16 | Updated repository-root commands, public API snippets, HTTP routes, and architecture. [#140](https://github.com/valence-works/nuplane/issues/140) · [Delivery and validation](https://github.com/valence-works/nuplane/pull/149) |
-| 6–9 | DX-005, CQ-003, CQ-004, HYP-001–HYP-004 | Deferred by owner | Nuplane maintainers will revisit after 1.0.0 ships. [Owner disposition](https://github.com/valence-works/nuplane/issues/104#issuecomment-6299802498) · [Tracked follow-up](https://github.com/valence-works/nuplane/issues/150) |
+| 6 | DX-005 | Post-GA | Repository references, external-consumer compilation, and sample package-drop and HTTP gates, with offline negative controls. [PR #154](https://github.com/valence-works/nuplane/pull/154) |
+| 7 | CQ-003 | Post-GA | Characterization followed by extraction of package asset selection, graph materialization, and graph lifetime. [PR #155](https://github.com/valence-works/nuplane/pull/155) |
+| 8 | CQ-004 | Post-GA | One reconciliation composition and middleware order across production registration and compatibility construction. [PR #156](https://github.com/valence-works/nuplane/pull/156) |
+| 9 | HYP-001–HYP-004 | Post-GA | Restart and failure evidence, graph pointer atomicity, source-priority validation, and SDK reproducibility. [#150](https://github.com/valence-works/nuplane/issues/150) |
 
 The first Windows matrix run failed because `File.Move(..., overwrite: true)` denied replacement while a shared reader held the old state file open. The corrected exact head uses `File.Replace` with a unique backup for existing files and `File.Move` only for first creation. If replacement removes the destination and then fails, the prior backup is restored before the error is rethrown; if restoration is blocked, recovery artifacts are retained. The refreshed Windows job passed that production path. The deliberate extra file read before each file-backed mutation protects direct registry writers that loaded before another writer committed, while the lock-held cycle refresh protects reconciliation and startup-recovery reads.
 
@@ -406,6 +409,17 @@ The following are not confirmed defects and must not be reported as fixed withou
 | HYP-002 | A later graph-node transaction failure may leave earlier process-local pointers switched | Add fault injection across a multi-node graph and observe state/pointer visibility before changing rollback. |
 | HYP-003 | `DesiredStateOptions.SourcePriorities` needs validation for blank/unknown keys | Define whether unmatched keys are intentionally tolerated. Add contract tests before a validator. |
 | HYP-004 | No `global.json` makes SDK selection too variable | Current CI and local SDK are explicit enough for this audit. Add pinning only if reproducibility evidence shows drift. |
+
+### Post-GA hypothesis dispositions
+
+The baseline for these checks was the shipped 1.0.0 revision, `ed261030dea8e0135a0df0c7bc2571d15e1eda64`.
+
+| ID | Disposition and evidence |
+| --- | --- |
+| HYP-001 | The configured store registry is the durable authority. The restart integration test verifies the install path, generation, active version, and last-known-good version in a new registry and the offline public catalog, without a `current` directory. The README and glossary now describe the registry. |
+| HYP-002 | Confirmed for process-local pointers. A two-node graph placed a dependency before its root, whose lock hash failed. The dependency pointer advanced even though reconciliation reported no applied nodes in either the previously empty or seeded case. The executor now prepares every node before switching the graph's provisional pointers. Both failure cases preserve their initial pointers, and a successful retry advances both. |
+| HYP-003 | Blank keys were accepted through both direct options and bound configuration. Both now reject empty or whitespace-only names. A named entry can be configured before a matching source emits a request, including for custom sources. |
+| HYP-004 | Confirmed SDK-dependent package payloads. Linux ARM64 Release builds of the baseline with SDKs 10.0.402 and 10.0.404 used the same source, version and verified Darwin shim. All seven packages differed only in their `net10.0` DLL contents, and all seven symbol packages differed only in their corresponding PDB contents. Two independent 10.0.404 runs had identical unpacked entries across the 14 packages. ZIP container bytes still varied. Local builds and CI now select the exact 10.0.404 SDK used to publish 1.0.0. |
 
 Concerns disproved or classified as intentional:
 
