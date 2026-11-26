@@ -1,4 +1,5 @@
 using Nuplane.Abstractions;
+using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Observability;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Models;
@@ -36,6 +37,13 @@ internal sealed class TrustAndLockGateMiddleware(
                 combinedFailures.Add(resolved.Id);
                 await failureRecorder.RecordAsync(resolved.Id, "lock", lockOutcome.ReasonCode, context.CorrelationId, context.CancellationToken);
                 continue;
+            }
+
+            if (context.PackageStoreOwner is { } owner &&
+                !HasSameResolvedPackageContent(resolved, lockOutcome.EffectivePackage))
+            {
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                    $"The lock decision changed the resolved package projection for '{resolved.Id}'.", owner.Root);
             }
 
             trustAndLockPassed.Add(lockOutcome.EffectivePackage);
