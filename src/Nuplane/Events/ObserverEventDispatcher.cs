@@ -1,5 +1,6 @@
 using Nuplane.Abstractions;
 using Nuplane.Observability;
+using Nuplane.Reconciliation;
 
 namespace Nuplane.Events;
 
@@ -69,13 +70,29 @@ internal sealed partial class ObserverEventDispatcher(IEnumerable<INuplaneObserv
     }
 
     /// <inheritdoc />
-    public async Task PublishReconciledAsync(
+    public Task PublishReconciledAsync(
         PackageChangeSet changeSet,
         IReadOnlyList<ResolvedPackage> appliedPackages,
+        CancellationToken cancellationToken)
+        => PublishReconciledAsync(changeSet, appliedPackages, loadingAlreadyPrepared: false, cancellationToken);
+
+    internal Task PublishReconciledAfterOrdinaryLoadingAsync(
+        PackageChangeSet changeSet,
+        IReadOnlyList<ResolvedPackage> appliedPackages,
+        CancellationToken cancellationToken)
+        => PublishReconciledAsync(changeSet, appliedPackages, loadingAlreadyPrepared: true, cancellationToken);
+
+    private async Task PublishReconciledAsync(
+        PackageChangeSet changeSet,
+        IReadOnlyList<ResolvedPackage> appliedPackages,
+        bool loadingAlreadyPrepared,
         CancellationToken cancellationToken)
     {
         foreach (var observer in _observers)
         {
+            if (loadingAlreadyPrepared && observer is IOrdinaryPackageLoadingActivation)
+                continue;
+
             try
             {
                 await observer.OnPackagesReconciledAsync(changeSet, appliedPackages, cancellationToken);

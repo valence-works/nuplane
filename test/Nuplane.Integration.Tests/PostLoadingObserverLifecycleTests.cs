@@ -180,7 +180,8 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         GraphUseFixture fixture,
         PostLoadingObserverProbe observer,
         bool withoutDeferredLoader = false,
-        bool generateLockFile = false)
+        bool generateLockFile = false,
+        IPackageActivationGate? activationGate = null)
     {
         var feedPath = Path.Combine(Path.GetTempPath(), "nuplane-post-loading-feed-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(feedPath);
@@ -193,12 +194,15 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             PackageUpdatePolicy.Range, "post-loading-test");
         var localFeed = new FeedDefinition("local-cache", new Uri(feedPath + Path.DirectorySeparatorChar)) { Trust = FeedTrustLevel.Trusted };
         var remoteFeed = new FeedDefinition("feed", new Uri("https://unused.invalid/v3/index.json")) { Trust = FeedTrustLevel.Trusted };
-        var provider = fixture.CreateProvider("member-b", desiredRequests: [request], remoteFeed: remoteFeed,
+        var provider = fixture.CreateProvider("member-b", activationGate: activationGate, desiredRequests: [request], remoteFeed: remoteFeed,
             additionalFeeds: [localFeed], participant: true, observer: observer,
             configureServices: services =>
             {
                 if (withoutDeferredLoader)
+                {
                     services.RemoveAll<ILeasedPackageGraphLoadingObserver>();
+                    services.RemoveAll<ICoordinatedPackageLoadingActivation>();
+                }
                 if (generateLockFile)
                     services.Configure<LockFileOptions>(options => options.Mode = LockFileMode.Generate);
             });

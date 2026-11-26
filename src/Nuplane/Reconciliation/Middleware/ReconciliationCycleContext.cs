@@ -24,6 +24,8 @@ internal sealed class ReconciliationCycleContext
     /// <summary>Whether final health/metrics construction is deferred until post-admission loading finishes.</summary>
     public bool DeferCycleCompletion { get; set; }
 
+    internal bool DeferCoordinatedActivation { get; set; }
+
     // Desired state
     public IReadOnlyList<PackageRequest> DesiredRequests { get; set; } = [];
 
@@ -50,6 +52,9 @@ internal sealed class ReconciliationCycleContext
 
     // Result
     public ReconciliationRunResult? Result { get; set; }
+
+    internal Func<IReadOnlyDictionary<string, string>, CancellationToken, Task>? PublishOrdinaryLoadingAsync { get; set; }
+    internal IReadOnlySet<string> LoadingRejectedPackageIds { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Deferred package-load failures returned after the enrolled cycle releases short locks.</summary>
     public IReadOnlyList<string> DeferredLoadingFailedPackageIds { get; set; } = [];

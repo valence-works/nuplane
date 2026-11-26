@@ -20,7 +20,7 @@ namespace Nuplane.Loading;
 /// and providing context removal for unloading. Resolves compatible runtime assets within
 /// each package's install directory without requiring a package entry assembly.
 /// </summary>
-internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
+internal sealed partial class PackageLoader : IPackageLoader, IScopedPackageLoader
 {
     private readonly SharedAssemblyPolicyMatcher _matcher;
     private readonly HostIntegratedAssemblyResolutionCatalog _hostIntegratedResolutionCatalog;
@@ -168,6 +168,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
         var projections = CreatePackageProjections(packages);
         lock (_loadContextSync)
         {
+            BeginLiveActivationMutation();
             EnsurePackagesLoaded(packages, sharedPolicy, cancellationToken, loaded, failed,
                 packageProjections: projections);
         }
@@ -271,32 +272,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                 throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
                     "Each selected graph must have a distinct published lease owner.");
 
-            _loadModeSelector.ValidateScopedParticipants();
-            if (_activationGates.Any(static gate =>
-                    gate is not IScopedPackageActivationGate and not IPackagePathIndependentActivationGate))
-            {
-                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
-                    "Enrolled package loading requires explicitly scoped or path-independent activation gates.");
-            }
-
-            // Validate every immutable envelope before the first package read or user callback.
-            foreach (var graph in graphs)
-            {
-                var selected = graph ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
-                    "A leased graph collection contains a null entry.");
-                selected.Validate();
-                selected.PackageProjections = CreatePackageProjections(selected.Packages, selected.LeaseOwner.Lease);
-            }
-
-            // Hold counted exact-path pins across metadata, gates, package enumeration, and transfer
-            // into the actual load context. No root operation borrow is retained or reacquired here.
-            foreach (var graph in graphs)
-            {
-                var selected = graph!;
-                var lease = selected.LeaseOwner.Lease;
-                foreach (var package in selected.Packages)
-                    readPins.Add(lease.AcquireRead(package.InstallPath));
-            }
+            PrepareLeasedGraphReads(graphs, readPins);
 
             foreach (var graph in graphs)
             {
@@ -336,6 +312,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                 {
                     lock (_loadContextSync)
                     {
+                        BeginLiveActivationMutation();
                         RecordGraphFailure(
                             packages,
                             graphKey,
@@ -350,6 +327,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
 
                 lock (_loadContextSync)
                 {
+                    BeginLiveActivationMutation();
                     if (usesPerPackageContexts)
                     {
                         EnsurePackagesLoaded(packages, copiedSharedPolicy, cancellationToken, loaded, failed,
@@ -397,6 +375,36 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
         }
     }
 
+    private void PrepareLeasedGraphReads(IReadOnlyList<LeasedGraphWorkItem?> graphs, List<IDisposable> readPins)
+    {
+        _loadModeSelector.ValidateScopedParticipants();
+        if (_activationGates.Any(static gate =>
+                gate is not IScopedPackageActivationGate and not IPackagePathIndependentActivationGate))
+        {
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "Enrolled package loading requires explicitly scoped or path-independent activation gates.");
+        }
+
+        // Validate every immutable envelope before the first package read or user callback.
+        foreach (var graph in graphs)
+        {
+            var selected = graph ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                "A leased graph collection contains a null entry.");
+            selected.Validate();
+            selected.PackageProjections = CreatePackageProjections(selected.Packages, selected.LeaseOwner.Lease);
+        }
+
+        // Hold counted exact-path pins across metadata, gates, package enumeration, and transfer
+        // into the actual load context. No root operation borrow is retained or reacquired here.
+        foreach (var graph in graphs)
+        {
+            var selected = graph!;
+            var lease = selected.LeaseOwner.Lease;
+            foreach (var package in selected.Packages)
+                readPins.Add(lease.AcquireRead(package.InstallPath));
+        }
+    }
+
     private sealed class LeasedGraphWorkItem(
         IReadOnlyList<ResolvedPackage> packages,
         PackageGraphUseLeaseOwner leaseOwner,
@@ -439,6 +447,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
 
         lock (_loadContextSync)
         {
+            BeginLiveActivationMutation();
             if (activationBlockMessage is not null)
             {
                 RecordGraphFailure(
@@ -607,6 +616,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                     usesPerPackageContexts, packageProjections))
                 return false;
 
+            BeginLiveActivationMutation();
             if (usesPerPackageContexts)
                 EnsurePackagesLoaded(packageGraph, sharedPolicy, cancellationToken, loaded, failed,
                     packageProjections, diagnosticsByPackageKey, graphLeaseOwner);
@@ -684,12 +694,10 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                     continue;
                 }
 
-                var resolverPaths = selection.ResolverAssemblyPaths.Where(path => !HostRuntimeAssemblyCatalog.Contains(path)).ToArray();
-                newContext = new PackageGraphLoadContext(key, runtimePaths, resolverPaths, [package.InstallPath], sharedPolicy, _matcher, graphLeaseOwner);
-                foreach (var path in selection.LoadAssemblyPaths.Where(path => !HostRuntimeAssemblyCatalog.Contains(path)))
-                {
-                    newContext.LoadFromAssemblyName(PackageAssemblyReadCheckpoint.GetAssemblyName(path));
-                }
+                var graphPackages = new LoadableGraphPackage[] { new(package.Id, package.Version, package.InstallPath, selection) };
+                newContext = CreateGraphLoadContext(key, PackageLoadMode.Collectible, graphPackages,
+                    [package.InstallPath], sharedPolicy, graphLeaseOwner);
+                LoadGraphAssemblies(newContext, graphPackages);
 
                 var replaced = new List<AssemblyLoadContext>();
                 if (_contexts.TryGetValue(key, out var previousContext) && !ReferenceEquals(previousContext, newContext))
@@ -793,36 +801,15 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                     $"No loadable assembly found in graph '{graphKey}'. Scanned install paths: {FormatQuotedList(graphPackages.SkippedInstallPaths)}.");
             }
 
-            var runtimeAssemblyPaths = graphPackages.LoadablePackages
-                .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
-                .SelectMany(static package => package.Selection.AssemblyPaths)
-                .Where(path => !HostRuntimeAssemblyCatalog.Contains(path))
-                .ToArray();
-            var resolverAssemblyPaths = graphPackages.LoadablePackages
-                .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
-                .SelectMany(static package => package.Selection.ResolverAssemblyPaths)
-                .Where(path => !HostRuntimeAssemblyCatalog.Contains(path))
-                .ToArray();
             if (graphLoadMode == PackageLoadMode.HostIntegrated)
             {
                 var candidates = BuildHostIntegratedResolutionCandidates(graphKey, graphPackages.LoadablePackages, sharedPolicy);
                 _hostIntegratedResolutionCatalog.ValidateCanPublishGraph(graphKey, candidates);
             }
 
-            context = graphLoadMode == PackageLoadMode.HostIntegrated
-                ? new HostIntegratedPackageGraphLoadContext(graphKey, runtimeAssemblyPaths, resolverAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher, graphLeaseOwner)
-                : new PackageGraphLoadContext(graphKey, runtimeAssemblyPaths, resolverAssemblyPaths, packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, _matcher, graphLeaseOwner);
-
-            foreach (var assemblyPath in graphPackages.LoadablePackages
-                         .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
-                         .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase)
-                         .SelectMany(static package => package.Selection.LoadAssemblyPaths)
-                         .Where(path => !HostRuntimeAssemblyCatalog.Contains(path)))
-            {
-                context.LoadFromAssemblyName(PackageAssemblyReadCheckpoint.GetAssemblyName(assemblyPath));
-            }
+            context = CreateGraphLoadContext(graphKey, graphLoadMode, graphPackages.LoadablePackages,
+                packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, graphLeaseOwner);
+            LoadGraphAssemblies(context, graphPackages.LoadablePackages);
 
             var assembliesByPackageKey = graphLoadMode == PackageLoadMode.HostIntegrated
                 ? MaterializeHostIntegratedAssemblies(context, graphPackages.LoadablePackages, sharedPolicy)
@@ -927,6 +914,43 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
 
         return new(loaded, failed);
     }
+
+    private PackageGraphLoadContext CreateGraphLoadContext(
+        string contextKey,
+        PackageLoadMode loadMode,
+        IReadOnlyList<LoadableGraphPackage> packages,
+        IReadOnlyList<string> installPaths,
+        IReadOnlyList<SharedAssemblyPolicyEntry> sharedPolicy,
+        PackageGraphUseLeaseOwner? leaseOwner)
+    {
+        var sortedPackages = OrderLoadablePackages(packages);
+        var runtimePaths = sortedPackages.SelectMany(static package => package.Selection.AssemblyPaths)
+            .Where(path => !HostRuntimeAssemblyCatalog.Contains(path)).ToArray();
+        var resolverPaths = sortedPackages.SelectMany(static package => package.Selection.ResolverAssemblyPaths)
+            .Where(path => !HostRuntimeAssemblyCatalog.Contains(path)).ToArray();
+
+        return loadMode == PackageLoadMode.HostIntegrated
+            ? new HostIntegratedPackageGraphLoadContext(contextKey, runtimePaths, resolverPaths, installPaths,
+                sharedPolicy, _matcher, leaseOwner)
+            : new PackageGraphLoadContext(contextKey, runtimePaths, resolverPaths, installPaths,
+                sharedPolicy, _matcher, leaseOwner);
+    }
+
+    private static void LoadGraphAssemblies(
+        AssemblyLoadContext context,
+        IReadOnlyList<LoadableGraphPackage> packages)
+    {
+        foreach (var path in OrderLoadablePackages(packages)
+                     .SelectMany(static package => package.Selection.LoadAssemblyPaths)
+                     .Where(path => !HostRuntimeAssemblyCatalog.Contains(path)))
+        {
+            context.LoadFromAssemblyName(PackageAssemblyReadCheckpoint.GetAssemblyName(path));
+        }
+    }
+
+    private static IEnumerable<LoadableGraphPackage> OrderLoadablePackages(IEnumerable<LoadableGraphPackage> packages) =>
+        packages.OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static package => package.Version, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// The single definition of "this package version is already loaded", used both by the per-package load
@@ -1162,6 +1186,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                 return [];
             }
 
+            BeginLiveActivationMutation();
             var removedContexts = new List<AssemblyLoadContext>();
             foreach (var key in inactiveKeys)
             {
@@ -1230,6 +1255,7 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
     {
         lock (_loadContextSync)
         {
+            BeginLiveActivationMutation();
             var key = BuildKey(packageId, version);
             _sessions.TryRemove(key, out _);
             ClearInert(key);
@@ -1818,12 +1844,12 @@ internal sealed class PackageLoader : IPackageLoader, IScopedPackageLoader
                 "Participating package loading requires a published graph-use lease.");
     }
 
-    private sealed record LoadedGraphCacheEntry(
+    internal sealed record LoadedGraphCacheEntry(
         PackageLoadMode LoadMode,
         IReadOnlyList<string> LoadablePackageKeys,
         IReadOnlyList<PackageProjection> Projections);
 
-    private sealed record PackageProjection(
+    internal sealed record PackageProjection(
         string PackageKey,
         string InstallPath,
         string? PackageContentHash,

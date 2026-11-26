@@ -1,6 +1,8 @@
 using Nuplane.Abstractions;
 using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Reconciliation.Middleware;
 using Nuplane.Reconciliation.Models;
+using Nuplane.Store.State;
 
 namespace Nuplane.Reconciliation;
 
@@ -12,7 +14,8 @@ internal interface ICoordinatedActiveStateTransitionDriver
         IReadOnlyDictionary<string, string> nextActiveVersions,
         IReadOnlySet<string> desiredRootPackageIds,
         IReadOnlySet<string> failedPackageIds,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        IReadOnlySet<string>? rejectedWhileLoading = null);
 
     Task PreflightAsync(
         PackageStoreOperationOwner owner,
@@ -24,6 +27,12 @@ internal interface ICoordinatedActiveStateTransitionDriver
         IReadOnlySet<string> failedPackageIds,
         string correlationId,
         CancellationToken cancellationToken);
+
+    Task<StoreStateRecord> CreateCandidateForPublicationAsync(
+        PackageStoreOperationOwner owner, ReconciliationCycleContext context, IReadOnlyDictionary<string, string> loadingFailures);
+
+    Task PersistCandidateAsync(
+        PackageStoreOperationOwner owner, StoreStateRecord candidate, CancellationToken cancellationToken);
 
     Task PublishAsync(
         PackageStoreOperationOwner owner,

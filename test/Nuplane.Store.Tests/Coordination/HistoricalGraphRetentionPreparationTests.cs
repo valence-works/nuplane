@@ -152,6 +152,11 @@ public sealed class HistoricalGraphRetentionPreparationTests
             emptyState, noVersions, Set("B"), Set("B"), [], []));
         Assert.Equal(PackageStoreAdmissionReason.StateMismatch, failedRoot.Reason);
 
+        var refusedLoad = ActivePackageCatalogMapper.PrepareHistoricalGraphRetention(
+            emptyState, noVersions, Set("B"), Set("B"), [], [], rejectedWhileLoading: Set("B"));
+        Assert.Empty(refusedLoad.RetainedSnapshots);
+        Assert.Empty(refusedLoad.RequiredRetainedInstalls);
+
         var unknown = fixture.EmptyState(legacyUnknownRecovery: true);
         var unknownError = Assert.Throws<PackageStoreAdmissionException>(() => ActivePackageCatalogMapper.PrepareHistoricalGraphRetention(
             unknown, noVersions, Set(), Set(), [], []));

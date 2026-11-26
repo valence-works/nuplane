@@ -1,11 +1,11 @@
 namespace Nuplane.Abstractions.PackageStoreProtection;
 
-/// <summary>Describes whether a core-validated graph-use snapshot is pending or committed.</summary>
+/// <summary>Describes the package state at the time Core issued a graph-use snapshot.</summary>
 public enum PackageGraphUseSnapshotState
 {
-    /// <summary>The snapshot belongs to work that has not yet committed.</summary>
+    /// <summary>Core issued the snapshot before package state was committed.</summary>
     Pending,
 
-    /// <summary>The snapshot describes committed package state.</summary>
+    /// <summary>Core issued the snapshot from already committed package state.</summary>
     Committed
 }

@@ -37,6 +37,32 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
         ArgumentNullException.ThrowIfNull(selections);
         ArgumentNullException.ThrowIfNull(assembliesByPackageKey);
 
+        var additions = CreateGraphEntries(graphKey, selections, assembliesByPackageKey);
+
+        lock (_gate)
+        {
+            var replacementPackageKeys = additions
+                .Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var nextGeneration = _generation + 1;
+            var retained = _entries
+                .Where(entry => !string.Equals(entry.GraphKey, graphKey, StringComparison.OrdinalIgnoreCase)
+                    && !replacementPackageKeys.Contains(BuildPackageKey(entry.PackageId, entry.PackageVersion)))
+                .Concat(additions.Select(entry => entry with { Generation = nextGeneration }))
+                .ToArray();
+
+            ValidateNoConflicts(retained);
+
+            _entries = OrderEntries(retained);
+            _generation = nextGeneration;
+        }
+    }
+
+    internal static IReadOnlyList<HostIntegratedAssemblyResolutionEntry> CreateGraphEntries(
+        string graphKey,
+        IReadOnlyList<PackageLoadModeSelection> selections,
+        IReadOnlyDictionary<string, IReadOnlyList<Assembly>> assembliesByPackageKey)
+    {
         var additions = new List<HostIntegratedAssemblyResolutionEntry>();
 
         foreach (var selection in selections.Where(static selection => selection.LoadMode == PackageLoadMode.HostIntegrated))
@@ -63,30 +89,89 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
             }
         }
 
+        return additions;
+    }
+
+    internal IReadOnlyDictionary<string, string> FindProspectiveCandidateConflicts(
+        IReadOnlySet<string> retainedKeys,
+        IReadOnlyList<HostIntegratedAssemblyResolutionCandidate> candidates)
+    {
         lock (_gate)
         {
-            var replacementPackageKeys = additions
-                .Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var nextGeneration = _generation + 1;
-            var retained = _entries
-                .Where(entry => !string.Equals(entry.GraphKey, graphKey, StringComparison.OrdinalIgnoreCase)
-                    && !replacementPackageKeys.Contains(BuildPackageKey(entry.PackageId, entry.PackageVersion)))
-                .Concat(additions.Select(entry => entry with { Generation = nextGeneration }))
-                .ToArray();
-
-            ValidateNoConflicts(retained);
-
-            _entries = retained
-                .OrderBy(static entry => entry.AssemblySimpleName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static entry => entry.Assembly.GetName().CultureName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static entry => entry.Version?.ToString(), StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static entry => entry.PackageId, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static entry => entry.PackageVersion, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            _generation = nextGeneration;
+            return FindAdditionConflicts(GetRetainedEntries(retainedKeys).Select(ToConflictCandidate),
+                candidates.Select(ToConflictCandidate));
         }
     }
+
+    internal ActiveProjection? PrepareActiveProjection(
+        IReadOnlySet<string> retainedKeys,
+        IReadOnlyList<HostIntegratedAssemblyResolutionEntry> additions,
+        out IReadOnlyDictionary<string, string> conflictsByPackageKey)
+    {
+        lock (_gate)
+        {
+            var retained = GetRetainedEntries(retainedKeys).ToArray();
+            conflictsByPackageKey = FindAdditionConflicts(retained.Select(ToConflictCandidate),
+                additions.Select(ToConflictCandidate));
+            if (conflictsByPackageKey.Count != 0)
+                return null;
+            if (retained.Length == _entries.Count && additions.Count == 0)
+                return new(_entries, _generation);
+
+            var generation = _generation + 1;
+            var proposed = OrderEntries(retained.Concat(additions.Select(entry => entry with { Generation = generation })));
+            return new(proposed, generation);
+        }
+    }
+
+    private IEnumerable<HostIntegratedAssemblyResolutionEntry> GetRetainedEntries(IReadOnlySet<string> retainedKeys) =>
+        _entries.Where(entry => retainedKeys.Contains(BuildPackageKey(entry.PackageId, entry.PackageVersion)));
+
+    private static IReadOnlyDictionary<string, string> FindAdditionConflicts(
+        IEnumerable<ConflictCandidate> retained,
+        IEnumerable<ConflictCandidate> additions)
+    {
+        var newCandidates = additions.ToArray();
+        var additionKeys = newCandidates.Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var conflicts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        // Preserve an active identity that remains selected. Reject both new graphs when their
+        // additions conflict, so graph enumeration order does not decide which graph can load.
+        foreach (var conflict in FindConflicts(retained.Concat(newCandidates)))
+        {
+            var conflictingAdditions = conflict.Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
+                .Where(additionKeys.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            var message = FormatConflict(conflict);
+            if (conflictingAdditions.Length == 0)
+                throw new InvalidOperationException(message);
+
+            foreach (var key in conflictingAdditions)
+                conflicts[key] = conflicts.TryGetValue(key, out var previous) ? $"{previous} {message}" : message;
+        }
+
+        return conflicts;
+    }
+
+    internal void CommitActiveProjection(ActiveProjection projection)
+    {
+        lock (_gate)
+        {
+            _entries = projection.Entries;
+            _generation = projection.Generation;
+        }
+    }
+
+    internal sealed record ActiveProjection(IReadOnlyList<HostIntegratedAssemblyResolutionEntry> Entries, long Generation);
+
+    private static HostIntegratedAssemblyResolutionEntry[] OrderEntries(IEnumerable<HostIntegratedAssemblyResolutionEntry> entries) =>
+        entries
+        .OrderBy(static entry => entry.AssemblySimpleName, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(static entry => entry.Assembly.GetName().CultureName, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(static entry => entry.Version?.ToString(), StringComparer.OrdinalIgnoreCase)
+        .ThenBy(static entry => entry.PackageId, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(static entry => entry.PackageVersion, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
 
     /// <summary>
     /// Validates that the specified graph can be published without conflicting with active entries.
@@ -112,12 +197,7 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
                     entry.PackageId,
                     entry.PackageVersion,
                     entry.Assembly.GetName().CultureName))
-                .Concat(candidates.Select(static candidate => new ConflictCandidate(
-                    candidate.AssemblySimpleName,
-                    candidate.Version,
-                    candidate.PackageId,
-                    candidate.PackageVersion,
-                    candidate.CultureName)))
+                .Concat(candidates.Select(ToConflictCandidate))
                 .ToArray();
 
             ValidateNoConflicts(proposedEntries);
@@ -194,44 +274,36 @@ internal sealed class HostIntegratedAssemblyResolutionCatalog
         return false;
     }
 
+    private static ConflictCandidate ToConflictCandidate(HostIntegratedAssemblyResolutionCandidate candidate) =>
+        new(candidate.AssemblySimpleName, candidate.Version, candidate.PackageId, candidate.PackageVersion, candidate.CultureName);
+
+    private static ConflictCandidate ToConflictCandidate(HostIntegratedAssemblyResolutionEntry entry) =>
+        new(entry.AssemblySimpleName, entry.Version, entry.PackageId, entry.PackageVersion,
+            entry.Assembly.GetName().CultureName);
+
     private static void ValidateNoConflicts(IEnumerable<HostIntegratedAssemblyResolutionEntry> proposedEntries) =>
-        ValidateNoConflicts(proposedEntries.Select(static entry => new ConflictCandidate(
-            entry.AssemblySimpleName,
-            entry.Version,
-            entry.PackageId,
-            entry.PackageVersion,
-            entry.Assembly.GetName().CultureName)));
+        ValidateNoConflicts(proposedEntries.Select(ToConflictCandidate));
 
     private static void ValidateNoConflicts(IEnumerable<ConflictCandidate> proposedEntries)
     {
-        var conflict = proposedEntries
-            .GroupBy(static entry => new AssemblyNameCultureKey(entry.AssemblySimpleName, entry.CultureName))
-            .Select(group => new
-            {
-                SimpleName = group.First().AssemblySimpleName,
-                group.Key.CultureName,
-                Versions = group
-                    .Select(static entry => entry.Version?.ToString() ?? string.Empty)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray(),
-                PackageKeys = group
-                    .Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray(),
-                Entries = group.ToArray()
-            })
-            .FirstOrDefault(group => group.Versions.Length > 1 || group.PackageKeys.Length > 1);
+        if (FindConflicts(proposedEntries).FirstOrDefault() is { } conflict)
+            throw new InvalidOperationException(FormatConflict(conflict));
+    }
 
-        if (conflict is null)
-        {
-            return;
-        }
+    private static IEnumerable<IGrouping<AssemblyNameCultureKey, ConflictCandidate>> FindConflicts(
+        IEnumerable<ConflictCandidate> proposedEntries) =>
+        proposedEntries.GroupBy(static entry => new AssemblyNameCultureKey(entry.AssemblySimpleName, entry.CultureName))
+            .Where(group => group.Select(static entry => entry.Version).Distinct().Skip(1).Any() ||
+                group.Select(static entry => BuildPackageKey(entry.PackageId, entry.PackageVersion))
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Skip(1).Any());
 
-        var packages = string.Join(", ", conflict.Entries
+    private static string FormatConflict(IGrouping<AssemblyNameCultureKey, ConflictCandidate> conflict)
+    {
+        var packages = string.Join(", ", conflict
             .OrderBy(static entry => entry.PackageId, StringComparer.OrdinalIgnoreCase)
             .Select(static entry => $"{entry.PackageId}@{entry.PackageVersion} ({entry.Version})"));
-        throw new InvalidOperationException(
-            $"Host-integrated assembly conflict for '{conflict.SimpleName}' (culture '{conflict.CultureName}'): active packages expose ambiguous assembly identities. Candidates: {packages}.");
+        return $"Host-integrated assembly conflict for '{conflict.First().AssemblySimpleName}' " +
+            $"(culture '{conflict.Key.CultureName}'): active packages expose ambiguous assembly identities. Candidates: {packages}.";
     }
 
     private static string FormatCandidate(HostIntegratedAssemblyResolutionEntry entry) =>

@@ -1058,13 +1058,15 @@ What an operator sees when a gate blocks a graph during a reconcile:
 
 - A `Warning` log per blocking gate, naming the gate type, the graph key, the package identities, and the gate-supplied reason.
 - An ordinary load failure for every package in that graph — the same shape a missing assembly or a resolution error produces: a recorded package failure for the `load` stage, a package-failed loading event, and a degraded reconciliation cycle. Because the graph is refused before it is resolved, that includes graph members a successful load would have skipped as host-provided or assembly-less; they stop being reported as failed as soon as the gates allow the graph.
-- No rollback of package state. Activation gating happens at the loading boundary, after the store transaction, so the package stays active and installed; it is simply not loaded in this process. The load-state surface reports it as `Failed` with the gate's reason in its diagnostics.
+- With automatic loading enabled, Nuplane prepares the whole candidate graph before publishing active or last-known-good state. A rejected replacement keeps the previous graph active. Independent graphs can still complete. The failed candidate can remain installed for retry and appears in reconciliation failures and loading failure events.
+
+Host-integrated assemblies loaded during preparation are process-lifetime assemblies. If a later store commit fails, previously committed assemblies remain the ones exposed by Nuplane's resolver and catalogs. Any host-integrated assemblies already materialized during preparation remain in memory until process exit.
 
 At startup the same failure makes the startup cycle degraded, so the configured `StartupFailurePolicy` decides what happens next — gating does not change that policy:
 
 - `FailHost` (the default) throws `NuplaneStartupReconciliationException`, so a host whose pre-condition is not met does not start rather than starting with a half-valid module.
-- `UseLastKnownGood` replays the last-known-good active set, where the gate is consulted again and blocks again, so startup recovery reports `last-known-good-load-failed` and the host still does not start.
-- `StartDegraded` starts the host with the blocked package unloaded and the cycle marked degraded.
+- `UseLastKnownGood` tries to load the previous committed graph. Startup fails if no recoverable graph exists or the previous graph also fails to load.
+- `StartDegraded` starts the host with the cycle marked degraded and the failed candidate unavailable.
 
 ## Sample-backed next steps
 

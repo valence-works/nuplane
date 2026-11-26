@@ -1,6 +1,7 @@
 using Nuplane.Abstractions;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Operational;
+using Nuplane.Reconciliation.Middleware;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.PhysicalFiles;
@@ -39,14 +40,15 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
         IReadOnlyDictionary<string, string> nextActiveVersions,
         IReadOnlySet<string> desiredRootPackageIds,
         IReadOnlySet<string> failedPackageIds,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlySet<string>? rejectedWhileLoading = null)
     {
         ArgumentNullException.ThrowIfNull(owner);
         using var borrow = owner.Borrow();
         var current = await _stateRegistry.ReadCoordinatedStateAsync(borrow, cancellationToken)
             .ConfigureAwait(false);
         return ActivePackageCatalogMapper.RestoreFailedRootSubclosureVersions(
-            current, nextActiveVersions, desiredRootPackageIds, failedPackageIds);
+            current, nextActiveVersions, desiredRootPackageIds, failedPackageIds, rejectedWhileLoading);
     }
 
     public async Task PreflightAsync(
@@ -63,6 +65,36 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
         using var borrow = owner.Borrow();
         _ = await CreateCandidateAsync(borrow, nextActiveVersions, resolvedPackages, changeSet,
             graphSelections, desiredRootPackageIds, failedPackageIds, correlationId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<StoreStateRecord> CreateCandidateForPublicationAsync(
+        PackageStoreOperationOwner owner, ReconciliationCycleContext context, IReadOnlyDictionary<string, string> loadingFailures)
+    {
+        var resolution = context.ResolutionResult!;
+        var applied = context.ApplyResult!;
+        var failedIds = BuildFailedPackageIds(resolution.FailedPackageIds, applied.FailedPackageIds);
+        failedIds.UnionWith(context.LoadingRejectedPackageIds);
+        using var borrow = owner.Borrow();
+        return await CreateCandidateAsync(
+            borrow,
+            context.MergedActive!,
+            applied.AppliedPackages,
+            context.ChangeSet!,
+            applied.SuccessfulGraphSelections,
+            BuildDesiredRootIds(context.DesiredRequests, resolution.ResolvedGraphs, resolution.GraphSelections),
+            failedIds,
+            context.CorrelationId,
+            context.CancellationToken,
+            loadingFailures,
+            context.LoadingRejectedPackageIds).ConfigureAwait(false);
+    }
+
+    public async Task PersistCandidateAsync(
+        PackageStoreOperationOwner owner, StoreStateRecord candidate, CancellationToken cancellationToken)
+    {
+        using var borrow = owner.Borrow();
+        await _stateRegistry.PersistCoordinatedActiveStateAsync(borrow, candidate, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -94,7 +126,9 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
         IReadOnlySet<string> desiredRootPackageIds,
         IReadOnlySet<string> failedPackageIds,
         string correlationId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? loadingFailures = null,
+        IReadOnlySet<string>? rejectedWhileLoading = null)
         => CoordinatedActiveStateTransitionProducer.CreateCandidateAsync(
             _files,
             _membershipRegistry,
@@ -108,5 +142,7 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
             failedPackageIds,
             correlationId,
             DateTimeOffset.UtcNow,
-            cancellationToken);
+            cancellationToken,
+            loadingFailures,
+            rejectedWhileLoading);
 }
