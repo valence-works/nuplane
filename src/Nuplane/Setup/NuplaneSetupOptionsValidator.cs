@@ -22,21 +22,6 @@ internal sealed class NuplaneSetupOptionsValidator : IValidateOptions<NuplaneSet
         
         var errors = new List<string>();
 
-        if (options.AutomaticReconciliation && options.PollInterval <= TimeSpan.Zero)
-        {
-            errors.Add("Nuplane setup PollInterval must be greater than zero when AutomaticReconciliation is enabled.");
-        }
-
-        if (options.StateFilePath is not null && string.IsNullOrWhiteSpace(options.StateFilePath))
-        {
-            errors.Add("Nuplane setup StateFilePath cannot be blank when provided.");
-        }
-
-        if (options.UseInMemoryStore && !string.IsNullOrEmpty(options.StateFilePath))
-        {
-            errors.Add("Nuplane setup UseInMemoryStore cannot be combined with a non-empty StateFilePath.");
-        }
-
         if (_feedDeclarationSource is { } source)
         {
             var readResult = source.Read();

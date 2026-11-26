@@ -13,6 +13,8 @@ using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Reconciliation;
 using Nuplane.Registration;
+using Nuplane.Setup;
+using Nuplane.Sources.Configuration;
 using Nuplane.Sources;
 using Nuplane.Store.State;
 using Nuplane.Versioning;
@@ -136,6 +138,8 @@ internal sealed class RestoreComposition : IAsyncDisposable
             // store comes first, so "this configuration persists nothing" and "nothing says which
             // store to write" are reported ahead of anything derived from them.
             var persistence = provider.GetRequiredService<EffectiveStorePersistenceSettings>();
+            _ = provider.GetRequiredService<IOptions<NuplaneSetupOptions>>().Value;
+            _ = provider.GetRequiredService<IOptions<DesiredStateOptions>>().Value;
             _ = provider.GetRequiredService<IOptions<LockFileOptions>>().Value;
             var feedOptions = provider.GetRequiredService<IOptions<FeedResolutionOptions>>().Value;
 

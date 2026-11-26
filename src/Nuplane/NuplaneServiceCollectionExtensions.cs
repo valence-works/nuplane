@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Builder;
+using Nuplane.Feeds.Setup;
 using Nuplane.Registration;
 using Nuplane.Store.Coordination;
 
@@ -14,18 +15,9 @@ public static class NuplaneServiceCollectionExtensions
 {
     /// <summary>
     /// Registers Nuplane from a configuration root or the <c>Setup</c> subsection itself.
-    /// Existing runtime option sections such as <c>Reconciliation</c>, <c>SourceTrust</c>, and
-    /// <c>StoreRegistry</c> are bound directly when present, while builder-only concepts are
-    /// translated from the <c>Setup</c> section.
+    /// Runtime options are bound from their own sections. Feed declarations are translated from
+    /// <c>Setup:Feeds</c>.
     /// </summary>
-    /// <remarks>
-    /// Where both layers express the same setting, the more specific runtime option section wins:
-    /// an explicitly present <c>Reconciliation:EnableAutomaticReconciliation</c> or
-    /// <c>Reconciliation:PollInterval</c> overrides the <c>Setup:AutomaticReconciliation</c> /
-    /// <c>Setup:PollInterval</c> shorthand, and an explicitly present
-    /// <c>StoreRegistry:StateFilePath</c> or <c>StoreRegistry:UseInMemoryStore</c> overrides the
-    /// <c>Setup:StateFilePath</c> / <c>Setup:UseInMemoryStore</c> shorthand.
-    /// </remarks>
     public static IServiceCollection AddNuplane(
         this IServiceCollection services,
         IConfiguration configuration) =>
@@ -43,18 +35,10 @@ public static class NuplaneServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        var setupSection = NuplaneSetupConfigurationServices.GetSetupSectionOrSelf(configuration);
-        var reconciliationSection = NuplaneSetupConfigurationServices.GetReconciliationSectionOrSelf(configuration);
-        var storeRegistrySection = NuplaneSetupConfigurationServices.GetStoreRegistrySectionOrSelf(configuration);
-
         return services.AddNuplane(builder =>
         {
-            NuplaneOptionsRegistrationServices.BindConfiguredOptions(builder.Services, configuration);
-            NuplaneSetupConfigurationServices.ApplySetupConfiguration(
-                builder,
-                setupSection,
-                reconciliationSection,
-                storeRegistrySection);
+            var setupSection = NuplaneOptionsRegistrationServices.BindConfiguredOptions(builder.Services, configuration);
+            NuplaneFeedSetupConfiguration.ApplyConfiguredFeeds(builder, setupSection);
             configure?.Invoke(builder);
         });
     }

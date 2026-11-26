@@ -230,7 +230,7 @@ public sealed class DesiredManifestIntegrationTests : IDisposable
             {
                 ["Nuplane:DesiredState:Manifest:Enabled"] = "true",
                 ["Nuplane:DesiredState:Manifest:Path"] = manifestPath,
-                ["Nuplane:Setup:UseInMemoryStore"] = "true"
+                ["Nuplane:StoreRegistry:UseInMemoryStore"] = "true"
             })
             .Build();
 

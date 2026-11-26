@@ -41,8 +41,7 @@ public sealed class NuplaneRestoreOptions
 
     /// <summary>
     /// Gets or sets an absolute override for the store's state file, taking precedence over
-    /// <c>Nuplane:StoreRegistry:StateFilePath</c>, over the <c>Nuplane:Setup:StateFilePath</c>
-    /// shorthand, and over <see cref="BasePath"/>.
+    /// <c>Nuplane:StoreRegistry:StateFilePath</c> and over <see cref="BasePath"/>.
     /// </summary>
     public string? StateFilePath { get; set; }
 

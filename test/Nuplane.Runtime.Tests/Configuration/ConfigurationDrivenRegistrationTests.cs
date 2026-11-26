@@ -205,9 +205,9 @@ public sealed class ConfigurationDrivenRegistrationTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Nuplane:Setup:AutomaticReconciliation"] = "true",
-                    ["Nuplane:Setup:PollInterval"] = "00:00:45",
-                    ["Nuplane:Setup:StateFilePath"] = stateFilePath,
+                    ["Nuplane:Reconciliation:EnableAutomaticReconciliation"] = "true",
+                    ["Nuplane:Reconciliation:PollInterval"] = "00:00:45",
+                    ["Nuplane:StoreRegistry:StateFilePath"] = stateFilePath,
                     ["Nuplane:Setup:Feeds:0:Name"] = "local-packages",
                     ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath,
                     ["Nuplane:Setup:Feeds:0:IncludePatterns:0"] = "*",
@@ -541,7 +541,7 @@ public sealed class ConfigurationDrivenRegistrationTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Nuplane:Setup:UseInMemoryStore"] = "true",
+                    ["Nuplane:StoreRegistry:UseInMemoryStore"] = "true",
                     ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
                     ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
                 })
@@ -585,7 +585,7 @@ public sealed class ConfigurationDrivenRegistrationTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Nuplane:Setup:StateFilePath"] = stateFilePath,
+                    ["Nuplane:StoreRegistry:StateFilePath"] = stateFilePath,
                     ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
                     ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
                 })
@@ -665,7 +665,7 @@ public sealed class ConfigurationDrivenRegistrationTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Nuplane:Setup:StateFilePath"] = stateFilePath,
+                    ["Nuplane:StoreRegistry:StateFilePath"] = stateFilePath,
                     ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
                     ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
                 })
@@ -689,45 +689,7 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
-    public void AddNuplane_StoreRegistryStateFilePathOverridesSetupSection()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "nuplane-precedence", Guid.NewGuid().ToString("N"));
-        var packagesPath = Path.Combine(root, "packages");
-        var setupPath = Path.Combine(root, "setup-state.json");
-        var storeRegistryPath = Path.Combine(root, "store-registry-state.json");
-        Directory.CreateDirectory(packagesPath);
-
-        try
-        {
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["Nuplane:Setup:StateFilePath"] = setupPath,
-                    ["Nuplane:StoreRegistry:StateFilePath"] = storeRegistryPath,
-                    ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
-                    ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
-                })
-                .Build();
-
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddNuplane(configuration.GetSection("Nuplane"));
-
-            using var provider = services.BuildServiceProvider();
-
-            var effectiveSettings = provider.GetRequiredService<EffectiveStorePersistenceSettings>();
-
-            Assert.Equal(StorePersistenceMode.ConfiguredPath, effectiveSettings.Mode);
-            Assert.Equal(Path.GetFullPath(storeRegistryPath), effectiveSettings.ResolvedStateFilePath);
-        }
-        finally
-        {
-            try { Directory.Delete(root, recursive: true); } catch { }
-        }
-    }
-
-    [Fact]
-    public void AddNuplane_SetupUseInMemoryStore_ResolvesInMemoryMode()
+    public void AddNuplane_StoreRegistryUseInMemoryStore_ResolvesInMemoryMode()
     {
         var root = Path.Combine(Path.GetTempPath(), "nuplane-setup-inmemory", Guid.NewGuid().ToString("N"));
         var packagesPath = Path.Combine(root, "packages");
@@ -738,7 +700,7 @@ public sealed class ConfigurationDrivenRegistrationTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Nuplane:Setup:UseInMemoryStore"] = "true",
+                    ["Nuplane:StoreRegistry:UseInMemoryStore"] = "true",
                     ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
                     ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
                 })
@@ -799,41 +761,6 @@ public sealed class ConfigurationDrivenRegistrationTests
     }
 
     [Fact]
-    public void AddNuplane_BlankSetupStateFilePath_FailsOnStartup()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "nuplane-blank-path", Guid.NewGuid().ToString("N"));
-        var packagesPath = Path.Combine(root, "packages");
-        Directory.CreateDirectory(packagesPath);
-
-        try
-        {
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["Nuplane:Setup:StateFilePath"] = "  ",
-                    ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
-                    ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
-                })
-                .Build();
-
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddNuplane(configuration.GetSection("Nuplane"));
-
-            using var provider = services.BuildServiceProvider();
-
-            var ex = Assert.Throws<OptionsValidationException>(() =>
-                provider.GetRequiredService<IOptions<NuplaneSetupOptions>>().Value);
-
-            Assert.Contains("StateFilePath cannot be blank", ex.Message);
-        }
-        finally
-        {
-            try { Directory.Delete(root, recursive: true); } catch { }
-        }
-    }
-
-    [Fact]
     public void AddNuplane_UseInMemoryStoreWithStateFilePath_FailsOnStartup()
     {
         var root = Path.Combine(Path.GetTempPath(), "nuplane-conflict-config", Guid.NewGuid().ToString("N"));
@@ -845,8 +772,8 @@ public sealed class ConfigurationDrivenRegistrationTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Nuplane:Setup:UseInMemoryStore"] = "true",
-                    ["Nuplane:Setup:StateFilePath"] = "./state.json",
+                    ["Nuplane:StoreRegistry:UseInMemoryStore"] = "true",
+                    ["Nuplane:StoreRegistry:StateFilePath"] = "./state.json",
                     ["Nuplane:Setup:Feeds:0:Name"] = "drop-folder",
                     ["Nuplane:Setup:Feeds:0:DirectoryPath"] = packagesPath
                 })
@@ -859,7 +786,7 @@ public sealed class ConfigurationDrivenRegistrationTests
             using var provider = services.BuildServiceProvider();
 
             var ex = Assert.Throws<OptionsValidationException>(() =>
-                provider.GetRequiredService<IOptions<NuplaneSetupOptions>>().Value);
+                provider.GetRequiredService<IOptions<StoreRegistryOptions>>().Value);
 
             Assert.Contains("UseInMemoryStore cannot be combined", ex.Message);
         }

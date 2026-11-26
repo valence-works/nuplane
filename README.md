@@ -239,7 +239,7 @@ If the same module is registered through both paths, the last registration wins 
 ### Configuration-driven setup
 
 A way to declare Nuplane infrastructure in configuration instead of code.
-`Nuplane:Setup` covers builder-only concepts like feeds, polling, and state-file persistence, while `Nuplane:Loading` covers optional runtime loading behavior.
+`Nuplane:Setup:Feeds` declares feeds. Use `Nuplane:Reconciliation` for polling, `Nuplane:StoreRegistry` for state-file persistence, and `Nuplane:Loading` for optional runtime loading.
 Observer registration and other host-specific reactions stay in code.
 
 ---
@@ -268,9 +268,11 @@ builder.Services.AddNuplane(nuplaneConfiguration, nuplane =>
 ```json
 {
   "Nuplane": {
+    "Reconciliation": {
+      "EnableAutomaticReconciliation": true,
+      "PollInterval": "00:01:00"
+    },
     "Setup": {
-      "AutomaticReconciliation": true,
-      "PollInterval": "00:01:00",
       "Feeds": {
         "local-packages": {
           "DirectoryPath": "packages",
@@ -349,13 +351,9 @@ app.MapSampleCatalog();
 
 ### Configuration model
 
-Nuplane has two configuration layers:
+Each part of Nuplane has its own configuration section.
 
-- `Nuplane:Setup` — the builder-only setup surface:
-  - automatic reconciliation
-  - poll interval
-  - optional state file path
-  - feeds, include patterns, directory watcher settings
+- `Nuplane:Setup:Feeds` declares feeds, include patterns, and directory watcher settings.
 - existing runtime option sections under `Nuplane:*` — advanced operator configuration:
   - `DesiredState`
   - `Reconciliation`
@@ -376,14 +374,20 @@ Nuplane has two configuration layers:
   - `PackageLoadModes`
   - `SharedAssemblies`
 
-When both layers express the same setting, the more specific runtime option section wins over the `Nuplane:Setup` shorthand:
+Automatic reconciliation is opt-in via `Nuplane:Reconciliation:EnableAutomaticReconciliation` and
+polls every 60 seconds unless you set `Nuplane:Reconciliation:PollInterval`. For persistence, choose
+either `Nuplane:StoreRegistry:StateFilePath` or `Nuplane:StoreRegistry:UseInMemoryStore`.
+Builder calls in the `AddNuplane` callback run after binding, so `PollEvery(...)`, `WithStateFile(...)`,
+and `UseInMemoryStore()` can override configuration.
 
-- `Reconciliation:EnableAutomaticReconciliation` overrides `Setup:AutomaticReconciliation` in both directions when the key is present; an explicit `false` disables automatic reconciliation even when the shorthand enables it.
-- `Reconciliation:PollInterval` overrides `Setup:PollInterval`; when neither is set, automatic reconciliation polls every 60 seconds.
-- `StoreRegistry:StateFilePath` overrides `Setup:StateFilePath`, and `StoreRegistry:UseInMemoryStore` overrides `Setup:UseInMemoryStore` in both directions; an explicit `false` there keeps state persisted even when the shorthand asks for an in-memory store.
-- The two store persistence settings are mutually exclusive, so an explicit choice in `StoreRegistry` also suppresses the opposing `Setup` shorthand: `StoreRegistry:UseInMemoryStore: true` ignores `Setup:StateFilePath`, and `StoreRegistry:StateFilePath` ignores `Setup:UseInMemoryStore`.
+Older `Setup` keys fail startup validation. Migrate them as follows.
 
-Builder calls run after configuration binds, so `WithStateFile(...)` and `UseInMemoryStore()` in the `AddNuplane` callback still override both layers.
+| Old key | Replacement |
+| --- | --- |
+| `Setup:AutomaticReconciliation` | `Reconciliation:EnableAutomaticReconciliation` |
+| `Setup:PollInterval` | `Reconciliation:PollInterval` |
+| `Setup:StateFilePath` | `StoreRegistry:StateFilePath` |
+| `Setup:UseInMemoryStore` | `StoreRegistry:UseInMemoryStore` |
 
 For unrestricted feeds, prefer one of these explicit forms:
 
@@ -447,10 +451,14 @@ Example configuration:
 ```json
 {
   "Nuplane": {
+    "StoreRegistry": {
+      "StateFilePath": "/var/lib/nuplane/store-state.json"
+    },
+    "Reconciliation": {
+      "EnableAutomaticReconciliation": true,
+      "PollInterval": "00:01:00"
+    },
     "Setup": {
-      "StateFilePath": "/var/lib/nuplane/store-state.json",
-      "AutomaticReconciliation": true,
-      "PollInterval": "00:01:00",
       "Feeds": {
         "nuget.org": {
           "ServiceIndex": "https://api.nuget.org/v3/index.json",

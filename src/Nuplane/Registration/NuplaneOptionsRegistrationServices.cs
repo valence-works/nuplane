@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Nuplane.Capabilities;
 using Nuplane.Feeds.Configuration;
+using Nuplane.Hosting;
 using Nuplane.PackageArchives;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.LockFile;
@@ -29,6 +30,14 @@ internal static class NuplaneOptionsRegistrationServices
     internal const string StoreRegistrySectionName = "StoreRegistry";
     internal const string CapabilitiesSectionName = "Capabilities";
     internal const string HostProvidedPackagesSectionName = "HostProvidedPackages";
+
+    private static readonly (string OldKey, string ReplacementKey)[] RetiredSetupKeys =
+    [
+        ("AutomaticReconciliation", "Reconciliation:EnableAutomaticReconciliation"),
+        ("PollInterval", "Reconciliation:PollInterval"),
+        ("StateFilePath", "StoreRegistry:StateFilePath"),
+        ("UseInMemoryStore", "StoreRegistry:UseInMemoryStore")
+    ];
 
     private static readonly Action<IServiceCollection, IConfiguration>[] ConfiguredOptionBinders =
     [
@@ -74,12 +83,20 @@ internal static class NuplaneOptionsRegistrationServices
         services.AddOptions<PackageArchiveReaderOptions>().ValidateOnStart();
     }
 
-    internal static void BindConfiguredOptions(IServiceCollection services, IConfiguration configuration)
+    internal static IConfigurationSection BindConfiguredOptions(IServiceCollection services, IConfiguration configuration)
     {
         var setupSection = GetNamedSectionOrSelf(configuration, SetupSectionName);
         services.Replace(ServiceDescriptor.Singleton<INuplaneSetupFeedDeclarationSource>(
             new ConfigurationNuplaneSetupFeedDeclarationSource(setupSection)));
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IPostConfigureOptions<NuplaneSetupOptions>, NuplaneSetupFeedDiagnosticReporter>());
+
+        var setupOptions = services.AddOptions<NuplaneSetupOptions>();
+        foreach (var (oldKey, replacementKey) in RetiredSetupKeys)
+        {
+            setupOptions.Validate(
+                _ => !setupSection.GetChildren().Any(key => string.Equals(key.Key, oldKey, StringComparison.OrdinalIgnoreCase)),
+                $"Nuplane:Setup:{oldKey} has been removed. Set Nuplane:{replacementKey} instead.");
+        }
 
         var retiredSection = GetNamedSectionOrSelf(configuration, "Convergence");
         services.AddOptions<DesiredStateOptions>().Validate(
@@ -91,6 +108,14 @@ internal static class NuplaneOptionsRegistrationServices
         {
             bindOptions(services, configuration);
         }
+
+        var reconciliationSection = GetNamedSectionOrSelf(configuration, ReconciliationSectionName);
+        if (reconciliationSection.GetValue<bool>(nameof(ReconciliationOptions.EnableAutomaticReconciliation)))
+        {
+            services.AddHostedService<ReconciliationHostedService>();
+        }
+
+        return setupSection;
     }
 
     private static void ConfigureCapabilityOptions(IServiceCollection services, IConfiguration configuration)

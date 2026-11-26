@@ -459,7 +459,7 @@ restoring tool both of those name the tool, so `NuplaneRestore` never falls back
 | Path | Resolution order |
 |---|---|
 | Install root | `NuplaneRestoreOptions.InstallRoot` (must be absolute) → absolute `Nuplane:FeedResolution:PackageInstallRoot` → relative configured value against `BasePath` → `BasePath/.nuplane/packages` → **refused** |
-| State file | `NuplaneRestoreOptions.StateFilePath` (must be absolute) → absolute `Nuplane:StoreRegistry:StateFilePath`, or the `Nuplane:Setup:StateFilePath` shorthand → relative configured value against `BasePath` → `BasePath/.nuplane/store-state.json` → **refused** |
+| State file | `NuplaneRestoreOptions.StateFilePath` (must be absolute) → absolute `Nuplane:StoreRegistry:StateFilePath` → relative configured value against `BasePath` → `BasePath/.nuplane/store-state.json` → **refused** |
 | Package lock file | `NuplaneRestoreOptions.LockFilePath` (must be absolute) → absolute `Nuplane:LockFile:Path` → relative value against `BasePath`, otherwise against the resolved state file's directory |
 
 A directory feed's own `DirectoryPath` is not one of the three paths above — it belongs to
@@ -654,19 +654,10 @@ This avoids positional array merging when `appsettings.json`, environment variab
 configuration files are layered. Feed object order is not semantic; use `DesiredState:SourcePriorities`
 for overlapping desired requests and `FeedResolution:FeedPriorities` for feed resolution candidates.
 
-When the same setting is expressed in both layers, the more specific runtime option section wins
-over the `Nuplane:Setup` shorthand. An explicitly present
-`Reconciliation:EnableAutomaticReconciliation` decides automatic reconciliation in both directions,
-so `false` there disables polling even when `Setup:AutomaticReconciliation` is `true`; the same
-applies to `Reconciliation:PollInterval` over `Setup:PollInterval`.
-
-Store persistence follows the same rule: `StoreRegistry:StateFilePath` and
-`StoreRegistry:UseInMemoryStore` decide over `Setup:StateFilePath` and `Setup:UseInMemoryStore`, so
-`StoreRegistry:UseInMemoryStore: false` keeps state persisted even when the shorthand asks for an
-in-memory store. Because the two persistence settings are mutually exclusive, an explicit choice in
-`StoreRegistry` also suppresses the opposing shorthand instead of combining into a rejected
-configuration. Builder calls run last, so `WithStateFile(...)` and `UseInMemoryStore()` in the
-`AddNuplane` callback still override both configuration layers.
+Enable automatic polling with `Reconciliation:EnableAutomaticReconciliation`. Set
+`Reconciliation:PollInterval` to override the default 60-second interval. Configure persistence with
+`StoreRegistry:StateFilePath` or choose `StoreRegistry:UseInMemoryStore`. Builder calls in the
+`AddNuplane` callback run after configuration binding.
 
 ### Selecting a package capability
 
