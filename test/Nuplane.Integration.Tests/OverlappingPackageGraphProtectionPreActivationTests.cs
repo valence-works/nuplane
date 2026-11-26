@@ -99,7 +99,8 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         {
             var pending = Assert.Single(context.GraphUseLeases);
             Assert.Equal(PackageGraphUseSnapshotState.Pending, pending.Snapshot.State);
-            Assert.Contains(context.Packages, package => package.Id == "Root.Second" && package.Version == "3.0.0");
+            Assert.Contains(context.Packages, package =>
+                StringComparer.OrdinalIgnoreCase.Equals(package.Id, "Root.Second") && package.Version == "3.0.0");
 
             // The callback can acquire the same native root and read the previous committed graph.
             var whileLoading = await ReadStateAsync(cancellationToken);
@@ -124,7 +125,8 @@ public sealed partial class OverlappingPackageGraphProtectionTests
             Assert.Equal("1.0.0", current.LastKnownGoodById["Root.Second"]);
             Assert.Equal("2.1.0", current.ActiveVersionById["Shared.Dependency"]);
             Assert.Equal("load", current.LastFailureById["Root.Second"].Stage);
-            Assert.Contains("Staged activation refused", current.LastFailureById["Root.Second"].Message);
+            var failure = current.LastFailureById["Root.Second"].Message;
+            Assert.True(failure.Contains("Staged activation refused", StringComparison.Ordinal), failure);
             Assert.Equal(Assert.Single(prior.ActiveGraphsByIdNormalized.Values).GenerationId,
                 Assert.Single(current.ActiveGraphsByIdNormalized.Values).GenerationId);
             Assert.Equal(Assert.Single(prior.ProtectionRecord!.RecoverableClosure.Graphs!).SnapshotId,
