@@ -170,7 +170,7 @@ internal sealed class PackageAutoLoadingObserver :
 
     private PackageLoadingPreparation CreatePreparation(
         PackageLoader loader,
-        PackageLoader.OrdinaryLoadBatch batch,
+        PackageGraphLifetime.StagedLoadBatch batch,
         HashSet<PackageLoadSession> currentSessions,
         int inertCount,
         string correlationId)

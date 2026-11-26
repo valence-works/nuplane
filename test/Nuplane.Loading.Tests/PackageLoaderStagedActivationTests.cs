@@ -12,6 +12,40 @@ public sealed class PackageLoaderStagedActivationTests : IDisposable
 
     private readonly DirectoryInfo _temp = Directory.CreateTempSubdirectory("nuplane-staged-activation-");
 
+    [Theory]
+    [InlineData(PackageLoadMode.Collectible)]
+    [InlineData(PackageLoadMode.HostIntegrated)]
+    public async Task StageOrdinaryGraphsAsync_WhenPublishedGraphMatchesExactly_ReusesSessionsAndSharedContext(PackageLoadMode mode)
+    {
+        var catalog = new HostIntegratedAssemblyResolutionCatalog();
+        var loader = new PackageLoader(hostIntegratedResolutionCatalog: catalog,
+            options: Options.Create(new LoadingOptions { DefaultLoadMode = mode }));
+        var root = Install("plugin", "1.0.0", typeof(FixtureMarker).Assembly);
+        var dependency = Install("dependency", "3.0.0", typeof(PackageLoaderStagedActivationTests).Assembly);
+        var facade = PackageMetadataTestSupport.Package("facade", "1.0.0",
+            PackageMetadataTestSupport.CreateNoAssemblyInstallDir(_temp, "facade"));
+        var initial = await loader.EnsureGraphLoadedAsync([[root, dependency, facade]], [], CancellationToken.None);
+        Assert.Empty(initial.FailedByPackageId);
+        var rootContext = ContextOf(loader, root);
+        var catalogGeneration = catalog.Generation;
+
+        using var batch = await loader.StageOrdinaryGraphsAsync([[facade, dependency, root]],
+            Versions(root, dependency, facade), [], CancellationToken.None);
+        Assert.Empty(batch.StagedContexts);
+        Assert.Empty(batch.Result.FailedByPackageId);
+        Assert.Equal(2, batch.Result.Loaded.Count);
+        Assert.All(batch.Result.Loaded, session => Assert.Same(loader.Sessions[$"{session.PackageId}@{session.Version}"], session));
+        Assert.Empty(batch.ValidateForCommit([ToActive(root), ToActive(dependency), ToActive(facade)], NoRejectedPackages));
+        batch.Commit();
+
+        Assert.Same(rootContext, ContextOf(loader, root));
+        Assert.Same(rootContext, ContextOf(loader, dependency));
+        Assert.True(loader.IsInertPackage(facade.Id, facade.Version));
+        Assert.Equal(catalogGeneration, catalog.Generation);
+        if (rootContext.IsCollectible)
+            rootContext.Unload();
+    }
+
     [Fact]
     public async Task StageOrdinaryGraphsAsync_WhenReplacementFails_PreservesTheSameVersionDependencySession()
     {
