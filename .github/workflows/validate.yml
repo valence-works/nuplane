@@ -1464,6 +1464,27 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  coordinated-package-store-container:
+    name: Coordinated package store (Linux container, ${{ matrix.filesystem }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        filesystem: [overlay, ext4, xfs]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Qualify enrollment, acquisition and extracted content under Docker's default security profile
+        shell: bash
+        run: bash build/qualify-coordinated-store-container.sh "${{ matrix.filesystem }}" "$RUNNER_TEMP/coordinated-store"
+
   package-archive-container:
     name: Archive-backed package content (Linux container, overlayfs)
     runs-on: ubuntu-latest

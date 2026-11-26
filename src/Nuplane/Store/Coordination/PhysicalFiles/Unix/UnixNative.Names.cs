@@ -8,9 +8,16 @@ internal readonly record struct UnixNameProfile(string ProfileId, bool CaseSensi
 internal static partial class UnixNative
 {
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
-    private const int LinuxExt4Magic = 0xEF53;
-    private const int LinuxFsCasefoldFlag = 0x40000000;
+    private const uint LinuxExt4Magic = 0xEF53;
+    private const uint LinuxOverlayMagic = 0x794C7630;
+    private const uint LinuxXfsMagic = 0x58465342;
+    private const uint LinuxBtrfsMagic = 0x9123683E;
+    private const uint LinuxTmpfsMagic = 0x1021994;
+    private const uint LinuxFsCasefoldFlag = 0x40000000;
     private const ulong LinuxGetFlagsRequest = 0x80086601;
+    // _IOR('X', 100, struct xfs_fsop_geom_v1), whose ABI is 112 bytes on Linux x64/arm64.
+    private const ulong LinuxXfsGeometryRequest = 0x80705864;
+    private const uint LinuxXfsAsciiCaseInsensitive = 1 << 12;
     private const long LinuxGetdents64X64 = 217;
     private const long LinuxGetdents64Arm64 = 61;
 
@@ -29,23 +36,59 @@ internal static partial class UnixNative
             throw new ArgumentOutOfRangeException(nameof(platform));
 
         if (UnixNamesNative.LinuxFStatFs(directoryFd, out var fileSystem) != 0)
-            throw NativeResultException("identify Linux directory filesystem");
-        if (fileSystem.FileSystemType != LinuxExt4Magic)
-            throw new UnixNativeCallException(0, "The Linux name provider currently qualifies ext4 only.", unsupported: true);
+            throw NativeResultException("fstatfs could not identify the Linux directory filesystem");
 
+        var type = unchecked((uint)fileSystem.FileSystemType);
+        return type switch
+        {
+            LinuxExt4Magic => ReadLinuxInodeNameProfile(directoryFd, "ext4", allowCasefold: true),
+            LinuxOverlayMagic => ReadLinuxInodeNameProfile(directoryFd, "overlayfs", allowCasefold: false),
+            LinuxXfsMagic => ReadLinuxXfsNameProfile(directoryFd),
+            _ => throw new UnixNativeCallException(0,
+                $"fstatfs detected an unsupported Linux name profile on {DescribeLinuxFileSystem(type)}.",
+                unsupported: true)
+        };
+    }
+
+    private static string DescribeLinuxFileSystem(uint type)
+        => type switch
+        {
+            LinuxBtrfsMagic => "btrfs (0x9123683e)",
+            LinuxTmpfsMagic => "tmpfs (0x01021994)",
+            _ => $"filesystem 0x{type:x8}"
+        };
+
+    private static UnixNameProfile ReadLinuxInodeNameProfile(int directoryFd, string filesystem, bool allowCasefold)
+    {
         // FS_IOC_GETFLAGS is defined with sizeof(long) in its request encoding on
         // the supported 64-bit Linux ABIs. Keep the pointed-to storage native-sized
-        // even though current ext4 kernels expose the flag bits in an int-sized field.
+        // even though the kernel exposes the flag bits in an int-sized field.
         long nativeFlags = 0;
-        var flagsResult = UnixNamesNative.LinuxIoctlGetFlags(directoryFd, LinuxGetFlagsRequest, ref nativeFlags);
-        if (flagsResult != 0)
-            throw NativeResultException("inspect ext4 directory casefold semantics");
+        if (UnixNamesNative.LinuxIoctlGetFlags(directoryFd, LinuxGetFlagsRequest, ref nativeFlags) != 0)
+            throw new UnixNativeCallException(Marshal.GetLastPInvokeError(),
+                $"FS_IOC_GETFLAGS could not establish {filesystem} directory name semantics.", unsupported: true);
 
         var isCasefold = (((uint)nativeFlags) & LinuxFsCasefoldFlag) != 0;
+        if (isCasefold && !allowCasefold)
+            throw new UnixNativeCallException(0,
+                $"FS_IOC_GETFLAGS detected unqualified casefold semantics on {filesystem}.", unsupported: true);
+
         return new UnixNameProfile(
-            isCasefold ? "linux-ext4-casefold-v1" : "linux-ext4-sensitive-v1",
+            isCasefold ? "linux-ext4-casefold-v1" : $"linux-{filesystem}-sensitive-v1",
             CaseSensitive: !isCasefold,
             NormalizationInsensitive: isCasefold);
+    }
+
+    private static UnixNameProfile ReadLinuxXfsNameProfile(int directoryFd)
+    {
+        if (UnixNamesNative.LinuxIoctlXfsGeometry(directoryFd, LinuxXfsGeometryRequest, out var geometry) != 0)
+            throw new UnixNativeCallException(Marshal.GetLastPInvokeError(),
+                "XFS_IOC_FSGEOMETRY_V1 could not establish xfs directory name semantics.", unsupported: true);
+        if ((geometry.Flags & LinuxXfsAsciiCaseInsensitive) != 0)
+            throw new UnixNativeCallException(0,
+                "XFS_IOC_FSGEOMETRY_V1 detected unqualified ASCII case-insensitive xfs names.", unsupported: true);
+
+        return new UnixNameProfile("linux-xfs-sensitive-v1", CaseSensitive: true, NormalizationInsensitive: false);
     }
 
     internal static byte[] FindEntryName(UnixPlatform platform, int parentFd, int fileFd, int maximumNameBytes)
@@ -231,6 +274,9 @@ internal static class UnixNamesNative
     [DllImport("libc", EntryPoint = "ioctl", SetLastError = true)]
     internal static extern int LinuxIoctlGetFlags(int fd, ulong request, ref long flags);
 
+    [DllImport("libc", EntryPoint = "ioctl", SetLastError = true)]
+    internal static extern int LinuxIoctlXfsGeometry(int fd, ulong request, out LinuxXfsGeometry geometry);
+
     [DllImport("libc", EntryPoint = "syscall", SetLastError = true)]
     internal static extern nint LinuxSyscallGetdents64(long number, int fd, [Out] byte[] buffer, nuint count);
 
@@ -252,5 +298,11 @@ internal static class UnixNamesNative
     internal struct LinuxStatFs
     {
         [FieldOffset(0)] internal long FileSystemType;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 112)]
+    internal struct LinuxXfsGeometry
+    {
+        [FieldOffset(92)] internal uint Flags;
     }
 }

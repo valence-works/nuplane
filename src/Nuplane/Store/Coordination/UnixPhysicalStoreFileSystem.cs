@@ -493,7 +493,7 @@ internal sealed partial class UnixPhysicalStoreFileSystem : IPhysicalStoreFileSy
         {
             throw Refusal(
                 PackageStoreAdmissionReason.UnsupportedFilesystem,
-                $"The Unix provider cannot perform '{operation}' with the metadata or locking support returned by this filesystem.",
+                $"The Unix provider could not {operation}. {exception.Message} (native error {exception.Error}).",
                 exception);
         }
         catch (UnixNativeCallException exception)
@@ -518,7 +518,8 @@ internal sealed partial class UnixPhysicalStoreFileSystem : IPhysicalStoreFileSy
         var reason = UnixNative.IsUnsupportedError(error)
             ? PackageStoreAdmissionReason.UnsupportedFilesystem
             : PackageStoreAdmissionReason.UnknownAuthority;
-        return Refusal(reason, $"The Unix provider could not {operation} (native error {error}).", innerException);
+        var probe = innerException is UnixNativeCallException native ? $" Probe: {native.Message}." : string.Empty;
+        return Refusal(reason, $"The Unix provider could not {operation} (native error {error}).{probe}", innerException);
     }
 
     private static PackageStoreAdmissionException Unknown(string message, Exception? innerException = null)
