@@ -211,6 +211,38 @@ public sealed class PackageLoaderTests : IDisposable
     }
 
     [Fact]
+    public void BuildScanCandidates_ExactRidLowerFrameworkAndFallbackHigherFramework_PrefersExactRidAssetSet()
+    {
+        const string packageId = "My.Plugin";
+        var runtimeIdentifiers = PackageGraphLoadContext.ExpandRuntimeIdentifiers(RuntimeInformation.RuntimeIdentifier);
+        var exactRid = runtimeIdentifiers[0];
+        var fallbackRid = Assert.Single(runtimeIdentifiers.Skip(1).Take(1));
+        var install = _tempDir.CreateSubdirectory(packageId);
+        var exact = install.CreateSubdirectory(Path.Combine("runtimes", exactRid, "lib", "net8.0"));
+        var fallback = install.CreateSubdirectory(Path.Combine("runtimes", fallbackRid, "lib", "net9.0"));
+        var portable = install.CreateSubdirectory(Path.Combine("lib", "net10.0"));
+        var source = typeof(FixtureMarker).Assembly.Location;
+        File.Copy(source, Path.Combine(exact.FullName, "Z.Helper.dll"));
+        File.Copy(source, Path.Combine(exact.FullName, "A.Helper.dll"));
+        File.Copy(source, Path.Combine(exact.FullName, $"{packageId}.dll"));
+        File.Copy(source, Path.Combine(fallback.FullName, $"{packageId}.dll"));
+        File.Copy(source, Path.Combine(portable.FullName, $"{packageId}.dll"));
+
+        var loader = new PackageLoader(hostTargetFrameworkOverride: "net10.0");
+        var candidates = loader.BuildScanCandidates(packageId, install.FullName);
+
+        Assert.Equal(["A.Helper.dll", $"{packageId}.dll", "Z.Helper.dll"],
+            candidates.Select(static candidate => candidate.AssemblyFileName));
+        Assert.All(candidates, candidate =>
+        {
+            Assert.Equal(exact.FullName, Path.GetDirectoryName(candidate.AssemblyPath));
+            Assert.Equal("net8.0", candidate.TargetFrameworkMoniker);
+        });
+        var primary = Assert.Single(candidates, static candidate => candidate.CandidateKind == "PrimaryLoadAssembly");
+        Assert.Equal($"{packageId}.dll", primary.AssemblyFileName);
+    }
+
+    [Fact]
     public async Task EnsureLoadedAsync_MultiTargetPackage_WithOnlyHigherFrameworks_FailsClearly()
     {
         var installPath = CreateMultiTargetInstallDir("Nuplane.Loading.Tests.Fixtures", "net11.0");
