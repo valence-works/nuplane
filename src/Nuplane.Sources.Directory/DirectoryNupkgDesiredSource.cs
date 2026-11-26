@@ -6,6 +6,7 @@ using Nuplane.Abstractions;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.PhysicalFiles;
+using Nuplane.Sources;
 
 namespace Nuplane.Sources.Directory;
 
@@ -14,7 +15,8 @@ namespace Nuplane.Sources.Directory;
 /// directory, optionally filtering by a set of package identifier patterns.
 /// Patterns support <c>*</c> (any sequence of characters) and <c>?</c> (any single character).
 /// </summary>
-public sealed class DirectoryNupkgDesiredSource : IScopedDesiredPackageSource
+public sealed class DirectoryNupkgDesiredSource : IScopedDesiredPackageSource,
+    IIdentifiedDesiredPackageSource, ILegacyDesiredPackageSourceSnapshotVerifier
 {
     private static readonly Regex PackageFileNamePattern = new(
         "^(?<id>.+)\\.(?<version>\\d+\\.\\d+\\.\\d+(?:[-+][A-Za-z0-9\\.-]+)?)$",
@@ -69,6 +71,14 @@ public sealed class DirectoryNupkgDesiredSource : IScopedDesiredPackageSource
     {
         _requiresBorrow = requiresBorrow;
     }
+
+    /// <inheritdoc />
+    public string SourceInstanceId => $"directory:{_feedName ?? _sourceName}";
+
+    bool ILegacyDesiredPackageSourceSnapshotVerifier.OwnsLegacySnapshot(IReadOnlyList<PackageRequest> requests) =>
+        requests.Count > 0 && requests.All(request =>
+            string.Equals(_feedName, request.FeedName, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(_sourceName, request.SourceName, StringComparison.OrdinalIgnoreCase));
 
     /// <inheritdoc />
     public Task<IReadOnlyList<PackageRequest>> GetDesiredAsync(CancellationToken ct)

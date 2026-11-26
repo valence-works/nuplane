@@ -51,23 +51,20 @@ internal sealed class DesiredStateReadMiddleware(
         var freshReads = 0;
         var sourceOutageCount = 0;
 
-        var orderedSources = sources
-            .Select(source => new
-            {
-                Source = source,
-                SourceName = DesiredPackageSourceAccess.GetSourceName(source)
-            })
-            .OrderBy(x => x.SourceName, StringComparer.Ordinal)
-            .ToArray();
+        var orderedSources = DesiredPackageSourceAccess.Describe(sources);
 
         foreach (var entry in orderedSources)
         {
             var source = entry.Source;
-            var sourceName = entry.SourceName;
+            var sourceName = entry.DiagnosticName;
             try
             {
                 var fromSource = await retryPolicy.ExecuteAsync(ct => source.GetDesiredAsync(ct), cancellationToken);
-                await snapshotCache.SaveAsync(sourceName, fromSource, cancellationToken);
+                if (entry.SnapshotKey is { } snapshotKey)
+                {
+                    await snapshotCache.SaveAsync(snapshotKey, fromSource, cancellationToken);
+                }
+
                 requests.AddRange(fromSource);
                 freshReads++;
             }
@@ -87,7 +84,7 @@ internal sealed class DesiredStateReadMiddleware(
                 logger.LogSourceOutage(correlationId, sourceName, ex.Message);
                 metrics.RecordSourceOutage();
 
-                var fallback = await snapshotCache.LoadSnapshotAsync(sourceName, cancellationToken);
+                var fallback = await snapshotCache.LoadForSourceAsync(entry, cancellationToken);
                 if (fallback is not null)
                 {
                     requests.AddRange(fallback);
@@ -98,6 +95,6 @@ internal sealed class DesiredStateReadMiddleware(
         return (new(
             requests,
             usedFallback,
-            AllSourcesFresh: freshReads == orderedSources.Length), sourceOutageCount);
+            AllSourcesFresh: freshReads == orderedSources.Count), sourceOutageCount);
     }
 }

@@ -131,6 +131,14 @@ does not compare semantic versions across sources. For example, a higher-priorit
 remains the winner over a lower-priority source's newer `1.1.0` request. With no priorities, existing
 case-insensitive source-name ordering remains the default.
 
+Desired-state snapshots and outage diagnostics identify each registered source instance. Built-in
+feeds and directories use their configured names. If a host registers multiple instances of a custom
+source type, implement `IIdentifiedDesiredPackageSource` with a unique `SourceInstanceId` that stays
+stable across restarts. This ID is independent of the `PackageRequest.SourceName` used for source
+priority. A legacy type-keyed snapshot can provide fallback if its saved requests identify the
+current built-in source. On a successful read Nuplane stores the new instance snapshot, even if
+the source returns zero packages.
+
 ### Actual state
 
 The packages currently installed and active in the local package store.
