@@ -608,16 +608,16 @@ if (archive.GetEntry("staticwebassets/module.js") is { Length: <= MaxBytes } ent
 * It works on any filesystem that can store a file. CI qualifies it on Linux overlayfs (a container's
   writable layer), xfs, btrfs, tmpfs and ext4, macOS, and Windows x64 and arm64, all without an enrolled
   store.
-* Every file entry is exposed. Paths use `/` or `\`, are matched case-insensitively, and must stay inside
-  the package: rooted paths, empty, `.` or `..` segments, `:` and NUL are refused. When two entries share a
-  path after normalization, neither is exposed.
-* Verified archives stay in a bounded in-memory cache, so each archive is verified once until it is
-  evicted. A cache hit serves the previously verified bytes even if the on-disk file has since changed.
-  An archive larger than `CacheBytes` is never cached, so every open reads and verifies it
-  again. Size `CacheBytes` to the archives a host serves, or verified archives are evicted and
-  re-read. Each archive being read holds up to `MaximumArchiveBytes` in memory until it is verified.
-  Configure the bounds under `Nuplane:PackageArchives`: `CacheBytes` (64 MiB by default, 0 turns the
-  cache off) and `MaximumArchiveBytes` (256 MiB by default).
+* The reader exposes valid, unambiguous file entries. It treats `/` and `\` as separators in ZIP names
+  and lookup paths. Lookups are case-insensitive and reject rooted paths, empty, `.` or `..` segments, `:`
+  and NUL. When two entries share a path after normalization, neither is exposed. The ordinary installer
+  follows platform ZIP extraction rules. The coordinated installer rejects backslashes in ZIP names.
+* A cache hit serves the previously verified bytes even if the on-disk file has since changed. Under
+  `Nuplane:PackageArchives`, `CacheBytes` caps retained verified archive bytes at 64 MiB by default. Set it
+  to 0 to turn off retention. Concurrent callers can still share a load, and refusals are remembered for
+  five seconds. An archive larger than the cache is read and verified on the next load. Size `CacheBytes`
+  for the archives a host serves to avoid extra reads after eviction. Each archive being read holds up to
+  `MaximumArchiveBytes` in memory until it is verified. The default is 256 MiB.
 * Installs created before archive retention need a fresh acquisition to serve content. Keep the
   store state and its recorded hashes. For a live or enrolled store, keep the old install available
   while active, last-known-good or in use. A newly published package version can be acquired

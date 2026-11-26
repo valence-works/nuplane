@@ -8,11 +8,12 @@ namespace Nuplane.PackageArchives;
 /// sha512 when it was opened, so every entry it returns is the admitted package's content.
 /// </summary>
 /// <remarks>
-/// Entry paths are package-relative and use <c>/</c>; names are used as the archive stores them, as Nuplane
-/// extracts them. Lookup is case-insensitive, like NuGet package paths. Directory entries, entries whose names would escape the
-/// package (rooted, <c>..</c>, <c>.</c>, empty segments, <c>:</c> or NUL), and names that two entries share
-/// after normalization are not exposed. Instances are immutable and safe to use from several threads; reads of
-/// entries from one instance run one at a time, because they share one parsed zip archive.
+/// Entry paths are package-relative. The reader interprets <c>\</c> and <c>/</c> in ZIP entry names as
+/// separators and exposes paths using <c>/</c>. Lookup is case-insensitive. Ordinary installation follows
+/// the platform's ZIP extraction rules. Coordinated installation refuses backslashes in ZIP entry names.
+/// Directory entries, invalid paths (rooted, <c>..</c>, <c>.</c>, empty segments, <c>:</c> or NUL), and names
+/// shared by multiple entries after normalization are omitted. Instances are immutable and safe to use
+/// from several threads. Reads from one instance run one at a time because they share a parsed ZIP archive.
 /// </remarks>
 public sealed class PackageArchive
 {
@@ -84,10 +85,10 @@ public sealed class PackageArchive
         if (expected.Length > Array.MaxLength)
             throw new InvalidDataException("The package archive entry is larger than a managed byte array can represent.");
 
-        var bytes = new byte[(int)expected.Length];
         lock (_readSync)
         {
             using var stream = _archive.Entries[expected.Index].Open();
+            var bytes = new byte[(int)expected.Length];
             var offset = 0;
             while (offset < bytes.Length)
             {
@@ -99,9 +100,9 @@ public sealed class PackageArchive
 
             if (stream.ReadByte() != -1)
                 throw new InvalidDataException("The package archive entry exceeded its declared length.");
-        }
 
-        return bytes;
+            return bytes;
+        }
     }
 
     internal static bool TryNormalizeRequestPath(string? relativePath, out string normalized)

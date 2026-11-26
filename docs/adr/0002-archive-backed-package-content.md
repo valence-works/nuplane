@@ -45,12 +45,13 @@ Rejected: reading the archive from the feed while it still matches. Remote downl
 The state file records each install's archive hash in two places:
 
 - `ActivePackageDescriptor.ArchiveHash`, projected as `ActivePackage.ArchiveHash`, for the active install of each package;
-- `StoreStateRecord.ArchiveHashesByPackage`, for every package version the state has activated, active or not. The key is `packageId/version`, folded with Unicode NFC and invariant case in both directions. It leaves out the feed and the install path: a NuGet package version names one artifact (ADR-0001), so no feed, fallback feed, renamed feed, install path or spelling of the install root can miss the record. An entry is never replaced once written.
+- `StoreStateRecord.ArchiveHashesByPackage`, for every package version the state has activated, active or not. The key is `packageId/version`. Lookup uses NuGet’s normalized version and folds both segments with Unicode NFC and invariant case. For example, `acme/1.0`, `acme/1.0.0.0` and `acme/1.0.0+build` share the `acme/1.0.0` identity. The persisted spelling stays intact for digest verification. Conflicting hashes for equivalent keys cause the history to be refused. It leaves out the feed and the install path: a NuGet package version names one artifact (ADR-0001), so no feed, fallback feed, renamed feed, install path or spelling of the install root can miss the record. An entry is never replaced once written.
 
 The rules:
 
 - **First activation:** the first time a package version becomes active, its hash comes from its install's acquisition record, `.nuplane-content-hash`. That record was computed from the archive bytes when the archive was acquired. The value is written to both places.
 - **Later activations:** the recorded value is kept from then on. This covers re-resolution of the active install, restarts, and a rollback to a retained install. Re-reading the hash file beside the archive never replaces a recorded value. So replacing an install's archive and its hash file together is refused, whether the install is active or is reactivated later.
+- **Coordinated publication:** the candidate must preserve every previously recorded hash, including inactive versions. Its active descriptor hashes must agree with its history. A caller constructing complete active state supplies each newly activated version’s acquisition hash. Enrollment applies this check to the acknowledged source state when moving a member.
 - **Digests:** the protection digest covers both places in coordinated compositions. Each field is written only when present, so states without recorded hashes keep their existing digests.
 - **Different bytes for a recorded version:** a package version acquired again with different bytes, from any feed, stays refused (`HashMismatch`). This happens only when a version is republished or a second feed carries a different build of it, which ADR-0001 already treats as an artifact change. Publish a new version instead.
 
@@ -69,8 +70,9 @@ No filesystem semantics take part in the safety argument, so the reader needs no
 
 ### Entry scope and paths
 
-- Every file entry is exposed, and the host decides which prefix it serves.
-- Names are used as the archive stores them; `\` in a name is read as a separator, as NuGet reads it. Current `dotnet pack` stores names literally, so no percent-decoding is applied.
+- Valid, unambiguous file entries are exposed, and the host decides which prefix it serves.
+- The reader treats both `/` and `\` in ZIP names as separators and exposes paths using `/`. The ordinary installer follows the platform's ZIP extraction rules. On Unix a backslash can be part of the extracted filename, and on Windows it is a separator. The coordinated installer rejects backslashes in ZIP names.
+- `dotnet pack` stores literal names. The reader treats percent-encoded text literally.
 - Lookups are case-insensitive. A request path accepts `/` or `\`.
 - These are refused, and an entry that fails them is not reachable: rooted paths, empty segments, `.` and `..` segments, `:` and NUL.
 - When two entries share a path after normalization, neither is exposed.
@@ -83,7 +85,7 @@ The reader is a separate service that `AddNuplane` registers in every compositio
 
 Verified archives stay in an in-memory LRU cache keyed by package, version, archive path and hash.
 
-- `Nuplane:PackageArchives:CacheBytes` bounds the cache: 64 MiB by default, and 0 turns it off. An archive larger than the cache is read and verified on every open, and a cache smaller than the archives a host serves evicts and re-reads them; size `CacheBytes` for the working set. Loads of different archives run concurrently, and each holds up to `MaximumArchiveBytes` until it is verified; a limit on concurrent loads was tried and removed, because a stalled read would hold its slot and block healthy packages.
+- `Nuplane:PackageArchives:CacheBytes` bounds verified archive retention. It defaults to 64 MiB, and 0 turns off retention. Concurrent callers can share an in-progress load, and the reader retains refusals for five seconds at every cache size. Archives larger than the cache are read and verified on the next load. Size `CacheBytes` for the working set to avoid extra reads after eviction. Loads of different archives run concurrently, and each holds up to `MaximumArchiveBytes` until it is verified. A limit on concurrent loads was tried and removed because a stalled read would hold its slot and block healthy packages.
 - Nothing is cached on disk, so the cache adds no filesystem requirement.
 
 ## Consequences

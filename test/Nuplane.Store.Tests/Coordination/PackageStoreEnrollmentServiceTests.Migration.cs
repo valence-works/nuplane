@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Reconciliation;
 using Nuplane.Store.Coordination;
@@ -183,7 +184,8 @@ public sealed partial class PackageStoreEnrollmentServiceTests
     [SupportedPhysicalStoreFact]
     public async Task MigrateAsync_MovesAddsAndRetiresMembersWhilePreservingOldStateFiles()
     {
-        using var context = await RootMembershipProtectionVerificationTests.Context.CreateCompleteAsync();
+        using var context = await CreateCompleteMigrationContextWithArchiveHistoryAsync();
+        var archivedVersion = Assert.Single(context.States["first"].ArchiveHashesByPackage!);
         var targets = PrepareMigrationTargets(context);
         var service = CreateMigrationService(context, new StoreStateSerializer(), targets.Declarations);
         var beforeBytes = CaptureMemberBytes(context);
@@ -210,12 +212,46 @@ public sealed partial class PackageStoreEnrollmentServiceTests
         var moved = Assert.IsType<RootMemberRecord.AcknowledgedBinding>(
             migrated.Members.Single(static member => member.MemberId == "first").Binding);
         Assert.Equal(Path.GetFileName(targets.FirstPath), moved.StateSlot.CanonicalBasename);
-        Assert.Equal(2, (await new StoreStateSerializer().LoadAsync(targets.FirstPath, CancellationToken.None))
-            .ProtectionRecord!.EnrollmentEpoch);
+        var movedState = await new StoreStateSerializer().LoadAsync(targets.FirstPath, CancellationToken.None);
+        Assert.Equal(2, movedState.ProtectionRecord!.EnrollmentEpoch);
+        Assert.Equal(archivedVersion.Value, movedState.ArchiveHashesByPackage![archivedVersion.Key]);
         Assert.Equal(2, (await new StoreStateSerializer().LoadAsync(targets.ThirdPath, CancellationToken.None))
             .ProtectionRecord!.EnrollmentEpoch);
         Assert.True(File.Exists(context.StatePaths["first"]));
         Assert.True(File.Exists(context.StatePaths["second"]));
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task PublishStateAsync_MovedSlotDropsPriorArchiveHistory_RefusesBeforePublication()
+    {
+        using var context = await CreateCompleteMigrationContextWithArchiveHistoryAsync();
+        var targets = PrepareMigrationTargets(context);
+        var declarations = targets.Declarations.Declarations.Select(static declaration => new RootMemberRecord(
+            declaration.MemberId, declaration.StateFileLocator, new RootMemberRecord.DeclaredBinding())).ToArray();
+        var authority = new PackageStoreAuthorityResolver(context.Files, context.Registry);
+        var priorBytes = CaptureMemberBytes(context);
+
+        var refusal = await Assert.ThrowsAsync<PackageStoreAdmissionException>(() =>
+            context.Registry.WithQuiescentMembershipMigrationLocationsAsync(context.Root, context.RootIdentity,
+                1, ["first", "second"], declarations, ["second"], authority,
+                quiescentCutoverConfirmed: true, recoverExisting: false,
+                async (locked, token) =>
+                {
+                    var source = Assert.IsType<StoreStateRecord>(await locked.ReadMigrationSourceStateAsync("first", token));
+                    var protection = Assert.IsType<PackageProtectionRecord>(source.ProtectionRecord);
+                    var candidate = PackageStoreProtectionRecordFactory.WithProtection(
+                        source with { ArchiveHashesByPackage = null }, context.RootIdentity,
+                        locked.Ledger.EnrollmentEpoch, "first", checked(protection.Revision + 1),
+                        protection.ActiveClosure, protection.RecoverableClosure, protection.RetiredGraphs,
+                        protection.LegacyUnknownRecovery);
+                    return await locked.PublishStateAsync("first", candidate, token);
+                }, CancellationToken.None));
+
+        Assert.Equal(PackageStoreAdmissionReason.StateMismatch, refusal.Reason);
+        Assert.Contains("removed or replaced the recorded archive hash", refusal.Message, StringComparison.Ordinal);
+        Assert.Null(context.Registry.ReadCandidate(context.Root).PendingStateCommit);
+        AssertMemberBytesEqual(priorBytes, CaptureMemberBytes(context));
+        Assert.False(File.Exists(targets.FirstPath));
     }
 
     [SupportedPhysicalStoreFact]
@@ -367,6 +403,28 @@ public sealed partial class PackageStoreEnrollmentServiceTests
 
     private static TrustedPackageStoreMemberDeclarationDefinition SingleMemberDeclarations(string path)
         => new(true, [new TrustedPackageStoreMemberDeclaration("default", "legacy-member", path)]);
+
+    private static async Task<RootMembershipProtectionVerificationTests.Context> CreateCompleteMigrationContextWithArchiveHistoryAsync()
+    {
+        var context = await RootMembershipProtectionVerificationTests.Context.CreateAsync();
+        try
+        {
+            var key = StoreStateRecord.ArchiveHashKey("Root.First", "0.9.0");
+            var hash = "sha512:" + Convert.ToBase64String(SHA512.HashData("retained version"u8));
+            context.States["first"] = context.Reprotect(context.States["first"] with
+            {
+                ArchiveHashesByPackage = new(StringComparer.Ordinal) { [key] = hash }
+            }, legacyUnknown: false);
+            await context.PublishStatesAsync();
+            await context.Registry.CompleteEnrollmentAsync(context.Root, context.RootIdentity, 1, true, CancellationToken.None);
+            return context;
+        }
+        catch
+        {
+            context.Dispose();
+            throw;
+        }
+    }
 
     private static (TrustedPackageStoreMemberDeclarationDefinition Declarations, string FirstPath, string ThirdPath)
         PrepareMigrationTargets(RootMembershipProtectionVerificationTests.Context context)

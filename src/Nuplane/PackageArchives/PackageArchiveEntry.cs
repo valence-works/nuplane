@@ -32,6 +32,9 @@ public sealed class PackageArchiveEntry
 
     /// <summary>Decompresses the entry.</summary>
     /// <returns>Exactly <see cref="Length"/> bytes.</returns>
-    /// <exception cref="InvalidDataException">The entry's data does not match its declared size.</exception>
+    /// <exception cref="InvalidDataException">
+    /// The entry is corrupt, uses unsupported compression, exceeds the maximum byte array length, or its
+    /// data does not match its declared size.
+    /// </exception>
     public byte[] ReadAllBytes() => _archive.ReadEntry(this);
 }

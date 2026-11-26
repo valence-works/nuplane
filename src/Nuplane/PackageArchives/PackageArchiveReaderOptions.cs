@@ -10,8 +10,10 @@ public sealed class PackageArchiveReaderOptions
     public long MaximumArchiveBytes { get; set; } = 256L * 1024 * 1024;
 
     /// <summary>
-    /// Gets or sets how many bytes of verified archives the reader keeps in memory. Defaults to 64 MiB.
-    /// Zero disables caching, so every open reads and verifies the archive again.
+    /// Gets or sets the byte budget for retaining verified archives. Defaults to 64 MiB.
+    /// Zero disables retention of verified archives. Concurrent callers can still share an in-progress load,
+    /// and the reader remembers refusals for five seconds. A retry within that window can return
+    /// <see cref="PackageArchiveFailureReason.ArchiveMissing"/> after the archive is restored.
     /// </summary>
     public long CacheBytes { get; set; } = 64L * 1024 * 1024;
 }

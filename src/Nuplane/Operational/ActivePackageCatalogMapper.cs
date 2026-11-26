@@ -393,11 +393,11 @@ internal static class ActivePackageCatalogMapper
         // after deactivation. The record is keyed by package ID and version only, so no feed, install path or
         // spelling can miss it. Re-resolution re-reads the hash file beside the archive; that value is used only
         // for a package version the state has never recorded.
-        var recordedByPackage = currentState.ArchiveHashesByPackage;
+        var recordedByPackage = StoreStateRecord.IndexArchiveHashes(currentState.ArchiveHashesByPackage);
         string? ArchiveHashFor(ResolvedPackage package)
         {
             var key = StoreStateRecord.ArchiveHashKey(package.Id, package.Version);
-            return recordedByPackage is not null && recordedByPackage.TryGetValue(key, out var recorded)
+            return recordedByPackage.TryGetValue(key, out var recorded)
                 ? recorded
                 : package.PackageContentHash;
         }
@@ -828,7 +828,11 @@ internal static class ActivePackageCatalogMapper
     {
         ArgumentNullException.ThrowIfNull(state);
 
-        return state.ActivePackageDescriptorsByIdNormalized.Values
+        var descriptors = state.ActivePackageDescriptorsByIdNormalized;
+        if (state.ArchiveHashesByPackage is { Count: > 0 } recorded)
+            descriptors = StoreStateRecord.WithRecordedArchiveHashes(descriptors, recorded);
+
+        return descriptors.Values
             .Where(package => state.ActiveVersionById.TryGetValue(package.PackageId, out var version)
                 && string.Equals(version, package.Version, StringComparison.OrdinalIgnoreCase))
             .OrderBy(package => package.PackageId, StringComparer.OrdinalIgnoreCase)

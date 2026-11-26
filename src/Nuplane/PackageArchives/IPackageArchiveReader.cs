@@ -18,10 +18,14 @@ public interface IPackageArchiveReader
     /// <summary>Opens the verified archive of a package from an active-package snapshot.</summary>
     /// <param name="package">The package, as an <see cref="IActivePackageCatalog"/> snapshot reports it.</param>
     /// <param name="cancellationToken">
-    /// Cancels this caller's wait. A read already in progress finishes for other callers of the same archive.
+    /// Cancels this caller's wait. A load already in progress continues for other callers of the same archive.
     /// </param>
     /// <returns>The verified archive. It holds the archive bytes in memory and needs no disposal.</returns>
-    /// <remarks>A refusal is remembered for a few seconds, so repeated opens of a refused archive fail without rereading it.</remarks>
+    /// <remarks>
+    /// The file open has a 30-second bound. Filesystem metadata checks and reads can stall on an
+    /// unresponsive volume. A refusal is remembered for five seconds, so repeated opens of a refused
+    /// archive fail without rereading it.
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="package"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="package"/> has no install path.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
