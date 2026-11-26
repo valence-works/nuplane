@@ -760,6 +760,11 @@ A directory feed declared with `DirectoryPath` both contributes desired roots an
 so pre-populating it with the full dependency closure removes the boot-time network dependency —
 useful when baking packages into a container image.
 
+Writable drop folders use a stability probe to defer packages that are still being copied. The probe
+samples up to 32 archives per batch and shares the default 200 ms interval between observations.
+It checks each archive independently for two matching, nonzero file lengths and retries candidates
+that are busy or changing within the existing attempt limit.
+
 **Where a relative `DirectoryPath` resolves from.** Both `AddDirectoryFeed` and
 `AddDirectoryFeedsFromConfiguration` resolve it against `NuplaneBuilder.BasePath` when something has
 set one, and against the process's own current directory otherwise. Nothing sets it by default, so a

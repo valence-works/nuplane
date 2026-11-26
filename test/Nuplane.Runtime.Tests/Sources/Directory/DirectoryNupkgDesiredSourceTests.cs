@@ -213,6 +213,113 @@ public sealed class DirectoryNupkgDesiredSourceTests : IDisposable
         Assert.Equal("Ordinary.Probed.Package", request.Id);
     }
 
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task GetDesiredAsync_MixedBatchRequiresTwoMatchingObservationsPerFile(int maxAttempts)
+    {
+        const string growing = "Growing.Package.2.0.0.nupkg";
+        const string removed = "Removed.Package.1.0.0.nupkg";
+        CreateNupkg("Growing.Package.1.0.0.nupkg");
+        CreateNupkg("Stable.Package.1.0.0.nupkg");
+        CreateNupkg(removed);
+        File.WriteAllBytes(Path.Combine(_tempDir, growing), [0x50]);
+
+        var retryAttempts = new List<int>();
+        var probe = new NupkgFileStabilityProbe(
+            NullLogger<NupkgFileStabilityProbe>.Instance,
+            maxAttempts: maxAttempts,
+            retryDelay: TimeSpan.Zero,
+            onBeforeRetryAsync: (attempt, _) =>
+            {
+                retryAttempts.Add(attempt);
+                if (attempt == 1)
+                {
+                    CreateNupkg(growing);
+                    File.Delete(Path.Combine(_tempDir, removed));
+                }
+
+                return Task.CompletedTask;
+            });
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], stabilityProbe: probe);
+
+        var requests = await source.GetDesiredAsync(CancellationToken.None);
+
+        Assert.Equal(Enumerable.Range(1, maxAttempts - 1), retryAttempts);
+        Assert.Collection(requests,
+            growingRequest =>
+            {
+                Assert.Equal("Growing.Package", growingRequest.Id);
+                Assert.Equal(maxAttempts == 2 ? "1.0.0" : "2.0.0", growingRequest.VersionRange);
+            },
+            stableRequest => Assert.Equal("Stable.Package", stableRequest.Id));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Discovery_StableCandidatesShareRetryIntervalsInBoundedBatches(bool guarded)
+    {
+        var count = NupkgFileStabilityProbe.BatchSize + 1;
+        for (var index = count - 1; index >= 0; index--)
+            CreateNupkg($"Stable.Package{index:D3}.1.0.0.nupkg");
+
+        var retryAttempts = new List<int>();
+        var probe = new NupkgFileStabilityProbe(
+            NullLogger<NupkgFileStabilityProbe>.Instance,
+            retryDelay: TimeSpan.Zero,
+            onBeforeRetryAsync: (attempt, _) =>
+            {
+                retryAttempts.Add(attempt);
+                return Task.CompletedTask;
+            });
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], stabilityProbe: probe);
+
+        var requests = await (guarded
+            ? source.GetDesiredGuardedAsync(CancellationToken.None)
+            : source.GetDesiredAsync(CancellationToken.None));
+
+        Assert.Equal([1, 1], retryAttempts);
+        Assert.Equal(Enumerable.Range(0, count).Select(index => $"Stable.Package{index:D3}"),
+            requests.Select(request => request.Id));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Discovery_CancellationDuringSharedRetryInterval_StopsDiscovery(bool guarded)
+    {
+        CreateNupkg("First.Package.1.0.0.nupkg");
+        CreateNupkg("Second.Package.1.0.0.nupkg");
+        var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var probe = new NupkgFileStabilityProbe(
+            NullLogger<NupkgFileStabilityProbe>.Instance,
+            retryDelay: Timeout.InfiniteTimeSpan,
+            onBeforeRetryAsync: (_, _) =>
+            {
+                waiting.SetResult();
+                return Task.CompletedTask;
+            });
+        var source = new DirectoryNupkgDesiredSource("src-name", _tempDir, ["*"], stabilityProbe: probe);
+        using var cancellation = new CancellationTokenSource();
+
+        var discovery = guarded
+            ? source.GetDesiredGuardedAsync(cancellation.Token)
+            : source.GetDesiredAsync(cancellation.Token);
+        Assert.True(waiting.Task.IsCompletedSuccessfully);
+        Assert.False(discovery.IsCompleted);
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => discovery.WaitAsync(TimeSpan.FromSeconds(10)));
+
+        // A cancelled batch releases its Windows metadata pins before completing.
+        using var first = File.Open(Path.Combine(_tempDir, "First.Package.1.0.0.nupkg"),
+            FileMode.Open, FileAccess.Write, FileShare.None);
+        using var second = File.Open(Path.Combine(_tempDir, "Second.Package.1.0.0.nupkg"),
+            FileMode.Open, FileAccess.Write, FileShare.None);
+    }
+
     [Fact]
     public async Task GetDesiredAsync_CoordinatedParticipantRequiresCurrentBorrow()
     {
