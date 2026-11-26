@@ -73,6 +73,7 @@ Nuplane.Feeds.Builder.NuplaneFeedBuilder
 Nuplane.Feeds.Builder.NuplaneFeedBuilder.FromUri(System.Uri! serviceIndex, string? credentials = null) -> Nuplane.Feeds.Builder.NuplaneFeedBuilder!
 Nuplane.Feeds.Builder.NuplaneFeedBuilder.Include(string! pattern) -> Nuplane.Feeds.Builder.NuplaneFeedBuilder!
 Nuplane.Feeds.Builder.NuplaneFeedBuilder.IncludeAll() -> Nuplane.Feeds.Builder.NuplaneFeedBuilder!
+Nuplane.Feeds.Builder.NuplaneFeedBuilder.WithTrust(Nuplane.Abstractions.FeedTrustLevel trust) -> Nuplane.Feeds.Builder.NuplaneFeedBuilder!
 Nuplane.Feeds.Configuration.FeedResolutionOptions
 Nuplane.Feeds.Configuration.FeedResolutionOptions.DeterministicFeedOrder.get -> bool
 Nuplane.Feeds.Configuration.FeedResolutionOptions.DeterministicFeedOrder.set -> void
@@ -97,6 +98,7 @@ Nuplane.Feeds.Configuration.FeedResolutionOptions.RemoteFallbackMode.set -> void
 Nuplane.Feeds.Configuration.FeedResolutionOptions.SetPriority(string! feedName, int priority) -> void
 Nuplane.Feeds.Configuration.FeedResolutionOptions.StopOnFirstSuccessfulFeed.get -> bool
 Nuplane.Feeds.Configuration.FeedResolutionOptions.StopOnFirstSuccessfulFeed.set -> void
+Nuplane.Feeds.Configuration.FeedResolutionOptions.TrustOverrides.get -> System.Collections.Generic.List<Nuplane.Feeds.Configuration.FeedTrustOverride!>!
 Nuplane.Feeds.Configuration.FeedResolutionOptions.UnavailableFeeds.get -> System.Collections.Generic.HashSet<string!>!
 Nuplane.Feeds.Configuration.FeedResolutionOptions.ValidateDeterministicOrdering.get -> bool
 Nuplane.Feeds.Configuration.FeedResolutionOptions.ValidateDeterministicOrdering.set -> void
@@ -105,6 +107,16 @@ Nuplane.Feeds.Configuration.FeedResolutionOptions.VersionCacheTtl.set -> void
 Nuplane.Feeds.Configuration.FeedResolutionPolicyMode
 Nuplane.Feeds.Configuration.FeedResolutionPolicyMode.Fallback = 0 -> Nuplane.Feeds.Configuration.FeedResolutionPolicyMode
 Nuplane.Feeds.Configuration.FeedResolutionPolicyMode.Strict = 1 -> Nuplane.Feeds.Configuration.FeedResolutionPolicyMode
+Nuplane.Feeds.Configuration.FeedTrustOverride
+Nuplane.Feeds.Configuration.FeedTrustOverride.<Clone>$() -> Nuplane.Feeds.Configuration.FeedTrustOverride!
+Nuplane.Feeds.Configuration.FeedTrustOverride.Equals(Nuplane.Feeds.Configuration.FeedTrustOverride? other) -> bool
+Nuplane.Feeds.Configuration.FeedTrustOverride.FeedName.get -> string!
+Nuplane.Feeds.Configuration.FeedTrustOverride.FeedName.set -> void
+Nuplane.Feeds.Configuration.FeedTrustOverride.FeedTrustOverride() -> void
+Nuplane.Feeds.Configuration.FeedTrustOverride.PackageId.get -> string!
+Nuplane.Feeds.Configuration.FeedTrustOverride.PackageId.set -> void
+Nuplane.Feeds.Configuration.FeedTrustOverride.Reason.get -> string!
+Nuplane.Feeds.Configuration.FeedTrustOverride.Reason.set -> void
 Nuplane.Feeds.Configuration.RemoteFallbackMode
 Nuplane.Feeds.Configuration.RemoteFallbackMode.Always = 2 -> Nuplane.Feeds.Configuration.RemoteFallbackMode
 Nuplane.Feeds.Configuration.RemoteFallbackMode.Never = 0 -> Nuplane.Feeds.Configuration.RemoteFallbackMode
@@ -169,6 +181,8 @@ Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.Name.set -> void
 Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.NuplaneFeedSetupOptions() -> void
 Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.ServiceIndex.get -> string?
 Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.ServiceIndex.set -> void
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.Trust.get -> Nuplane.Abstractions.FeedTrustLevel
+Nuplane.Feeds.Setup.NuplaneFeedSetupOptions.Trust.set -> void
 Nuplane.Hosting.NuplaneStartupReconciliationException
 Nuplane.Hosting.NuplaneStartupReconciliationException.CorrelationId.get -> string!
 Nuplane.Hosting.NuplaneStartupReconciliationException.FailedPackageIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
@@ -397,11 +411,6 @@ Nuplane.Reconciliation.Configuration.StartupFailurePolicy
 Nuplane.Reconciliation.Configuration.StartupFailurePolicy.FailHost = 0 -> Nuplane.Reconciliation.Configuration.StartupFailurePolicy
 Nuplane.Reconciliation.Configuration.StartupFailurePolicy.StartDegraded = 1 -> Nuplane.Reconciliation.Configuration.StartupFailurePolicy
 Nuplane.Reconciliation.Configuration.StartupFailurePolicy.UseLastKnownGood = 2 -> Nuplane.Reconciliation.Configuration.StartupFailurePolicy
-Nuplane.Reconciliation.Convergence.ConvergenceOptions
-Nuplane.Reconciliation.Convergence.ConvergenceOptions.ConvergenceOptions() -> void
-Nuplane.Reconciliation.Convergence.ConvergenceOptions.Manifest.get -> Nuplane.Sources.ManifestOptions!
-Nuplane.Reconciliation.Convergence.ConvergenceOptions.PollInterval.get -> System.TimeSpan
-Nuplane.Reconciliation.Convergence.ConvergenceOptions.PollInterval.set -> void
 Nuplane.Reconciliation.IReconciliationService
 Nuplane.Reconciliation.IReconciliationService.TriggerAsync(Nuplane.Reconciliation.Models.ReconciliationTrigger! trigger, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Reconciliation.Models.ReconciliationRunResult!>!
 Nuplane.Reconciliation.IReconciliationTriggerIngress
@@ -585,22 +594,30 @@ Nuplane.Reconciliation.Models.TriggerType.ObservedChange = 1 -> Nuplane.Reconcil
 Nuplane.Reconciliation.Models.TriggerType.Scheduled = 0 -> Nuplane.Reconciliation.Models.TriggerType
 Nuplane.Reconciliation.Models.TriggerType.Startup = 3 -> Nuplane.Reconciliation.Models.TriggerType
 Nuplane.Setup.NuplaneSetupOptions
-Nuplane.Setup.NuplaneSetupOptions.AutomaticReconciliation.get -> bool
-Nuplane.Setup.NuplaneSetupOptions.AutomaticReconciliation.set -> void
 Nuplane.Setup.NuplaneSetupOptions.Feeds.get -> System.Collections.Generic.List<Nuplane.Feeds.Setup.NuplaneFeedSetupOptions!>!
 Nuplane.Setup.NuplaneSetupOptions.Feeds.set -> void
 Nuplane.Setup.NuplaneSetupOptions.NuplaneSetupOptions() -> void
-Nuplane.Setup.NuplaneSetupOptions.PollInterval.get -> System.TimeSpan
-Nuplane.Setup.NuplaneSetupOptions.PollInterval.set -> void
-Nuplane.Setup.NuplaneSetupOptions.StateFilePath.get -> string?
-Nuplane.Setup.NuplaneSetupOptions.StateFilePath.set -> void
-Nuplane.Setup.NuplaneSetupOptions.UseInMemoryStore.get -> bool
-Nuplane.Setup.NuplaneSetupOptions.UseInMemoryStore.set -> void
 Nuplane.Sources.Configuration.DesiredStateOptions
 Nuplane.Sources.Configuration.DesiredStateOptions.DesiredStateOptions() -> void
 Nuplane.Sources.Configuration.DesiredStateOptions.GetPriority(string! sourceName) -> int
+Nuplane.Sources.Configuration.DesiredStateOptions.Manifest.get -> Nuplane.Sources.ManifestOptions!
 Nuplane.Sources.Configuration.DesiredStateOptions.SetPriority(string! sourceName, int priority) -> void
 Nuplane.Sources.Configuration.DesiredStateOptions.SourcePriorities.get -> System.Collections.Generic.Dictionary<string!, int>!
+Nuplane.Sources.Directory.Builder.NuplaneBuilderDirectoryExtensions
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Credentials.get -> string?
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Credentials.set -> void
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.DebounceWindow.get -> System.TimeSpan
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.DebounceWindow.set -> void
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Include(string! pattern) -> Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration!
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.IncludeAll() -> Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration!
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.NuplaneDirectoryFeedConfiguration() -> void
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Role.get -> Nuplane.Feeds.Setup.DirectoryFeedRole
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Role.set -> void
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Trust.get -> Nuplane.Abstractions.FeedTrustLevel
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Trust.set -> void
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Watch.get -> bool
+Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration.Watch.set -> void
 Nuplane.Sources.ManifestOptions
 Nuplane.Sources.ManifestOptions.Enabled.get -> bool
 Nuplane.Sources.ManifestOptions.Enabled.set -> void
@@ -856,6 +873,9 @@ override Nuplane.Builder.PackageStoreMemberDeclaration.ToString() -> string!
 override Nuplane.DesiredPackageDescription.Equals(object? obj) -> bool
 override Nuplane.DesiredPackageDescription.GetHashCode() -> int
 override Nuplane.DesiredPackageDescription.ToString() -> string!
+override Nuplane.Feeds.Configuration.FeedTrustOverride.Equals(object? obj) -> bool
+override Nuplane.Feeds.Configuration.FeedTrustOverride.GetHashCode() -> int
+override Nuplane.Feeds.Configuration.FeedTrustOverride.ToString() -> string!
 override Nuplane.Feeds.Credentials.SecretReferenceResolution.Equals(object? obj) -> bool
 override Nuplane.Feeds.Credentials.SecretReferenceResolution.GetHashCode() -> int
 override Nuplane.Feeds.Credentials.SecretReferenceResolution.ToString() -> string!
@@ -930,6 +950,8 @@ static Nuplane.Builder.PackageStoreMemberDeclaration.operator !=(Nuplane.Builder
 static Nuplane.Builder.PackageStoreMemberDeclaration.operator ==(Nuplane.Builder.PackageStoreMemberDeclaration? left, Nuplane.Builder.PackageStoreMemberDeclaration? right) -> bool
 static Nuplane.DesiredPackageDescription.operator !=(Nuplane.DesiredPackageDescription? left, Nuplane.DesiredPackageDescription? right) -> bool
 static Nuplane.DesiredPackageDescription.operator ==(Nuplane.DesiredPackageDescription? left, Nuplane.DesiredPackageDescription? right) -> bool
+static Nuplane.Feeds.Configuration.FeedTrustOverride.operator !=(Nuplane.Feeds.Configuration.FeedTrustOverride? left, Nuplane.Feeds.Configuration.FeedTrustOverride? right) -> bool
+static Nuplane.Feeds.Configuration.FeedTrustOverride.operator ==(Nuplane.Feeds.Configuration.FeedTrustOverride? left, Nuplane.Feeds.Configuration.FeedTrustOverride? right) -> bool
 static Nuplane.Feeds.Credentials.SecretReferenceResolution.Empty(string! providerName) -> Nuplane.Feeds.Credentials.SecretReferenceResolution!
 static Nuplane.Feeds.Credentials.SecretReferenceResolution.NoProvider(string! providerName) -> Nuplane.Feeds.Credentials.SecretReferenceResolution!
 static Nuplane.Feeds.Credentials.SecretReferenceResolution.Resolved(string! providerName, Nuplane.Feeds.Credentials.SecretValue! value) -> Nuplane.Feeds.Credentials.SecretReferenceResolution!
@@ -1001,6 +1023,7 @@ static Nuplane.Reconciliation.Models.ResolvedPackageGraph.operator !=(Nuplane.Re
 static Nuplane.Reconciliation.Models.ResolvedPackageGraph.operator ==(Nuplane.Reconciliation.Models.ResolvedPackageGraph? left, Nuplane.Reconciliation.Models.ResolvedPackageGraph? right) -> bool
 static Nuplane.Reconciliation.Models.ResolvedPackageNode.operator !=(Nuplane.Reconciliation.Models.ResolvedPackageNode? left, Nuplane.Reconciliation.Models.ResolvedPackageNode? right) -> bool
 static Nuplane.Reconciliation.Models.ResolvedPackageNode.operator ==(Nuplane.Reconciliation.Models.ResolvedPackageNode? left, Nuplane.Reconciliation.Models.ResolvedPackageNode? right) -> bool
+static Nuplane.Sources.Directory.Builder.NuplaneBuilderDirectoryExtensions.AddDirectoryFeed(this Nuplane.Builder.NuplaneBuilder! builder, string! name, string! path, System.Action<Nuplane.Sources.Directory.Builder.NuplaneDirectoryFeedConfiguration!>? configure = null) -> Nuplane.Builder.NuplaneBuilder!
 static Nuplane.Store.State.FailureRecord.operator !=(Nuplane.Store.State.FailureRecord? left, Nuplane.Store.State.FailureRecord? right) -> bool
 static Nuplane.Store.State.FailureRecord.operator ==(Nuplane.Store.State.FailureRecord? left, Nuplane.Store.State.FailureRecord? right) -> bool
 static Nuplane.Store.State.GraphActivationFailure.operator !=(Nuplane.Store.State.GraphActivationFailure? left, Nuplane.Store.State.GraphActivationFailure? right) -> bool

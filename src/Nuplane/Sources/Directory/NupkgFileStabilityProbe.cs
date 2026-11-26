@@ -8,7 +8,7 @@ namespace Nuplane.Sources.Directory;
 /// Probes whether a <c>.nupkg</c> file is stable (i.e., not currently being written).
 /// Uses bounded retries to avoid consuming partially written artifacts.
 /// </summary>
-public sealed class NupkgFileStabilityProbe
+internal sealed class NupkgFileStabilityProbe
 {
     /// <summary>Default maximum number of stability check attempts before giving up.</summary>
     public const int DefaultMaxAttempts = 5;

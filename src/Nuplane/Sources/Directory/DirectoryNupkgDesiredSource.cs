@@ -15,7 +15,7 @@ namespace Nuplane.Sources.Directory;
 /// directory, optionally filtering by a set of package identifier patterns.
 /// Patterns support <c>*</c> (any sequence of characters) and <c>?</c> (any single character).
 /// </summary>
-public sealed class DirectoryNupkgDesiredSource : IScopedDesiredPackageSource,
+internal sealed class DirectoryNupkgDesiredSource : IScopedDesiredPackageSource,
     IIdentifiedDesiredPackageSource, ILegacyDesiredPackageSourceSnapshotVerifier
 {
     private static readonly Regex PackageFileNamePattern = new(
