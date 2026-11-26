@@ -5,7 +5,7 @@ using Nuplane.Store.Coordination.ProtectionRecords;
 
 namespace Nuplane.Store.State;
 
-public sealed partial class StoreRegistry
+internal sealed partial class StoreRegistry
 {
     /// <inheritdoc />
     public async Task<StoreStateRecord> ReadCoordinatedStateAsync(

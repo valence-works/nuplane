@@ -9,7 +9,7 @@ namespace Nuplane.Feeds.Credentials;
 /// A variable that is unset or empty resolves to nothing, which refuses the referencing feed by name
 /// rather than failing the run.
 /// </remarks>
-public sealed class EnvironmentSecretReferenceProvider : ISecretReferenceProvider
+internal sealed class EnvironmentSecretReferenceProvider : ISecretReferenceProvider
 {
     /// <summary>The provider segment this provider answers for: <c>env</c>.</summary>
     public const string ProviderName = "env";

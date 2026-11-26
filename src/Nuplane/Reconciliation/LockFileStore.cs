@@ -11,7 +11,7 @@ namespace Nuplane.Reconciliation;
 /// Reads and writes package lock files in JSON format, providing serialization
 /// and deserialization for <see cref="PackageLockFile"/> instances.
 /// </summary>
-public sealed class LockFileStore
+internal sealed class LockFileStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

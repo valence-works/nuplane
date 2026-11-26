@@ -10,7 +10,7 @@ namespace Nuplane.Sources;
 /// manifest file. Projects manifest entries into <see cref="PackageRequest"/> instances with
 /// <see cref="PackageUpdatePolicy.Exact"/> to ensure deterministic reconciliation.
 /// </summary>
-public sealed class DesiredManifestPackageSource : IScopedDesiredPackageSource
+internal sealed class DesiredManifestPackageSource : IScopedDesiredPackageSource
 {
     private readonly DesiredManifestReader _reader;
     private readonly DesiredStateOptions _options;

@@ -10,7 +10,7 @@ namespace Nuplane.Feeds.Setup;
 /// <param name="Key">The keyed feed name when the declaration came from a keyed entry.</param>
 /// <param name="Options">The feed setup options bound from the declaration.</param>
 /// <param name="IgnoredArrayDeclarations">Array declarations ignored because a keyed declaration with the same name wins.</param>
-public sealed record NuplaneFeedSetupDeclaration(
+internal sealed record NuplaneFeedSetupDeclaration(
     string Name,
     NuplaneFeedSetupSourceShape SourceShape,
     string ConfigurationPath,

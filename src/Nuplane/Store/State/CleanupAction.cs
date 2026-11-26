@@ -3,7 +3,7 @@ namespace Nuplane.Store.State;
 /// <summary>
 /// Describes the action taken or to be taken for a package version during cleanup.
 /// </summary>
-public enum CleanupAction
+internal enum CleanupAction
 {
     /// <summary>The version is retained by cleanup policy.</summary>
     Kept,

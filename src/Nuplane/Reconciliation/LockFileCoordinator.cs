@@ -11,7 +11,7 @@ namespace Nuplane.Reconciliation;
 /// Evaluates resolved packages against the lock file, enforcing or overriding
 /// package versions and feeds based on the configured lock file mode.
 /// </summary>
-public sealed class LockFileCoordinator(LockFileStore store, IOptions<LockFileOptions> options) :
+internal sealed class LockFileCoordinator(LockFileStore store, IOptions<LockFileOptions> options) :
     ILockFileCoordinator,
     IPackagePathIndependentLockFileCoordinator,
     ILockFileCycleCoordinator

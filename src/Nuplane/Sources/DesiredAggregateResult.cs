@@ -11,7 +11,7 @@ namespace Nuplane.Sources;
 /// A dictionary mapping source type names to the exception thrown by that source, if any.
 /// Sources that completed successfully do not appear in this dictionary.
 /// </param>
-public sealed record DesiredAggregateResult(
+internal sealed record DesiredAggregateResult(
     IReadOnlyList<PackageRequest> Requests,
     IReadOnlyDictionary<string, Exception> SourceErrors);
 

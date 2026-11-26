@@ -3,7 +3,7 @@ namespace Nuplane.Health;
 /// <summary>
 /// Evaluates reconciliation health by tracking lock, cleanup, manifest, source, acquisition, and admin failures.
 /// </summary>
-public sealed class ReconciliationHealthEvaluator : IReconciliationHealthEvaluator
+internal sealed class ReconciliationHealthEvaluator : IReconciliationHealthEvaluator
 {
     private bool _lastHadFailures;
     private bool _lastAllSourcesFresh = true;

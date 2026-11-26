@@ -6,7 +6,7 @@ namespace Nuplane.Reconciliation;
 /// Computes the difference between desired and actual (active) package state,
 /// producing a change set of added, updated, and removed packages.
 /// </summary>
-public interface IDesiredActualDiffEngine
+internal interface IDesiredActualDiffEngine
 {
     /// <summary>
     /// Computes the package change set by comparing desired packages against active versions.

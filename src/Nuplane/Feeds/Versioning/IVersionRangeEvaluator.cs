@@ -3,7 +3,7 @@ namespace Nuplane.Feeds.Versioning;
 /// <summary>
 /// Evaluates a version range against a list of available versions and selects the best match.
 /// </summary>
-public interface IVersionRangeEvaluator
+internal interface IVersionRangeEvaluator
 {
     /// <summary>
     /// Selects the best matching version from the available versions for the given range.

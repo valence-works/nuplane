@@ -6,7 +6,7 @@ namespace Nuplane.Store.State;
 /// Validates <see cref="StoreRegistryOptions"/> at startup to reject blank paths and
 /// conflicting persistence settings before runtime services begin processing.
 /// </summary>
-public sealed class StoreRegistryOptionsValidator : IValidateOptions<StoreRegistryOptions>
+internal sealed class StoreRegistryOptionsValidator : IValidateOptions<StoreRegistryOptions>
 {
     /// <inheritdoc />
     public ValidateOptionsResult Validate(string? name, StoreRegistryOptions options)

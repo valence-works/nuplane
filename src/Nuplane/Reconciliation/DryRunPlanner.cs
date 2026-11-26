@@ -7,7 +7,7 @@ namespace Nuplane.Reconciliation;
 /// <summary>
 /// Builds a dry-run plan by computing the change set without mutating any state.
 /// </summary>
-public sealed class DryRunPlanner(IDesiredActualDiffEngine diffEngine) : IDryRunPlanner
+internal sealed class DryRunPlanner(IDesiredActualDiffEngine diffEngine) : IDryRunPlanner
 {
     private readonly IDesiredActualDiffEngine _diffEngine = diffEngine ?? throw new ArgumentNullException(nameof(diffEngine));
 

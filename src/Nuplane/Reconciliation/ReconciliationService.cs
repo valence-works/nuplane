@@ -22,7 +22,7 @@ using Nuplane.Abstractions.PackageStoreProtection;
 namespace Nuplane.Reconciliation;
 
 /// <inheritdoc />
-public sealed class ReconciliationService : IReconciliationService
+internal sealed class ReconciliationService : IReconciliationService
 {
     private static readonly PackageChangeSet EmptyChangeSet = new([], [], [], string.Empty, DateTimeOffset.UtcNow);
 

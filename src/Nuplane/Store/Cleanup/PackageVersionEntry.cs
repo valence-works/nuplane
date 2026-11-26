@@ -7,7 +7,7 @@ namespace Nuplane.Store.Cleanup;
 /// <param name="Version">The package version.</param>
 /// <param name="CapturedAt">The time the version was first captured.</param>
 /// <param name="IsLastKnownGood">Whether this version is the last-known-good version.</param>
-public sealed record PackageVersionEntry(
+internal sealed record PackageVersionEntry(
     string PackageId,
     string Version,
     DateTimeOffset CapturedAt,

@@ -5,7 +5,7 @@ using Nuplane.Reconciliation.Models;
 namespace Nuplane.Reconciliation;
 
 /// <summary>Associates one successfully applied complete graph with its final roots and lease owner.</summary>
-public sealed class LeasedPackageGraphSelection
+internal sealed class LeasedPackageGraphSelection
 {
     internal LeasedPackageGraphSelection(ResolvedPackageGraphSelection selection, PackageGraphUseLeaseOwner owner)
     {

@@ -3,7 +3,7 @@ using Nuplane.Abstractions;
 namespace Nuplane.Reconciliation.Models;
 
 /// <summary>Associates one actual resolved graph with its selecting roots and resolved package projection.</summary>
-public sealed record ResolvedPackageGraphSelection
+internal sealed record ResolvedPackageGraphSelection
 {
     /// <summary>Creates a graph selection with copied collection inputs.</summary>
     /// <param name="graph">The complete resolved graph.</param>

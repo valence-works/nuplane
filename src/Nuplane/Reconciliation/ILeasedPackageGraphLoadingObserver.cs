@@ -8,7 +8,7 @@ namespace Nuplane.Reconciliation;
 /// Implementations must load only the supplied graph projections and must transfer each owner only to
 /// a lifetime that can retain package paths. This handoff does not authorize reopening or regrouping the store.
 /// </remarks>
-public interface ILeasedPackageGraphLoadingObserver
+internal interface ILeasedPackageGraphLoadingObserver
 {
     /// <summary>Awaits loading for the committed graph selections carried by this cycle.</summary>
     /// <param name="handoff">The immutable graph/request/owner association published by Core.</param>

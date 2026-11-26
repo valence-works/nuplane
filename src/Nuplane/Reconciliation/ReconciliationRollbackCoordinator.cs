@@ -9,7 +9,7 @@ namespace Nuplane.Reconciliation;
 /// reconciliation cycle failures. Ensures that failed acquisition or activation stages
 /// preserve the LKG active pointer and produce non-mutating outcomes for impacted packages.
 /// </summary>
-public sealed class ReconciliationRollbackCoordinator
+internal sealed class ReconciliationRollbackCoordinator
 {
     private readonly IReconciliationLogger _logger;
     private readonly ReconciliationMetrics? _metrics;

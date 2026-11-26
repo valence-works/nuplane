@@ -5,6 +5,6 @@ namespace Nuplane.Reconciliation;
 /// Implementations may compare package identifiers, versions, and other in-memory metadata only.
 /// Both diff computation and next-version projection must honor this promise.
 /// </remarks>
-public interface IPackagePathIndependentDesiredActualDiffEngine : IDesiredActualDiffEngine
+internal interface IPackagePathIndependentDesiredActualDiffEngine : IDesiredActualDiffEngine
 {
 }

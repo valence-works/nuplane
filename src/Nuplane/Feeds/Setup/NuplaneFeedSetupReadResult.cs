@@ -5,7 +5,7 @@ namespace Nuplane.Feeds.Setup;
 /// </summary>
 /// <param name="Declarations">The effective setup feed declarations.</param>
 /// <param name="Diagnostics">Warnings and errors discovered while reading setup feed configuration.</param>
-public sealed record NuplaneFeedSetupReadResult(
+internal sealed record NuplaneFeedSetupReadResult(
     IReadOnlyList<NuplaneFeedSetupDeclaration> Declarations,
     IReadOnlyList<NuplaneFeedSetupDiagnostic> Diagnostics)
 {

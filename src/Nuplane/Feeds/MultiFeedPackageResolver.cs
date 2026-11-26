@@ -20,7 +20,7 @@ namespace Nuplane.Feeds;
 /// Resolves packages across multiple feeds using priority ordering and feed availability
 /// tracking, recording resolution decisions for observability.
 /// </summary>
-public sealed partial class MultiFeedPackageResolver : IScopedPackageResolver
+internal sealed partial class MultiFeedPackageResolver : IScopedPackageResolver
 {
     private readonly FeedResolutionOptions _options;
     private readonly FeedResolutionPolicy _policy;

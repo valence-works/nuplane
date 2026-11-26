@@ -10,7 +10,7 @@ namespace Nuplane.Reconciliation.Models;
 /// <param name="FailedPackageIds">The identifiers of packages that failed resolution.</param>
 /// <param name="FeedDecisions">The feed resolution decision records for each package.</param>
 /// <param name="ResolvedGraphs">The resolved package graphs, when dependency closure metadata is available.</param>
-public sealed record PackageResolutionResult(
+internal sealed record PackageResolutionResult(
     IReadOnlyList<ResolvedPackage> ResolvedPackages,
     IReadOnlyList<string> FailedPackageIds,
     IReadOnlyList<FeedResolutionDecision> FeedDecisions,

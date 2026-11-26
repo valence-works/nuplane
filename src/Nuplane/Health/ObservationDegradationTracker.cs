@@ -7,7 +7,7 @@ namespace Nuplane.Health;
 /// Thread-safe tracker for degraded observation mechanisms keyed by observed feed origin.
 /// Tracks the current degraded set rather than a cumulative count so monitors can recover cleanly.
 /// </summary>
-public sealed class ObservationDegradationTracker
+internal sealed class ObservationDegradationTracker
 {
     private readonly ConcurrentDictionary<FeedObservationOrigin, byte> _degradedOrigins = new();
 

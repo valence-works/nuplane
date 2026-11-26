@@ -9,7 +9,7 @@ namespace Nuplane.Feeds.Policy;
 /// Orders candidate feeds for package resolution based on priority and deterministic ordering,
 /// and selects the winning package from multiple candidates.
 /// </summary>
-public sealed class FeedResolutionPolicy(IOptions<FeedResolutionOptions> options)
+internal sealed class FeedResolutionPolicy(IOptions<FeedResolutionOptions> options)
 {
     private readonly FeedResolutionOptions _options = (options ?? throw new ArgumentNullException(nameof(options))).Value;
 

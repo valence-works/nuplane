@@ -8,7 +8,7 @@ namespace Nuplane.Observability;
 /// Records reconciliation operational metrics including cycle outcomes, dry runs,
 /// cleanup results, and assembly loading/unloading statistics.
 /// </summary>
-public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
+internal sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
 {
     private readonly ReconciliationTelemetry _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
 

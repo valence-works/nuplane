@@ -9,7 +9,7 @@ namespace Nuplane.Store.Transactions;
 /// <param name="FailedStage">The stage at which the transaction failed, if any.</param>
 /// <param name="FailureMessage">The failure message, if any.</param>
 /// <param name="LastKnownGoodPreserved">Whether the last-known-good version was preserved on failure.</param>
-public sealed record PackageTransactionResult(
+internal sealed record PackageTransactionResult(
     string PackageId,
     string Version,
     bool Succeeded,

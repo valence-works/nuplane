@@ -3,7 +3,7 @@ namespace Nuplane.Store.State;
 /// <summary>
 /// Describes the resolved persistence mode for the store registry.
 /// </summary>
-public enum StorePersistenceMode
+internal enum StorePersistenceMode
 {
     /// <summary>
     /// Persistence uses the default path <c>.nuplane/store-state.json</c> under the host base directory.
@@ -26,7 +26,7 @@ public enum StorePersistenceMode
 /// This model is computed once and consumed by runtime services to determine how and where
 /// store state is persisted.
 /// </summary>
-public sealed class EffectiveStorePersistenceSettings
+internal sealed class EffectiveStorePersistenceSettings
 {
     /// <summary>
     /// Gets the resolved persistence mode.

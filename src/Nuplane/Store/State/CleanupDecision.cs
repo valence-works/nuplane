@@ -9,7 +9,7 @@ namespace Nuplane.Store.State;
 /// <param name="Reason">A machine-readable code describing the reason for the action.</param>
 /// <param name="Timestamp">The time at which the decision was made.</param>
 /// <param name="CorrelationId">The correlation identifier of the reconciliation cycle.</param>
-public sealed record CleanupDecision(
+internal sealed record CleanupDecision(
     string PackageId,
     string Version,
     CleanupAction Action,

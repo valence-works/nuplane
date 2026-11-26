@@ -6,7 +6,7 @@ namespace Nuplane.Feeds.Setup;
 /// <summary>
 /// Reads setup feed declarations from raw configuration while preserving array and keyed shapes.
 /// </summary>
-public static class NuplaneFeedSetupDeclarationReader
+internal static class NuplaneFeedSetupDeclarationReader
 {
     private const string MixedShapeOverrideCode = "NuplaneSetupFeedMixedShapeOverride";
     private const string KeyNameMismatchCode = "NuplaneSetupFeedKeyNameMismatch";

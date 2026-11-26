@@ -10,7 +10,7 @@ namespace Nuplane.Operational;
 /// Default runtime implementation of <see cref="IActivePackageCatalog"/>.
 /// Reads the persisted active package descriptor set without replaying observer history.
 /// </summary>
-public sealed class ActivePackageCatalog : IActivePackageCatalog
+internal sealed class ActivePackageCatalog : IActivePackageCatalog
 {
     private readonly IStoreRegistry _storeRegistry;
     private readonly IReconciliationLogger _logger;

@@ -13,7 +13,7 @@ namespace Nuplane.Sources;
 /// In the unscoped mode, per-source exceptions are captured in <see cref="DesiredAggregateResult.SourceErrors"/>
 /// rather than propagated. The scoped mode propagates cancellation and typed package-store admission refusals.
 /// </summary>
-public sealed class DesiredStateAggregator : IScopedDesiredStateAggregator
+internal sealed class DesiredStateAggregator : IScopedDesiredStateAggregator
 {
     private readonly DesiredStateOptions _options;
 

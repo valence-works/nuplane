@@ -17,7 +17,7 @@ namespace Nuplane.Reconciliation;
 /// <summary>
 /// Resolves the dependency closure for desired root packages from installed NuGet metadata.
 /// </summary>
-public sealed class PackageDependencyGraphResolver
+internal sealed class PackageDependencyGraphResolver
 {
     /// <summary>
     /// The stage a package is refused under when it depends on a declared host-provided package the
@@ -780,7 +780,7 @@ public sealed class PackageDependencyGraphResolver
 /// </summary>
 /// <param name="ResolvedPackages">All resolved graph packages.</param>
 /// <param name="ResolvedGraphs">The resolved dependency graphs.</param>
-public sealed record PackageDependencyGraphResolutionResult(
+internal sealed record PackageDependencyGraphResolutionResult(
     IReadOnlyList<ResolvedPackage> ResolvedPackages,
     IReadOnlyList<ResolvedPackageGraph> ResolvedGraphs)
 {

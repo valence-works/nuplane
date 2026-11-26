@@ -7,7 +7,7 @@ namespace Nuplane.Reconciliation;
 /// Coordinates manual reconciliation trigger requests through the shared trigger ingress,
 /// mapping outcomes to explicit <see cref="ManualReconcileOutcomeCode"/> values with correlation context.
 /// </summary>
-public sealed class ManualReconcileCoordinator
+internal sealed class ManualReconcileCoordinator
 {
     private readonly IReconciliationTriggerIngress _triggerIngress;
     private readonly IReconciliationLogger _logger;

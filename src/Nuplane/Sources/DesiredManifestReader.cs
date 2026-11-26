@@ -11,7 +11,7 @@ namespace Nuplane.Sources;
 /// Reads and parses a shared desired manifest from a file path, producing a
 /// <see cref="DesiredManifestReadResult"/> with deterministic validation.
 /// </summary>
-public sealed class DesiredManifestReader
+internal sealed class DesiredManifestReader
 {
     private readonly Func<CancellationToken, Task>? _afterNativeReadAsync;
     private readonly bool _requiresBorrow;

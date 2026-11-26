@@ -8,7 +8,7 @@ namespace Nuplane.Sources;
 /// Caches desired-state source snapshots in memory and persists them to the store registry,
 /// providing fallback data when sources are temporarily unavailable.
 /// </summary>
-public sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
+internal sealed class DesiredSourceSnapshotCache(IStoreRegistry storeRegistry)
 {
     private readonly ConcurrentDictionary<string, IReadOnlyList<PackageRequest>> _snapshots = new(StringComparer.OrdinalIgnoreCase);
     private readonly IStoreRegistry _storeRegistry = storeRegistry ?? throw new ArgumentNullException(nameof(storeRegistry));

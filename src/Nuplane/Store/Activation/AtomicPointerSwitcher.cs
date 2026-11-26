@@ -6,7 +6,7 @@ namespace Nuplane.Store.Activation;
 /// Provides atomic version pointer switching for packages, enabling transactional
 /// activation with rollback to the last-known-good version on failure.
 /// </summary>
-public sealed class AtomicPointerSwitcher
+internal sealed class AtomicPointerSwitcher
 {
     private readonly ConcurrentDictionary<string, string> _currentByPackage = new(StringComparer.OrdinalIgnoreCase);
 

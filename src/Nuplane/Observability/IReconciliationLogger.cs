@@ -5,7 +5,7 @@ namespace Nuplane.Observability;
 /// <summary>
 /// Defines the contract for structured reconciliation logging operations.
 /// </summary>
-public interface IReconciliationLogger
+internal interface IReconciliationLogger
 {
     /// <summary>
     /// Logs the start of a reconciliation cycle.

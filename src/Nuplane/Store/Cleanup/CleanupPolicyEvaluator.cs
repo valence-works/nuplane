@@ -6,7 +6,7 @@ namespace Nuplane.Store.Cleanup;
 /// Evaluates cleanup policy rules for individual package versions, determining whether
 /// each version should be kept, deleted, or is protected as last-known-good.
 /// </summary>
-public sealed class CleanupPolicyEvaluator
+internal sealed class CleanupPolicyEvaluator
 {
     /// <summary>
     /// Evaluates the cleanup policy for a specific package version.

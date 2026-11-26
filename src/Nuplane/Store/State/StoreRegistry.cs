@@ -12,7 +12,7 @@ namespace Nuplane.Store.State;
 /// last-known-good versions, failure records, and source snapshots. Supports lazy loading
 /// from a serialized state file.
 /// </summary>
-public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreStateCycleRefresher
+internal sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreStateCycleRefresher
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly IStoreStateSerializer _serializer;

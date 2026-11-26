@@ -6,7 +6,7 @@ namespace Nuplane.Feeds.Credentials;
 /// matches its provider segment, and reports an unresolved outcome when there is no such provider or
 /// the provider holds no value.
 /// </summary>
-public sealed class SecretReferenceResolver : ISecretReferenceResolver
+internal sealed class SecretReferenceResolver : ISecretReferenceResolver
 {
     private readonly Dictionary<string, ISecretReferenceProvider> _providers;
 

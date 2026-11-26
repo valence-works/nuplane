@@ -4,7 +4,7 @@ namespace Nuplane.Sources;
 /// Selects a deterministic subset of candidate package identifiers for feed rules,
 /// applying deduplication, ordering, and a maximum count limit.
 /// </summary>
-public sealed class FeedRuleResultSelector
+internal sealed class FeedRuleResultSelector
 {
     /// <summary>
     /// Selects up to <paramref name="maxPackages"/> unique candidates in deterministic order.

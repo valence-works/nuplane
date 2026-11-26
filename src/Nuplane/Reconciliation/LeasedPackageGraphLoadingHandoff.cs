@@ -3,7 +3,7 @@ using Nuplane.Abstractions;
 namespace Nuplane.Reconciliation;
 
 /// <summary>Contains exact applied graph selections and owners for the deferred Loading phase.</summary>
-public sealed class LeasedPackageGraphLoadingHandoff
+internal sealed class LeasedPackageGraphLoadingHandoff
 {
     internal LeasedPackageGraphLoadingHandoff(
         PackageChangeSet changeSet,

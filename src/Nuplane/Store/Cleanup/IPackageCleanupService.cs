@@ -5,7 +5,7 @@ namespace Nuplane.Store.Cleanup;
 /// <summary>
 /// Defines the contract for executing automatic package version cleanup.
 /// </summary>
-public interface IPackageCleanupService
+internal interface IPackageCleanupService
 {
     /// <summary>
     /// Executes automatic cleanup based on the configured policy.

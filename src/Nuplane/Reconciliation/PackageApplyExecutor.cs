@@ -27,7 +27,7 @@ namespace Nuplane.Reconciliation;
 /// resolution sees only the enlarged root set, so graph selection, lock-file evaluation, the trust
 /// gate, the diff, and the transactions are untouched by any of this.
 /// </remarks>
-public sealed class PackageApplyExecutor(
+internal sealed class PackageApplyExecutor(
     IPackageResolver packageResolver,
     PackageTransactionCoordinator transactionCoordinator,
     IReconciliationRetryPolicy retryPolicy,

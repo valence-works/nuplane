@@ -13,7 +13,7 @@ namespace Nuplane.Store.State.ProtectionSerialization;
 /// checks the payload structure and digest text shape only; core digest verification and graph-completeness
 /// validation remain separate operations.
 /// </remarks>
-public sealed class PackageProtectionRecordJsonConverter : JsonConverter<PackageProtectionRecord>
+internal sealed class PackageProtectionRecordJsonConverter : JsonConverter<PackageProtectionRecord>
 {
     private static readonly JsonSerializerOptions ProtectionJsonOptions = new()
     {

@@ -18,7 +18,7 @@ namespace Nuplane.Feeds;
 /// hand-composed acquirer still works — with no resolver, every credentialed feed is refused, which
 /// is what such a feed did before credentials could be resolved at all.
 /// </remarks>
-public sealed class NuGetRemotePackageAcquirer : IScopedRemotePackageAcquirer
+internal sealed class NuGetRemotePackageAcquirer : IScopedRemotePackageAcquirer
 {
     private static readonly HttpClient HttpClient = new();
     private readonly ConcurrentDictionary<string, Lazy<Task<CachedPackageBaseAddress>>> _packageBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);

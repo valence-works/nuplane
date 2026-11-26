@@ -5,6 +5,7 @@ This document defines the coding standards and conventions for the Nuplane proje
 ## Table of Contents
 
 - [General Principles](#general-principles)
+- [Public API](#public-api)
 - [Naming Conventions](#naming-conventions)
 - [Code Organization](#code-organization)
 - [XML Documentation](#xml-documentation)
@@ -30,6 +31,34 @@ This document defines the coding standards and conventions for the Nuplane proje
 5. **Immutability** — Prefer `sealed record` for data transfer types. Use `readonly` fields and properties where possible.
 
 ---
+
+## Public API
+
+Types in `Nuplane` and `Nuplane.Admin` are internal by default. Keep a type public when a
+supported host, package author, or extension needs to call or implement it, or when a supported
+public signature uses it. First-party modules may share implementation types through scoped
+`InternalsVisibleTo` declarations.
+
+| Purpose | Supported entry points |
+| --- | --- |
+| Host configuration | `AddNuplane`, `NuplaneBuilder`, feed builders, and configuration options and enums |
+| Reconciliation and observers | `IReconciliationService`, `IReconciliationTriggerIngress`, `INuplaneObserver`, `PackageChangeSet`, and the scoped, path-independent, and post-loading observer contracts |
+| Catalog reads | `IActivePackageCatalog`, `IPackageAssemblyCatalog`, `IPackageTypeFinder`, and `IPackageLoadStateCatalog` |
+| Host-free tooling and package content | `NuplaneRestore`, `NuplaneStore`, `NuplaneHostIntegratedLoader`, `PackageContent`, and `IPackageArchiveReader` |
+| Coordinated stores | Builder participation and root declarations, admitted snapshots, package-store admission and graph-use leases, and the documented session-aware companions for store state, serializers, and callbacks |
+| Host customization | Desired-state sources and contributors, package resolution and acquisition contracts, secret reference providers, operational state contributors, package metadata readers, activation gates, and load-mode advisors |
+| Admin operations | `AddNuplaneAdmin`, `AddNuplanePackageStoreMaintenance`, `INuplaneAdminOperations`, and `INuplanePackageStoreMaintenanceOperations` with their request and result records |
+
+Resolve these contracts through the documented host registration APIs. Concrete pipeline,
+persistence, observability, and registration classes belong to the implementation. External code
+that composed these classes directly can use `AddNuplane`, `NuplaneRestore`, or `NuplaneStore`
+for the host or offline workflow it needs.
+
+`Microsoft.CodeAnalysis.PublicApiAnalyzers` checks the `PublicAPI.Shipped.txt` and
+`PublicAPI.Unshipped.txt` manifests in both projects during ordinary builds. Review the API diff
+with any intentional addition or change. Record new or changed signatures in the unshipped
+manifest and promote reviewed entries to the shipped manifest with the release. The manifest
+includes nullability and supports the same API on .NET 8, .NET 9, and .NET 10.
 
 ## Naming Conventions
 

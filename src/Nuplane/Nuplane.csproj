@@ -22,6 +22,10 @@
          (duplicated there because core Nuplane cannot reference the optional loading module)
          against Nuplane.Loading's own PackageLoadMode/LoadModeScopes. -->
     <InternalsVisibleTo Include="Nuplane.Loading.Tests" />
+    <InternalsVisibleTo Include="Nuplane.NuGet.Tests" />
+    <InternalsVisibleTo Include="Nuplane.Sources.Directory.Tests" />
+    <!-- NSubstitute generates test doubles for internal core contracts in this assembly. -->
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
     <InternalsVisibleTo Include="Nuplane.Loading" />
     <!-- Optional Admin projects detached reports over the core-owned maintenance kernels. -->
     <InternalsVisibleTo Include="Nuplane.Admin" />

@@ -7,7 +7,7 @@ namespace Nuplane.Store.Transactions;
 /// Coordinates package transactions through sequential stages, handling trust/lock policy gates,
 /// artifact integrity validation, atomic pointer switching, and rollback on failure.
 /// </summary>
-public sealed class PackageTransactionCoordinator(AtomicPointerSwitcher pointerSwitcher, IFailureRecorder failureRecorder)
+internal sealed class PackageTransactionCoordinator(AtomicPointerSwitcher pointerSwitcher, IFailureRecorder failureRecorder)
 {
     private readonly AtomicPointerSwitcher _pointerSwitcher = pointerSwitcher ?? throw new ArgumentNullException(nameof(pointerSwitcher));
     private readonly IFailureRecorder _failureRecorder = failureRecorder ?? throw new ArgumentNullException(nameof(failureRecorder));

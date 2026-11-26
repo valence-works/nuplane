@@ -8,7 +8,7 @@ namespace Nuplane.Operational;
 /// Projects an <see cref="OperationalStateSnapshot"/> from the current runtime health state.
 /// Produces a consistent point-in-time read model for admin/operator consumption.
 /// </summary>
-public sealed class OperationalSnapshotProjector
+internal sealed class OperationalSnapshotProjector
 {
     private readonly IReconciliationHealthEvaluator _healthEvaluator;
     private readonly IReconciliationLogger _logger;

@@ -11,7 +11,7 @@ namespace Nuplane.Store.State;
 /// <summary>
 /// Serializes and deserializes <see cref="StoreStateRecord"/> to/from JSON files.
 /// </summary>
-public sealed class StoreStateSerializer : IPackageProtectionBundleStatePayloadSerializer, IStoreStatePayloadObservationSerializer
+internal sealed class StoreStateSerializer : IPackageProtectionBundleStatePayloadSerializer, IStoreStatePayloadObservationSerializer
 {
     private readonly AtomicFileWriter _fileWriter;
     private readonly bool _refuseUnscopedPathAccess;

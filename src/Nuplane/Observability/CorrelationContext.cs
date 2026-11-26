@@ -8,7 +8,7 @@ namespace Nuplane.Observability;
 /// to an <see cref="AsyncLocal{T}"/>-based scope for environments that do not
 /// use the <see cref="System.Diagnostics"/> tracing infrastructure.
 /// </summary>
-public static class CorrelationContext
+internal static class CorrelationContext
 {
     /// <summary>
     /// The <see cref="ActivitySource"/> used to create reconciliation activities.

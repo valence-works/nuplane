@@ -6,7 +6,7 @@ namespace Nuplane.Observability;
 /// Provides OpenTelemetry-compatible counters, histograms, and gauges for
 /// tracking reconciliation, trust policy, lock file, cleanup, and assembly loading metrics.
 /// </summary>
-public sealed class ReconciliationTelemetry : IDisposable
+internal sealed class ReconciliationTelemetry : IDisposable
 {
     private readonly Meter _meter = new("Nuplane.Runtime", "0.1.0");
 

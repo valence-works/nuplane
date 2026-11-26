@@ -9,7 +9,7 @@ namespace Nuplane.Feeds.Registration;
 /// <summary>
 /// Provides services for registering Nuplane feeds and their associated metadata in the service collection.
 /// </summary>
-public static class NuplaneFeedRegistrationServices
+internal static class NuplaneFeedRegistrationServices
 {
     /// <summary>
     /// Determines whether a feed with the specified name has already been registered in the service collection.

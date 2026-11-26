@@ -13,7 +13,7 @@ namespace Nuplane.Health;
 /// <param name="AcquisitionFailures">The number of package acquisition failures during the cycle.</param>
 /// <param name="AdminRejections">The number of admin trigger rejections during the cycle.</param>
 /// <param name="OperationalStateContributions">Additional module-owned operational-state contributions.</param>
-public sealed record ReconciliationHealthInput(
+internal sealed record ReconciliationHealthInput(
     bool HadAnyFailures,
     bool AllSourcesFresh,
     int LockFailures,
