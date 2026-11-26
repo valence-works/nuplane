@@ -25,7 +25,7 @@ This document defines the coding standards and conventions for the Nuplane proje
 ## General Principles
 
 1. **Determinism** — Reconciliation behavior must be deterministic. Given the same desired state and actual state, the engine must produce the same result.
-2. **Transactional Safety** — State mutations use atomic pointer switches with rollback/LKG (last known good) semantics. Never leave state in an inconsistent position.
+2. **Transactional Safety** — Publish committed active and last-known-good state through the store registry. Keep graph apply bookkeeping local and publish it only after all nodes have passed.
 3. **Trusted Sources** — All package sources must be validated against the trust policy. Secrets must never appear in logs, configuration files checked into source control, or exception messages.
 4. **Fail-Safe Defaults** — Options default to the safest value. For example, `EnableAutomaticReconciliation` defaults to `false`; `EnableSingleFlight` defaults to `true`.
 5. **Immutability** — Prefer `sealed record` for data transfer types. Use `readonly` fields and properties where possible.
@@ -425,7 +425,7 @@ Nuplane.Loading.Api (ASP.NET Core)
 
 ### Multi-Targeting
 
-The solution targets `net10.0`. Use the .NET 10 SDK to build and test it.
+The solution targets `net10.0`. Install the exact .NET SDK version in [`global.json`](../global.json) to build and test it. Update the pin alongside SDK servicing updates.
 
 ### Build Policy
 

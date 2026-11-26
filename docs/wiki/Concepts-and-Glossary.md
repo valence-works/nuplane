@@ -48,7 +48,7 @@ A named location that supplies package files for resolution. A feed can be a NuG
 
 ### Package store
 
-Nuplane’s deterministic on-disk storage area for packages, current-package pointers, staging work, and persisted state.
+Nuplane’s deterministic on-disk storage area for packages, staging work, and persisted state. The configured state file records the active and last-known-good versions for file-backed hosts.
 
 - Applied in: [Overview](Overview.md), [Architecture Guide](Architecture-Guide.md)
 - Canonical anchors: `README.md`, `src/Nuplane/Store/`

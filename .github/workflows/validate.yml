@@ -63,7 +63,7 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - name: Qualify Darwin native stat ABI on the actual runner architecture
         if: startsWith(matrix.os, 'macos-')
@@ -1494,6 +1494,11 @@ jobs:
       - name: Install the TRX verifier's Python
         run: apt-get update -qq && apt-get install -y -qq python3
 
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
       # The workspace is a bind mount from the runner; /var/tmp is the container's own overlayfs layer.
       - name: Qualify the reader on the container's writable layer
         shell: bash
@@ -1525,7 +1530,7 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - name: Mount an owned ${{ matrix.filesystem }} test root
         shell: bash
@@ -1570,7 +1575,7 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - name: Setup Python for the TRX verifier
         uses: actions/setup-python@v7
@@ -1601,7 +1606,7 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - name: Restore isolated documentation fixture
         run: python3 build/check-docs.py restore "$RUNNER_TEMP/nuplane-docs"
@@ -1630,7 +1635,7 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - name: Download verified Darwin native shim
         uses: actions/download-artifact@v4

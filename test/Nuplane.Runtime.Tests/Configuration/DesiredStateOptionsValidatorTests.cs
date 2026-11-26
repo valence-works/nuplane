@@ -14,6 +14,30 @@ public sealed class DesiredStateOptionsValidatorTests
         Assert.True(result.Succeeded);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Validate_BlankSourcePriorityKey_Fails(string sourceName)
+    {
+        var options = new DesiredStateOptions();
+        options.SourcePriorities[sourceName] = 1;
+
+        var result = _sut.Validate(null, options);
+
+        Assert.True(result.Failed);
+        Assert.Contains("DesiredState:SourcePriorities", result.FailureMessage);
+    }
+
+    [Fact]
+    public void Validate_PriorityForSourceDiscoveredLater_Succeeds()
+    {
+        var options = new DesiredStateOptions();
+        options.SetPriority("future-source", -1);
+
+        Assert.True(_sut.Validate(null, options).Succeeded);
+        Assert.Equal(-1, options.GetPriority("FUTURE-SOURCE"));
+    }
+
     [Fact]
     public void Validate_ManifestEnabledWithoutPath_Fails()
     {

@@ -28,6 +28,19 @@ public sealed class PackageTransactionCoordinatorRegressionTests
     }
 
     [Fact]
+    public async Task PrepareGraphNodeAsync_InvalidVersion_RejectsBeforePointerPublication()
+    {
+        var (pointerSwitcher, _, coordinator) = await SetupCoordinator("pkg-graph", "1.0.0");
+
+        var result = await coordinator.PrepareGraphNodeAsync(
+            new("pkg-graph", "", "corr-invalid"), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.True(result.LastKnownGoodPreserved);
+        Assert.Equal("1.0.0", pointerSwitcher.GetCurrentVersion("pkg-graph"));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_SequentialTransactions_EachAdvancesPointerDeterministically()
     {
         var (pointerSwitcher, _, coordinator) = await SetupCoordinator("pkg-seq", "1.0.0");

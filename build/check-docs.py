@@ -177,7 +177,15 @@ def restore(fixture):
     fixture.mkdir(parents=True)
     for name in ("src", "samples", "native"):
         shutil.copytree(ROOT / name, fixture / name, ignore=shutil.ignore_patterns("bin", "obj", "packages", ".nuplane"))
-    for name in ("Directory.Build.props", "Directory.Packages.props", "NuGet.config", "README.md", "LICENSE", "logo.png"):
+    for name in (
+        "Directory.Build.props",
+        "Directory.Packages.props",
+        "NuGet.config",
+        "global.json",
+        "README.md",
+        "LICENSE",
+        "logo.png",
+    ):
         shutil.copy2(ROOT / name, fixture / name)
     consumer = fixture / SNIPPET_PROJECT
     consumer.parent.mkdir()
