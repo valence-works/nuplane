@@ -2,6 +2,7 @@ using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Reconciliation.Middleware;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Store.Coordination;
+using Nuplane.Store.Coordination.MembershipRecords;
 using Nuplane.Store.State;
 
 namespace Nuplane.Reconciliation;
@@ -9,17 +10,17 @@ namespace Nuplane.Reconciliation;
 /// <summary>Retains the exact pending installs across the unlocked loading phase of a coordinated cycle.</summary>
 internal sealed class CoordinatedPreActivationCycle : IAsyncDisposable
 {
-    private readonly string _ledgerDigest;
+    private readonly RootMemberRecord.AcknowledgedBinding _memberBinding;
     private readonly PackageGraphUseLeaseOwner[] _leases;
 
     private CoordinatedPreActivationCycle(
         StoreStateRecord priorState,
-        string ledgerDigest,
+        RootMemberRecord.AcknowledgedBinding memberBinding,
         LeasedPackageGraphLoadingHandoff handoff,
         PackageGraphUseLeaseOwner[] leases)
     {
         PriorState = priorState;
-        _ledgerDigest = ledgerDigest;
+        _memberBinding = memberBinding;
         Handoff = handoff;
         _leases = leases;
     }
@@ -38,8 +39,7 @@ internal sealed class CoordinatedPreActivationCycle : IAsyncDisposable
         // Source snapshots and acquisition failures have already been persisted in this phase.
         // Use their resulting exact member state as the revision to compare at commit.
         var prior = await registry.ReadCoordinatedStateAsync(borrow, cancellationToken).ConfigureAwait(false);
-        if (prior.ProtectionRecord is null)
-            throw Stale(owner, "The coordinated activation has no verified current member protection.");
+        var member = ReadMemberBinding(borrow, prior);
 
         var selections = context.ApplyResult!.SuccessfulGraphSelections;
         var pending = new List<LeasedPackageGraphSelection>(selections.Count);
@@ -55,8 +55,7 @@ internal sealed class CoordinatedPreActivationCycle : IAsyncDisposable
                 pending.Add(new(selection, lease));
             }
 
-            var ledgerDigest = PackageStoreOperationAccess.GetLockedMemberLocations(borrow).Ledger.LedgerDigest;
-            return new(prior, ledgerDigest,
+            return new(prior, member,
                 new LeasedPackageGraphLoadingHandoff(context.ChangeSet!, context.DesiredRequests, pending),
                 leases.ToArray());
         }
@@ -82,12 +81,12 @@ internal sealed class CoordinatedPreActivationCycle : IAsyncDisposable
     {
         using var borrow = owner.Borrow();
         var current = await registry.ReadCoordinatedStateAsync(borrow, cancellationToken).ConfigureAwait(false);
-        var ledger = PackageStoreOperationAccess.GetLockedMemberLocations(borrow).Ledger;
-        var priorProtection = PriorState.ProtectionRecord!;
+        var member = ReadMemberBinding(borrow, current);
+        var priorProtection = _memberBinding.ProtectionRecord;
         if (owner.Root != priorProtection.RootIdentity || owner.Epoch != priorProtection.EnrollmentEpoch ||
-            !StringComparer.Ordinal.Equals(ledger.LedgerDigest, _ledgerDigest) ||
-            current.ProtectionRecord is not { } protection ||
-            !priorProtection.HasSamePayloadAs(protection))
+            member.StateSlot != _memberBinding.StateSlot ||
+            member.ObservedStateFileIdentity != _memberBinding.ObservedStateFileIdentity ||
+            !priorProtection.HasSamePayloadAs(member.ProtectionRecord))
         {
             throw Stale(owner, "The coordinated member or root changed while package loading was staged. Retry reconciliation against current state.");
         }
@@ -137,12 +136,11 @@ internal sealed class CoordinatedPreActivationCycle : IAsyncDisposable
             Removed = PriorState.ActiveVersionById.Keys.Where(id => !restored.ContainsKey(id))
                 .Order(StringComparer.OrdinalIgnoreCase).ToArray(),
         };
+        context.LoadingRejectedPackageIds = rejected;
         context.ApplyResult = applied with
         {
             AppliedPackages = survivingPackages,
             SuccessfulGraphSelections = survivingSelections,
-            FailedPackageIds = applied.FailedPackageIds.Concat(rejected)
-                .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray(),
         };
     }
 
@@ -206,6 +204,23 @@ internal sealed class CoordinatedPreActivationCycle : IAsyncDisposable
         while (rejected.Count != previousSize);
 
         return rejected;
+    }
+
+    private static RootMemberRecord.AcknowledgedBinding ReadMemberBinding(
+        PackageStoreOperationBorrow borrow, StoreStateRecord state)
+    {
+        var ledger = PackageStoreOperationAccess.GetLockedMemberLocations(borrow).Ledger;
+        var stateProtection = state.ProtectionRecord;
+        var member = ledger.Members.SingleOrDefault(item =>
+            StringComparer.Ordinal.Equals(item.MemberId, stateProtection?.MemberId));
+        if (member?.Binding is not RootMemberRecord.AcknowledgedBinding binding ||
+            stateProtection is null ||
+            !binding.ProtectionRecord.HasSamePayloadAs(stateProtection))
+        {
+            throw Stale(borrow.Owner, "The coordinated activation has no verified acknowledgement for the configured member.");
+        }
+
+        return binding;
     }
 
     private static bool SameGraph(ResolvedPackageGraph left, ResolvedPackageGraph right) =>

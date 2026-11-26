@@ -72,6 +72,8 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
     {
         var resolution = context.ResolutionResult!;
         var applied = context.ApplyResult!;
+        var failedIds = BuildFailedPackageIds(resolution.FailedPackageIds, applied.FailedPackageIds);
+        failedIds.UnionWith(context.LoadingRejectedPackageIds);
         using var borrow = owner.Borrow();
         return await CreateCandidateAsync(
             borrow,
@@ -80,7 +82,7 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
             context.ChangeSet!,
             applied.SuccessfulGraphSelections,
             BuildDesiredRootIds(context.DesiredRequests, resolution.ResolvedGraphs, resolution.GraphSelections),
-            BuildFailedPackageIds(resolution.FailedPackageIds, applied.FailedPackageIds),
+            failedIds,
             context.CorrelationId,
             context.CancellationToken).ConfigureAwait(false);
     }
