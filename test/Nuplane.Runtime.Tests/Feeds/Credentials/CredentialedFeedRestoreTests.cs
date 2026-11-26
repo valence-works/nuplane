@@ -92,6 +92,42 @@ public sealed class CredentialedFeedRestoreTests : IDisposable
         Assert.NotEmpty(_logs.Entries);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RestoreAsync_UntrustedFeed_ResolvesCredentialOnlyWithPackageOverride(bool hasOverride)
+    {
+        await using var server = StartServer();
+        var configuration = Configuration(server, reference: "secrets://test-store/feed-token");
+        configuration[$"Setup:Feeds:{FeedName}:Trust"] = "Untrusted";
+        if (hasOverride)
+        {
+            configuration["FeedResolution:TrustOverrides:0:FeedName"] = FeedName;
+            configuration["FeedResolution:TrustOverrides:0:PackageId"] = PackageId;
+            configuration["FeedResolution:TrustOverrides:0:Reason"] = "Approved fixture package";
+        }
+        var credential = StubSecretReferenceProvider.Holding("test-store", "feed-token", Sentinel);
+        var options = RestoreOptions();
+        options.ConfigureBuilder += (builder, _) => builder.Services.AddSingleton<ISecretReferenceProvider>(credential);
+
+        var result = await NuplaneRestore.RestoreAsync(configuration, options);
+
+        Assert.Empty(result.CredentialRefusedFeeds);
+        if (hasOverride)
+        {
+            Assert.Equal(PackageId, Assert.Single(result.ActivePackages).PackageId);
+            Assert.True(credential.Lookups > 0);
+            Assert.Equal(1, server.PackageDownloads);
+        }
+        else
+        {
+            Assert.Equal(PackageId, Assert.Single(result.FailedPackages));
+            Assert.Equal(0, credential.Lookups);
+            Assert.Equal(0, server.Requests);
+            Assert.Contains($"Nuplane:Setup:Feeds:{FeedName}:Trust", _logs.AllText, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public async Task Create_WithTwoProvidersClaimingOneName_RefusesWhileComposing()
     {

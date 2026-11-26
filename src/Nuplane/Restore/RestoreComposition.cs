@@ -141,9 +141,8 @@ internal sealed class RestoreComposition : IAsyncDisposable
             // secret. Nothing has been written or fetched at this point.
             var secretReferenceResolver = provider.GetRequiredService<ISecretReferenceResolver>();
 
-            // After validation, and before anything reads the feed list: a feed whose secret
-            // reference resolves stays and is used authenticated; one that cannot be resolved is
-            // dropped and named here, before the first network call.
+            // Check credential references only for feeds with acquisition authority. Keep other
+            // feeds visible so the resolver can report the trust refusal and its configuration key.
             await RefuseUnresolvableCredentialFeedsAsync(provider, secretReferenceResolver, feedOptions, credentialRefusedFeeds)
                 .ConfigureAwait(false);
 
@@ -352,7 +351,7 @@ internal sealed class RestoreComposition : IAsyncDisposable
             .Any(static source => source is not DesiredManifestPackageSource { IsEnabled: false });
 
     /// <summary>
-    /// Drops every feed whose configured secret reference no registered
+    /// Drops candidate feeds whose configured secret reference no registered
     /// <see cref="ISecretReferenceProvider"/> could resolve, recording its name. A feed whose
     /// reference does resolve is left in place and contacted with credentials, like any other feed.
     /// </summary>
@@ -370,7 +369,9 @@ internal sealed class RestoreComposition : IAsyncDisposable
         List<string> refusedFeeds)
     {
         var credentialFeeds = feedOptions.Feeds
-            .Where(static feed => !string.IsNullOrWhiteSpace(feed.Credentials))
+            .Where(feed => !string.IsNullOrWhiteSpace(feed.Credentials)
+                && (feed.Trust == FeedTrustLevel.Trusted || feedOptions.TrustOverrides.Any(rule =>
+                    string.Equals(rule.FeedName, feed.Name, StringComparison.OrdinalIgnoreCase))))
             .ToArray();
 
         if (credentialFeeds.Length == 0)
