@@ -69,14 +69,26 @@ public sealed class NupkgFileStabilityProbe
         CancellationToken cancellationToken,
         DesiredSourceDirectorySession? session = null,
         string? directoryPath = null)
-        => (await GetStableFilesAsync([candidate], cancellationToken, session, directoryPath).ConfigureAwait(false)).Count != 0;
+        => (await ProbeFilesAsync([candidate], cancellationToken, session, directoryPath, releaseCompletedCandidates: false)
+            .ConfigureAwait(false)).Count != 0;
 
-    // Ordinary callers supply file paths. Native callers supply basenames from the held directory.
-    internal async Task<IReadOnlyList<string>> GetStableFilesAsync(
+    internal Task<IReadOnlyList<string>> GetStableFilesAsync(
+        IEnumerable<string> filePaths, CancellationToken cancellationToken)
+        => ProbeFilesAsync(filePaths, cancellationToken, session: null, directoryPath: null, releaseCompletedCandidates: true);
+
+    internal Task<IReadOnlyList<string>> GetStableFilesAsync(
+        DesiredSourceDirectorySession session,
+        string directoryPath,
+        IEnumerable<string> basenames,
+        CancellationToken cancellationToken)
+        => ProbeFilesAsync(basenames, cancellationToken, session, directoryPath, releaseCompletedCandidates: true);
+
+    private async Task<IReadOnlyList<string>> ProbeFilesAsync(
         IEnumerable<string> candidates,
         CancellationToken cancellationToken,
-        DesiredSourceDirectorySession? session = null,
-        string? directoryPath = null)
+        DesiredSourceDirectorySession? session,
+        string? directoryPath,
+        bool releaseCompletedCandidates)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (session is { IsMissing: true })
@@ -111,7 +123,9 @@ public sealed class NupkgFileStabilityProbe
                     if (candidate.IsStable is not null)
                     {
                         remaining--;
-                        session?.ReleasePackageCandidate(candidate.Name);
+                        // A standalone guarded probe keeps its pin through the final directory replay.
+                        if (releaseCompletedCandidates)
+                            session?.ReleasePackageCandidate(candidate.Name);
                     }
                 }
 

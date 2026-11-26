@@ -145,8 +145,9 @@ public sealed class DirectoryNupkgDesiredSource : IScopedDesiredPackageSource
                 if (_stabilityProbe is not null)
                 {
                     var stableCandidates = await _stabilityProbe.GetStableFilesAsync(
+                            session, _directoryPath,
                             candidates.Where(static candidate => !string.IsNullOrWhiteSpace(Path.GetFileNameWithoutExtension(candidate))),
-                            cancellationToken, session, _directoryPath)
+                            cancellationToken)
                         .ConfigureAwait(false);
                     return CreateRequests(stableCandidates, cancellationToken);
                 }
