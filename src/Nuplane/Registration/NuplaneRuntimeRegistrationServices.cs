@@ -210,7 +210,8 @@ internal static class NuplaneRuntimeRegistrationServices
                 ? sp.GetService<IResolvedPackageGraphUseLeaseAcquisition>()
                 : null,
             composition.IsParticipant ? loadingObserver : null,
-            composition);
+            composition,
+            composition.IsParticipant ? null : sp.GetService<IOrdinaryPackageLoadingActivation>());
         });
         services.AddSingleton<IReconciliationService>(sp => sp.GetRequiredService<ReconciliationService>());
     }

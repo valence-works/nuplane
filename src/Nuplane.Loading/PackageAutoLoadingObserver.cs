@@ -14,7 +14,8 @@ namespace Nuplane.Loading;
 /// Subscribes to reconciliation completion callbacks, ensures newly applied or not-yet-loaded
 /// packages are loaded into Assembly Load Contexts, and dispatches loading-domain events.
 /// </summary>
-internal sealed class PackageAutoLoadingObserver : IScopedNuplaneObserver, ILeasedPackageGraphRecoveryLoadingObserver
+internal sealed class PackageAutoLoadingObserver :
+    IScopedNuplaneObserver, ILeasedPackageGraphRecoveryLoadingObserver, IOrdinaryPackageLoadingActivation
 {
     private readonly IPackageLoader _loader;
     private readonly IScopedPackageLoader? _scopedLoader;
@@ -106,7 +107,7 @@ internal sealed class PackageAutoLoadingObserver : IScopedNuplaneObserver, ILeas
         // below because a pure removal produces nothing to load yet still must release the old context.
         await UnloadInactiveContextsAsync(changeSet, ct);
 
-        var packagesToLoad = BuildPackagesToLoad(changeSet, appliedPackages);
+        var packagesToLoad = BuildPackagesToLoad(appliedPackages);
         if (packagesToLoad.Count == 0)
         {
             RefreshTracker?.MarkRefreshed(changeSet.CorrelationId);
@@ -116,19 +117,55 @@ internal sealed class PackageAutoLoadingObserver : IScopedNuplaneObserver, ILeas
         var (packageGraphs, inertPackageCount) = SelectGraphsRequiringLoad(
             await BuildPackageGraphsAsync(packagesToLoad, ct),
             changeSet.CorrelationId);
-        if (packageGraphs.Count == 0)
+        var loadResult = await LoadOrdinaryGraphsAsync(packageGraphs, changeSet.CorrelationId, ct);
+        await RecordOrdinaryLoadFailuresAsync(loadResult, changeSet.CorrelationId, ct);
+        await PublishOrdinaryLoadResultAsync(loadResult, inertPackageCount, changeSet.CorrelationId, ct);
+    }
+
+    async Task<OrdinaryPackageLoadingResult?> IOrdinaryPackageLoadingActivation.PrepareAsync(
+        IReadOnlyList<ResolvedPackage> packages,
+        StoreStateRecord candidate,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        if (_requiresGraphUseLease || !_loadingOptions.Enabled)
+            return null;
+
+        var packagesToLoad = BuildPackagesToLoad(packages);
+        if (packagesToLoad.Count == 0)
+            return null;
+
+        var (graphs, inertCount) = SelectGraphsRequiringLoad(
+            PackageGraphGrouping.ForActiveState(packagesToLoad, candidate), correlationId);
+        var result = await LoadOrdinaryGraphsAsync(graphs, correlationId, cancellationToken);
+        await RecordOrdinaryLoadFailuresAsync(result, correlationId, cancellationToken);
+
+        return new(result.FailedByPackageId, (activeVersions, token) =>
         {
-            Metrics?.RecordLoaderBoundaryOutcome(succeeded: 0, failed: 0, inertPackageCount);
-            RefreshTracker?.MarkRefreshed(changeSet.CorrelationId);
-            return;
-        }
+            var committed = result.Loaded.Where(session =>
+                activeVersions.TryGetValue(session.PackageId, out var version) &&
+                StringComparer.OrdinalIgnoreCase.Equals(version, session.Version)).ToArray();
+            return PublishOrdinaryLoadResultAsync(result with { Loaded = committed }, inertCount, correlationId, token);
+        });
+    }
+
+    void IOrdinaryPackageLoadingActivation.DiscardInactiveLoads(IReadOnlyDictionary<string, string> activeVersions)
+        => _loader.UnloadContextsNotActive(activeVersions);
+
+    private async Task<PackageLoadResult> LoadOrdinaryGraphsAsync(
+        IReadOnlyList<IReadOnlyList<ResolvedPackage>> packageGraphs,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        if (packageGraphs.Count == 0)
+            return new([], new Dictionary<string, string>());
 
         var graphPackageCount = packageGraphs.Sum(static graph => graph.Count);
 
         _logger.LogDebug(
             "Loading {Count} packages after reconciliation. CorrelationId={CorrelationId}",
             graphPackageCount,
-            changeSet.CorrelationId);
+            correlationId);
 
         for (var i = 0; i < graphPackageCount; i++)
         {
@@ -139,8 +176,22 @@ internal sealed class PackageAutoLoadingObserver : IScopedNuplaneObserver, ILeas
             .Select(x => new SharedAssemblyPolicyEntry(x.Name, x.PublicKeyToken, x.MajorVersion))
             .ToArray();
 
-        var loadResult = await _loader.EnsureGraphLoadedAsync(packageGraphs, sharedPolicy, ct);
+        return await _loader.EnsureGraphLoadedAsync(packageGraphs, sharedPolicy, cancellationToken);
+    }
 
+    private async Task RecordOrdinaryLoadFailuresAsync(
+        PackageLoadResult loadResult, string correlationId, CancellationToken cancellationToken)
+    {
+        if (FailureRecorder is null)
+            return;
+
+        foreach (var (packageId, reason) in loadResult.FailedByPackageId)
+            await FailureRecorder.RecordAsync(packageId, "load", reason, correlationId, cancellationToken);
+    }
+
+    private async Task PublishOrdinaryLoadResultAsync(
+        PackageLoadResult loadResult, int inertPackageCount, string correlationId, CancellationToken cancellationToken)
+    {
         foreach (var _ in loadResult.Loaded)
         {
             Metrics?.RecordLoadSucceeded();
@@ -149,39 +200,33 @@ internal sealed class PackageAutoLoadingObserver : IScopedNuplaneObserver, ILeas
         foreach (var (packageId, reason) in loadResult.FailedByPackageId)
         {
             Metrics?.RecordLoadFailed();
-            LoadingFailureTracker?.RecordFailure(changeSet.CorrelationId, packageId, reason);
+            LoadingFailureTracker?.RecordFailure(correlationId, packageId, reason);
 
             _logger.LogWarning(
                 "Package {PackageId} failed to load: {Reason}. CorrelationId={CorrelationId}",
                 packageId,
                 reason,
-                changeSet.CorrelationId);
+                correlationId);
 
-            if (FailureRecorder is not null)
-            {
-                await FailureRecorder.RecordAsync(packageId, "load", reason, changeSet.CorrelationId, ct);
-            }
-
-
-            await _dispatcher.PublishFailedAsync(packageId, reason, ct);
+            await _dispatcher.PublishFailedAsync(packageId, reason, cancellationToken);
         }
 
         Metrics?.RecordLoaderBoundaryOutcome(loadResult.Loaded.Count, loadResult.FailedByPackageId.Count, inertPackageCount);
-        RefreshTracker?.MarkRefreshed(changeSet.CorrelationId);
+        RefreshTracker?.MarkRefreshed(correlationId);
 
         if (loadResult.Loaded.Count > 0)
         {
             var evt = new PackageLoadedEvent(
-                changeSet.CorrelationId,
+                correlationId,
                 DateTimeOffset.UtcNow,
                 loadResult.Loaded);
 
             _logger.LogInformation(
                 "Packages loaded. Count={Count} CorrelationId={CorrelationId}",
                 loadResult.Loaded.Count,
-                changeSet.CorrelationId);
+                correlationId);
 
-            await _dispatcher.PublishLoadedAsync(evt, ct);
+            await _dispatcher.PublishLoadedAsync(evt, cancellationToken);
         }
     }
 
@@ -437,9 +482,7 @@ internal sealed class PackageAutoLoadingObserver : IScopedNuplaneObserver, ILeas
         }
     }
 
-    private List<ResolvedPackage> BuildPackagesToLoad(
-        PackageChangeSet changeSet,
-        IReadOnlyList<ResolvedPackage> appliedPackages)
+    private List<ResolvedPackage> BuildPackagesToLoad(IReadOnlyList<ResolvedPackage> appliedPackages)
     {
         var packagesToLoad = new Dictionary<string, ResolvedPackage>(StringComparer.OrdinalIgnoreCase);
 

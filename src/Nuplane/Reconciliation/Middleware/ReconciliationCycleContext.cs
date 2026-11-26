@@ -51,6 +51,8 @@ internal sealed class ReconciliationCycleContext
     // Result
     public ReconciliationRunResult? Result { get; set; }
 
+    internal OrdinaryPackageLoadingResult? OrdinaryLoadingResult { get; set; }
+
     /// <summary>Deferred package-load failures returned after the enrolled cycle releases short locks.</summary>
     public IReadOnlyList<string> DeferredLoadingFailedPackageIds { get; set; } = [];
 }

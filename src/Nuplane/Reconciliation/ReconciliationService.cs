@@ -179,6 +179,7 @@ internal sealed class ReconciliationService : IReconciliationService
     /// <param name="graphUseLeaseAcquisition">Publishes graph-use owners before deferred loading begins.</param>
     /// <param name="leasedPackageGraphLoadingObserver">Performs lease-bound loading after short admission locks are released.</param>
     /// <param name="composition">The frozen composition route selected by host registration.</param>
+    /// <param name="ordinaryLoadingActivation">Prepares package loads before an ordinary state transition commits.</param>
     internal ReconciliationService(
         IEnumerable<IDesiredPackageSource> sources,
         IDesiredStateAggregator desiredStateAggregator,
@@ -206,7 +207,8 @@ internal sealed class ReconciliationService : IReconciliationService
         IPackageStoreAdmission? packageStoreAdmission = null,
         IResolvedPackageGraphUseLeaseAcquisition? graphUseLeaseAcquisition = null,
         ILeasedPackageGraphLoadingObserver? leasedPackageGraphLoadingObserver = null,
-        PackageStoreCompositionSnapshot? composition = null)
+        PackageStoreCompositionSnapshot? composition = null,
+        IOrdinaryPackageLoadingActivation? ordinaryLoadingActivation = null)
     {
         _storeLock = storeLock;
 
@@ -268,7 +270,8 @@ internal sealed class ReconciliationService : IReconciliationService
             startupRecoveryState,
             contributors,
             hostProvidedPackagesOptions?.Value,
-            transitionDriver);
+            transitionDriver,
+            ordinaryLoadingActivation);
         _pipeline = _pipelineDefinition.Create(null, out var legacyCache, out _);
         _sourceSnapshotCache = legacyCache;
         _graphUseLeaseAcquisition = graphUseLeaseAcquisition;
@@ -639,6 +642,7 @@ internal sealed class ReconciliationPipelineDefinition
     private readonly StartupRecoveryState? _startupRecoveryState;
     private readonly HostProvidedPackagesOptions? _hostProvidedPackagesOptions;
     private readonly ICoordinatedActiveStateTransitionDriver? _transitionDriver;
+    private readonly IOrdinaryPackageLoadingActivation? _ordinaryLoadingActivation;
 
     internal ReconciliationPipelineDefinition(
         IReadOnlyList<IDesiredPackageSource> sources,
@@ -662,7 +666,8 @@ internal sealed class ReconciliationPipelineDefinition
         StartupRecoveryState? startupRecoveryState,
         IReadOnlyList<IDesiredStateContributor> contributors,
         HostProvidedPackagesOptions? hostProvidedPackagesOptions,
-        ICoordinatedActiveStateTransitionDriver? transitionDriver)
+        ICoordinatedActiveStateTransitionDriver? transitionDriver,
+        IOrdinaryPackageLoadingActivation? ordinaryLoadingActivation = null)
     {
         Sources = sources;
         PackageResolver = packageResolver;
@@ -686,6 +691,7 @@ internal sealed class ReconciliationPipelineDefinition
         _startupRecoveryState = startupRecoveryState;
         _hostProvidedPackagesOptions = hostProvidedPackagesOptions;
         _transitionDriver = transitionDriver;
+        _ordinaryLoadingActivation = ordinaryLoadingActivation;
     }
 
     internal IReadOnlyList<IDesiredPackageSource> Sources { get; }
@@ -740,7 +746,7 @@ internal sealed class ReconciliationPipelineDefinition
         pipeline.Use(new TransactionExecutionMiddleware(applyExecutor, _desiredActualDiffEngine, dispatcher,
             _transitionDriver));
         pipeline.Use(new CleanupMiddleware(_desiredActualDiffEngine, registry, PackageCleanupService,
-            _cleanupPolicyOptions, _metrics, _transitionDriver));
+            _cleanupPolicyOptions, _metrics, _transitionDriver, owner is null ? _ordinaryLoadingActivation : null));
         healthAndMetricsMiddleware = new HealthAndMetricsMiddleware(_healthEvaluator, dispatcher, _logger, _metrics,
             _feedResolutionOptions, _observationDegradationTracker, CycleFailureContributor, _startupRecoveryState);
         pipeline.Use(healthAndMetricsMiddleware);
