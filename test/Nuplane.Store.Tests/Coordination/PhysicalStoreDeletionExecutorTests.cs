@@ -60,6 +60,7 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
 
         Assert.Equal(PackageStoreDeletionExecutionStatus.Deleted, result);
         Assert.False(Directory.Exists(originalPath));
+        Assert.Empty(EnumerateJournalPaths(fixture.Context.RootAPath));
         Assert.DoesNotContain(Directory.EnumerateFileSystemEntries(Path.GetDirectoryName(originalPath)!),
             path => Path.GetFileName(path).StartsWith(".nuplane-quarantine-", StringComparison.Ordinal));
         Assert.Equal("keep", File.ReadAllText(Path.Combine(unrelatedPath, "keep.txt")));
@@ -256,6 +257,74 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
 
         Assert.Equal(PackageStoreDeletionExecutionStatus.AlreadyAbsent,
             await DeleteOneAsync(fixture, packageId));
+        Assert.Empty(EnumerateJournalPaths(fixture.Context.RootAPath));
+        AssertExecutionLocksReleased(fixture.Context);
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task ExecuteEligibleCandidates_ReinstalledAtFinalizingJournalPath_HonorsCurrentRetention()
+    {
+        const string packageId = "executor-reinstalled";
+        using var fixture = await ExecutionFixture.CreateAsync(
+            deletionExecutionCheckpoint: InterruptAfterQuarantineRemoval(packageId));
+        var originalPath = CreateInactiveInstall(fixture.Context.RootAPath, packageId);
+        await Assert.ThrowsAsync<IOException>(() => DeleteOneAsync(fixture, packageId));
+        var journal = Assert.Single(EnumerateJournalPaths(fixture.Context.RootAPath));
+        Assert.False(Directory.Exists(originalPath));
+
+        var replacement = CreateInactiveInstall(fixture.Context.RootAPath, packageId);
+        Assert.Equal(originalPath, replacement);
+        var payload = Path.Combine(replacement, "replacement.txt");
+        File.WriteAllText(payload, "new install");
+
+        var retained = await fixture.Service.ExecuteEligibleCandidatesAsync("root-0", 1, 1);
+
+        Assert.Equal(PackageStoreExecutionRequestStatus.Completed, retained.Status);
+        Assert.False(File.Exists(journal));
+        Assert.Equal("new install", File.ReadAllText(payload));
+        var pruned = await fixture.Service.ExecuteEligibleCandidatesAsync("root-0", 1, 0);
+        Assert.Equal(PackageStoreExecutionRequestStatus.Completed, pruned.Status);
+        Assert.Equal(PackageStoreExecutionPhysicalOutcome.Deleted, OutcomeFor(pruned, packageId).PhysicalOutcome);
+        Assert.False(Directory.Exists(replacement));
+        Assert.Empty(EnumerateJournalPaths(fixture.Context.RootAPath));
+    }
+
+    [SupportedPhysicalStoreTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteEligibleCandidates_InterruptedAtTerminalRetirement_RecoversFromExactDiskState(bool afterRemoval)
+    {
+        const string packageId = "executor-journal-retirement";
+        var stop = afterRemoval
+            ? PackageStoreDeletionJournalPublicationPoint.AfterTerminalRemoval
+            : PackageStoreDeletionJournalPublicationPoint.BeforeTerminalRemoval;
+        var interrupted = false;
+        using var fixture = await ExecutionFixture.CreateAsync(journalPublicationCheckpoint: (point, journal) =>
+        {
+            if (!interrupted && point == stop && journal.OriginalInstall.PackageId == packageId)
+            {
+                interrupted = true;
+                throw new IOException("controlled stop during terminal journal retirement");
+            }
+        });
+        var originalPath = CreateInactiveInstall(fixture.Context.RootAPath, packageId);
+
+        var outcome = await fixture.Service.ExecuteEligibleCandidatesAsync("root-0", 1, 0);
+
+        Assert.True(interrupted);
+        Assert.Equal(PackageStoreExecutionRequestStatus.Failed, outcome.Status);
+        Assert.Equal(PackageStoreExecutionPhysicalOutcome.Deleted, OutcomeFor(outcome, packageId).PhysicalOutcome);
+        Assert.False(Directory.Exists(originalPath));
+        Assert.Equal(!afterRemoval, EnumerateJournalPaths(fixture.Context.RootAPath).Any());
+
+        var recovered = await fixture.Service.ExecuteEligibleCandidatesAsync("root-0", 1, 0);
+
+        Assert.Equal(PackageStoreExecutionRequestStatus.Completed, recovered.Status);
+        if (afterRemoval)
+            Assert.DoesNotContain(recovered.Candidates, candidate => candidate.Install.PackageId == packageId);
+        else
+            Assert.Equal(PackageStoreExecutionPhysicalOutcome.AlreadyAbsent, OutcomeFor(recovered, packageId).PhysicalOutcome);
+        Assert.Empty(EnumerateJournalPaths(fixture.Context.RootAPath));
         AssertExecutionLocksReleased(fixture.Context);
     }
 
@@ -263,9 +332,10 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
     public async Task ExecuteEligibleCandidates_InstallReusingADeletedInstallsNativeIdentitiesIsStillPruned()
     {
         const string packageId = "executor-reused-identity";
-        using var fixture = await ExecutionFixture.CreateAsync();
+        using var fixture = await ExecutionFixture.CreateAsync(
+            deletionExecutionCheckpoint: InterruptAfterQuarantineRemoval(packageId));
         var deletedPath = CreateInactiveInstall(fixture.Context.RootAPath, packageId, "1.0.0");
-        Assert.Equal(PackageStoreDeletionExecutionStatus.Deleted, await DeleteOneAsync(fixture, packageId));
+        await Assert.ThrowsAsync<IOException>(() => DeleteOneAsync(fixture, packageId));
         var tombstone = ReadCandidateJournal(fixture.Context.RootAPath, packageId);
         Assert.Equal(PackageStoreDeletionPhase.Finalizing, tombstone.Phase);
 
@@ -304,13 +374,10 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
         Assert.False(Directory.Exists(deletedPath));
         Assert.False(Directory.Exists(laterPath));
 
-        // Both Finalizing journals now name the same directory identity; discovery must still accept them.
+        // Both the historical journal and the new deletion's journal were retired.
         var again = await fixture.Service.ExecuteEligibleCandidatesAsync("root-0", 1, 0);
         Assert.Equal(PackageStoreExecutionRequestStatus.Completed, again.Status);
-        var tombstones = again.Candidates.Where(candidate => candidate.Install.PackageId == packageId).ToArray();
-        Assert.Equal(2, tombstones.Length);
-        Assert.All(tombstones, candidate =>
-            Assert.Equal(PackageStoreExecutionPhysicalOutcome.AlreadyAbsent, candidate.PhysicalOutcome));
+        Assert.DoesNotContain(again.Candidates, candidate => candidate.Install.PackageId == packageId);
         AssertExecutionLocksReleased(fixture.Context);
     }
 
@@ -318,11 +385,12 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
     public async Task QuarantineInventoryJoin_DeletedInstallJoinsAsPositivelyAbsentTombstone()
     {
         const string packageId = "executor-tombstone";
-        using var fixture = await ExecutionFixture.CreateAsync();
+        using var fixture = await ExecutionFixture.CreateAsync(
+            deletionExecutionCheckpoint: InterruptAfterQuarantineRemoval(packageId));
         var originalPath = CreateInactiveInstall(fixture.Context.RootAPath, packageId);
         File.WriteAllText(Path.Combine(originalPath, "payload.txt"), "payload");
 
-        Assert.Equal(PackageStoreDeletionExecutionStatus.Deleted, await DeleteOneAsync(fixture, packageId));
+        await Assert.ThrowsAsync<IOException>(() => DeleteOneAsync(fixture, packageId));
         var journal = ReadCandidateJournal(fixture.Context.RootAPath, packageId);
         Assert.Equal(PackageStoreDeletionPhase.Finalizing, journal.Phase);
 
@@ -1105,6 +1173,24 @@ public sealed partial class RootMembershipNativeGroupPublicationTests
             scope.QuarantinePreparedCandidate(candidate, token);
             return Task.FromResult(true);
         });
+
+    private static Action<PackageStoreDeletionExecutionPoint, PackageStoreDeletionJournal> InterruptAfterQuarantineRemoval(
+        string packageId)
+    {
+        var interrupted = false;
+        return (point, journal) =>
+        {
+            if (!interrupted && point == PackageStoreDeletionExecutionPoint.AfterQuarantineRootRemoved &&
+                journal.OriginalInstall.PackageId == packageId)
+            {
+                interrupted = true;
+                throw new IOException("controlled stop after quarantine-root removal");
+            }
+        };
+    }
+
+    private static IEnumerable<string> EnumerateJournalPaths(string rootPath)
+        => Directory.EnumerateFiles(Path.Combine(rootPath, RootMembershipRegistry.ControlDirectoryName), "prune-*.json");
 
     private static PackageStoreDeletionJournal ReadCandidateJournal(string rootPath, string packageId)
     {

@@ -114,6 +114,28 @@ internal sealed class PackageStoreDeletionJournalStore
             throw Refuse("A discovered prune journal's exact native bytes changed during the execution scope.", expectedRoot);
     }
 
+    internal void RetireFinalizing(
+        PhysicalStoreDirectoryHandle heldRoot,
+        PhysicalRootIdentity expectedRoot,
+        DiscoveredJournal observed,
+        Action<CancellationToken> verifyQuarantineAbsent,
+        CancellationToken cancellationToken)
+    {
+        if (observed.Journal.Phase != PackageStoreDeletionPhase.Finalizing)
+            throw Refuse("Only a Finalizing prune journal can be retired.", expectedRoot);
+
+        _checkpoint?.Invoke(PackageStoreDeletionJournalPublicationPoint.BeforeTerminalRemoval, observed.Journal);
+        verifyQuarantineAbsent(cancellationToken);
+        VerifyDiscovered(heldRoot, expectedRoot, observed, cancellationToken);
+        using var control = OpenAndVerifyControl(heldRoot, expectedRoot, observed.RootSemantics,
+            out var controlIdentity, out var controlSemantics);
+        if (controlIdentity != observed.ControlDirectoryIdentity || controlSemantics != observed.ControlDirectorySemantics)
+            throw Refuse("The reserved control directory changed before prune-journal retirement.", expectedRoot);
+
+        RequirePublication().RemoveControlFileAt(control, observed.CanonicalName, observed.FileIdentity);
+        _checkpoint?.Invoke(PackageStoreDeletionJournalPublicationPoint.AfterTerminalRemoval, observed.Journal);
+    }
+
     internal PublishedJournal PublishPrepared(
         PhysicalStoreDirectoryHandle heldRoot,
         PhysicalRootIdentity expectedRoot,
@@ -937,5 +959,7 @@ internal enum PackageStoreDeletionJournalPublicationPoint
     BeforeDeletingPhasePublish,
     AfterDeletingPhasePublish,
     BeforeFinalizingPhasePublish,
-    AfterFinalizingPhasePublish
+    AfterFinalizingPhasePublish,
+    BeforeTerminalRemoval,
+    AfterTerminalRemoval
 }

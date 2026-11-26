@@ -105,6 +105,7 @@ internal sealed class PackageStoreExecutionService(
             try
             {
                 context.Revalidate(cancellationToken);
+                executionJoin.RetireReplacedTerminalJournals(cancellationToken);
                 result = await candidateWork(context, cancellationToken).ConfigureAwait(false);
                 context.Revalidate(cancellationToken);
                 await registry.VerifyCatalogMemberProtectionUnderOperationAsync(borrow, operation, cancellationToken)
@@ -146,7 +147,9 @@ internal sealed class PackageStoreExecutionService(
                 {
                     outcomes.Initialize(context.Snapshot);
                     var plan = context.Snapshot.RetentionPlan!;
-                    foreach (var row in plan.Entries)
+                    // Reclaim verified terminal journals before publishing new ones, even when
+                    // upgrading a store whose journal namespace has already reached its limit.
+                    foreach (var row in plan.Entries.OrderByDescending(context.IsTerminalJournalRow))
                     {
                         if (row.Classification != PackageStoreRetentionClassification.Eligible)
                             continue;
@@ -205,6 +208,9 @@ internal sealed class PackageStoreExecutionService(
         private bool _disposed;
 
         internal PackageStoreInspectionSnapshot Snapshot { get; } = snapshot;
+
+        internal bool IsTerminalJournalRow(PackageStoreRetentionPlanEntry row)
+            => _executionJoin.TryFind(row.Install, out var binding) && binding.QuarantinePositivelyAbsent;
 
         internal PhysicalStoreDirectoryHandle RootHandle
         {
@@ -485,6 +491,7 @@ internal sealed class PackageStoreExecutionService(
                         _candidateBinder.VerifyFinalizingQuarantineAbsent(existing.Discovered,
                             RootHandle, Revalidate, cancellationToken);
                         outcomeBuilder?.RecordAlreadyAbsent(exactRow, existing.Discovered.Journal.Phase);
+                        _executionJoin.RetireTerminalJournal(existing, cancellationToken);
                         return PackageStoreDeletionExecutionStatus.AlreadyAbsent;
                     }
 
@@ -524,6 +531,7 @@ internal sealed class PackageStoreExecutionService(
                     token => RequireBoundEligibleJournal(binding, quarantine, token),
                     cancellationToken);
                 outcomeBuilder?.RecordDeleted(exactRow, quarantine.Manifest);
+                _executionJoin.RetireTerminalJournal(binding, cancellationToken);
                 return PackageStoreDeletionExecutionStatus.Deleted;
             }
             catch (Exception candidateFailure)
