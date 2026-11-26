@@ -13,7 +13,7 @@ using Nuplane.Sources;
 using Nuplane.Store.Cleanup;
 using Nuplane.Store.State;
 
-namespace Nuplane.Runtime.Tests;
+namespace Nuplane.Tests.Shared;
 
 internal static class ReconciliationServiceFactory
 {
@@ -35,47 +35,41 @@ internal static class ReconciliationServiceFactory
         IDryRunPlanner? dryRunPlanner = null,
         IPackageCleanupService? packageCleanupService = null,
         IFailureRecorder? failureRecorder = null,
-        LoadingOptions? loadingOptions = null,
-        IPackageLoader? packageLoader = null,
-        IPackageUnloadCoordinator? packageUnloadCoordinator = null,
         ObservationDegradationTracker? observationDegradationTracker = null,
         ILoadingFailureTracker? loadingFailureTracker = null,
         IStoreLock? storeLock = null)
     {
-        var desiredStateAgg = desiredStateAggregator ?? new DesiredStateAggregator();
         var diffEngine = desiredActualDiffEngine ?? new DesiredActualDiffEngine();
         var store = storeRegistry ?? new StoreRegistry(new StoreStateSerializer(), stateFilePath: null);
-        var reconOptions = reconciliationOptions ?? new ReconciliationOptions();
-        var metricsInstance = metrics ?? new ReconciliationMetrics(new());
-        var feedResolution = feedResolutionOptions ?? new FeedResolutionOptions();
-        var lockOptions = new LockFileOptions
+        var options = reconciliationOptions ?? new ReconciliationOptions();
+        var lockOptions = Options.Create(new LockFileOptions
         {
             Mode = LockFileMode.Enforce,
             Path = Path.Combine(Path.GetTempPath(), $"nuplane-test-lock-{Guid.NewGuid():N}.json")
-        };
-        var cleanupOptions = cleanupPolicyOptions ?? new CleanupPolicyOptions();
+        });
 
-        return new(
-            sources ?? [],
-            desiredStateAgg,
-            diffEngine,
-            packageResolver ?? new NuGetPackageResolver(),
-            store,
-            new OptionsWrapper<ReconciliationOptions>(reconOptions),
-            observerEventDispatcher ?? new ObserverEventDispatcher([]),
-            healthEvaluator ?? new ReconciliationHealthEvaluator(),
-            logger ?? new ReconciliationLogger(),
-            metricsInstance,
-            new OptionsWrapper<FeedResolutionOptions>(feedResolution),
-            lockFileCoordinator ?? new LockFileCoordinator(new(new OptionsWrapper<LockFileOptions>(lockOptions)), new OptionsWrapper<LockFileOptions>(lockOptions)),
-            new OptionsWrapper<CleanupPolicyOptions>(cleanupOptions),
-            retryPolicy ?? new ReconciliationRetryPolicy(new OptionsWrapper<ReconciliationOptions>(reconOptions)),
-            dryRunPlanner ?? new DryRunPlanner(diffEngine),
-            packageCleanupService ?? new PackageCleanupService(new()),
-            failureRecorder ?? new FailureRecorder(store),
-            observationDegradationTracker ?? new ObservationDegradationTracker(),
-            loadingFailureTracker,
-            startupRecoveryState: null,
-            storeLock);
+        return new(new ReconciliationComposition
+        {
+            Sources = sources ?? [],
+            DesiredStateAggregator = desiredStateAggregator ?? new DesiredStateAggregator(),
+            DiffEngine = diffEngine,
+            PackageResolver = packageResolver ?? new NuGetPackageResolver(),
+            StoreRegistry = store,
+            Options = options,
+            ObserverDispatcher = observerEventDispatcher ?? new ObserverEventDispatcher([]),
+            HealthEvaluator = healthEvaluator ?? new ReconciliationHealthEvaluator(),
+            Logger = logger ?? new ReconciliationLogger(),
+            Metrics = metrics ?? new ReconciliationMetrics(new()),
+            FeedOptions = feedResolutionOptions ?? new FeedResolutionOptions(),
+            LockFileCoordinator = lockFileCoordinator ?? new LockFileCoordinator(new(lockOptions), lockOptions),
+            CleanupOptions = cleanupPolicyOptions ?? new CleanupPolicyOptions(),
+            RetryPolicy = retryPolicy ?? new ReconciliationRetryPolicy(Options.Create(options)),
+            DryRunPlanner = dryRunPlanner ?? new DryRunPlanner(diffEngine),
+            CleanupService = packageCleanupService ?? new PackageCleanupService(new()),
+            FailureRecorder = failureRecorder ?? new FailureRecorder(store),
+            ObservationDegradationTracker = observationDegradationTracker ?? new ObservationDegradationTracker(),
+            CycleFailureContributor = loadingFailureTracker,
+            StoreLock = storeLock
+        });
     }
 }
