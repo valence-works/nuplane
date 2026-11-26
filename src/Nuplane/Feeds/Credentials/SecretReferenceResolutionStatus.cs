@@ -5,7 +5,7 @@ namespace Nuplane.Feeds.Credentials;
 /// <see cref="Resolved"/> carries a value; the other outcomes are ordinary answers that refuse the
 /// referencing feed by name rather than failing the run.
 /// </summary>
-public enum SecretReferenceResolutionStatus
+internal enum SecretReferenceResolutionStatus
 {
     /// <summary>A registered provider returned a non-empty value.</summary>
     Resolved,

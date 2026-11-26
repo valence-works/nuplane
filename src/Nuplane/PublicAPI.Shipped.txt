@@ -127,20 +127,6 @@ Nuplane.Feeds.Credentials.FeedCredentialUnavailableException.FeedName.get -> str
 Nuplane.Feeds.Credentials.ISecretReferenceProvider
 Nuplane.Feeds.Credentials.ISecretReferenceProvider.ResolveAsync(string! name, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<string?>
 Nuplane.Feeds.Credentials.ISecretReferenceProvider.Scheme.get -> string!
-Nuplane.Feeds.Credentials.SecretReferenceResolution
-Nuplane.Feeds.Credentials.SecretReferenceResolution.<Clone>$() -> Nuplane.Feeds.Credentials.SecretReferenceResolution!
-Nuplane.Feeds.Credentials.SecretReferenceResolution.Equals(Nuplane.Feeds.Credentials.SecretReferenceResolution? other) -> bool
-Nuplane.Feeds.Credentials.SecretReferenceResolution.IsResolved.get -> bool
-Nuplane.Feeds.Credentials.SecretReferenceResolution.ProviderName.get -> string!
-Nuplane.Feeds.Credentials.SecretReferenceResolution.Status.get -> Nuplane.Feeds.Credentials.SecretReferenceResolutionStatus
-Nuplane.Feeds.Credentials.SecretReferenceResolution.Value.get -> Nuplane.Feeds.Credentials.SecretValue?
-Nuplane.Feeds.Credentials.SecretReferenceResolutionStatus
-Nuplane.Feeds.Credentials.SecretReferenceResolutionStatus.Empty = 2 -> Nuplane.Feeds.Credentials.SecretReferenceResolutionStatus
-Nuplane.Feeds.Credentials.SecretReferenceResolutionStatus.NoProvider = 1 -> Nuplane.Feeds.Credentials.SecretReferenceResolutionStatus
-Nuplane.Feeds.Credentials.SecretReferenceResolutionStatus.Resolved = 0 -> Nuplane.Feeds.Credentials.SecretReferenceResolutionStatus
-Nuplane.Feeds.Credentials.SecretValue
-Nuplane.Feeds.Credentials.SecretValue.Reveal() -> string!
-Nuplane.Feeds.Credentials.SecretValue.SecretValue(string! value) -> void
 Nuplane.Feeds.IRemotePackageAcquirer
 Nuplane.Feeds.IRemotePackageAcquirer.AcquireAsync(Nuplane.Abstractions.FeedDefinition! feed, string! packageId, string! version, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<string!>!
 Nuplane.Feeds.IScopedRemotePackageAcquirer
@@ -878,10 +864,6 @@ override Nuplane.DesiredPackageDescription.ToString() -> string!
 override Nuplane.Feeds.Configuration.FeedTrustOverride.Equals(object? obj) -> bool
 override Nuplane.Feeds.Configuration.FeedTrustOverride.GetHashCode() -> int
 override Nuplane.Feeds.Configuration.FeedTrustOverride.ToString() -> string!
-override Nuplane.Feeds.Credentials.SecretReferenceResolution.Equals(object? obj) -> bool
-override Nuplane.Feeds.Credentials.SecretReferenceResolution.GetHashCode() -> int
-override Nuplane.Feeds.Credentials.SecretReferenceResolution.ToString() -> string!
-override Nuplane.Feeds.Credentials.SecretValue.ToString() -> string!
 override Nuplane.Metadata.NuplanePackageMetadataReadResult.Equals(object? obj) -> bool
 override Nuplane.Metadata.NuplanePackageMetadataReadResult.GetHashCode() -> int
 override Nuplane.Metadata.NuplanePackageMetadataReadResult.ToString() -> string!
@@ -954,11 +936,6 @@ static Nuplane.DesiredPackageDescription.operator !=(Nuplane.DesiredPackageDescr
 static Nuplane.DesiredPackageDescription.operator ==(Nuplane.DesiredPackageDescription? left, Nuplane.DesiredPackageDescription? right) -> bool
 static Nuplane.Feeds.Configuration.FeedTrustOverride.operator !=(Nuplane.Feeds.Configuration.FeedTrustOverride? left, Nuplane.Feeds.Configuration.FeedTrustOverride? right) -> bool
 static Nuplane.Feeds.Configuration.FeedTrustOverride.operator ==(Nuplane.Feeds.Configuration.FeedTrustOverride? left, Nuplane.Feeds.Configuration.FeedTrustOverride? right) -> bool
-static Nuplane.Feeds.Credentials.SecretReferenceResolution.Empty(string! providerName) -> Nuplane.Feeds.Credentials.SecretReferenceResolution!
-static Nuplane.Feeds.Credentials.SecretReferenceResolution.NoProvider(string! providerName) -> Nuplane.Feeds.Credentials.SecretReferenceResolution!
-static Nuplane.Feeds.Credentials.SecretReferenceResolution.Resolved(string! providerName, Nuplane.Feeds.Credentials.SecretValue! value) -> Nuplane.Feeds.Credentials.SecretReferenceResolution!
-static Nuplane.Feeds.Credentials.SecretReferenceResolution.operator !=(Nuplane.Feeds.Credentials.SecretReferenceResolution? left, Nuplane.Feeds.Credentials.SecretReferenceResolution? right) -> bool
-static Nuplane.Feeds.Credentials.SecretReferenceResolution.operator ==(Nuplane.Feeds.Credentials.SecretReferenceResolution? left, Nuplane.Feeds.Credentials.SecretReferenceResolution? right) -> bool
 static Nuplane.Metadata.NuplanePackageMetadataReadResult.Invalid(string! diagnostic, int? declaredSchemaVersion = null) -> Nuplane.Metadata.NuplanePackageMetadataReadResult!
 static Nuplane.Metadata.NuplanePackageMetadataReadResult.Missing.get -> Nuplane.Metadata.NuplanePackageMetadataReadResult!
 static Nuplane.Metadata.NuplanePackageMetadataReadResult.Refused(Nuplane.Abstractions.PackageStoreProtection.PackageStoreAdmissionReason reason) -> Nuplane.Metadata.NuplanePackageMetadataReadResult!
