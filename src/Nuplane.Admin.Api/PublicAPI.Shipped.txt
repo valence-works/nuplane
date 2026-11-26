@@ -1,0 +1,5 @@
+#nullable enable
+Nuplane.Admin.Api.NuplaneAdminEndpointExtensions
+Nuplane.Admin.Api.NuplanePackageStoreMaintenanceEndpointExtensions
+static Nuplane.Admin.Api.NuplaneAdminEndpointExtensions.MapNuplaneAdmin(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! prefix = "/nuplane/admin") -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!
+static Nuplane.Admin.Api.NuplanePackageStoreMaintenanceEndpointExtensions.MapNuplanePackageStoreMaintenance(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints, string! prefix = "/nuplane/admin/store") -> Microsoft.AspNetCore.Routing.RouteGroupBuilder!

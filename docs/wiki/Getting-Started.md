@@ -4,6 +4,8 @@
 
 This page gets you to your first working dynamic package installation in a .NET application — and then points you to the right next steps.
 
+Install the .NET 10 SDK to build the samples. Nuplane 1.x packages target .NET 10. When upgrading from Nuplane 0.0.15 or earlier, apply the [0.0.16 migration notes](https://github.com/valence-works/nuplane/releases/tag/0.0.16) before starting the upgraded host.
+
 ### Install a plugin in the sample host
 
 Run from the repository root:

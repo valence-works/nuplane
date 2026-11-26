@@ -1,0 +1,272 @@
+#nullable enable
+Nuplane.Loading.IPackageActivationGate
+Nuplane.Loading.IPackageActivationGate.EvaluateAsync(Nuplane.Loading.PackageActivationContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Nuplane.Loading.PackageActivationGateResult!>
+Nuplane.Loading.IPackageAssemblyCatalog
+Nuplane.Loading.IPackageAssemblyCatalog.GetPackagedAssembliesAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Nuplane.Loading.PackageAssemblies!>!>!
+Nuplane.Loading.IPackageAssemblyCatalog.GetPackagedAssembliesAsync(string! packageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Loading.PackageAssemblies?>!
+Nuplane.Loading.IPackageLoadModeAdvisor
+Nuplane.Loading.IPackageLoadModeAdvisor.EvaluateAsync(Nuplane.Loading.LoadModeAdvisorContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Nuplane.Loading.LoadModeAdvisorResult!>!>
+Nuplane.Loading.IPackageLoadModeAdvisor.Name.get -> string!
+Nuplane.Loading.IPackageLoadStateCatalog
+Nuplane.Loading.IPackageLoadStateCatalog.GetLoadStateAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Loading.PackageLoadStateSnapshot!>!
+Nuplane.Loading.IPackagePathIndependentActivationGate
+Nuplane.Loading.IPackagePathIndependentLoadModeAdvisor
+Nuplane.Loading.IPackageTypeFinder
+Nuplane.Loading.IPackageTypeFinder.FindTypesAsync(System.Type! interfaceType, string! packageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<System.Type!>!>!
+Nuplane.Loading.IPackageTypeFinder.FindTypesAsync<TInterface>(string! packageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<System.Type!>!>!
+Nuplane.Loading.IScopedPackageActivationGate
+Nuplane.Loading.IScopedPackageLoadModeAdvisor
+Nuplane.Loading.LoadModeAdvisorContext
+Nuplane.Loading.LoadModeAdvisorContext.<Clone>$() -> Nuplane.Loading.LoadModeAdvisorContext!
+Nuplane.Loading.LoadModeAdvisorContext.Deconstruct(out string! GraphKey, out System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ResolvedPackage!>! Packages, out Nuplane.Loading.PackageLoadModeSelectionPolicy SelectionPolicy, out Nuplane.Loading.PackageLoadMode DefaultLoadMode, out System.Collections.Generic.IReadOnlyDictionary<string!, Nuplane.Loading.PackageLoadMode>! PackageOverrides) -> void
+Nuplane.Loading.LoadModeAdvisorContext.DefaultLoadMode.get -> Nuplane.Loading.PackageLoadMode
+Nuplane.Loading.LoadModeAdvisorContext.DefaultLoadMode.init -> void
+Nuplane.Loading.LoadModeAdvisorContext.Equals(Nuplane.Loading.LoadModeAdvisorContext? other) -> bool
+Nuplane.Loading.LoadModeAdvisorContext.GraphKey.get -> string!
+Nuplane.Loading.LoadModeAdvisorContext.GraphKey.init -> void
+Nuplane.Loading.LoadModeAdvisorContext.GraphUseLeases.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageStoreProtection.PackageGraphUseLease!>!
+Nuplane.Loading.LoadModeAdvisorContext.GraphUseLeases.init -> void
+Nuplane.Loading.LoadModeAdvisorContext.LoadModeAdvisorContext(string! GraphKey, System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ResolvedPackage!>! Packages, Nuplane.Loading.PackageLoadModeSelectionPolicy SelectionPolicy, Nuplane.Loading.PackageLoadMode DefaultLoadMode, System.Collections.Generic.IReadOnlyDictionary<string!, Nuplane.Loading.PackageLoadMode>! PackageOverrides) -> void
+Nuplane.Loading.LoadModeAdvisorContext.PackageOverrides.get -> System.Collections.Generic.IReadOnlyDictionary<string!, Nuplane.Loading.PackageLoadMode>!
+Nuplane.Loading.LoadModeAdvisorContext.PackageOverrides.init -> void
+Nuplane.Loading.LoadModeAdvisorContext.Packages.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ResolvedPackage!>!
+Nuplane.Loading.LoadModeAdvisorContext.Packages.init -> void
+Nuplane.Loading.LoadModeAdvisorContext.SelectionPolicy.get -> Nuplane.Loading.PackageLoadModeSelectionPolicy
+Nuplane.Loading.LoadModeAdvisorContext.SelectionPolicy.init -> void
+Nuplane.Loading.LoadModeAdvisorResult
+Nuplane.Loading.LoadModeAdvisorResult.<Clone>$() -> Nuplane.Loading.LoadModeAdvisorResult!
+Nuplane.Loading.LoadModeAdvisorResult.AdvisorName.get -> string!
+Nuplane.Loading.LoadModeAdvisorResult.AdvisorName.init -> void
+Nuplane.Loading.LoadModeAdvisorResult.Deconstruct(out string! AdvisorName, out string! PackageId, out string! Version, out Nuplane.Loading.PackageLoadMode RequestedLoadMode, out string! Scope, out string! ReasonCode, out string? Reason, out bool IsValid, out string? Diagnostic) -> void
+Nuplane.Loading.LoadModeAdvisorResult.Diagnostic.get -> string?
+Nuplane.Loading.LoadModeAdvisorResult.Diagnostic.init -> void
+Nuplane.Loading.LoadModeAdvisorResult.Equals(Nuplane.Loading.LoadModeAdvisorResult? other) -> bool
+Nuplane.Loading.LoadModeAdvisorResult.IsValid.get -> bool
+Nuplane.Loading.LoadModeAdvisorResult.IsValid.init -> void
+Nuplane.Loading.LoadModeAdvisorResult.LoadModeAdvisorResult(string! AdvisorName, string! PackageId, string! Version, Nuplane.Loading.PackageLoadMode RequestedLoadMode, string! Scope, string! ReasonCode, string? Reason, bool IsValid = true, string? Diagnostic = null) -> void
+Nuplane.Loading.LoadModeAdvisorResult.PackageId.get -> string!
+Nuplane.Loading.LoadModeAdvisorResult.PackageId.init -> void
+Nuplane.Loading.LoadModeAdvisorResult.Reason.get -> string?
+Nuplane.Loading.LoadModeAdvisorResult.Reason.init -> void
+Nuplane.Loading.LoadModeAdvisorResult.ReasonCode.get -> string!
+Nuplane.Loading.LoadModeAdvisorResult.ReasonCode.init -> void
+Nuplane.Loading.LoadModeAdvisorResult.RequestedLoadMode.get -> Nuplane.Loading.PackageLoadMode
+Nuplane.Loading.LoadModeAdvisorResult.RequestedLoadMode.init -> void
+Nuplane.Loading.LoadModeAdvisorResult.Scope.get -> string!
+Nuplane.Loading.LoadModeAdvisorResult.Scope.init -> void
+Nuplane.Loading.LoadModeAdvisorResult.Version.get -> string!
+Nuplane.Loading.LoadModeAdvisorResult.Version.init -> void
+Nuplane.Loading.LoadModeDecisionDiagnostic
+Nuplane.Loading.LoadModeDecisionDiagnostic.<Clone>$() -> Nuplane.Loading.LoadModeDecisionDiagnostic!
+Nuplane.Loading.LoadModeDecisionDiagnostic.AdvisorName.get -> string?
+Nuplane.Loading.LoadModeDecisionDiagnostic.AdvisorName.init -> void
+Nuplane.Loading.LoadModeDecisionDiagnostic.DeclaringPackageId.get -> string?
+Nuplane.Loading.LoadModeDecisionDiagnostic.DeclaringPackageId.init -> void
+Nuplane.Loading.LoadModeDecisionDiagnostic.DeclaringPackageVersion.get -> string?
+Nuplane.Loading.LoadModeDecisionDiagnostic.DeclaringPackageVersion.init -> void
+Nuplane.Loading.LoadModeDecisionDiagnostic.Deconstruct(out string! GraphKey, out Nuplane.Loading.PackageLoadMode EffectiveGraphLoadMode, out Nuplane.Loading.PackageLoadMode EffectivePackageLoadMode, out string! ReasonCode, out string? DeclaringPackageId, out string? DeclaringPackageVersion, out string? RequestedScope, out string? AdvisorName, out string? Message) -> void
+Nuplane.Loading.LoadModeDecisionDiagnostic.EffectiveGraphLoadMode.get -> Nuplane.Loading.PackageLoadMode
+Nuplane.Loading.LoadModeDecisionDiagnostic.EffectiveGraphLoadMode.init -> void
+Nuplane.Loading.LoadModeDecisionDiagnostic.EffectivePackageLoadMode.get -> Nuplane.Loading.PackageLoadMode
+Nuplane.Loading.LoadModeDecisionDiagnostic.EffectivePackageLoadMode.init -> void
+Nuplane.Loading.LoadModeDecisionDiagnostic.Equals(Nuplane.Loading.LoadModeDecisionDiagnostic? other) -> bool
+Nuplane.Loading.LoadModeDecisionDiagnostic.GraphKey.get -> string!
+Nuplane.Loading.LoadModeDecisionDiagnostic.GraphKey.init -> void
+Nuplane.Loading.LoadModeDecisionDiagnostic.LoadModeDecisionDiagnostic(string! GraphKey, Nuplane.Loading.PackageLoadMode EffectiveGraphLoadMode, Nuplane.Loading.PackageLoadMode EffectivePackageLoadMode, string! ReasonCode, string? DeclaringPackageId = null, string? DeclaringPackageVersion = null, string? RequestedScope = null, string? AdvisorName = null, string? Message = null) -> void
+Nuplane.Loading.LoadModeDecisionDiagnostic.Message.get -> string?
+Nuplane.Loading.LoadModeDecisionDiagnostic.Message.init -> void
+Nuplane.Loading.LoadModeDecisionDiagnostic.ReasonCode.get -> string!
+Nuplane.Loading.LoadModeDecisionDiagnostic.ReasonCode.init -> void
+Nuplane.Loading.LoadModeDecisionDiagnostic.RequestedScope.get -> string?
+Nuplane.Loading.LoadModeDecisionDiagnostic.RequestedScope.init -> void
+Nuplane.Loading.PackageActivationContext
+Nuplane.Loading.PackageActivationContext.<Clone>$() -> Nuplane.Loading.PackageActivationContext!
+Nuplane.Loading.PackageActivationContext.Deconstruct(out string! GraphKey, out Nuplane.Loading.PackageLoadMode LoadMode, out System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ResolvedPackage!>! Packages) -> void
+Nuplane.Loading.PackageActivationContext.Equals(Nuplane.Loading.PackageActivationContext? other) -> bool
+Nuplane.Loading.PackageActivationContext.GraphKey.get -> string!
+Nuplane.Loading.PackageActivationContext.GraphKey.init -> void
+Nuplane.Loading.PackageActivationContext.GraphUseLeases.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.PackageStoreProtection.PackageGraphUseLease!>!
+Nuplane.Loading.PackageActivationContext.GraphUseLeases.init -> void
+Nuplane.Loading.PackageActivationContext.LoadMode.get -> Nuplane.Loading.PackageLoadMode
+Nuplane.Loading.PackageActivationContext.LoadMode.init -> void
+Nuplane.Loading.PackageActivationContext.PackageActivationContext(string! GraphKey, Nuplane.Loading.PackageLoadMode LoadMode, System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ResolvedPackage!>! Packages) -> void
+Nuplane.Loading.PackageActivationContext.Packages.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ResolvedPackage!>!
+Nuplane.Loading.PackageActivationContext.Packages.init -> void
+Nuplane.Loading.PackageActivationGateResult
+Nuplane.Loading.PackageActivationGateResult.<Clone>$() -> Nuplane.Loading.PackageActivationGateResult!
+Nuplane.Loading.PackageActivationGateResult.Equals(Nuplane.Loading.PackageActivationGateResult? other) -> bool
+Nuplane.Loading.PackageActivationGateResult.IsAllowed.get -> bool
+Nuplane.Loading.PackageActivationGateResult.Reason.get -> string?
+Nuplane.Loading.PackageAssemblies
+Nuplane.Loading.PackageAssemblies.<Clone>$() -> Nuplane.Loading.PackageAssemblies!
+Nuplane.Loading.PackageAssemblies.Assemblies.get -> System.Collections.Generic.IReadOnlyList<System.Reflection.Assembly!>!
+Nuplane.Loading.PackageAssemblies.Assemblies.init -> void
+Nuplane.Loading.PackageAssemblies.AssemblyReferences.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Loading.PackageAssemblyReference!>!
+Nuplane.Loading.PackageAssemblies.AssemblyReferences.init -> void
+Nuplane.Loading.PackageAssemblies.Deconstruct(out string! PackageId, out string! Version, out System.Collections.Generic.IReadOnlyList<System.Reflection.Assembly!>! Assemblies, out System.Collections.Generic.IReadOnlyList<Nuplane.Loading.PackageAssemblyReference!>! AssemblyReferences, out Nuplane.Loading.PackageLoadMode LoadMode, out bool FrameworkIntegrationSafe) -> void
+Nuplane.Loading.PackageAssemblies.Equals(Nuplane.Loading.PackageAssemblies? other) -> bool
+Nuplane.Loading.PackageAssemblies.FrameworkIntegrationSafe.get -> bool
+Nuplane.Loading.PackageAssemblies.FrameworkIntegrationSafe.init -> void
+Nuplane.Loading.PackageAssemblies.LoadMode.get -> Nuplane.Loading.PackageLoadMode
+Nuplane.Loading.PackageAssemblies.LoadMode.init -> void
+Nuplane.Loading.PackageAssemblies.PackageAssemblies(string! PackageId, string! Version, System.Collections.Generic.IReadOnlyList<System.Reflection.Assembly!>! Assemblies, System.Collections.Generic.IReadOnlyList<Nuplane.Loading.PackageAssemblyReference!>! AssemblyReferences, Nuplane.Loading.PackageLoadMode LoadMode = Nuplane.Loading.PackageLoadMode.Collectible, bool FrameworkIntegrationSafe = false) -> void
+Nuplane.Loading.PackageAssemblies.PackageId.get -> string!
+Nuplane.Loading.PackageAssemblies.PackageId.init -> void
+Nuplane.Loading.PackageAssemblies.Version.get -> string!
+Nuplane.Loading.PackageAssemblies.Version.init -> void
+Nuplane.Loading.PackageAssemblyCatalogExtensions
+Nuplane.Loading.PackageAssemblyReference
+Nuplane.Loading.PackageAssemblyReference.<Clone>$() -> Nuplane.Loading.PackageAssemblyReference!
+Nuplane.Loading.PackageAssemblyReference.AssemblyFileName.get -> string!
+Nuplane.Loading.PackageAssemblyReference.AssemblyFileName.init -> void
+Nuplane.Loading.PackageAssemblyReference.AssemblyPath.get -> string!
+Nuplane.Loading.PackageAssemblyReference.AssemblyPath.init -> void
+Nuplane.Loading.PackageAssemblyReference.Deconstruct(out string! AssemblyPath, out string! AssemblyFileName, out string? TargetFrameworkMoniker, out string! Kind, out string! SelectionReason) -> void
+Nuplane.Loading.PackageAssemblyReference.Equals(Nuplane.Loading.PackageAssemblyReference? other) -> bool
+Nuplane.Loading.PackageAssemblyReference.Kind.get -> string!
+Nuplane.Loading.PackageAssemblyReference.Kind.init -> void
+Nuplane.Loading.PackageAssemblyReference.PackageAssemblyReference(string! AssemblyPath, string! AssemblyFileName, string? TargetFrameworkMoniker, string! Kind, string! SelectionReason) -> void
+Nuplane.Loading.PackageAssemblyReference.SelectionReason.get -> string!
+Nuplane.Loading.PackageAssemblyReference.SelectionReason.init -> void
+Nuplane.Loading.PackageAssemblyReference.TargetFrameworkMoniker.get -> string?
+Nuplane.Loading.PackageAssemblyReference.TargetFrameworkMoniker.init -> void
+Nuplane.Loading.PackageLoadMode
+Nuplane.Loading.PackageLoadMode.Collectible = 0 -> Nuplane.Loading.PackageLoadMode
+Nuplane.Loading.PackageLoadMode.HostIntegrated = 1 -> Nuplane.Loading.PackageLoadMode
+Nuplane.Loading.PackageLoadModeSelectionPolicy
+Nuplane.Loading.PackageLoadModeSelectionPolicy.Automatic = 0 -> Nuplane.Loading.PackageLoadModeSelectionPolicy
+Nuplane.Loading.PackageLoadModeSelectionPolicy.ExplicitOnly = 1 -> Nuplane.Loading.PackageLoadModeSelectionPolicy
+Nuplane.Loading.PackageLoadState
+Nuplane.Loading.PackageLoadState.<Clone>$() -> Nuplane.Loading.PackageLoadState!
+Nuplane.Loading.PackageLoadState.AssemblyReferences.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Loading.PackageAssemblyReference!>!
+Nuplane.Loading.PackageLoadState.AssemblyReferences.init -> void
+Nuplane.Loading.PackageLoadState.Deconstruct(out string! PackageId, out string! Version, out Nuplane.Loading.PackageLoadStatus Status, out string! InstallPath, out System.DateTimeOffset? LoadedAtUtc, out System.Collections.Generic.IReadOnlyList<string!>! Diagnostics, out System.Collections.Generic.IReadOnlyList<Nuplane.Loading.PackageAssemblyReference!>! AssemblyReferences, out bool Discoverable, out Nuplane.Loading.PackageLoadMode LoadMode, out bool FrameworkIntegrationSafe) -> void
+Nuplane.Loading.PackageLoadState.Diagnostics.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Loading.PackageLoadState.Diagnostics.init -> void
+Nuplane.Loading.PackageLoadState.Discoverable.get -> bool
+Nuplane.Loading.PackageLoadState.Discoverable.init -> void
+Nuplane.Loading.PackageLoadState.Equals(Nuplane.Loading.PackageLoadState? other) -> bool
+Nuplane.Loading.PackageLoadState.FrameworkIntegrationSafe.get -> bool
+Nuplane.Loading.PackageLoadState.FrameworkIntegrationSafe.init -> void
+Nuplane.Loading.PackageLoadState.InstallPath.get -> string!
+Nuplane.Loading.PackageLoadState.InstallPath.init -> void
+Nuplane.Loading.PackageLoadState.LoadMode.get -> Nuplane.Loading.PackageLoadMode
+Nuplane.Loading.PackageLoadState.LoadMode.init -> void
+Nuplane.Loading.PackageLoadState.LoadModeDiagnostics.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Loading.LoadModeDecisionDiagnostic!>?
+Nuplane.Loading.PackageLoadState.LoadModeDiagnostics.init -> void
+Nuplane.Loading.PackageLoadState.LoadedAtUtc.get -> System.DateTimeOffset?
+Nuplane.Loading.PackageLoadState.LoadedAtUtc.init -> void
+Nuplane.Loading.PackageLoadState.PackageId.get -> string!
+Nuplane.Loading.PackageLoadState.PackageId.init -> void
+Nuplane.Loading.PackageLoadState.PackageLoadState(string! PackageId, string! Version, Nuplane.Loading.PackageLoadStatus Status, string! InstallPath, System.DateTimeOffset? LoadedAtUtc, System.Collections.Generic.IReadOnlyList<string!>! Diagnostics, System.Collections.Generic.IReadOnlyList<Nuplane.Loading.PackageAssemblyReference!>! AssemblyReferences, bool Discoverable = true, Nuplane.Loading.PackageLoadMode LoadMode = Nuplane.Loading.PackageLoadMode.Collectible, bool FrameworkIntegrationSafe = false) -> void
+Nuplane.Loading.PackageLoadState.Status.get -> Nuplane.Loading.PackageLoadStatus
+Nuplane.Loading.PackageLoadState.Status.init -> void
+Nuplane.Loading.PackageLoadState.Version.get -> string!
+Nuplane.Loading.PackageLoadState.Version.init -> void
+Nuplane.Loading.PackageLoadStateAvailability
+Nuplane.Loading.PackageLoadStateAvailability.Available = 2 -> Nuplane.Loading.PackageLoadStateAvailability
+Nuplane.Loading.PackageLoadStateAvailability.Disabled = 0 -> Nuplane.Loading.PackageLoadStateAvailability
+Nuplane.Loading.PackageLoadStateAvailability.Stale = 1 -> Nuplane.Loading.PackageLoadStateAvailability
+Nuplane.Loading.PackageLoadStateSnapshot
+Nuplane.Loading.PackageLoadStateSnapshot.<Clone>$() -> Nuplane.Loading.PackageLoadStateSnapshot!
+Nuplane.Loading.PackageLoadStateSnapshot.Availability.get -> Nuplane.Loading.PackageLoadStateAvailability
+Nuplane.Loading.PackageLoadStateSnapshot.Availability.init -> void
+Nuplane.Loading.PackageLoadStateSnapshot.CorrelationId.get -> string!
+Nuplane.Loading.PackageLoadStateSnapshot.CorrelationId.init -> void
+Nuplane.Loading.PackageLoadStateSnapshot.Deconstruct(out Nuplane.Loading.PackageLoadStateAvailability Availability, out System.DateTimeOffset SnapshotAtUtc, out System.DateTimeOffset? RefreshedAtUtc, out System.Collections.Generic.IReadOnlyList<Nuplane.Loading.PackageLoadState!>! Packages, out string? Reason, out string! CorrelationId) -> void
+Nuplane.Loading.PackageLoadStateSnapshot.Equals(Nuplane.Loading.PackageLoadStateSnapshot? other) -> bool
+Nuplane.Loading.PackageLoadStateSnapshot.PackageLoadStateSnapshot(Nuplane.Loading.PackageLoadStateAvailability Availability, System.DateTimeOffset SnapshotAtUtc, System.DateTimeOffset? RefreshedAtUtc, System.Collections.Generic.IReadOnlyList<Nuplane.Loading.PackageLoadState!>! Packages, string? Reason, string! CorrelationId) -> void
+Nuplane.Loading.PackageLoadStateSnapshot.Packages.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Loading.PackageLoadState!>!
+Nuplane.Loading.PackageLoadStateSnapshot.Packages.init -> void
+Nuplane.Loading.PackageLoadStateSnapshot.Reason.get -> string?
+Nuplane.Loading.PackageLoadStateSnapshot.Reason.init -> void
+Nuplane.Loading.PackageLoadStateSnapshot.RefreshedAtUtc.get -> System.DateTimeOffset?
+Nuplane.Loading.PackageLoadStateSnapshot.RefreshedAtUtc.init -> void
+Nuplane.Loading.PackageLoadStateSnapshot.SnapshotAtUtc.get -> System.DateTimeOffset
+Nuplane.Loading.PackageLoadStateSnapshot.SnapshotAtUtc.init -> void
+Nuplane.Loading.PackageLoadStatus
+Nuplane.Loading.PackageLoadStatus.Disabled = 0 -> Nuplane.Loading.PackageLoadStatus
+Nuplane.Loading.PackageLoadStatus.Failed = 3 -> Nuplane.Loading.PackageLoadStatus
+Nuplane.Loading.PackageLoadStatus.Loaded = 2 -> Nuplane.Loading.PackageLoadStatus
+Nuplane.Loading.PackageLoadStatus.Skipped = 4 -> Nuplane.Loading.PackageLoadStatus
+Nuplane.Loading.PackageLoadStatus.Stale = 1 -> Nuplane.Loading.PackageLoadStatus
+Nuplane.Loading.SharedAssemblyIdentity
+Nuplane.Loading.SharedAssemblyIdentity.<Clone>$() -> Nuplane.Loading.SharedAssemblyIdentity!
+Nuplane.Loading.SharedAssemblyIdentity.Deconstruct(out string! name, out string! publicKeyToken, out int majorVersion) -> void
+Nuplane.Loading.SharedAssemblyIdentity.Equals(Nuplane.Loading.SharedAssemblyIdentity? other) -> bool
+Nuplane.Loading.SharedAssemblyIdentity.MajorVersion.get -> int
+Nuplane.Loading.SharedAssemblyIdentity.MajorVersion.init -> void
+Nuplane.Loading.SharedAssemblyIdentity.Name.get -> string!
+Nuplane.Loading.SharedAssemblyIdentity.Name.init -> void
+Nuplane.Loading.SharedAssemblyIdentity.PublicKeyToken.get -> string!
+Nuplane.Loading.SharedAssemblyIdentity.PublicKeyToken.init -> void
+Nuplane.Loading.SharedAssemblyIdentity.SharedAssemblyIdentity(string! Name, string? PublicKeyToken = null, int MajorVersion) -> void
+Nuplane.Loading.SharedAssemblyPolicyEntry
+Nuplane.Loading.SharedAssemblyPolicyEntry.<Clone>$() -> Nuplane.Loading.SharedAssemblyPolicyEntry!
+Nuplane.Loading.SharedAssemblyPolicyEntry.Deconstruct(out string! Name, out string! PublicKeyToken, out int MajorVersion) -> void
+Nuplane.Loading.SharedAssemblyPolicyEntry.Equals(Nuplane.Loading.SharedAssemblyPolicyEntry? other) -> bool
+Nuplane.Loading.SharedAssemblyPolicyEntry.MajorVersion.get -> int
+Nuplane.Loading.SharedAssemblyPolicyEntry.MajorVersion.init -> void
+Nuplane.Loading.SharedAssemblyPolicyEntry.Name.get -> string!
+Nuplane.Loading.SharedAssemblyPolicyEntry.Name.init -> void
+Nuplane.Loading.SharedAssemblyPolicyEntry.PublicKeyToken.get -> string!
+Nuplane.Loading.SharedAssemblyPolicyEntry.PublicKeyToken.init -> void
+Nuplane.Loading.SharedAssemblyPolicyEntry.SharedAssemblyPolicyEntry(string! Name, string! PublicKeyToken, int MajorVersion) -> void
+override Nuplane.Loading.LoadModeAdvisorContext.Equals(object? obj) -> bool
+override Nuplane.Loading.LoadModeAdvisorContext.GetHashCode() -> int
+override Nuplane.Loading.LoadModeAdvisorContext.ToString() -> string!
+override Nuplane.Loading.LoadModeAdvisorResult.Equals(object? obj) -> bool
+override Nuplane.Loading.LoadModeAdvisorResult.GetHashCode() -> int
+override Nuplane.Loading.LoadModeAdvisorResult.ToString() -> string!
+override Nuplane.Loading.LoadModeDecisionDiagnostic.Equals(object? obj) -> bool
+override Nuplane.Loading.LoadModeDecisionDiagnostic.GetHashCode() -> int
+override Nuplane.Loading.LoadModeDecisionDiagnostic.ToString() -> string!
+override Nuplane.Loading.PackageActivationContext.Equals(object? obj) -> bool
+override Nuplane.Loading.PackageActivationContext.GetHashCode() -> int
+override Nuplane.Loading.PackageActivationContext.ToString() -> string!
+override Nuplane.Loading.PackageActivationGateResult.Equals(object? obj) -> bool
+override Nuplane.Loading.PackageActivationGateResult.GetHashCode() -> int
+override Nuplane.Loading.PackageActivationGateResult.ToString() -> string!
+override Nuplane.Loading.PackageAssemblies.Equals(object? obj) -> bool
+override Nuplane.Loading.PackageAssemblies.GetHashCode() -> int
+override Nuplane.Loading.PackageAssemblies.ToString() -> string!
+override Nuplane.Loading.PackageAssemblyReference.Equals(object? obj) -> bool
+override Nuplane.Loading.PackageAssemblyReference.GetHashCode() -> int
+override Nuplane.Loading.PackageAssemblyReference.ToString() -> string!
+override Nuplane.Loading.PackageLoadState.Equals(object? obj) -> bool
+override Nuplane.Loading.PackageLoadState.GetHashCode() -> int
+override Nuplane.Loading.PackageLoadState.ToString() -> string!
+override Nuplane.Loading.PackageLoadStateSnapshot.Equals(object? obj) -> bool
+override Nuplane.Loading.PackageLoadStateSnapshot.GetHashCode() -> int
+override Nuplane.Loading.PackageLoadStateSnapshot.ToString() -> string!
+override Nuplane.Loading.SharedAssemblyIdentity.Equals(object? obj) -> bool
+override Nuplane.Loading.SharedAssemblyIdentity.GetHashCode() -> int
+override Nuplane.Loading.SharedAssemblyIdentity.ToString() -> string!
+override Nuplane.Loading.SharedAssemblyPolicyEntry.Equals(object? obj) -> bool
+override Nuplane.Loading.SharedAssemblyPolicyEntry.GetHashCode() -> int
+override Nuplane.Loading.SharedAssemblyPolicyEntry.ToString() -> string!
+static Nuplane.Loading.LoadModeAdvisorContext.operator !=(Nuplane.Loading.LoadModeAdvisorContext? left, Nuplane.Loading.LoadModeAdvisorContext? right) -> bool
+static Nuplane.Loading.LoadModeAdvisorContext.operator ==(Nuplane.Loading.LoadModeAdvisorContext? left, Nuplane.Loading.LoadModeAdvisorContext? right) -> bool
+static Nuplane.Loading.LoadModeAdvisorResult.operator !=(Nuplane.Loading.LoadModeAdvisorResult? left, Nuplane.Loading.LoadModeAdvisorResult? right) -> bool
+static Nuplane.Loading.LoadModeAdvisorResult.operator ==(Nuplane.Loading.LoadModeAdvisorResult? left, Nuplane.Loading.LoadModeAdvisorResult? right) -> bool
+static Nuplane.Loading.LoadModeDecisionDiagnostic.operator !=(Nuplane.Loading.LoadModeDecisionDiagnostic? left, Nuplane.Loading.LoadModeDecisionDiagnostic? right) -> bool
+static Nuplane.Loading.LoadModeDecisionDiagnostic.operator ==(Nuplane.Loading.LoadModeDecisionDiagnostic? left, Nuplane.Loading.LoadModeDecisionDiagnostic? right) -> bool
+static Nuplane.Loading.PackageActivationContext.operator !=(Nuplane.Loading.PackageActivationContext? left, Nuplane.Loading.PackageActivationContext? right) -> bool
+static Nuplane.Loading.PackageActivationContext.operator ==(Nuplane.Loading.PackageActivationContext? left, Nuplane.Loading.PackageActivationContext? right) -> bool
+static Nuplane.Loading.PackageActivationGateResult.Allow.get -> Nuplane.Loading.PackageActivationGateResult!
+static Nuplane.Loading.PackageActivationGateResult.Block(string! reason) -> Nuplane.Loading.PackageActivationGateResult!
+static Nuplane.Loading.PackageActivationGateResult.operator !=(Nuplane.Loading.PackageActivationGateResult? left, Nuplane.Loading.PackageActivationGateResult? right) -> bool
+static Nuplane.Loading.PackageActivationGateResult.operator ==(Nuplane.Loading.PackageActivationGateResult? left, Nuplane.Loading.PackageActivationGateResult? right) -> bool
+static Nuplane.Loading.PackageAssemblies.operator !=(Nuplane.Loading.PackageAssemblies? left, Nuplane.Loading.PackageAssemblies? right) -> bool
+static Nuplane.Loading.PackageAssemblies.operator ==(Nuplane.Loading.PackageAssemblies? left, Nuplane.Loading.PackageAssemblies? right) -> bool
+static Nuplane.Loading.PackageAssemblyCatalogExtensions.GetAssembliesAsync(this Nuplane.Loading.IPackageAssemblyCatalog! catalog, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IEnumerable<System.Reflection.Assembly!>!>!
+static Nuplane.Loading.PackageAssemblyReference.operator !=(Nuplane.Loading.PackageAssemblyReference? left, Nuplane.Loading.PackageAssemblyReference? right) -> bool
+static Nuplane.Loading.PackageAssemblyReference.operator ==(Nuplane.Loading.PackageAssemblyReference? left, Nuplane.Loading.PackageAssemblyReference? right) -> bool
+static Nuplane.Loading.PackageLoadState.operator !=(Nuplane.Loading.PackageLoadState? left, Nuplane.Loading.PackageLoadState? right) -> bool
+static Nuplane.Loading.PackageLoadState.operator ==(Nuplane.Loading.PackageLoadState? left, Nuplane.Loading.PackageLoadState? right) -> bool
+static Nuplane.Loading.PackageLoadStateSnapshot.operator !=(Nuplane.Loading.PackageLoadStateSnapshot? left, Nuplane.Loading.PackageLoadStateSnapshot? right) -> bool
+static Nuplane.Loading.PackageLoadStateSnapshot.operator ==(Nuplane.Loading.PackageLoadStateSnapshot? left, Nuplane.Loading.PackageLoadStateSnapshot? right) -> bool
+static Nuplane.Loading.SharedAssemblyIdentity.operator !=(Nuplane.Loading.SharedAssemblyIdentity? left, Nuplane.Loading.SharedAssemblyIdentity? right) -> bool
+static Nuplane.Loading.SharedAssemblyIdentity.operator ==(Nuplane.Loading.SharedAssemblyIdentity? left, Nuplane.Loading.SharedAssemblyIdentity? right) -> bool
+static Nuplane.Loading.SharedAssemblyPolicyEntry.operator !=(Nuplane.Loading.SharedAssemblyPolicyEntry? left, Nuplane.Loading.SharedAssemblyPolicyEntry? right) -> bool
+static Nuplane.Loading.SharedAssemblyPolicyEntry.operator ==(Nuplane.Loading.SharedAssemblyPolicyEntry? left, Nuplane.Loading.SharedAssemblyPolicyEntry? right) -> bool

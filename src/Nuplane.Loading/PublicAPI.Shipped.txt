@@ -1,0 +1,77 @@
+#nullable enable
+Nuplane.Loading.Extensions.LoadingOptionsValidation
+Nuplane.Loading.Extensions.LoadingOptionsValidation.LoadingOptionsValidation(Nuplane.Loading.LoadingOptionsValidator! validator) -> void
+Nuplane.Loading.Extensions.LoadingOptionsValidation.Validate(string? name, Nuplane.Loading.LoadingOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Nuplane.Loading.HostIntegratedLoadOptions
+Nuplane.Loading.HostIntegratedLoadOptions.ActivationGates.get -> System.Collections.Generic.IList<Nuplane.Loading.IPackageActivationGate!>!
+Nuplane.Loading.HostIntegratedLoadOptions.HostIntegratedLoadOptions() -> void
+Nuplane.Loading.HostIntegratedLoadOptions.LoggerFactory.get -> Microsoft.Extensions.Logging.ILoggerFactory?
+Nuplane.Loading.HostIntegratedLoadOptions.LoggerFactory.set -> void
+Nuplane.Loading.HostIntegratedLoadOptions.SharedAssemblies.get -> System.Collections.Generic.IList<Nuplane.Loading.SharedAssemblyIdentity!>!
+Nuplane.Loading.HostIntegratedLoadOptions.TargetFrameworkOverride.get -> string?
+Nuplane.Loading.HostIntegratedLoadOptions.TargetFrameworkOverride.set -> void
+Nuplane.Loading.HostIntegratedLoadResult
+Nuplane.Loading.HostIntegratedLoadResult.<Clone>$() -> Nuplane.Loading.HostIntegratedLoadResult!
+Nuplane.Loading.HostIntegratedLoadResult.Deconstruct(out System.Collections.Generic.IReadOnlyList<Nuplane.Loading.PackageLoadState!>! Packages, out System.Collections.Generic.IReadOnlyDictionary<string!, string!>! FailedByPackageId) -> void
+Nuplane.Loading.HostIntegratedLoadResult.Equals(Nuplane.Loading.HostIntegratedLoadResult? other) -> bool
+Nuplane.Loading.HostIntegratedLoadResult.FailedByPackageId.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+Nuplane.Loading.HostIntegratedLoadResult.FailedByPackageId.init -> void
+Nuplane.Loading.HostIntegratedLoadResult.HostIntegratedLoadResult(System.Collections.Generic.IReadOnlyList<Nuplane.Loading.PackageLoadState!>! Packages, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! FailedByPackageId) -> void
+Nuplane.Loading.HostIntegratedLoadResult.Packages.get -> System.Collections.Generic.IReadOnlyList<Nuplane.Loading.PackageLoadState!>!
+Nuplane.Loading.HostIntegratedLoadResult.Packages.init -> void
+Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder
+Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder.AddActivationGate<TGate>() -> Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder!
+Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder.Disable() -> Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder!
+Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder.Enable() -> Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder!
+Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder.PackageLoadMode(string! packageId, Nuplane.Loading.PackageLoadMode loadMode) -> Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder!
+Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder.SharedAssembly(string! name, string? publicKeyToken, int majorVersion) -> Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder!
+Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder.WithDeactivationTimeout(System.TimeSpan timeout) -> Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder!
+Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder.WithDefaultLoadMode(Nuplane.Loading.PackageLoadMode loadMode) -> Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder!
+Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder.WithLoadModeSelectionPolicy(Nuplane.Loading.PackageLoadModeSelectionPolicy selectionPolicy) -> Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder!
+Nuplane.Loading.LoadingCatalogRefreshTracker
+Nuplane.Loading.LoadingCatalogRefreshTracker.HasRefreshed.get -> bool
+Nuplane.Loading.LoadingCatalogRefreshTracker.LastRefreshCorrelationId.get -> string?
+Nuplane.Loading.LoadingCatalogRefreshTracker.LoadingCatalogRefreshTracker() -> void
+Nuplane.Loading.LoadingCatalogRefreshTracker.MarkRefreshed(string! correlationId) -> void
+Nuplane.Loading.LoadingCatalogRefreshTracker.RefreshedAtUtc.get -> System.DateTimeOffset?
+Nuplane.Loading.LoadingOptions
+Nuplane.Loading.LoadingOptions.ActiveStoreRoot.get -> string?
+Nuplane.Loading.LoadingOptions.ActiveStoreRoot.set -> void
+Nuplane.Loading.LoadingOptions.DeactivationTimeout.get -> System.TimeSpan
+Nuplane.Loading.LoadingOptions.DeactivationTimeout.set -> void
+Nuplane.Loading.LoadingOptions.DefaultLoadMode.get -> Nuplane.Loading.PackageLoadMode
+Nuplane.Loading.LoadingOptions.DefaultLoadMode.set -> void
+Nuplane.Loading.LoadingOptions.Enabled.get -> bool
+Nuplane.Loading.LoadingOptions.Enabled.set -> void
+Nuplane.Loading.LoadingOptions.LoadModeSelectionPolicy.get -> Nuplane.Loading.PackageLoadModeSelectionPolicy
+Nuplane.Loading.LoadingOptions.LoadModeSelectionPolicy.set -> void
+Nuplane.Loading.LoadingOptions.LoadingOptions() -> void
+Nuplane.Loading.LoadingOptions.PackageLoadModes.get -> System.Collections.Generic.ICollection<Nuplane.Loading.PackageLoadModeOverrideOptions!>!
+Nuplane.Loading.LoadingOptions.SharedAssemblies.get -> System.Collections.Generic.ICollection<Nuplane.Loading.SharedAssemblyIdentity!>!
+Nuplane.Loading.LoadingOptionsValidator
+Nuplane.Loading.LoadingOptionsValidator.LoadingOptionsValidator() -> void
+Nuplane.Loading.LoadingOptionsValidator.Validate(Nuplane.Loading.LoadingOptions! options) -> System.Collections.Generic.IReadOnlyList<string!>!
+Nuplane.Loading.NuplaneBuilderLoadingExtensions
+Nuplane.Loading.NuplaneHostIntegratedLoader
+Nuplane.Loading.PackageAssemblyLoadContext
+Nuplane.Loading.PackageAssemblyLoadContext.PackageAssemblyLoadContext(string! packageMainAssemblyPath, System.Collections.Generic.IReadOnlyList<Nuplane.Loading.SharedAssemblyPolicyEntry!>! sharedPolicy, Nuplane.Loading.SharedAssemblyPolicyMatcher! matcher) -> void
+Nuplane.Loading.PackageLoadModeOverrideOptions
+Nuplane.Loading.PackageLoadModeOverrideOptions.LoadMode.get -> Nuplane.Loading.PackageLoadMode
+Nuplane.Loading.PackageLoadModeOverrideOptions.LoadMode.set -> void
+Nuplane.Loading.PackageLoadModeOverrideOptions.PackageId.get -> string!
+Nuplane.Loading.PackageLoadModeOverrideOptions.PackageId.set -> void
+Nuplane.Loading.PackageLoadModeOverrideOptions.PackageLoadModeOverrideOptions() -> void
+Nuplane.Loading.SharedAssemblyPolicyMatcher
+Nuplane.Loading.SharedAssemblyPolicyMatcher.IsMatch(System.Reflection.AssemblyName! requested, System.Collections.Generic.IReadOnlyList<Nuplane.Loading.SharedAssemblyPolicyEntry!>! entries) -> bool
+Nuplane.Loading.SharedAssemblyPolicyMatcher.SharedAssemblyPolicyMatcher() -> void
+override Nuplane.Loading.HostIntegratedLoadResult.Equals(object? obj) -> bool
+override Nuplane.Loading.HostIntegratedLoadResult.GetHashCode() -> int
+override Nuplane.Loading.HostIntegratedLoadResult.ToString() -> string!
+static Nuplane.Loading.HostIntegratedLoadResult.operator !=(Nuplane.Loading.HostIntegratedLoadResult? left, Nuplane.Loading.HostIntegratedLoadResult? right) -> bool
+static Nuplane.Loading.HostIntegratedLoadResult.operator ==(Nuplane.Loading.HostIntegratedLoadResult? left, Nuplane.Loading.HostIntegratedLoadResult? right) -> bool
+static Nuplane.Loading.NuplaneBuilderLoadingExtensions.AutoloadPackages(this Nuplane.Builder.NuplaneBuilder! builder, Microsoft.Extensions.Configuration.IConfiguration! configuration, System.Action<Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder!>? configure = null) -> Nuplane.Builder.NuplaneBuilder!
+static Nuplane.Loading.NuplaneBuilderLoadingExtensions.AutoloadPackages(this Nuplane.Builder.NuplaneBuilder! builder, System.Action<Nuplane.Loading.Hosting.Builder.NuplaneLoadingBuilder!>? configure = null) -> Nuplane.Builder.NuplaneBuilder!
+static Nuplane.Loading.NuplaneHostIntegratedLoader.LoadActivePackagesAsync(System.Collections.Generic.IReadOnlyList<Nuplane.Abstractions.ActivePackage!>! packages, Nuplane.Loading.HostIntegratedLoadOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.Loading.HostIntegratedLoadResult!>!
+static Nuplane.Loading.NuplaneHostIntegratedLoader.LoadFromParticipantAsync(Nuplane.NuplaneStoreSnapshotAccess! access, Nuplane.Loading.HostIntegratedLoadOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.Loading.HostIntegratedLoadResult!>!
+static Nuplane.Loading.NuplaneHostIntegratedLoader.LoadFromStateAsync(Nuplane.Store.State.StoreRegistryOptions! storeOptions, Nuplane.Loading.HostIntegratedLoadOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.Loading.HostIntegratedLoadResult!>!
+static Nuplane.Loading.NuplaneHostIntegratedLoader.LoadFromStateAsync(string! stateFilePath, Nuplane.Loading.HostIntegratedLoadOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Nuplane.Loading.HostIntegratedLoadResult!>!

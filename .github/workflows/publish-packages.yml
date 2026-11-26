@@ -14,8 +14,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Main-branch previews continue the existing 1.0.0 preview line; releases use their tag below.
-  PREVIEW_BASE_VERSION: 1.0.0
+  # Main-branch previews use the next version; releases use their tag below.
+  PREVIEW_BASE_VERSION: ${{ vars.NUPLANE_PREVIEW_BASE_VERSION || '1.0.0' }}
+  PackageValidationBaselineVersion: ${{ vars.NUPLANE_PACKAGE_VALIDATION_BASELINE }}
 
 jobs:
   darwin-native-shim:
