@@ -112,29 +112,10 @@ public sealed class DirectoryNupkgDesiredSource : IScopedDesiredPackageSource
             return Array.Empty<PackageRequest>();
         }
 
-        var requests = new List<PackageRequest>();
-        foreach (var filePath in filePaths)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (_stabilityProbe is not null &&
-                !await _stabilityProbe.IsStableAsync(filePath, cancellationToken))
-            {
-                _logger.LogDebug(
-                    "Skipping unstable file '{FilePath}' — it may still be in the process of being written.",
-                    filePath);
-                continue;
-            }
-
-            var fileName = Path.GetFileNameWithoutExtension(filePath);
-            if (string.IsNullOrWhiteSpace(fileName))
-                continue;
-
-            var request = CreateRequest(fileName);
-            if (request is not null)
-                requests.Add(request);
-        }
-
-        return DeduplicateByHighestVersion(requests).ToList();
+        var stablePaths = _stabilityProbe is null
+            ? filePaths
+            : await _stabilityProbe.GetStableFilesAsync(filePaths, cancellationToken).ConfigureAwait(false);
+        return CreateRequests(stablePaths, cancellationToken);
     }
 
     private Task<IReadOnlyList<PackageRequest>> ReadDesiredNativeAsync(
@@ -161,63 +142,68 @@ public sealed class DirectoryNupkgDesiredSource : IScopedDesiredPackageSource
                     return Array.Empty<PackageRequest>();
                 }
 
-                var requests = new List<PackageRequest>();
+                if (_stabilityProbe is not null)
+                {
+                    var stableCandidates = await _stabilityProbe.GetStableFilesAsync(
+                            candidates.Where(static candidate => !string.IsNullOrWhiteSpace(Path.GetFileNameWithoutExtension(candidate))),
+                            cancellationToken, session, _directoryPath)
+                        .ConfigureAwait(false);
+                    return CreateRequests(stableCandidates, cancellationToken);
+                }
+
+                var verifiedCandidates = new List<string>();
                 foreach (var candidate in candidates)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (string.IsNullOrWhiteSpace(Path.GetFileNameWithoutExtension(candidate)))
+                        continue;
+
                     try
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        var fileName = candidate[..^".nupkg".Length];
-                        if (string.IsNullOrWhiteSpace(fileName))
+                        var sample = session.SamplePackageCandidate(candidate);
+                        if (sample.Kind == PhysicalStoreDirectoryCandidateKind.Busy)
+                        {
+                            // Without a probe, include busy files only when native metadata has
+                            // positively verified a regular single-link file.
+                            _logger.LogDebug(
+                                "Including metadata-verified package candidate '{FilePath}' without a stability probe.",
+                                Path.Combine(_directoryPath, candidate));
+                        }
+                        else if (sample.Kind != PhysicalStoreDirectoryCandidateKind.RegularFile)
+                        {
                             continue;
-
-                        if (_stabilityProbe is not null)
-                        {
-                            var stable = await _stabilityProbe.IsStableAsync(
-                                    session, candidate, Path.Combine(_directoryPath, candidate), cancellationToken)
-                                .ConfigureAwait(false);
-                            if (!stable)
-                            {
-                                _logger.LogDebug(
-                                    "Skipping unstable file '{FilePath}' — it may still be in the process of being written.",
-                                    Path.Combine(_directoryPath, candidate));
-                                continue;
-                            }
-                        }
-                        else
-                        {
-                            var sample = session.SamplePackageCandidate(candidate);
-                            if (sample.Kind == PhysicalStoreDirectoryCandidateKind.Busy)
-                            {
-                                // Historically the optional stability probe was the only operation
-                                // that opened package contents. Without it, preserve enumeration
-                                // behavior only when native metadata positively proved this exact
-                                // candidate is a regular single-link file.
-                                _logger.LogDebug(
-                                    "Including metadata-verified package candidate '{FilePath}' without a stability probe.",
-                                    Path.Combine(_directoryPath, candidate));
-                            }
-                            else if (sample.Kind != PhysicalStoreDirectoryCandidateKind.RegularFile)
-                            {
-                                continue;
-                            }
                         }
 
-                        var request = CreateRequest(fileName);
-                        if (request is not null)
-                            requests.Add(request);
+                        verifiedCandidates.Add(candidate);
                     }
                     finally
                     {
-                        // Retain a Windows metadata pin only through this package's stability awaits;
-                        // large feeds must not accumulate one native handle per matching filename.
                         session.ReleasePackageCandidate(candidate);
                     }
                 }
 
-                return DeduplicateByHighestVersion(requests);
+                return CreateRequests(verifiedCandidates, cancellationToken);
             },
             cancellationToken);
+
+    private IReadOnlyList<PackageRequest> CreateRequests(
+        IEnumerable<string> candidates, CancellationToken cancellationToken)
+    {
+        var requests = new List<PackageRequest>();
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var fileName = Path.GetFileNameWithoutExtension(candidate);
+            if (string.IsNullOrWhiteSpace(fileName))
+                continue;
+
+            var request = CreateRequest(fileName);
+            if (request is not null)
+                requests.Add(request);
+        }
+
+        return DeduplicateByHighestVersion(requests);
+    }
 
     private static IReadOnlyList<PackageRequest> DeduplicateByHighestVersion(List<PackageRequest> requests) => requests
         .GroupBy(request => request.Id, StringComparer.OrdinalIgnoreCase)

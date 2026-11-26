@@ -97,6 +97,7 @@ public sealed class NuplaneRestoreAdmissionTests
         var feedDirectory = Path.Combine(root.RootPath, "directory-source-probe");
         Directory.CreateDirectory(feedDirectory);
         File.WriteAllBytes(Path.Combine(feedDirectory, "Probe.Package.1.0.0.nupkg"), [0x50, 0x4B, 0x03, 0x04]);
+        File.WriteAllBytes(Path.Combine(feedDirectory, "Second.Package.2.0.0.nupkg"), [0x50, 0x4B, 0x03, 0x04]);
 
         var probeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseProbe = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -130,9 +131,8 @@ public sealed class NuplaneRestoreAdmissionTests
         }
 
         var description = await describe;
-        var request = Assert.Single(description.Requests);
-        Assert.Equal("Probe.Package", request.PackageId);
-        Assert.Equal("1.0.0", request.PinnedVersion);
+        Assert.Equal([("Probe.Package", "1.0.0"), ("Second.Package", "2.0.0")],
+            description.Requests.Select(request => (request.PackageId, request.PinnedVersion)));
 
         await using var afterDrain = await competitor.AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Maintenance);
         Assert.Equal(PackageStoreAdmissionStatus.Enrolled, afterDrain.Status);
