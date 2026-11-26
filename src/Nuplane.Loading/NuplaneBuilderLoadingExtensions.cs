@@ -3,14 +3,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nuplane.Abstractions;
 using Nuplane.Builder;
+using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Loading.Registration;
 using Nuplane.Reconciliation;
 
-namespace Nuplane.Loading.Hosting.Builder;
+namespace Nuplane.Loading;
 
 /// <summary>
 /// Provides extensions on <see cref="NuplaneBuilder"/> that install the Nuplane assembly
-/// loading subsystem. Add a reference to <c>Nuplane.Loading.Hosting</c> to access these methods.
+/// loading subsystem. Add a reference to <c>Nuplane.Loading</c> to access these methods.
 /// </summary>
 public static class NuplaneBuilderLoadingExtensions
 {
@@ -19,7 +20,8 @@ public static class NuplaneBuilderLoadingExtensions
     /// <summary>
     /// Installs the Nuplane assembly loading subsystem from configuration or the <c>Loading</c>
     /// subsection itself, then applies any additional builder customization.
-    /// Configuration binds first; the optional builder callback runs afterward and can override it.
+    /// Loading is enabled unless configuration sets <c>Enabled</c> to <see langword="false"/>.
+    /// Configuration binds before the optional builder callback, which can override it.
     /// Load-mode selection uses package metadata advisors by default and can be changed through
     /// <see cref="NuplaneLoadingBuilder.WithLoadModeSelectionPolicy(PackageLoadModeSelectionPolicy)"/>.
     /// </summary>
@@ -43,9 +45,13 @@ public static class NuplaneBuilderLoadingExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         var loadingSection = GetNamedSectionOrSelf(configuration, LoadingSectionName);
-        builder.Services.Configure<LoadingOptions>(options => LoadingOptionsConfigurationBinder.Bind(options, loadingSection));
+        builder.Services.Configure<LoadingOptions>(options =>
+        {
+            options.Enabled = true;
+            LoadingOptionsConfigurationBinder.Bind(options, loadingSection);
+        });
 
-        return AutoloadPackagesCore(builder, configure, enableByDefault: false);
+        return AutoloadPackagesCore(builder, configure);
     }
 
     /// <summary>
@@ -60,16 +66,18 @@ public static class NuplaneBuilderLoadingExtensions
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="builder"/> is <see langword="null"/>.</exception>
     public static NuplaneBuilder AutoloadPackages(
         this NuplaneBuilder builder,
-        Action<NuplaneLoadingBuilder>? configure = null) =>
-        AutoloadPackagesCore(builder, configure, enableByDefault: true);
-
-    private static NuplaneBuilder AutoloadPackagesCore(
-        NuplaneBuilder builder,
-        Action<NuplaneLoadingBuilder>? configure,
-        bool enableByDefault)
+        Action<NuplaneLoadingBuilder>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
 
+        builder.Services.Configure<LoadingOptions>(options => options.Enabled = true);
+        return AutoloadPackagesCore(builder, configure);
+    }
+
+    private static NuplaneBuilder AutoloadPackagesCore(
+        NuplaneBuilder builder,
+        Action<NuplaneLoadingBuilder>? configure)
+    {
         var services = builder.Services;
 
         // ── Delegate to module-owned registration services ────────────────────────
@@ -82,13 +90,7 @@ public static class NuplaneBuilderLoadingExtensions
         services.TryAddSingleton<ILeasedPackageGraphRecoveryLoadingObserver>(sp =>
             sp.GetServices<INuplaneObserver>().OfType<PackageAutoLoadingObserver>().Single());
 
-        var loadingBuilder = new NuplaneLoadingBuilder(services);
-        if (enableByDefault)
-        {
-            loadingBuilder.Enable();
-        }
-
-        configure?.Invoke(loadingBuilder);
+        configure?.Invoke(new NuplaneLoadingBuilder(services));
         return builder;
     }
 

@@ -20,8 +20,11 @@ public sealed class OperationalStateContributorIntegrationTests
         {
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddNuplane(nuplane => nuplane.WithStateFile(stateFilePath));
-            services.AddNuplaneLoading(options => options.Enabled = true);
+            services.AddNuplane(nuplane =>
+            {
+                nuplane.WithStateFile(stateFilePath);
+                nuplane.AutoloadPackages();
+            });
             services.AddNuplaneAdmin();
 
             using var provider = services.BuildServiceProvider();

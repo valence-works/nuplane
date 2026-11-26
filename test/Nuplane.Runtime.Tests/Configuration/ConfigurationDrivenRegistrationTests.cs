@@ -9,7 +9,6 @@ using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Registration;
 using Nuplane.Hosting;
 using Nuplane.Loading;
-using Nuplane.Loading.Hosting.Builder;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Setup;
@@ -903,60 +902,6 @@ public sealed class ConfigurationDrivenRegistrationTests
         {
             try { Directory.Delete(root, recursive: true); } catch { }
         }
-    }
-
-    [Fact]
-    public void AddNuplaneLoading_DirectRegistration_RegistersLoadingServices()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddNuplaneLoading(options =>
-        {
-            options.Enabled = true;
-            options.DeactivationTimeout = TimeSpan.FromSeconds(30);
-        });
-
-        using var provider = services.BuildServiceProvider();
-
-        var loading = provider.GetRequiredService<IOptions<LoadingOptions>>().Value;
-
-        Assert.True(loading.Enabled);
-        Assert.Equal(TimeSpan.FromSeconds(30), loading.DeactivationTimeout);
-    }
-
-    [Fact]
-    public void AddNuplaneLoading_FollowedByBuilder_LastRegistrationWins()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-
-        // Direct registration enables loading
-        services.AddNuplaneLoading(options => options.Enabled = true);
-
-        // Builder registration disables loading (last wins)
-        services.AddNuplane(nuplane =>
-        {
-            nuplane.AutoloadPackages(load => load.Disable());
-        });
-
-        using var provider = services.BuildServiceProvider();
-
-        var loading = provider.GetRequiredService<IOptions<LoadingOptions>>().Value;
-
-        Assert.False(loading.Enabled);
-    }
-
-    [Fact]
-    public void AddNuplaneLoading_AndBuilder_DoNotDuplicateConcretePackageLoader()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-
-        services.AddNuplaneLoading();
-        services.AddNuplane(nuplane => nuplane.AutoloadPackages());
-
-        var loaderCount = services.Count(d => d.ServiceType == typeof(PackageLoader));
-        Assert.Equal(1, loaderCount);
     }
 
     [Fact]

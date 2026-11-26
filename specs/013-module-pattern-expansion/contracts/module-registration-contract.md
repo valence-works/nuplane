@@ -20,6 +20,11 @@ Define the supported public registration surfaces for optional Nuplane modules a
   - Does not require consumers to reach into `Nuplane` internals.
 
 ## Loading module contract
+
+**Superseded by [#124](https://github.com/valence-works/nuplane/issues/124).** Register loading with `nuplane.AutoloadPackages(...)` from the `Nuplane.Loading` namespace. Calling the builder method enables loading by default. Set `Loading:Enabled` to `false` or call `Disable()` in the loading builder to opt out while keeping the query services.
+
+The original contract follows for reference.
+
 - Owning implementation project: `src/Nuplane.Loading`
 - Required direct surface: `services.AddNuplaneLoading(Action<LoadingOptions>? configure)`
 - Builder integration project: `src/Nuplane.Loading.Hosting`

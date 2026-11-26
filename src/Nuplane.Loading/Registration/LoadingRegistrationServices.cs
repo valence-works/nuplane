@@ -9,19 +9,17 @@ namespace Nuplane.Loading.Registration;
 
 /// <summary>
 /// Registers the core loading module services into the service collection.
-/// Both builder and direct <see cref="IServiceCollection"/> extension paths
-/// delegate here to share a single deterministic registration implementation.
 /// Uses last-registration-wins semantics for module-owned services while keeping
 /// low-level loading mechanics internal to the module.
 /// </summary>
-public static class LoadingRegistrationServices
+internal static class LoadingRegistrationServices
 {
     /// <summary>
     /// Registers loading module services: options validation with <c>ValidateOnStart()</c>,
     /// the canonical public query services, and the internal runtime infrastructure they depend on.
     /// Re-registration replaces earlier module state deterministically.
     /// </summary>
-    public static void Register(IServiceCollection services)
+    internal static void Register(IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -62,19 +60,6 @@ public static class LoadingRegistrationServices
         services.TryAddSingleton<LoadingCatalog>();
         services.TryAddSingleton<IPackageLoadStateCatalog>(sp => sp.GetRequiredService<LoadingCatalog>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IOperationalStateContributor, LoadingOperationalStateContributor>());
-    }
-
-    /// <summary>
-    /// Registers loading module services and applies the given configuration callback.
-    /// Both the direct <c>AddNuplaneLoading</c> extension and the builder convenience API
-    /// converge through this method to share a single deterministic implementation.
-    /// </summary>
-    public static void Register(IServiceCollection services, Action<LoadingOptions> configure)
-    {
-        ArgumentNullException.ThrowIfNull(configure);
-
-        Register(services);
-        services.Configure(configure);
     }
 
     private static void ReplaceSingleton<TService, TImplementation>(IServiceCollection services, Func<IServiceProvider, TService>? implementationFactory = null)

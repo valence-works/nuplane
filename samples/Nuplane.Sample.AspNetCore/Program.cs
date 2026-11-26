@@ -2,7 +2,7 @@ using Nuplane;
 using Nuplane.Admin;
 using Nuplane.Admin.Api;
 using Nuplane.Loading.Api;
-using Nuplane.Loading.Hosting.Builder;
+using Nuplane.Loading;
 using Nuplane.Sample.AspNetCore;
 using Nuplane.Sample.AspNetCore.Catalog;
 using Nuplane.Sources.Directory.Configuration;

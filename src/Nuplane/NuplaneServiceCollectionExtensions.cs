@@ -72,7 +72,7 @@ public static class NuplaneServiceCollectionExtensions
     ///         feed.FromDirectory("packages", dir => { dir.Watch = true; });
     ///         feed.Include("MyApp.Plugins.*");
     ///     });
-    ///     nuplane.AutoloadPackages();       // from Nuplane.Loading.Hosting
+    ///     nuplane.AutoloadPackages();       // from Nuplane.Loading
     ///     nuplane.OnPackagesChanged&lt;MyChangeObserver&gt;();
     /// });
     /// </code>

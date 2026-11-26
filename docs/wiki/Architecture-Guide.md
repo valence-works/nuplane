@@ -29,7 +29,6 @@ Nuplane’s architecture centers on a deterministic control loop:
 | `src/Nuplane.Sources.Directory/` | Directory-backed desired source | `Core` | Adds local `.nupkg` directory feed behavior |
 | `src/Nuplane.Admin/` + `src/Nuplane.Admin.Api/` | Admin and HTTP read surfaces | `Core` | Exposes management and read routes for package and operational state |
 | `src/Nuplane.Loading/` + `src/Nuplane.Loading.Api/` | Optional runtime loading | `Optional Module` | Adds load-state and assembly-loading behavior when the host opts in |
-| `src/Nuplane.Loading.Hosting/` | Loading module composition helpers | `Optional Module` | Adds module-owned builder integration for loading scenarios |
 
 ## Ownership boundaries
 

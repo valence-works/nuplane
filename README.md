@@ -192,6 +192,7 @@ Nuplane emits events such as package-change completion or package-loading comple
 ### Optional loading
 
 An opt-in subsystem that loads resolved packages into assembly load contexts.
+Call `AutoloadPackages` from `Nuplane.Loading` to register and enable it. Set `Nuplane:Loading:Enabled` to `false` to register the query surfaces while leaving loading disabled.
 Nuplane supports two package load modes:
 
 - `Collectible` is the default mode for isolated or scan-only plugin scenarios where package assemblies should remain unloadable when references drain.
@@ -241,7 +242,7 @@ Use the `Nuplane` configuration section for infrastructure, then keep host-owned
 
 ```csharp
 using Nuplane;
-using Nuplane.Loading.Hosting.Builder;
+using Nuplane.Loading;
 using Nuplane.Sources.Directory.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
