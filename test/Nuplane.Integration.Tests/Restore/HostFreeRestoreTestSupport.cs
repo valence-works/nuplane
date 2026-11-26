@@ -31,9 +31,15 @@ internal static class HostFreeRestoreTestSupport
         string feedDirectory,
         string version = "1.0.0",
         string prefix = "Restore.Fixture",
-        string? metadata = null)
+        string? metadata = null) =>
+        WriteNupkgForId(feedDirectory, $"{prefix}.N{Guid.NewGuid():N}", version, metadata);
+
+    /// <summary>
+    /// Writes a loadable package with an explicit ID so the same fixture can publish multiple versions.
+    /// </summary>
+    public static PackageFixture WriteNupkgForId(
+        string feedDirectory, string packageId, string version, string? metadata = null)
     {
-        var packageId = $"{prefix}.N{Guid.NewGuid():N}";
         Directory.CreateDirectory(feedDirectory);
 
         using var buffer = new MemoryStream();
