@@ -77,6 +77,7 @@ internal sealed class PackageTransactionCoordinator(AtomicPointerSwitcher pointe
             await ExecuteStageAsync(request, PackageTransactionStage.Validate, cancellationToken);
             await ExecuteStageAsync(request, PackageTransactionStage.PublishImmutable, cancellationToken);
             await ExecuteStageAsync(request, PackageTransactionStage.AtomicSwitch, cancellationToken);
+            ArgumentException.ThrowIfNullOrWhiteSpace(request.Version);
             if (publishPointer)
                 await _pointerSwitcher.SwitchAsync(request.PackageId, request.Version, cancellationToken);
             await ExecuteStageAsync(request, PackageTransactionStage.PersistState, cancellationToken);
