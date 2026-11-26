@@ -108,7 +108,8 @@ internal sealed class CoordinatedPreActivationCycle : IAsyncDisposable
         var resolution = context.ResolutionResult!;
         var changeSet = context.ChangeSet!;
         var rejected = FindRejectedComponent(
-            failures.Keys, PriorState.ActiveGraphsByIdNormalized.Values, applied.SuccessfulGraphSelections);
+            failures.Keys.Concat(context.LoadingRejectedPackageIds),
+            PriorState.ActiveGraphsByIdNormalized.Values, applied.SuccessfulGraphSelections);
         var survivingSelections = applied.SuccessfulGraphSelections
             .Where(selection => !selection.Packages.Any(package => rejected.Contains(package.Id))).ToArray();
         var survivingPackages = applied.AppliedPackages.Where(package => !rejected.Contains(package.Id)).ToArray();
