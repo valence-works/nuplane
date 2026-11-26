@@ -431,15 +431,12 @@ public sealed class CapabilityContributionCycleTests : IDisposable
 
         private sealed class RecordingObserver(List<PackageChangeSet> changeSets) : INuplaneObserver
         {
-            public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
-
             public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct)
             {
                 changeSets.Add(changeSet);
                 return Task.CompletedTask;
             }
 
-            public Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken ct) => Task.CompletedTask;
         }
     }
 }

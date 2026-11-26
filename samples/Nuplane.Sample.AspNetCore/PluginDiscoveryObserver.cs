@@ -47,10 +47,6 @@ internal sealed class PluginDiscoveryObserver(
         }
     }
 
-    public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
-
-    public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
-
     /// <summary>
     /// Logs package failures as invalidation signals while keeping query surfaces authoritative.
     /// </summary>

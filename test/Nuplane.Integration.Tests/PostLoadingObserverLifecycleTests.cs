@@ -275,18 +275,6 @@ public sealed partial class OverlappingPackageGraphProtectionTests
         internal PackageStoreAdmissionException ExpectedRefusal { get; } = new(
             PackageStoreAdmissionReason.UnknownAuthority, "Post-loading admission was refused by the observer.");
 
-        public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
-        public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
-        public Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken ct) => Task.CompletedTask;
-        public Task OnPackagesChangingAsync(PackageChangeSet changeSet, PackageStoreOperationBorrow borrow,
-            CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task OnPackagesChangedAsync(PackageChangeSet changeSet, PackageStoreOperationBorrow borrow,
-            CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task OnPackageFailedAsync(string packageId, Exception exception, PackageStoreOperationBorrow borrow,
-            CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task OnPackagesReconciledAsync(PackageChangeSet changeSet, IReadOnlyList<ResolvedPackage> appliedPackages,
-            PackageStoreOperationBorrow borrow, CancellationToken cancellationToken) => Task.CompletedTask;
-
         public async Task OnPackageLoadingCompletedAsync(PackageChangeSet changeSet,
             IReadOnlyList<ResolvedPackage> appliedPackages, CancellationToken cancellationToken)
         {

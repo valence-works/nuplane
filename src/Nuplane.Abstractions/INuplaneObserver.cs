@@ -6,32 +6,32 @@ namespace Nuplane.Abstractions;
 public interface INuplaneObserver
 {
     /// <summary>
-    /// Called before packages are applied during a reconciliation cycle.
+    /// Called before packages are applied during a reconciliation cycle. The default implementation is a no-op.
     /// </summary>
     /// <param name="changeSet">The set of package changes about to be applied.</param>
     /// <param name="ct">A token to cancel the operation.</param>
-    Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct);
+    Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
 
     /// <summary>
-    /// Called after packages have been successfully applied during a reconciliation cycle.
+    /// Called after packages have been successfully applied during a reconciliation cycle. The default implementation is a no-op.
     /// </summary>
     /// <param name="changeSet">The set of package changes that were applied.</param>
     /// <param name="ct">A token to cancel the operation.</param>
-    Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct);
+    Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken ct) => Task.CompletedTask;
 
     /// <summary>
-    /// Called when a package operation fails during reconciliation.
+    /// Called when a package operation fails during reconciliation. The default implementation is a no-op.
     /// </summary>
     /// <param name="packageId">The identifier of the package that failed.</param>
     /// <param name="exception">The exception that occurred.</param>
     /// <param name="ct">A token to cancel the operation.</param>
-    Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken ct);
+    Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken ct) => Task.CompletedTask;
 
     /// <summary>
     /// Called during reconciliation completion when the cycle successfully applies packages (even with an empty
     /// change set) or commits removals. The callback carries the change set and packages successfully applied in
     /// that cycle; <paramref name="appliedPackages"/> can be empty when a removal commits without a successful application.
-    /// Default implementation is a no-op for backward compatibility.
+    /// The default implementation is a no-op.
     /// </summary>
     /// <param name="changeSet">The computed package change set for the cycle.</param>
     /// <param name="appliedPackages">The packages successfully applied for the cycle; this is empty when a removal commits without a successful application.</param>

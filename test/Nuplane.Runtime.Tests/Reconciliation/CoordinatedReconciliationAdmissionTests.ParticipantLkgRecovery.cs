@@ -350,27 +350,6 @@ public sealed partial class CoordinatedReconciliationAdmissionTests
         internal Task<RecoveryObserverEvidence> Called => _called.Task;
         internal void Release() => _release.TrySetResult();
 
-        public Task OnPackagesChangingAsync(PackageChangeSet changeSet, CancellationToken cancellationToken)
-            => Task.CompletedTask;
-
-        public Task OnPackagesChangedAsync(PackageChangeSet changeSet, CancellationToken cancellationToken)
-            => Task.CompletedTask;
-
-        public Task OnPackageFailedAsync(string packageId, Exception exception, CancellationToken cancellationToken)
-            => Task.CompletedTask;
-
-        public Task OnPackagesReconciledAsync(PackageChangeSet changeSet, IReadOnlyList<ResolvedPackage> appliedPackages,
-            CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task OnPackagesChangingAsync(PackageChangeSet changeSet, PackageStoreOperationBorrow borrow,
-            CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task OnPackagesChangedAsync(PackageChangeSet changeSet, PackageStoreOperationBorrow borrow,
-            CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task OnPackageFailedAsync(string packageId, Exception exception, PackageStoreOperationBorrow borrow,
-            CancellationToken cancellationToken) => Task.CompletedTask;
-
         public async Task OnPackagesReconciledAsync(PackageChangeSet changeSet,
             IReadOnlyList<ResolvedPackage> appliedPackages, PackageStoreOperationBorrow borrow,
             CancellationToken cancellationToken)

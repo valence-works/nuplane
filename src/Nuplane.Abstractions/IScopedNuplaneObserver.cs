@@ -9,30 +9,30 @@ namespace Nuplane.Abstractions;
 /// </remarks>
 public interface IScopedNuplaneObserver : INuplaneObserver
 {
-    /// <summary>Observes a pending change under the current operation.</summary>
+    /// <summary>Observes a pending change under the current operation. The default implementation is a no-op.</summary>
     /// <param name="changeSet">The pending changes.</param>
     /// <param name="borrow">The live caller-owned borrow.</param>
     /// <param name="cancellationToken">A token to cancel the callback.</param>
-    Task OnPackagesChangingAsync(PackageChangeSet changeSet, PackageStoreOperationBorrow borrow, CancellationToken cancellationToken);
+    Task OnPackagesChangingAsync(PackageChangeSet changeSet, PackageStoreOperationBorrow borrow, CancellationToken cancellationToken) => Task.CompletedTask;
 
-    /// <summary>Observes applied changes under the current operation.</summary>
+    /// <summary>Observes applied changes under the current operation. The default implementation is a no-op.</summary>
     /// <param name="changeSet">The applied changes.</param>
     /// <param name="borrow">The live caller-owned borrow.</param>
     /// <param name="cancellationToken">A token to cancel the callback.</param>
-    Task OnPackagesChangedAsync(PackageChangeSet changeSet, PackageStoreOperationBorrow borrow, CancellationToken cancellationToken);
+    Task OnPackagesChangedAsync(PackageChangeSet changeSet, PackageStoreOperationBorrow borrow, CancellationToken cancellationToken) => Task.CompletedTask;
 
-    /// <summary>Observes a failure under the current operation.</summary>
+    /// <summary>Observes a failure under the current operation. The default implementation is a no-op.</summary>
     /// <param name="packageId">The package identifier.</param>
     /// <param name="exception">The failure.</param>
     /// <param name="borrow">The live caller-owned borrow.</param>
     /// <param name="cancellationToken">A token to cancel the callback.</param>
-    Task OnPackageFailedAsync(string packageId, Exception exception, PackageStoreOperationBorrow borrow, CancellationToken cancellationToken);
+    Task OnPackageFailedAsync(string packageId, Exception exception, PackageStoreOperationBorrow borrow, CancellationToken cancellationToken) => Task.CompletedTask;
 
-    /// <summary>Observes successful reconciliation under the current operation.</summary>
+    /// <summary>Observes successful reconciliation under the current operation. The default implementation is a no-op.</summary>
     /// <param name="changeSet">The computed changes.</param>
     /// <param name="appliedPackages">The successfully applied packages.</param>
     /// <param name="borrow">The live caller-owned borrow.</param>
     /// <param name="cancellationToken">A token to cancel the callback.</param>
     Task OnPackagesReconciledAsync(PackageChangeSet changeSet, IReadOnlyList<ResolvedPackage> appliedPackages,
-        PackageStoreOperationBorrow borrow, CancellationToken cancellationToken);
+        PackageStoreOperationBorrow borrow, CancellationToken cancellationToken) => Task.CompletedTask;
 }
