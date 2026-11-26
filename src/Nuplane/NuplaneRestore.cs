@@ -212,7 +212,7 @@ public static class NuplaneRestore
     /// <para>
     /// <b>What it touches.</b> It observes the configured store's membership authority and, on an
     /// unenrolled root, preserves the existing desired-source reads. A source may read its own local
-    /// input, such as a directory feed's <c>.nupkg</c> files or a convergence manifest. Remote feed
+    /// input, such as a directory feed's <c>.nupkg</c> files or a desired manifest. Remote feed
     /// requests come from configured include patterns alone, so no service index, version list, or
     /// package is fetched. It never reads installed package payloads.
     /// </para>

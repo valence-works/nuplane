@@ -31,7 +31,7 @@ public sealed class ReconciliationRollbackCoordinatorTests
         Assert.Empty(result.RolledBackPackages);
         Assert.Empty(result.PreservedPackages);
         Assert.Equal(2, result.SucceededPackages.Count);
-        Assert.Equal(ConvergenceReasonCodes.RollbackNotRequired, result.ReasonCode);
+        Assert.Equal(ReconciliationReasonCodes.RollbackNotRequired, result.ReasonCode);
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public sealed class ReconciliationRollbackCoordinatorTests
         Assert.True(result.RollbackPerformed);
         Assert.Contains("pkg-b", result.RolledBackPackages);
         Assert.Contains("pkg-a", result.SucceededPackages);
-        Assert.Equal(ConvergenceReasonCodes.RollbackPerformed, result.ReasonCode);
+        Assert.Equal(ReconciliationReasonCodes.RollbackPerformed, result.ReasonCode);
     }
 
     [Fact]

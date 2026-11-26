@@ -11,6 +11,13 @@ The package set Nuplane should make active.
 - Applied in: [Overview](Overview.md), [Getting Started](Getting-Started.md), [Architecture Guide](Architecture-Guide.md)
 - Canonical anchor: `README.md`
 
+### Desired manifest
+
+A shared file that supplies exact package requests. Configure the file under `Nuplane:DesiredState:Manifest`; the source is disabled unless explicitly enabled.
+
+- **Applied in:** [Usage Guide](Usage-Guide.md)
+- **Canonical anchor:** `DesiredStateOptions.Manifest`
+
 ### Actual state
 
 The package set currently active in the local store and available through Nuplane’s authoritative read surfaces.

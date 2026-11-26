@@ -1027,8 +1027,8 @@ public sealed class ConfigurationDrivenRegistrationTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Nuplane:Convergence:Manifest:Enabled"] = "true",
-                ["Nuplane:Convergence:Manifest:Path"] = manifestFile.Path
+                ["Nuplane:DesiredState:Manifest:Enabled"] = "true",
+                ["Nuplane:DesiredState:Manifest:Path"] = manifestFile.Path
             })
             .Build();
 
@@ -1039,13 +1039,34 @@ public sealed class ConfigurationDrivenRegistrationTests
         using var provider = services.BuildServiceProvider();
 
         // DesiredManifestPackageSource is always registered (the manifest gate now lives
-        // solely in ConvergenceOptions.Manifest.Enabled, honored at read time).
+        // solely in DesiredStateOptions.Manifest.Enabled, honored at read time).
         var source = Assert.Single(provider.GetServices<IDesiredPackageSource>()
             .OfType<DesiredManifestPackageSource>());
 
         var desired = await source.GetDesiredAsync(CancellationToken.None);
         var package = Assert.Single(desired);
         Assert.Equal("Lib.Core", package.Id);
+    }
+
+    [Theory]
+    [InlineData("Manifest:Enabled", "true", "Nuplane:DesiredState:Manifest:Enabled")]
+    [InlineData("PollInterval", "00:01:00", "Nuplane:Reconciliation:PollInterval")]
+    public void AddNuplane_RetiredConfiguration_FailsStartupWithMigrationKey(
+        string key, string value, string replacementKey)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            [$"Nuplane:Convergence:{key}"] = value
+        }).Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNuplane(configuration.GetSection("Nuplane"));
+
+        using var provider = services.BuildServiceProvider();
+        var exception = Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredService<IStartupValidator>().Validate());
+
+        Assert.Contains(replacementKey, exception.Message);
     }
 
     [Fact]

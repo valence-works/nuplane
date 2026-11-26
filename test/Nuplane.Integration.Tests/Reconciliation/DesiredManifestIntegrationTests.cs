@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nuplane.Abstractions;
 using Nuplane.Feeds;
 using Nuplane.Reconciliation;
-using Nuplane.Reconciliation.Convergence;
+using Nuplane.Sources.Configuration;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Sources;
@@ -17,11 +17,11 @@ namespace Nuplane.Integration.Tests.Reconciliation;
 /// identical outcomes across independent replicas and that manifest updates
 /// drive deterministic eventual convergence.
 /// </summary>
-public sealed class ManifestConvergenceIntegrationTests : IDisposable
+public sealed class DesiredManifestIntegrationTests : IDisposable
 {
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"nuplane-conv-{Guid.NewGuid():N}");
 
-    public ManifestConvergenceIntegrationTests()
+    public DesiredManifestIntegrationTests()
     {
         Directory.CreateDirectory(_tempDir);
     }
@@ -76,7 +76,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
             }
         });
 
-        var options = new ConvergenceOptions { Manifest = { Enabled = true, Path = manifestPath } };
+        var options = new DesiredStateOptions { Manifest = { Enabled = true, Path = manifestPath } };
 
         var source1 = new DesiredManifestPackageSource(new(), options);
         var source2 = new DesiredManifestPackageSource(new(), options);
@@ -97,10 +97,10 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task ManifestUpdate_DrivesConvergence_ToNewState()
+    public async Task ManifestUpdate_ChangesDesiredState()
     {
         var manifestPath = Path.Combine(_tempDir, "evolving.json");
-        var options = new ConvergenceOptions { Manifest = { Enabled = true, Path = manifestPath } };
+        var options = new DesiredStateOptions { Manifest = { Enabled = true, Path = manifestPath } };
 
         // Initial manifest
         File.WriteAllText(manifestPath, JsonSerializer.Serialize(new
@@ -142,7 +142,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
     public async Task ManifestPackageRemoved_DrivesRemovalOnNextCycle()
     {
         var manifestPath = Path.Combine(_tempDir, "removal.json");
-        var options = new ConvergenceOptions { Manifest = { Enabled = true, Path = manifestPath } };
+        var options = new DesiredStateOptions { Manifest = { Enabled = true, Path = manifestPath } };
 
         await File.WriteAllTextAsync(manifestPath, JsonSerializer.Serialize(new
         {
@@ -183,7 +183,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
         // DesiredManifestPackageSource is always registered on the shared runtime path, but a
         // host that never enables manifest convergence must see no observable effect from it:
         // no snapshot entry should be written to store state for a disabled manifest source.
-        var options = new ConvergenceOptions();
+        var options = new DesiredStateOptions();
         var source = new DesiredManifestPackageSource(new(), options);
         var store = new StoreRegistry(new StoreStateSerializer(), stateFilePath: null);
         var service = ReconciliationServiceFactory.Create(
@@ -203,7 +203,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
     {
         var manifestPath = WriteSinglePackageManifest("Lib.Core", "1.0.0");
 
-        var options = new ConvergenceOptions { Manifest = { Enabled = true, Path = manifestPath } };
+        var options = new DesiredStateOptions { Manifest = { Enabled = true, Path = manifestPath } };
         var source = new DesiredManifestPackageSource(new(), options);
         var store = new StoreRegistry(new StoreStateSerializer(), stateFilePath: null);
         var service = ReconciliationServiceFactory.Create(
@@ -228,8 +228,8 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Nuplane:Convergence:Manifest:Enabled"] = "true",
-                ["Nuplane:Convergence:Manifest:Path"] = manifestPath,
+                ["Nuplane:DesiredState:Manifest:Enabled"] = "true",
+                ["Nuplane:DesiredState:Manifest:Path"] = manifestPath,
                 ["Nuplane:Setup:UseInMemoryStore"] = "true"
             })
             .Build();
@@ -252,7 +252,7 @@ public sealed class ManifestConvergenceIntegrationTests : IDisposable
 
         // The manifest is enabled purely through code, with no IConfiguration involved, exercising
         // the builder-only AddNuplane overload.
-        services.Configure<ConvergenceOptions>(options =>
+        services.Configure<DesiredStateOptions>(options =>
         {
             options.Manifest.Enabled = true;
             options.Manifest.Path = manifestPath;

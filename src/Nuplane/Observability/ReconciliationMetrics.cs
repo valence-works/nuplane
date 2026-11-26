@@ -76,14 +76,14 @@ public sealed class ReconciliationMetrics(ReconciliationTelemetry telemetry)
     /// <param name="count">Number of acquisition failures to record. Defaults to 1.</param>
     public void RecordAcquisitionFailed(int count = 1) => _telemetry.AcquisitionFailedCounter.Add(count);
 
-    /// <summary>Records a completed convergence cycle.</summary>
+    /// <summary>Records a completed reconciliation cycle.</summary>
     /// <param name="degraded">Whether the cycle completed in degraded state.</param>
-    public void RecordConvergenceCycle(bool degraded)
+    public void RecordReconciliationCycle(bool degraded)
     {
-        _telemetry.ConvergenceCycleCounter.Add(1);
+        _telemetry.ReconciliationCycleCounter.Add(1);
         if (degraded)
         {
-            _telemetry.ConvergenceDegradedCounter.Add(1);
+            _telemetry.ReconciliationDegradedCounter.Add(1);
         }
     }
 

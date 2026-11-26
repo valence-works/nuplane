@@ -553,7 +553,7 @@ foreach (var request in description.Requests)
 
 It writes nothing — no install root, no state file, no lock file — and contacts no remote feed. It
 touches local disk only where a desired source already lives: a directory-backed feed enumerates its
-own `.nupkg` files, and a convergence manifest source reads its manifest. A remote feed's requests
+own `.nupkg` files, and a desired manifest source reads its manifest. A remote feed's requests
 come from its configured include patterns alone, so no service index, version list, or package is
 fetched. A source that throws is reported in `SourceErrors` rather than propagating, so an empty
 request list with an error in it means "could not tell", not "nothing is desired".
@@ -726,7 +726,7 @@ bounded at eight rounds. Changing the selection changes the graph, so the next c
 previous option out of the desired set and the new one in.
 
 **Naming the package by hand still works, and wins.** When one of the option packages is already an
-explicit desired root — a directory-feed drop, an include pattern, a convergence manifest — the
+explicit desired root — a directory-feed drop, an include pattern, a desired manifest — the
 capability is satisfied by that root, nothing is contributed, and the only difference from before
 this feature existed is one Information log line. A selection whose option package is already an
 explicit root contributes nothing either: the explicit root wins. When that explicit root's version

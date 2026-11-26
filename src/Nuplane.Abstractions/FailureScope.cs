@@ -1,7 +1,7 @@
 namespace Nuplane.Abstractions;
 
 /// <summary>
-/// Defines the scope of a convergence failure event.
+/// Defines the scope of a reconciliation failure event.
 /// </summary>
 public enum FailureScope
 {

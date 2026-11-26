@@ -364,7 +364,7 @@ Nuplane has two configuration layers:
   - `FeedTrustPolicy`
   - `LockFile`
   - `CleanupPolicy`
-  - `Convergence`
+  - `DesiredState:Manifest`
   - `TrustedSourcePolicy`
   - `StoreRegistry`
 - `Nuplane:Loading` — optional loading settings:
@@ -770,8 +770,10 @@ Use these conventions when enabling advanced feed governance:
 Use these conventions when enabling cluster-convergent runtime loading:
 
 - Configure a shared desired manifest with exact version pins for deterministic convergence across replicas.
+- Migrate existing settings from `Convergence:Manifest` to `DesiredState:Manifest` and from `Convergence:PollInterval` to `Reconciliation:PollInterval`.
+- Update dashboard queries from the `nuplane.convergence.*` metric prefix to `nuplane.reconciliation.*`.
 - Update manifests atomically: upload package artifacts first, then write/update the manifest last.
-- Use `ConvergenceOptions` to configure manifest path, admin surfaces, optional loader boundary, and poll interval.
+- Set `DesiredState:Manifest:Enabled` and `DesiredState:Manifest:Path` to read a shared manifest. Set any polling interval under `Reconciliation:PollInterval`.
 - Keep loader integration opt-in and default-disabled unless the host explicitly wants Nuplane-managed loading.
 - Use `INuplaneAdminOperations` (in-process) or `Nuplane.Admin.AspNetCore` (HTTP) for admin reads and manual reconcile triggers.
 - Monitor convergence through correlation-linked logs, metrics, health transitions, and observer failure events.

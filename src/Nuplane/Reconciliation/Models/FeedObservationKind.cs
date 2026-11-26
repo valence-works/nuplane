@@ -11,7 +11,7 @@ public enum FeedObservationKind
     /// <summary>A feed-specific notification channel detected a change.</summary>
     Notification,
 
-    /// <summary>A feed-specific polling monitor detected a change outside the scheduled convergence loop.</summary>
+    /// <summary>A feed-specific polling monitor detected a change outside the scheduled reconciliation loop.</summary>
     Polling
 }
 

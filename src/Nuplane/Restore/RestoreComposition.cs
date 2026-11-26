@@ -357,7 +357,7 @@ internal sealed class RestoreComposition : IAsyncDisposable
     /// <summary>
     /// Whether no registered <see cref="IDesiredPackageSource"/> would contribute anything — the
     /// same exclusion <see cref="DescribeDesiredAsync"/> and a reconciliation cycle apply, since the
-    /// manifest source is always registered but does nothing unless convergence is configured.
+    /// manifest source is always registered but does nothing unless the desired manifest is configured.
     /// </summary>
     private static bool HasNoDesiredPackageSources(IServiceProvider provider) =>
         !provider.GetServices<IDesiredPackageSource>()

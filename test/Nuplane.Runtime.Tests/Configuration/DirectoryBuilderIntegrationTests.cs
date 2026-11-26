@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 using Nuplane.Abstractions;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Setup;
-using Nuplane.Reconciliation.Convergence;
+using Nuplane.Sources.Configuration;
 using Nuplane.Runtime.Tests.TestSupport;
 using Nuplane.Sources;
 using Nuplane.Sources.Directory.Builder;
@@ -214,7 +214,7 @@ public sealed class DirectoryBuilderIntegrationTests
 
         // The manifest is enabled purely through code, with no IConfiguration involved,
         // exercising the builder-only AddNuplane overload.
-        services.Configure<ConvergenceOptions>(options =>
+        services.Configure<DesiredStateOptions>(options =>
         {
             options.Manifest.Enabled = true;
             options.Manifest.Path = manifestFile.Path;

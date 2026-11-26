@@ -5,8 +5,8 @@ using Nuplane.Capabilities;
 using Nuplane.Metadata;
 using Nuplane.Observability;
 using Nuplane.Reconciliation;
-using Nuplane.Reconciliation.Convergence;
 using Nuplane.Sources;
+using Nuplane.Sources.Configuration;
 
 namespace Nuplane.Registration;
 
@@ -18,7 +18,7 @@ internal static class NuplaneDesiredStatePlanningRegistrationServices
             sp.GetRequiredService<PackageStoreCompositionSnapshot>().IsParticipant));
         services.AddSingleton(sp => new DesiredManifestPackageSource(
             sp.GetRequiredService<DesiredManifestReader>(),
-            sp.GetRequiredService<IOptions<ConvergenceOptions>>().Value,
+            sp.GetRequiredService<IOptions<DesiredStateOptions>>().Value,
             sp.GetService<ReconciliationMetrics>()));
         services.AddSingleton<IDesiredPackageSource>(sp => sp.GetRequiredService<DesiredManifestPackageSource>());
 

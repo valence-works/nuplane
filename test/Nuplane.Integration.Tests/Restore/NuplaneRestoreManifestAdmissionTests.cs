@@ -349,9 +349,9 @@ public sealed class NuplaneRestoreManifestAdmissionTests
         var values = new Dictionary<string, string?>
         {
             ["Nuplane:Reconciliation:PollInterval"] = "00:05:00",
-            ["Nuplane:Convergence:Manifest:Enabled"] = manifestEnabled ? "true" : "false",
-            ["Nuplane:Convergence:Manifest:Path"] = manifestPath,
-            ["Nuplane:Convergence:Manifest:SchemaVersion"] = "1.0"
+            ["Nuplane:DesiredState:Manifest:Enabled"] = manifestEnabled ? "true" : "false",
+            ["Nuplane:DesiredState:Manifest:Path"] = manifestPath,
+            ["Nuplane:DesiredState:Manifest:SchemaVersion"] = "1.0"
         };
         if (includeUnpinnedRequest)
         {

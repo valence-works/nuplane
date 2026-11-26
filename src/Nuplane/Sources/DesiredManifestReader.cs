@@ -76,7 +76,7 @@ public sealed class DesiredManifestReader
         {
             return new(
                 ManifestReadStatus.Unreadable,
-                ConvergenceReasonCodes.ManifestUnreadable,
+                ReconciliationReasonCodes.ManifestUnreadable,
                 filePath,
                 correlationId,
                 now);
@@ -145,7 +145,7 @@ public sealed class DesiredManifestReader
                     case PhysicalStoreDesiredSourceTextReadKind.Unreadable:
                         return new DesiredManifestReadResult(
                             ManifestReadStatus.Unreadable,
-                            ConvergenceReasonCodes.ManifestUnreadable,
+                            ReconciliationReasonCodes.ManifestUnreadable,
                             filePath,
                             correlationId,
                             now);
@@ -174,7 +174,7 @@ public sealed class DesiredManifestReader
     private static DesiredManifestReadResult NotFound(string filePath, string correlationId, DateTimeOffset now)
         => new(
             ManifestReadStatus.NotFound,
-            ConvergenceReasonCodes.ManifestNotFound,
+            ReconciliationReasonCodes.ManifestNotFound,
             filePath,
             correlationId,
             now);
@@ -226,7 +226,7 @@ public sealed class DesiredManifestReader
         {
             return new(
                 ManifestReadStatus.Invalid,
-                ConvergenceReasonCodes.ManifestInvalid,
+                ReconciliationReasonCodes.ManifestInvalid,
                 filePath,
                 correlationId,
                 now);
@@ -236,7 +236,7 @@ public sealed class DesiredManifestReader
         {
             return new(
                 ManifestReadStatus.Invalid,
-                ConvergenceReasonCodes.ManifestInvalid,
+                ReconciliationReasonCodes.ManifestInvalid,
                 filePath,
                 correlationId,
                 now);
@@ -248,7 +248,7 @@ public sealed class DesiredManifestReader
         {
             return new(
                 ManifestReadStatus.Invalid,
-                ConvergenceReasonCodes.ManifestInvalid,
+                ReconciliationReasonCodes.ManifestInvalid,
                 filePath,
                 correlationId,
                 now);
@@ -262,7 +262,7 @@ public sealed class DesiredManifestReader
             {
                 return new(
                     ManifestReadStatus.Invalid,
-                    ConvergenceReasonCodes.ManifestInvalid,
+                    ReconciliationReasonCodes.ManifestInvalid,
                     filePath,
                     correlationId,
                     now);
@@ -272,7 +272,7 @@ public sealed class DesiredManifestReader
             {
                 return new(
                     ManifestReadStatus.Invalid,
-                    ConvergenceReasonCodes.ManifestInvalid,
+                    ReconciliationReasonCodes.ManifestInvalid,
                     filePath,
                     correlationId,
                     now);
@@ -282,7 +282,7 @@ public sealed class DesiredManifestReader
             {
                 return new(
                     ManifestReadStatus.Invalid,
-                    ConvergenceReasonCodes.ManifestInvalid,
+                    ReconciliationReasonCodes.ManifestInvalid,
                     filePath,
                     correlationId,
                     now);
@@ -293,7 +293,7 @@ public sealed class DesiredManifestReader
             {
                 return new(
                     ManifestReadStatus.Invalid,
-                    ConvergenceReasonCodes.ManifestInvalid,
+                    ReconciliationReasonCodes.ManifestInvalid,
                     filePath,
                     correlationId,
                     now);
@@ -314,7 +314,7 @@ public sealed class DesiredManifestReader
 
         return new(
             ManifestReadStatus.Succeeded,
-            ConvergenceReasonCodes.ManifestSucceeded,
+            ReconciliationReasonCodes.ManifestSucceeded,
             filePath,
             correlationId,
             now,

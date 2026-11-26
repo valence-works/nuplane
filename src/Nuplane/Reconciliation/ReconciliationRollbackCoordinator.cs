@@ -66,8 +66,8 @@ public sealed class ReconciliationRollbackCoordinator
 
         var rollbackPerformed = rolledBack.Count > 0;
         var reasonCode = rollbackPerformed
-            ? ConvergenceReasonCodes.RollbackPerformed
-            : ConvergenceReasonCodes.RollbackNotRequired;
+            ? ReconciliationReasonCodes.RollbackPerformed
+            : ReconciliationReasonCodes.RollbackNotRequired;
 
         if (rollbackPerformed)
         {

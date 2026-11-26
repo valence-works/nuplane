@@ -6,7 +6,6 @@ using Nuplane.Capabilities;
 using Nuplane.Feeds.Configuration;
 using Nuplane.PackageArchives;
 using Nuplane.Reconciliation.Configuration;
-using Nuplane.Reconciliation.Convergence;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Validation;
 using Nuplane.Setup;
@@ -26,7 +25,6 @@ internal static class NuplaneOptionsRegistrationServices
     private const string LockFileSectionName = "LockFile";
     private const string CleanupPolicySectionName = "CleanupPolicy";
     private const string PackageStoreMaintenanceSectionName = "PackageStoreMaintenance";
-    private const string ConvergenceSectionName = "Convergence";
     private const string DesiredStateSectionName = "DesiredState";
     internal const string StoreRegistrySectionName = "StoreRegistry";
     internal const string CapabilitiesSectionName = "Capabilities";
@@ -40,7 +38,6 @@ internal static class NuplaneOptionsRegistrationServices
         static (services, configuration) => ConfigureBoundOptions<LockFileOptions>(services, configuration, LockFileSectionName),
         static (services, configuration) => ConfigureBoundOptions<CleanupPolicyOptions>(services, configuration, CleanupPolicySectionName),
         static (services, configuration) => ConfigureBoundOptions<PackageStoreMaintenanceOptions>(services, configuration, PackageStoreMaintenanceSectionName),
-        static (services, configuration) => ConfigureBoundOptions<ConvergenceOptions>(services, configuration, ConvergenceSectionName),
         static (services, configuration) => ConfigureBoundOptions<DesiredStateOptions>(services, configuration, DesiredStateSectionName),
         static (services, configuration) => ConfigureBoundOptions<StoreRegistryOptions>(services, configuration, StoreRegistrySectionName),
         static (services, configuration) => ConfigureBoundOptions<PackageArchiveReaderOptions>(services, configuration, PackageArchiveReaderOptions.SectionName),
@@ -56,7 +53,7 @@ internal static class NuplaneOptionsRegistrationServices
         services.AddSingleton<IValidateOptions<LockFileOptions>, LockFileOptionsValidator>();
         services.AddSingleton<IValidateOptions<CleanupPolicyOptions>, CleanupPolicyOptionsValidator>();
         services.AddSingleton<FeedCredentialOptionsValidator>();
-        services.AddSingleton<IValidateOptions<ConvergenceOptions>, ConvergenceOptionsValidator>();
+        services.AddSingleton<IValidateOptions<DesiredStateOptions>, DesiredStateOptionsValidator>();
         services.AddSingleton<IValidateOptions<StoreRegistryOptions>, StoreRegistryOptionsValidator>();
         services.AddSingleton<IValidateOptions<CapabilityOptions>, CapabilityOptionsValidator>();
         services.AddSingleton<IValidateOptions<HostProvidedPackagesOptions>, HostProvidedPackagesOptionsValidator>();
@@ -70,7 +67,6 @@ internal static class NuplaneOptionsRegistrationServices
         services.AddOptions<FeedResolutionOptions>().ValidateOnStart();
         services.AddOptions<LockFileOptions>().ValidateOnStart();
         services.AddOptions<CleanupPolicyOptions>().ValidateOnStart();
-        services.AddOptions<ConvergenceOptions>().ValidateOnStart();
         services.AddOptions<DesiredStateOptions>().ValidateOnStart();
         services.AddOptions<StoreRegistryOptions>().ValidateOnStart();
         services.AddOptions<CapabilityOptions>().ValidateOnStart();
@@ -84,6 +80,12 @@ internal static class NuplaneOptionsRegistrationServices
         services.Replace(ServiceDescriptor.Singleton<INuplaneSetupFeedDeclarationSource>(
             new ConfigurationNuplaneSetupFeedDeclarationSource(setupSection)));
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IPostConfigureOptions<NuplaneSetupOptions>, NuplaneSetupFeedDiagnosticReporter>());
+
+        var retiredSection = GetNamedSectionOrSelf(configuration, "Convergence");
+        services.AddOptions<DesiredStateOptions>().Validate(
+            _ => !retiredSection.Exists(),
+            "Nuplane:Convergence has been removed. Move Nuplane:Convergence:Manifest:Enabled to Nuplane:DesiredState:Manifest:Enabled, "
+            + "move the other Manifest settings to Nuplane:DesiredState:Manifest, and set the poll interval under Nuplane:Reconciliation:PollInterval.");
 
         foreach (var bindOptions in ConfiguredOptionBinders)
         {

@@ -12,7 +12,7 @@ using Nuplane.Hosting;
 using Nuplane.Operational;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Configuration;
-using Nuplane.Reconciliation.Convergence;
+using Nuplane.Sources.Configuration;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Middleware;
 using Nuplane.Reconciliation.Models;
@@ -214,7 +214,7 @@ public sealed partial class CoordinatedReconciliationAdmissionTests
     public async Task EnabledManifestInsideEnrolledInstall_ReadsUnderOriginalOwnerAndPublishesSnapshot()
     {
         using var fixture = await CompletedMembershipFixture.CreateAsync();
-        var options = new ConvergenceOptions();
+        var options = new DesiredStateOptions();
         options.Manifest.Enabled = true;
         options.Manifest.Path = Path.Combine(fixture.SharedInstallPath, "desired.json");
         await File.WriteAllTextAsync(options.Manifest.Path,
