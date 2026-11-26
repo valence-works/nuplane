@@ -23,7 +23,6 @@
          against Nuplane.Loading's own PackageLoadMode/LoadModeScopes. -->
     <InternalsVisibleTo Include="Nuplane.Loading.Tests" />
     <InternalsVisibleTo Include="Nuplane.Loading" />
-    <InternalsVisibleTo Include="Nuplane.Sources.Directory" />
     <!-- Optional Admin projects detached reports over the core-owned maintenance kernels. -->
     <InternalsVisibleTo Include="Nuplane.Admin" />
   </ItemGroup>
