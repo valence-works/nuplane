@@ -97,10 +97,7 @@ internal static class ActivePackageCatalogMapper
         var explicitlyFailedRoots = NormalizeRootIds(explicitlyFailedRootPackageIds, "failed");
         var failedDesiredRoots = desiredRoots.Where(explicitlyFailedRoots.Contains)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var selectedPriorGraphs = (failedDesiredRoots.Count == 0
-                ? PersistedStoreStateGraphVerifier.Verify(currentState)
-                : PersistedStoreStateGraphVerifier.SelectUseLastKnownGood(currentState))
-            .RecoverableGraphs;
+        var selectedPriorGraphs = PersistedStoreStateGraphVerifier.Verify(currentState).RecoverableGraphs;
 
         var selectedRootIdsBySnapshot = new Dictionary<ProtectedGraphSnapshot, HashSet<string>>();
         foreach (var rootPackageId in failedDesiredRoots)
@@ -110,6 +107,15 @@ internal static class ActivePackageCatalogMapper
                     string.Equals(InstallForNode(graph, selection.SelectedNodeId).PackageId,
                         rootPackageId, StringComparison.OrdinalIgnoreCase)))
                 .ToArray();
+            if (candidates.Length == 0 &&
+                (!currentState.ActiveVersionById.ContainsKey(rootPackageId) ||
+                 currentState.ActivePackageDescriptorsByIdNormalized.TryGetValue(rootPackageId, out var activePackage) &&
+                 activePackage.PackageRole == ActivePackageRole.Dependency))
+            {
+                // A failed first activation has no previous requested-root closure to retain.
+                continue;
+            }
+
             if (candidates.Length != 1)
             {
                 throw RetentionRefusal(candidates.Length == 0

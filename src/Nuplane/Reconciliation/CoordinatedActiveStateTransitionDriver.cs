@@ -1,6 +1,7 @@
 using Nuplane.Abstractions;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Operational;
+using Nuplane.Reconciliation.Middleware;
 using Nuplane.Reconciliation.Models;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.PhysicalFiles;
@@ -63,6 +64,32 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
         using var borrow = owner.Borrow();
         _ = await CreateCandidateAsync(borrow, nextActiveVersions, resolvedPackages, changeSet,
             graphSelections, desiredRootPackageIds, failedPackageIds, correlationId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<StoreStateRecord> CreateCandidateForPublicationAsync(
+        PackageStoreOperationOwner owner, ReconciliationCycleContext context)
+    {
+        var resolution = context.ResolutionResult!;
+        var applied = context.ApplyResult!;
+        using var borrow = owner.Borrow();
+        return await CreateCandidateAsync(
+            borrow,
+            context.MergedActive!,
+            applied.AppliedPackages,
+            context.ChangeSet!,
+            applied.SuccessfulGraphSelections,
+            BuildDesiredRootIds(context.DesiredRequests, resolution.ResolvedGraphs, resolution.GraphSelections),
+            BuildFailedPackageIds(resolution.FailedPackageIds, applied.FailedPackageIds),
+            context.CorrelationId,
+            context.CancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task PersistCandidateAsync(
+        PackageStoreOperationOwner owner, StoreStateRecord candidate, CancellationToken cancellationToken)
+    {
+        using var borrow = owner.Borrow();
+        await _stateRegistry.PersistCoordinatedActiveStateAsync(borrow, candidate, cancellationToken)
             .ConfigureAwait(false);
     }
 

@@ -1,6 +1,8 @@
 using Nuplane.Abstractions;
 using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Reconciliation.Middleware;
 using Nuplane.Reconciliation.Models;
+using Nuplane.Store.State;
 
 namespace Nuplane.Reconciliation;
 
@@ -24,6 +26,12 @@ internal interface ICoordinatedActiveStateTransitionDriver
         IReadOnlySet<string> failedPackageIds,
         string correlationId,
         CancellationToken cancellationToken);
+
+    Task<StoreStateRecord> CreateCandidateForPublicationAsync(
+        PackageStoreOperationOwner owner, ReconciliationCycleContext context);
+
+    Task PersistCandidateAsync(
+        PackageStoreOperationOwner owner, StoreStateRecord candidate, CancellationToken cancellationToken);
 
     Task PublishAsync(
         PackageStoreOperationOwner owner,
