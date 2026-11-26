@@ -73,7 +73,10 @@ public sealed class DirectoryNupkgDesiredSource : IScopedDesiredPackageSource,
     }
 
     /// <inheritdoc />
-    public string SourceInstanceId => $"directory:{_feedName ?? _sourceName}";
+    public string SourceInstanceId => _feedName is null ||
+                                      string.Equals(_feedName, _sourceName, StringComparison.OrdinalIgnoreCase)
+        ? $"directory:{_feedName ?? _sourceName}"
+        : $"directory-source:{Uri.EscapeDataString(_feedName)}:{Uri.EscapeDataString(_sourceName)}";
 
     bool ILegacyDesiredPackageSourceSnapshotVerifier.OwnsLegacySnapshot(IReadOnlyList<PackageRequest> requests) =>
         requests.Count > 0 && requests.All(request =>

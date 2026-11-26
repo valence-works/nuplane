@@ -6,8 +6,17 @@ namespace Nuplane.Sources;
 /// <summary>Shared admission checks and scoped reads for desired package sources.</summary>
 internal static class DesiredPackageSourceAccess
 {
-    internal static IReadOnlyList<DesiredPackageSourceEntry> Describe(IEnumerable<IDesiredPackageSource> sources)
+    internal static IReadOnlyList<DesiredPackageSourceEntry> Describe(
+        IEnumerable<IDesiredPackageSource> sources,
+        bool preserveSourceTraversalOrder = false)
     {
+        if (preserveSourceTraversalOrder)
+        {
+            sources = sources
+                .OrderBy(source => GetTypeName(GetOriginalSource(source)), StringComparer.Ordinal)
+                .ThenBy(source => GetOriginalSource(source).ToString() ?? string.Empty, StringComparer.Ordinal);
+        }
+
         var entries = new List<DesiredPackageSourceEntry>();
         foreach (var group in sources.Select(DescribeSource).GroupBy(entry => entry.SnapshotKey, StringComparer.OrdinalIgnoreCase))
         {
@@ -37,14 +46,15 @@ internal static class DesiredPackageSourceAccess
             }
         }
 
-        return entries.OrderBy(entry => entry.DiagnosticName, StringComparer.Ordinal).ToArray();
+        return preserveSourceTraversalOrder
+            ? entries
+            : entries.OrderBy(entry => entry.DiagnosticName, StringComparer.Ordinal).ToArray();
     }
 
     private static DesiredPackageSourceEntry DescribeSource(IDesiredPackageSource source)
     {
-        var identitySource = source is IDesiredPackageSourceAdapter adapter ? adapter.Source : source;
-        var type = identitySource.GetType();
-        var typeName = type.FullName ?? type.Name;
+        var identitySource = GetOriginalSource(source);
+        var typeName = GetTypeName(identitySource);
         if (identitySource is not IIdentifiedDesiredPackageSource identified)
         {
             return new(source, typeName, typeName);
@@ -62,6 +72,12 @@ internal static class DesiredPackageSourceAccess
             LegacySnapshotKey: typeName,
             LegacySnapshotVerifier: identitySource as ILegacyDesiredPackageSourceSnapshotVerifier);
     }
+
+    private static IDesiredPackageSource GetOriginalSource(IDesiredPackageSource source)
+        => source is IDesiredPackageSourceAdapter adapter ? adapter.Source : source;
+
+    private static string GetTypeName(IDesiredPackageSource source)
+        => source.GetType().FullName ?? source.GetType().Name;
 
     internal static void Validate(
         IReadOnlyList<IDesiredPackageSource> sources,

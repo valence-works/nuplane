@@ -82,7 +82,7 @@ public sealed class DesiredStateAggregator : IScopedDesiredStateAggregator
         var collected = new List<PackageRequest>();
         var sourceErrors = new Dictionary<string, Exception>(StringComparer.Ordinal);
 
-        foreach (var entry in DesiredPackageSourceAccess.Describe(sources))
+        foreach (var entry in DesiredPackageSourceAccess.Describe(sources, preserveSourceTraversalOrder: true))
         {
             if (propagateAdmissionRefusals)
                 cancellationToken.ThrowIfCancellationRequested();
