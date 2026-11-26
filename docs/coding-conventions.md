@@ -47,7 +47,7 @@ public signature uses it. First-party modules may share implementation types thr
 | Host-free tooling and package content | `NuplaneRestore`, `NuplaneStore`, `NuplaneHostIntegratedLoader`, `PackageContent`, and `IPackageArchiveReader` |
 | Coordinated stores | Builder participation and root declarations, admitted snapshots, package-store admission and graph-use leases, and the documented session-aware companions for store state, serializers, and callbacks |
 | Host customization | Desired-state sources and contributors, package resolution and acquisition contracts, secret reference providers, operational state contributors, package metadata readers, activation gates, and load-mode advisors |
-| Admin operations | `AddNuplaneAdmin`, `AddNuplanePackageStoreMaintenance`, `INuplaneAdminOperations`, and `INuplanePackageStoreMaintenanceOperations` with their request and result records |
+| Admin operations | `AddNuplaneAdmin`, `AddNuplanePackageStoreMaintenance`, `INuplaneAdminOperations`, and `INuplanePackageStoreMaintenanceOperations` with their request and result records. Hosts can share the registered `ManualReconcileCoordinator` across service providers. |
 
 Resolve these contracts through the documented host registration APIs. Concrete pipeline,
 persistence, observability, and registration classes belong to the implementation. External code

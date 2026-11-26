@@ -430,6 +430,8 @@ Nuplane.Reconciliation.LockFile.LockFileOptions.Path.get -> string!
 Nuplane.Reconciliation.LockFile.LockFileOptions.Path.set -> void
 Nuplane.Reconciliation.LockFile.LockFileOptions.RequireEntryInStrictMode.get -> bool
 Nuplane.Reconciliation.LockFile.LockFileOptions.RequireEntryInStrictMode.set -> void
+Nuplane.Reconciliation.ManualReconcileCoordinator
+Nuplane.Reconciliation.ManualReconcileCoordinator.TriggerAsync(string! correlationId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Nuplane.Reconciliation.ManualReconcileOutcome!>!
 Nuplane.Reconciliation.ManualReconcileOutcome
 Nuplane.Reconciliation.ManualReconcileOutcome.<Clone>$() -> Nuplane.Reconciliation.ManualReconcileOutcome!
 Nuplane.Reconciliation.ManualReconcileOutcome.CorrelationId.get -> string!

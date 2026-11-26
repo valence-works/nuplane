@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Feeds.Configuration;
+using Nuplane.Observability;
 using Nuplane.Operational;
 using Nuplane.Reconciliation;
 using Nuplane.Store.Coordination;
@@ -29,7 +30,10 @@ public static class NuplaneAdminServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddSingleton<OperationalSnapshotProjector>();
-        services.AddSingleton<ManualReconcileCoordinator>();
+        services.AddSingleton(sp => new ManualReconcileCoordinator(
+            sp.GetRequiredService<IReconciliationTriggerIngress>(),
+            sp.GetRequiredService<IReconciliationLogger>(),
+            sp.GetService<ReconciliationMetrics>()));
         services.AddSingleton<INuplaneAdminOperations, NuplaneAdminOperations>();
 
         return services;
