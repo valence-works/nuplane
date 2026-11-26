@@ -98,8 +98,8 @@ This guide points to repository-owned sources for:
 - [`README.md`](../../README.md)
 - [`docs/roadmap.md`](../roadmap.md)
 - [`src/Nuplane/`](../../src/Nuplane/)
-- [`src/Nuplane.Runtime/`](../../src/Nuplane.Runtime/)
-- [`src/Nuplane.Store/`](../../src/Nuplane.Store/)
+- [`src/Nuplane/Reconciliation/`](../../src/Nuplane/Reconciliation/)
+- [`src/Nuplane/Store/`](../../src/Nuplane/Store/)
 - [`src/Nuplane.Loading/`](../../src/Nuplane.Loading/)
 - [`src/Nuplane.Admin.Api/`](../../src/Nuplane.Admin.Api/)
 

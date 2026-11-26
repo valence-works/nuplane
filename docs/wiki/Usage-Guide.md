@@ -528,7 +528,7 @@ The stages a caller can expect, and what each says:
 | `capability-metadata-invalid` | The package's schema-2 `nuplane.json` is invalid. |
 | `capability-contribution-limit` | Contribution rounds did not reach a fixpoint within the bound. |
 | `resolve-feed-unavailable`, `resolve-no-eligible-feed`, `resolve-graph-conflict`, `resolve` | The package itself could not be resolved: the feed could not be reached, no configured feed serves it, or its dependency graph could not be unified. |
-| `lock` | The lock file refused the package; the message is the lock outcome's reason code. |
+| `lock` | The package lock file refused the package; the message is the lock outcome's reason code. |
 | `host-version-unsatisfied` | The package, or a package in its closure, depends on a package declared in `Nuplane:HostProvidedPackages` that the host carries at a version outside the range the dependency requires. The message names the dependent package, the dependency, the required range and the host's version. See [Packages the host already provides](#packages-the-host-already-provides). |
 
 Every `capability-*` stage means the package is on a feed and what is missing is a decision the
@@ -551,7 +551,7 @@ foreach (var request in description.Requests)
 }
 ```
 
-It writes nothing — no install root, no state file, no lock file — and contacts no remote feed. It
+It writes nothing — no install root, no state file, no package lock file — and contacts no remote feed. It
 touches local disk only where a desired source already lives: a directory-backed feed enumerates its
 own `.nupkg` files, and a desired manifest source reads its manifest. A remote feed's requests
 come from its configured include patterns alone, so no service index, version list, or package is
@@ -629,11 +629,11 @@ Retrying is the caller's job. A host with automatic reconciliation enabled retri
 A host whose *startup* cycle is skipped this way starts against whatever the store already records
 and — with automatic reconciliation off, which is the default — does not reconcile again on its own;
 startup is not failed for contention, because that would break rolling restarts of replicas sharing
-one store. The warning naming the lock file is the signal to watch for.
+one store. The warning naming the store lock file is the signal to watch for.
 
 Two cases deliberately do not refuse. An in-memory store has no file to lock and behaves exactly as
-before. A store whose lock file cannot be created or opened at all — a read-only state directory, or
-a lock file this process may not write — is reconciled unprotected with a warning rather than refused,
+before. If the store lock file cannot be created or opened at all — a read-only state directory, or
+a store lock file this process may not write — reconciliation continues unprotected with a warning,
 so a deployment that works today keeps working. Set `EnableStoreLock` to `false` to restore the
 pre-lock behaviour exactly.
 
@@ -707,10 +707,10 @@ The object form says more about the same selection:
 their dependency closure expanded, Nuplane reads `nuplane.json` from each resolved package and turns
 every selected option into an additional **root** package request whose source name is
 `capability:<capability>=<option>`. From there it is an ordinary root: resolved from a trusted feed
-under the same retry policy, evaluated against the lock file, applied in the same transaction,
+under the same retry policy, evaluated against the package lock file, applied in the same transaction,
 recorded in `store-state.json` with `PackageRole = Root` and that source name, reported by
 `NuplaneStore.ReadActivePackagesAsync`, and loaded and discoverable exactly like a root a desired
-source asked for. Nothing bypasses trust, integrity, or the lock file. A dry run includes it,
+source asked for. Nothing bypasses trust, integrity, or the package lock file. A dry run includes it,
 because a dry-run plan is computed from the cycle's own resolved set. An option package that itself
 declares a capability is honoured too: contribution rounds repeat until a round adds nothing,
 bounded at eight rounds. Changing the selection changes the graph, so the next cycle reconciles the
