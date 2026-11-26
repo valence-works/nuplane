@@ -4,6 +4,7 @@
   "Nuplane.Runtime.Tests.Hosting.StartupCycleTests.LastKnownGoodRecovery_WhenRecoveredLoadFails_ReturnsFailure",
   "Nuplane.Runtime.Tests.Hosting.StartupCycleTests.LastKnownGoodRecovery_WhenStaleGraphReferencesMissingPackage_IgnoresStaleGraph",
   "Nuplane.Runtime.Tests.Hosting.StartupCycleTests.NoStartupCycle_WhenAutomaticReconciliationDisabled",
+  "Nuplane.Runtime.Tests.Hosting.StartupCycleTests.PollEvery_ManifestEnabled_SchedulesUsingBuilderInterval",
   "Nuplane.Runtime.Tests.Hosting.StartupCycleTests.PollEvery_RegistersAutomaticReconciliationOptionsAndHostedServices",
   "Nuplane.Runtime.Tests.Hosting.StartupCycleTests.StartupCycleFailurePolicyFailHost_WhenStartupCompletesDegraded_ThrowsStartupException",
   "Nuplane.Runtime.Tests.Hosting.StartupCycleTests.StartupCycleFailurePolicyStartDegraded_WhenStartupCompletesDegraded_DoesNotThrow",

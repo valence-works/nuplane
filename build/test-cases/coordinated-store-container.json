@@ -1,4 +1,4 @@
 [
-  "Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.CoordinatedNameProfile_ContainerTmpfs_IsRefusedWithFilesystemAndProbe",
+  "Nuplane.Integration.Tests.CoordinatedContainerFilesystemTests.CoordinatedNameProfile_ContainerTmpfs_IsRefusedWithFilesystemAndProbe",
   "Nuplane.Integration.Tests.OverlappingPackageGraphProtectionTests.Reconciliation_AcquiresMissingAuthenticatedPackage_NativelyProtectsAndLoadsExactGraph"
 ]

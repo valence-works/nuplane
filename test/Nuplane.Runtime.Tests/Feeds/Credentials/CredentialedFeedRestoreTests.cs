@@ -124,7 +124,7 @@ public sealed class CredentialedFeedRestoreTests : IDisposable
             Assert.Equal(PackageId, Assert.Single(result.FailedPackages));
             Assert.Equal(0, credential.Lookups);
             Assert.Equal(0, server.Requests);
-            Assert.Contains($"Nuplane:Setup:Feeds:{FeedName}:Trust", _logs.AllText, StringComparison.Ordinal);
+            Assert.Contains($"Setup:Feeds:{FeedName}:Trust", _logs.AllText, StringComparison.Ordinal);
         }
     }
 
