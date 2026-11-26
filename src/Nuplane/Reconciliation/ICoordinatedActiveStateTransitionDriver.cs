@@ -14,7 +14,8 @@ internal interface ICoordinatedActiveStateTransitionDriver
         IReadOnlyDictionary<string, string> nextActiveVersions,
         IReadOnlySet<string> desiredRootPackageIds,
         IReadOnlySet<string> failedPackageIds,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        IReadOnlySet<string>? rejectedWhileLoading = null);
 
     Task PreflightAsync(
         PackageStoreOperationOwner owner,

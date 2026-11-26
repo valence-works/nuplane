@@ -40,14 +40,15 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
         IReadOnlyDictionary<string, string> nextActiveVersions,
         IReadOnlySet<string> desiredRootPackageIds,
         IReadOnlySet<string> failedPackageIds,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlySet<string>? rejectedWhileLoading = null)
     {
         ArgumentNullException.ThrowIfNull(owner);
         using var borrow = owner.Borrow();
         var current = await _stateRegistry.ReadCoordinatedStateAsync(borrow, cancellationToken)
             .ConfigureAwait(false);
         return ActivePackageCatalogMapper.RestoreFailedRootSubclosureVersions(
-            current, nextActiveVersions, desiredRootPackageIds, failedPackageIds);
+            current, nextActiveVersions, desiredRootPackageIds, failedPackageIds, rejectedWhileLoading);
     }
 
     public async Task PreflightAsync(
@@ -85,7 +86,8 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
             failedIds,
             context.CorrelationId,
             context.CancellationToken,
-            loadingFailures).ConfigureAwait(false);
+            loadingFailures,
+            context.LoadingRejectedPackageIds).ConfigureAwait(false);
     }
 
     public async Task PersistCandidateAsync(
@@ -125,7 +127,8 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
         IReadOnlySet<string> failedPackageIds,
         string correlationId,
         CancellationToken cancellationToken,
-        IReadOnlyDictionary<string, string>? loadingFailures = null)
+        IReadOnlyDictionary<string, string>? loadingFailures = null,
+        IReadOnlySet<string>? rejectedWhileLoading = null)
         => CoordinatedActiveStateTransitionProducer.CreateCandidateAsync(
             _files,
             _membershipRegistry,
@@ -140,5 +143,6 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
             correlationId,
             DateTimeOffset.UtcNow,
             cancellationToken,
-            loadingFailures);
+            loadingFailures,
+            rejectedWhileLoading);
 }

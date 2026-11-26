@@ -127,7 +127,7 @@ internal sealed class CoordinatedPreActivationCycle : IAsyncDisposable
         // Only the historical closure of roots that remain desired is retained. A concurrently
         // requested removal cannot resurrect an unrelated old root just because an update failed.
         var restored = await driver.RestoreFailedRootSubclosureVersionsAsync(
-            owner, merged, desiredIds, failedIds, cancellationToken).ConfigureAwait(false);
+            owner, merged, desiredIds, failedIds, cancellationToken, rejected).ConfigureAwait(false);
         context.MergedActive = new(restored, StringComparer.OrdinalIgnoreCase);
 
         context.ChangeSet = changeSet with

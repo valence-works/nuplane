@@ -37,7 +37,8 @@ internal static class CoordinatedActiveStateTransitionProducer
         string correlationId,
         DateTimeOffset activatedAtUtc,
         CancellationToken cancellationToken,
-        IReadOnlyDictionary<string, string>? loadingFailures = null)
+        IReadOnlyDictionary<string, string>? loadingFailures = null,
+        IReadOnlySet<string>? rejectedWhileLoading = null)
     {
         ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(membershipRegistry);
@@ -148,7 +149,8 @@ internal static class CoordinatedActiveStateTransitionProducer
                     desiredRoots,
                     failedPackages,
                     incomingGraphs,
-                    incomingInstalls);
+                    incomingInstalls,
+                    rejectedWhileLoading);
                 if (retention.PriorProtectionRevision != priorProtection.Revision ||
                     !string.Equals(retention.PriorProtectionDigest, priorProtection.ProtectionDigest, StringComparison.Ordinal) ||
                     !string.Equals(retention.PriorStateBodyDigest, priorProtection.StateBodyDigest, StringComparison.Ordinal))

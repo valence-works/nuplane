@@ -25,7 +25,8 @@ internal static class ActivePackageCatalogMapper
         IReadOnlySet<string> desiredRootPackageIds,
         IReadOnlySet<string> explicitlyFailedRootPackageIds,
         IReadOnlyList<ResolvedPackageGraph> incomingResolvedGraphs,
-        IReadOnlyList<PackageInstallIdentity> incomingInstallIdentities)
+        IReadOnlyList<PackageInstallIdentity> incomingInstallIdentities,
+        IReadOnlySet<string>? rejectedWhileLoading = null)
     {
         ArgumentNullException.ThrowIfNull(currentState);
         ArgumentNullException.ThrowIfNull(nextActiveVersions);
@@ -35,7 +36,7 @@ internal static class ActivePackageCatalogMapper
         ArgumentNullException.ThrowIfNull(incomingInstallIdentities);
 
         var plan = CreateHistoricalGraphRetentionPlan(
-            currentState, desiredRootPackageIds, explicitlyFailedRootPackageIds);
+            currentState, desiredRootPackageIds, explicitlyFailedRootPackageIds, rejectedWhileLoading);
         var root = currentState.ProtectionRecord!.RootIdentity;
         var normalizedNextActiveVersions = NormalizeNextActiveVersions(nextActiveVersions, root);
         ValidateIncomingOverlap(normalizedNextActiveVersions, incomingResolvedGraphs, incomingInstallIdentities,
@@ -54,11 +55,12 @@ internal static class ActivePackageCatalogMapper
         StoreStateRecord currentState,
         IReadOnlyDictionary<string, string> nextActiveVersions,
         IReadOnlySet<string> desiredRootPackageIds,
-        IReadOnlySet<string> explicitlyFailedRootPackageIds)
+        IReadOnlySet<string> explicitlyFailedRootPackageIds,
+        IReadOnlySet<string>? rejectedWhileLoading = null)
     {
         ArgumentNullException.ThrowIfNull(nextActiveVersions);
         var plan = CreateHistoricalGraphRetentionPlan(
-            currentState, desiredRootPackageIds, explicitlyFailedRootPackageIds);
+            currentState, desiredRootPackageIds, explicitlyFailedRootPackageIds, rejectedWhileLoading);
         var root = currentState.ProtectionRecord!.RootIdentity;
         var restored = new Dictionary<string, string>(
             NormalizeNextActiveVersions(nextActiveVersions, root), StringComparer.OrdinalIgnoreCase);
@@ -85,7 +87,8 @@ internal static class ActivePackageCatalogMapper
     private static HistoricalGraphRetentionPlan CreateHistoricalGraphRetentionPlan(
         StoreStateRecord currentState,
         IReadOnlySet<string> desiredRootPackageIds,
-        IReadOnlySet<string> explicitlyFailedRootPackageIds)
+        IReadOnlySet<string> explicitlyFailedRootPackageIds,
+        IReadOnlySet<string>? rejectedWhileLoading)
     {
         ArgumentNullException.ThrowIfNull(currentState);
         ArgumentNullException.ThrowIfNull(desiredRootPackageIds);
@@ -97,7 +100,20 @@ internal static class ActivePackageCatalogMapper
         var explicitlyFailedRoots = NormalizeRootIds(explicitlyFailedRootPackageIds, "failed");
         var failedDesiredRoots = desiredRoots.Where(explicitlyFailedRoots.Contains)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var selectedPriorGraphs = PersistedStoreStateGraphVerifier.Verify(currentState).RecoverableGraphs;
+        // A rejected, fully admitted first activation has no previous requested-root closure.
+        // Keep the original exact historical requirement for acquisition and apply failures.
+        if (rejectedWhileLoading is not null)
+        {
+            failedDesiredRoots.RemoveWhere(id => rejectedWhileLoading.Contains(id) &&
+                (!currentState.ActiveVersionById.ContainsKey(id) ||
+                 currentState.ActivePackageDescriptorsByIdNormalized.TryGetValue(id, out var package) &&
+                 package.PackageRole == ActivePackageRole.Dependency));
+        }
+
+        var selectedPriorGraphs = (failedDesiredRoots.Count == 0
+                ? PersistedStoreStateGraphVerifier.Verify(currentState)
+                : PersistedStoreStateGraphVerifier.SelectUseLastKnownGood(currentState))
+            .RecoverableGraphs;
 
         var selectedRootIdsBySnapshot = new Dictionary<ProtectedGraphSnapshot, HashSet<string>>();
         foreach (var rootPackageId in failedDesiredRoots)
@@ -107,15 +123,6 @@ internal static class ActivePackageCatalogMapper
                     string.Equals(InstallForNode(graph, selection.SelectedNodeId).PackageId,
                         rootPackageId, StringComparison.OrdinalIgnoreCase)))
                 .ToArray();
-            if (candidates.Length == 0 &&
-                (!currentState.ActiveVersionById.ContainsKey(rootPackageId) ||
-                 currentState.ActivePackageDescriptorsByIdNormalized.TryGetValue(rootPackageId, out var activePackage) &&
-                 activePackage.PackageRole == ActivePackageRole.Dependency))
-            {
-                // A failed first activation has no previous requested-root closure to retain.
-                continue;
-            }
-
             if (candidates.Length != 1)
             {
                 throw RetentionRefusal(candidates.Length == 0
