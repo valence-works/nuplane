@@ -32,6 +32,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <AdditionalFiles Include="PublicAPI.Shipped.txt;PublicAPI.Unshipped.txt" />
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <!-- The container and logging implementations, not only their abstractions, because
          NuplaneRestore composes, drives, and disposes its own throwaway service provider. -->
