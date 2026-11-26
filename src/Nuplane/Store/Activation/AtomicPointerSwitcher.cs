@@ -9,7 +9,7 @@ internal sealed class AtomicPointerSwitcher
     private readonly Dictionary<string, string> _currentByPackage = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Atomically switches the active version pointer for a package.
+    /// Atomically switches the provisional version pointer for a package.
     /// </summary>
     /// <param name="packageId">The package identifier.</param>
     /// <param name="version">The target version.</param>
@@ -44,10 +44,10 @@ internal sealed class AtomicPointerSwitcher
     }
 
     /// <summary>
-    /// Gets the current active version for the specified package.
+    /// Gets the current provisional version for the specified package.
     /// </summary>
     /// <param name="packageId">The package identifier.</param>
-    /// <returns>The current version, or <see langword="null"/> if no version is active.</returns>
+    /// <returns>The current version, or <see langword="null"/> if no version has been set.</returns>
     public string? GetCurrentVersion(string packageId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);

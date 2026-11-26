@@ -123,6 +123,44 @@ public sealed class PackageApplyExecutorTests : IDisposable
     }
 
     [Fact]
+    public async Task ExecuteTransactionsAsync_GraphReusesAnAppliedVersion_PreservesMostRecentPointer()
+    {
+        var original = CreateInstalledPackage("Dependency", "1.0.0");
+        var updated = CreateInstalledPackage("Dependency", "2.0.0");
+        var root = CreateInstalledPackage("Root", "1.0.0", original.Id, "[1.0.0]");
+        var recorder = new RecordingFailureRecorder();
+        var pointers = new AtomicPointerSwitcher();
+        var executor = new PackageApplyExecutor(
+            new RecordingResolver(root), new PackageTransactionCoordinator(pointers, recorder),
+            new PassthroughRetryPolicy(), recorder);
+        var originalNode = CreateNode(original, PackageNodeRole.Root);
+        var updatedNode = CreateNode(updated, PackageNodeRole.Root);
+        var rootNode = CreateNode(root, PackageNodeRole.Root);
+        var now = DateTimeOffset.UtcNow;
+        var resolution = new PackageResolutionResult(
+            [original, updated, root],
+            [],
+            [],
+            [
+                new("first", "first", "net10.0", [originalNode], [originalNode], [], [], now),
+                new("second", "second", "net10.0", [updatedNode], [updatedNode], [], [], now),
+                new("third", "third", "net10.0", [rootNode],
+                    [rootNode, originalNode with { Role = PackageNodeRole.Dependency }], [], [], now)
+            ]);
+
+        var applied = await executor.ExecuteTransactionsAsync(resolution, "corr-reuse", CancellationToken.None);
+
+        Assert.Empty(applied.FailedPackageIds);
+        Assert.Equal([original, updated, root], applied.AppliedPackages);
+        Assert.Equal(updated.Version, pointers.GetCurrentVersion(updated.Id));
+        Assert.Equal(root.Version, pointers.GetCurrentVersion(root.Id));
+
+        static ResolvedPackageNode CreateNode(ResolvedPackage package, PackageNodeRole role) =>
+            new(package.Id, package.Version, role, package.InstallPath, PackageSourceKind.RemoteFeed, package.FeedName,
+                package.PackageContentHash, [], [], []);
+    }
+
+    [Fact]
     public async Task ExecuteTransactionsAsync_InconsistentExplicitGraphSelection_RefusesBeforeApplicationMutation()
     {
         var scenario = await CreateGraphApplyScenarioAsync();

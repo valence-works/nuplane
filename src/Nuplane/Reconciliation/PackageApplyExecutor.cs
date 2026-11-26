@@ -666,6 +666,7 @@ internal sealed class PackageApplyExecutor(
             var graph = resolvedGraphs[graphIndex];
             var resolvedSelection = graphSelections.Length > 0 ? graphSelections[graphIndex] : null;
             var graphApplied = new List<ResolvedPackage>();
+            var preparedVersions = new List<KeyValuePair<string, string>>();
             var graphFailures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var node in graph.Nodes.OrderBy(static node => node.PackageId, StringComparer.OrdinalIgnoreCase))
@@ -690,6 +691,7 @@ internal sealed class PackageApplyExecutor(
                 if (transaction.Succeeded)
                 {
                     graphApplied.Add(resolved);
+                    preparedVersions.Add(KeyValuePair.Create(resolved.Id, resolved.Version));
                 }
                 else
                 {
@@ -701,9 +703,7 @@ internal sealed class PackageApplyExecutor(
 
             if (graphFailures.Count == 0)
             {
-                _transactionCoordinator.PublishPreparedGraph(
-                    graphApplied.Select(static package => KeyValuePair.Create(package.Id, package.Version)),
-                    cancellationToken);
+                _transactionCoordinator.PublishPreparedGraph(preparedVersions, cancellationToken);
                 foreach (var graphPackage in graphApplied)
                 {
                     appliedByKey[BuildKey(graphPackage.Id, graphPackage.Version)] = graphPackage;
