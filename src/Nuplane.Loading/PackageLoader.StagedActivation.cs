@@ -170,7 +170,7 @@ internal sealed partial class PackageLoader
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            var resolved = ResolveGraphPackages(packages);
+            var resolved = _materializer.ResolvePackages(packages);
             if (resolved.ResolutionFailure is not null)
                 throw resolved.ResolutionFailure;
 
@@ -181,7 +181,7 @@ internal sealed partial class PackageLoader
             }
 
             var candidates = mode == PackageLoadMode.HostIntegrated
-                ? BuildHostIntegratedResolutionCandidates(graphKey, resolved.LoadablePackages, sharedPolicy)
+                ? _materializer.BuildResolutionCandidates(graphKey, resolved.LoadablePackages, sharedPolicy)
                 : [];
             return new(packages, projections, graphKey, mode, usesPerPackageContext,
                 resolved, decision, candidates, leaseOwner);
@@ -241,13 +241,13 @@ internal sealed partial class PackageLoader
         try
         {
             var contextKey = usesPerPackageContext ? BuildKey(packages[0].Id, packages[0].Version) : graphKey;
-            var context = CreateGraphLoadContext(contextKey, mode, resolved.LoadablePackages,
+            var context = _materializer.CreateContext(contextKey, mode, resolved.LoadablePackages,
                 packages.Select(static package => package.InstallPath).ToArray(), sharedPolicy, leaseOwner);
             batch.StagedContexts.Add(context);
-            LoadGraphAssemblies(context, resolved.LoadablePackages);
+            PackageGraphMaterializer.LoadAssemblies(context, resolved.LoadablePackages);
             var entries = mode == PackageLoadMode.HostIntegrated
                 ? HostIntegratedAssemblyResolutionCatalog.CreateGraphEntries(graphKey, decision.Selections,
-                    MaterializeHostIntegratedAssemblies(context, resolved.LoadablePackages, sharedPolicy))
+                    _materializer.GetHostIntegratedAssemblies(context, resolved.LoadablePackages, sharedPolicy))
                 : [];
 
             var sessions = resolved.LoadablePackages.Select(package => new PackageLoadSession(
