@@ -44,6 +44,17 @@ internal sealed class HealthAndMetricsMiddleware(
             logger.LogTrigger(context.CorrelationId, triggerType, trigger.ObservedOrigin?.FeedName);
         }
 
+        if (!context.DeferCoordinatedActivation)
+            await PublishCommittedChangesAsync(context).ConfigureAwait(false);
+
+        if (!context.DeferCycleCompletion)
+            CompleteCycle(context);
+
+        await next();
+    }
+
+    internal async Task PublishCommittedChangesAsync(ReconciliationCycleContext context)
+    {
         var changeSet = context.ChangeSet!;
         var applyResult = context.ApplyResult!;
 
@@ -52,18 +63,16 @@ internal sealed class HealthAndMetricsMiddleware(
             await observerEventDispatcher.PublishChangedAsync(changeSet, context.CancellationToken);
         }
 
-        if (context.OrdinaryLoadingResult is { } ordinaryLoading)
-            await ordinaryLoading.PublishAsync(context.MergedActive!, context.CancellationToken).ConfigureAwait(false);
+        if (context.PublishOrdinaryLoadingAsync is { } publishLoading)
+            await publishLoading(context.MergedActive!, context.CancellationToken).ConfigureAwait(false);
 
         if (applyResult.AppliedPackages.Count > 0 || changeSet.Removed.Count > 0)
         {
-            await observerEventDispatcher.PublishReconciledAsync(changeSet, applyResult.AppliedPackages, context.CancellationToken);
+            if (context.PublishOrdinaryLoadingAsync is not null && observerEventDispatcher is ObserverEventDispatcher dispatcher)
+                await dispatcher.PublishReconciledAfterOrdinaryLoadingAsync(changeSet, applyResult.AppliedPackages, context.CancellationToken);
+            else
+                await observerEventDispatcher.PublishReconciledAsync(changeSet, applyResult.AppliedPackages, context.CancellationToken);
         }
-        
-        if (!context.DeferCycleCompletion)
-            CompleteCycle(context);
-
-        await next();
     }
 
     internal void CompleteCycle(ReconciliationCycleContext context)
@@ -76,7 +85,7 @@ internal sealed class HealthAndMetricsMiddleware(
         var applyResult = context.ApplyResult!;
         var loaderFailedIds = (cycleFailureContributor?.TakeFailedPackageIds(context.CorrelationId) ?? [])
             .Concat(context.DeferredLoadingFailedPackageIds)
-            .Concat(context.OrdinaryLoadingResult?.Failures.Keys ?? [])
+            .Concat(context.LoadingRejectedPackageIds)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var hadFailures = context.ReadResult!.UsedFallback || applyResult.FailedPackageIds.Count > 0

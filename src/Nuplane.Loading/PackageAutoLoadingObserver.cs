@@ -15,7 +15,8 @@ namespace Nuplane.Loading;
 /// packages are loaded into Assembly Load Contexts, and dispatches loading-domain events.
 /// </summary>
 internal sealed class PackageAutoLoadingObserver :
-    IScopedNuplaneObserver, ILeasedPackageGraphRecoveryLoadingObserver, IOrdinaryPackageLoadingActivation
+    IScopedNuplaneObserver, ILeasedPackageGraphRecoveryLoadingObserver, IOrdinaryPackageLoadingActivation,
+    ICoordinatedPackageLoadingActivation
 {
     private readonly IPackageLoader _loader;
     private readonly IScopedPackageLoader? _scopedLoader;
@@ -122,35 +123,81 @@ internal sealed class PackageAutoLoadingObserver :
         await PublishOrdinaryLoadResultAsync(loadResult, inertPackageCount, changeSet.CorrelationId, ct);
     }
 
-    async Task<OrdinaryPackageLoadingResult?> IOrdinaryPackageLoadingActivation.PrepareAsync(
+    async Task<PackageLoadingPreparation?> IOrdinaryPackageLoadingActivation.PrepareAsync(
         IReadOnlyList<ResolvedPackage> packages,
         StoreStateRecord candidate,
         string correlationId,
         CancellationToken cancellationToken)
     {
-        if (_requiresGraphUseLease || !_loadingOptions.Enabled)
-            return null;
-
-        var packagesToLoad = BuildPackagesToLoad(packages);
-        if (packagesToLoad.Count == 0)
+        if (_requiresGraphUseLease || !_loadingOptions.Enabled || _loader is not PackageLoader loader)
             return null;
 
         var (graphs, inertCount) = SelectGraphsRequiringLoad(
-            PackageGraphGrouping.ForActiveState(packagesToLoad, candidate), correlationId);
-        var result = await LoadOrdinaryGraphsAsync(graphs, correlationId, cancellationToken);
-        await RecordOrdinaryLoadFailuresAsync(result, correlationId, cancellationToken);
+            PackageGraphGrouping.ForActiveState(packages, candidate), correlationId);
+        if (graphs.Count == 0)
+            return null;
 
-        return new(result.FailedByPackageId, (activeVersions, token) =>
+        var currentSessions = new HashSet<PackageLoadSession>(loader.Sessions.Values, ReferenceEqualityComparer.Instance);
+        RecordLoadAttempts(graphs.Sum(static graph => graph.Count));
+
+        var batch = await loader.StageOrdinaryGraphsAsync(graphs, CreateSharedPolicy(), cancellationToken);
+        try
         {
-            var committed = result.Loaded.Where(session =>
-                activeVersions.TryGetValue(session.PackageId, out var version) &&
-                StringComparer.OrdinalIgnoreCase.Equals(version, session.Version)).ToArray();
+            await RecordOrdinaryLoadFailuresAsync(batch.Result, correlationId, cancellationToken);
+            return CreatePreparation(loader, batch, currentSessions, inertCount, correlationId);
+        }
+        catch
+        {
+            batch.Dispose();
+            throw;
+        }
+    }
+
+    bool ICoordinatedPackageLoadingActivation.Enabled => _requiresGraphUseLease && _loadingOptions.Enabled;
+
+    async Task<PackageLoadingPreparation> ICoordinatedPackageLoadingActivation.StageAsync(
+        LeasedPackageGraphLoadingHandoff handoff,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(handoff);
+        if (!_requiresGraphUseLease || !_loadingOptions.Enabled || _loader is not PackageLoader loader)
+        {
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                "Preparing coordinated activation requires the enabled lease-bound package loader.");
+        }
+
+        var currentSessions = new HashSet<PackageLoadSession>(loader.Sessions.Values, ReferenceEqualityComparer.Instance);
+        var graphs = handoff.GraphSelections.Select(static selection => new ScopedResolvedPackageGraph(
+            selection.Graph, selection.Packages, selection.RootRequests, selection.LeaseOwner)).ToArray();
+        RecordLoadAttempts(graphs.Sum(static graph => graph.Packages.Count));
+        var batch = await loader.StageLeasedGraphsAsync(graphs, CreateSharedPolicy(), cancellationToken).ConfigureAwait(false);
+        return CreatePreparation(loader, batch, currentSessions, inertCount: 0, handoff.ChangeSet.CorrelationId);
+    }
+
+    private PackageLoadingPreparation CreatePreparation(
+        PackageLoader loader,
+        PackageLoader.OrdinaryLoadBatch batch,
+        HashSet<PackageLoadSession> currentSessions,
+        int inertCount,
+        string correlationId)
+    {
+        var result = batch.Result;
+        return new(result.FailedByPackageId, batch.ValidateForCommit, batch.Commit, batch, (activeVersions, token) =>
+        {
+            var committed = result.Loaded.Where(session => !currentSessions.Contains(session)
+                && activeVersions.TryGetValue(session.PackageId, out var version)
+                && StringComparer.OrdinalIgnoreCase.Equals(version, session.Version)
+                && loader.Sessions.TryGetValue(BuildKey(session.PackageId, session.Version), out var published)
+                && ReferenceEquals(session, published)).ToArray();
             return PublishOrdinaryLoadResultAsync(result with { Loaded = committed }, inertCount, correlationId, token);
         });
     }
 
-    void IOrdinaryPackageLoadingActivation.DiscardInactiveLoads(IReadOnlyDictionary<string, string> activeVersions)
-        => _loader.UnloadContextsNotActive(activeVersions);
+    private void RecordLoadAttempts(int count)
+    {
+        for (var i = 0; i < count; i++)
+            Metrics?.RecordLoadAttemptStarted();
+    }
 
     private async Task<PackageLoadResult> LoadOrdinaryGraphsAsync(
         IReadOnlyList<IReadOnlyList<ResolvedPackage>> packageGraphs,
@@ -167,17 +214,14 @@ internal sealed class PackageAutoLoadingObserver :
             graphPackageCount,
             correlationId);
 
-        for (var i = 0; i < graphPackageCount; i++)
-        {
-            Metrics?.RecordLoadAttemptStarted();
-        }
+        RecordLoadAttempts(graphPackageCount);
 
-        var sharedPolicy = _loadingOptions.SharedAssemblies
-            .Select(x => new SharedAssemblyPolicyEntry(x.Name, x.PublicKeyToken, x.MajorVersion))
-            .ToArray();
-
-        return await _loader.EnsureGraphLoadedAsync(packageGraphs, sharedPolicy, cancellationToken);
+        return await _loader.EnsureGraphLoadedAsync(packageGraphs, CreateSharedPolicy(), cancellationToken);
     }
+
+    private SharedAssemblyPolicyEntry[] CreateSharedPolicy() => _loadingOptions.SharedAssemblies
+        .Select(static entry => new SharedAssemblyPolicyEntry(entry.Name, entry.PublicKeyToken, entry.MajorVersion))
+        .ToArray();
 
     private async Task RecordOrdinaryLoadFailuresAsync(
         PackageLoadResult loadResult, string correlationId, CancellationToken cancellationToken)

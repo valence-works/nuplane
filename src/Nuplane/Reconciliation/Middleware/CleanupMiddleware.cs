@@ -20,6 +20,13 @@ internal sealed class CleanupMiddleware(
     {
         var applyResult = context.ApplyResult!;
         var changeSet = context.ChangeSet ?? new([], [], [], context.CorrelationId, DateTimeOffset.UtcNow);
+        if (context.DeferCoordinatedActivation && (applyResult.AppliedPackages.Count > 0 || changeSet.Removed.Count > 0))
+        {
+            await next();
+            return;
+        }
+
+        context.DeferCoordinatedActivation = false;
         var activatedAtUtc = DateTimeOffset.UtcNow;
         var resolvedGraphs = context.ResolutionResult?.ResolvedGraphs ?? [];
         if (context.PackageStoreOwner is { } owner && transitionDriver is not null)
@@ -52,61 +59,54 @@ internal sealed class CleanupMiddleware(
             var failedPackageIds = CoordinatedActiveStateTransitionDriver.BuildFailedPackageIds(
                 context.ResolutionResult?.FailedPackageIds ?? [], applyResult.FailedPackageIds);
             var candidate = ProjectOrdinaryState();
-            var prepareLoading = ordinaryLoadingActivation is not null && applyResult.AppliedPackages.Count > 0;
+            using var loading = ordinaryLoadingActivation is not null && applyResult.AppliedPackages.Count > 0
+                ? await ordinaryLoadingActivation.PrepareAsync(
+                    applyResult.AppliedPackages, candidate, context.CorrelationId, context.CancellationToken)
+                    .ConfigureAwait(false)
+                : null;
 
-            try
+            if (loading is { Failures.Count: > 0 })
             {
-                if (prepareLoading)
+                var rejected = FindRejectedGraphMembers(loading.Failures.Keys, priorState, candidate);
+                context.LoadingRejectedPackageIds = rejected;
+                failedPackageIds.UnionWith(rejected);
+
+                foreach (var id in rejected)
                 {
-                    context.OrdinaryLoadingResult = await ordinaryLoadingActivation!.PrepareAsync(
-                        applyResult.AppliedPackages, candidate, context.CorrelationId, context.CancellationToken)
-                        .ConfigureAwait(false);
-
-                    if (context.OrdinaryLoadingResult is { Failures.Count: > 0 } loading)
-                    {
-                        var rejected = FindRejectedGraphMembers(loading.Failures.Keys, priorState, candidate);
-                        failedPackageIds.UnionWith(rejected);
-
-                        foreach (var id in rejected)
-                        {
-                            if (priorState.ActiveVersionById.TryGetValue(id, out var previousVersion))
-                                context.MergedActive![id] = previousVersion;
-                            else
-                                context.MergedActive!.Remove(id);
-                        }
-
-                        changeSet = changeSet with
-                        {
-                            Added = changeSet.Added.Where(package => !rejected.Contains(package.Id)).ToArray(),
-                            Updated = changeSet.Updated.Where(package => !rejected.Contains(package.Id)).ToArray(),
-                            Removed = changeSet.Removed.Where(id => !rejected.Contains(id)).ToArray()
-                        };
-                        context.ChangeSet = changeSet;
-                        applyResult = applyResult with
-                        {
-                            AppliedPackages = applyResult.AppliedPackages.Where(package => !rejected.Contains(package.Id)).ToArray()
-                        };
-                        context.ApplyResult = applyResult;
-                        resolvedGraphs = resolvedGraphs.Where(graph => !graph.Nodes.Any(node => rejected.Contains(node.PackageId))).ToArray();
-                        candidate = ProjectOrdinaryState();
-                        ordinaryLoadingActivation.DiscardInactiveLoads(context.MergedActive!);
-                    }
+                    if (priorState.ActiveVersionById.TryGetValue(id, out var previousVersion))
+                        context.MergedActive![id] = previousVersion;
+                    else
+                        context.MergedActive!.Remove(id);
                 }
 
-                await storeRegistry.PersistActiveVersionsAsync(
-                    context.MergedActive!,
-                    desiredActualDiffEngine.BuildNextActiveVersions(applyResult.AppliedPackages),
-                    context.CorrelationId,
-                    context.CancellationToken,
-                    candidate.ActivePackageDescriptorsById,
-                    candidate.ActiveGraphsById).ConfigureAwait(false);
+                changeSet = changeSet with
+                {
+                    Added = changeSet.Added.Where(package => !rejected.Contains(package.Id)).ToArray(),
+                    Updated = changeSet.Updated.Where(package => !rejected.Contains(package.Id)).ToArray(),
+                    Removed = changeSet.Removed.Where(id => !rejected.Contains(id)).ToArray()
+                };
+                context.ChangeSet = changeSet;
+                applyResult = applyResult with
+                {
+                    AppliedPackages = applyResult.AppliedPackages.Where(package => !rejected.Contains(package.Id)).ToArray()
+                };
+                context.ApplyResult = applyResult;
+                resolvedGraphs = resolvedGraphs.Where(graph => !graph.Nodes.Any(node => rejected.Contains(node.PackageId))).ToArray();
+                candidate = ProjectOrdinaryState();
             }
-            catch
-            {
-                if (prepareLoading)
-                    ordinaryLoadingActivation!.DiscardInactiveLoads(priorState.ActiveVersionById);
 
-                throw;
+            loading?.ValidateForCommit(candidate.ActivePackageDescriptorsByIdNormalized.Values.ToArray());
+            await storeRegistry.PersistActiveVersionsAsync(
+                context.MergedActive!,
+                desiredActualDiffEngine.BuildNextActiveVersions(applyResult.AppliedPackages),
+                context.CorrelationId,
+                context.CancellationToken,
+                candidate.ActivePackageDescriptorsById,
+                candidate.ActiveGraphsById).ConfigureAwait(false);
+            if (loading is not null)
+            {
+                loading.Commit();
+                context.PublishOrdinaryLoadingAsync = loading.PublishAsync;
             }
 
             StoreStateRecord ProjectOrdinaryState()
@@ -119,13 +119,19 @@ internal sealed class CleanupMiddleware(
                     context.CorrelationId, activatedAtUtc, resolvedGraphs, activeGraphs);
                 return priorState with
                 {
-                    ActiveVersionById = context.MergedActive!,
+                    ActiveVersionById = new(context.MergedActive!, StringComparer.OrdinalIgnoreCase),
                     ActivePackageDescriptorsById = new(activePackages, StringComparer.OrdinalIgnoreCase),
                     ActiveGraphsById = new(activeGraphs, StringComparer.OrdinalIgnoreCase)
                 };
             }
         }
 
+        await CleanupCommittedAsync(context).ConfigureAwait(false);
+        await next();
+    }
+
+    internal async Task CleanupCommittedAsync(ReconciliationCycleContext context)
+    {
         var storeState = await storeRegistry.GetStateAsync(context.CancellationToken).ConfigureAwait(false);
         var cleanupInputs = context.MergedActive!
             .Select(x => new PackageVersionEntry(
@@ -140,13 +146,11 @@ internal sealed class CleanupMiddleware(
             cleanupInputs,
             cleanupPolicyOptions,
             context.CorrelationId,
-            triggerOnSuccessfulReconciliation: applyResult.FailedPackageIds.Count == 0
-                && context.OrdinaryLoadingResult is not { Failures.Count: > 0 },
+            triggerOnSuccessfulReconciliation: context.ApplyResult!.FailedPackageIds.Count == 0
+                && context.LoadingRejectedPackageIds.Count == 0,
             context.CancellationToken);
         metrics.RecordCleanup(cleanupResults);
         context.CleanupFailureCount = cleanupResults.Count(x => x.Action == CleanupAction.Blocked);
-
-        await next();
     }
 
     private static HashSet<string> FindRejectedGraphMembers(

@@ -38,14 +38,18 @@ internal static class HostFreeRestoreTestSupport
     /// Writes a loadable package with an explicit ID so the same fixture can publish multiple versions.
     /// </summary>
     public static PackageFixture WriteNupkgForId(
-        string feedDirectory, string packageId, string version, string? metadata = null)
+        string feedDirectory,
+        string packageId,
+        string version,
+        string? metadata = null,
+        PackageFixture? dependency = null)
     {
         Directory.CreateDirectory(feedDirectory);
 
         using var buffer = new MemoryStream();
         using (var archive = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
         {
-            WriteNuspec(archive, packageId, version);
+            WriteNuspec(archive, packageId, version, dependency);
             WriteAssembly(archive, packageId);
 
             if (metadata is not null)
@@ -69,8 +73,17 @@ internal static class HostFreeRestoreTestSupport
         || AppDomain.CurrentDomain.GetAssemblies()
             .Any(assembly => string.Equals(assembly.GetName().Name, package.PackageId, StringComparison.Ordinal));
 
-    private static void WriteNuspec(ZipArchive archive, string packageId, string version)
+    private static void WriteNuspec(ZipArchive archive, string packageId, string version, PackageFixture? dependency)
     {
+        var dependencies = dependency is null
+            ? string.Empty
+            : $"""
+                <dependencies>
+                  <group targetFramework="net8.0">
+                    <dependency id="{dependency.PackageId}" version="[{dependency.Version}]" />
+                  </group>
+                </dependencies>
+                """;
         using var writer = new StreamWriter(archive.CreateEntry($"{packageId}.nuspec").Open(), Encoding.UTF8);
         writer.Write($"""
             <?xml version="1.0" encoding="utf-8"?>
@@ -80,6 +93,7 @@ internal static class HostFreeRestoreTestSupport
                 <version>{version}</version>
                 <authors>test</authors>
                 <description>Host-free restore fixture</description>
+              {dependencies}
               </metadata>
             </package>
             """);

@@ -192,8 +192,7 @@ This is the version your host should treat as the current runtime target.
 
 ### Last-known-good (LKG)
 
-The most recent version Nuplane successfully applied for a package.
-If a future update fails, Nuplane can preserve the LKG state rather than leaving the system half-updated.
+The most recent version Nuplane successfully applied for a package. With automatic loading enabled, a replacement graph must load before it becomes the active and last-known-good graph. If loading fails, Nuplane keeps the previous graph and reports a degraded cycle.
 
 ### Observer
 

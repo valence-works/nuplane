@@ -290,6 +290,7 @@ internal sealed class ReconciliationService : IReconciliationService
 
         var cycleLockHeld = false;
         var graphUseOwners = new List<PackageGraphUseLeaseOwner>();
+        CoordinatedPreActivationCycle? activationCycle = null;
         Exception? operationFailure = null;
         string? cycleFailureCorrelationId = null;
         var cycleFailuresDrained = false;
@@ -313,9 +314,10 @@ internal sealed class ReconciliationService : IReconciliationService
             };
             HealthAndMetricsMiddleware? completionMiddleware = null;
             LeasedPackageGraphLoadingHandoff? loadingHandoff = null;
+            var stagedLoading = _leasedPackageGraphLoadingObserver as ICoordinatedPackageLoadingActivation;
 
-            // Phase A owns root admission and StoreLock only while reading, resolving, applying,
-            // publishing state and publishing graph-use owners. Both scopes end before phase B.
+            // Resolve and admit the exact candidate under short ownership. When loading is
+            // staged, state publication waits until a fresh admission has checked the result.
             var rootAdmission = _coordinatedParticipantRoute
                 ? await (_packageStoreAdmission ?? throw new PackageStoreAdmissionException(
                     PackageStoreAdmissionReason.UnsupportedParticipant,
@@ -382,10 +384,20 @@ internal sealed class ReconciliationService : IReconciliationService
                 context.DeferCycleCompletion = owner is not null &&
                     (_leasedPackageGraphLoadingObserver is not null ||
                      _postLoadingObserverEventDispatcher?.HasPostLoadingObservers == true);
+                context.DeferCoordinatedActivation = owner is not null && stagedLoading?.Enabled == true;
                 await pipeline.ExecuteAsync(context).ConfigureAwait(false);
                 cycleFailuresDrained = context.Result is not null;
 
-                if (context.DeferCycleCompletion && _leasedPackageGraphLoadingObserver is not null &&
+                if (context.DeferCoordinatedActivation)
+                {
+                    var acquisition = _graphUseLeaseAcquisition
+                        ?? throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnsupportedParticipant,
+                            "Coordinated activation requires native graph-use acquisition.", owner!.Root);
+                    activationCycle = await CoordinatedPreActivationCycle.PrepareAsync(
+                        owner!, (ICoordinatedStoreRegistry)_storeRegistry, acquisition, context, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                else if (context.DeferCycleCompletion && _leasedPackageGraphLoadingObserver is not null &&
                     HasReconciledPublication(context))
                 {
                     IReadOnlyList<ResolvedPackageGraphSelection> successfulSelections = context.ApplyResult!.AppliedPackages.Count > 0
@@ -426,6 +438,15 @@ internal sealed class ReconciliationService : IReconciliationService
                             []);
                     }
                 }
+            }
+
+            if (activationCycle is not null)
+            {
+                using var preparation = await stagedLoading!.StageAsync(activationCycle.Handoff, cancellationToken)
+                    .ConfigureAwait(false);
+                await CommitCoordinatedActivationAsync(activationCycle, context, preparation, cancellationToken)
+                    .ConfigureAwait(false);
+                await preparation.PublishAsync(context.MergedActive!, cancellationToken).ConfigureAwait(false);
             }
 
             if (context.DeferCycleCompletion)
@@ -520,6 +541,12 @@ internal sealed class ReconciliationService : IReconciliationService
                 catch (Exception exception) { cleanupFailures.Add(exception); }
             }
 
+            if (activationCycle is not null)
+            {
+                try { await activationCycle.DisposeAsync().ConfigureAwait(false); }
+                catch (Exception exception) { cleanupFailures.Add(exception); }
+            }
+
             if (cycleLockHeld)
             {
                 try { _cycleLock.Release(); }
@@ -538,6 +565,49 @@ internal sealed class ReconciliationService : IReconciliationService
                     cleanupFailures);
             }
         }
+    }
+
+    private async Task CommitCoordinatedActivationAsync(
+        CoordinatedPreActivationCycle cycle,
+        ReconciliationCycleContext context,
+        PackageLoadingPreparation preparation,
+        CancellationToken cancellationToken)
+    {
+        await using var admission = await _packageStoreAdmission!.AcquireConfiguredRootOperationAsync(
+            PackageStoreAdmissionKind.Reconciliation, cancellationToken).ConfigureAwait(false);
+        var owner = admission.Status == PackageStoreAdmissionStatus.Enrolled ? admission.Owner : null;
+        if (owner is null)
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.UnknownAuthority,
+                "The package store no longer has coordinated admission for activation.", admission.Root);
+
+        using var storeLock = _storeLock?.Acquire() ?? StoreLockHandle.NotRequired();
+        if (!storeLock.CanProceed)
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                "The package store lock could not be reacquired to commit the prepared activation.", owner.Root);
+
+        context.PackageStoreOwner = owner;
+        var registry = (ICoordinatedStoreRegistry)_storeRegistry;
+        var driver = _pipelineDefinition.TransitionDriver!;
+        await cycle.ReadUnchangedStateAsync(owner, registry, cancellationToken).ConfigureAwait(false);
+        await cycle.ApplyFailuresAsync(owner, driver, context, preparation.Failures, cancellationToken).ConfigureAwait(false);
+        var candidate = await driver.CreateCandidateForPublicationAsync(owner, context).ConfigureAwait(false);
+        cycle.ValidatePreparedInstalls(candidate, context.ApplyResult!.SuccessfulGraphSelections);
+        preparation.ValidateForCommit(candidate.ActivePackageDescriptorsByIdNormalized.Values.ToArray());
+        await driver.PersistCandidateAsync(owner, candidate, cancellationToken).ConfigureAwait(false);
+        preparation.Commit();
+
+        using (var borrow = owner.Borrow())
+        {
+            foreach (var (packageId, reason) in preparation.Failures)
+            {
+                await registry.PersistCoordinatedFailureAsync(
+                    borrow, packageId, "load", reason, context.CorrelationId, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        var (cleanup, events) = _pipelineDefinition.CoordinatedCompletion(owner);
+        await cleanup.CleanupCommittedAsync(context).ConfigureAwait(false);
+        await events.PublishCommittedChangesAsync(context).ConfigureAwait(false);
     }
 
     private static bool HasReconciledPublication(ReconciliationCycleContext context) =>
@@ -706,6 +776,15 @@ internal sealed class ReconciliationPipelineDefinition
     internal IDryRunPlanner DryRunPlanner => _dryRunPlanner;
     internal ILockFileCoordinator LockFileCoordinator => _lockFileCoordinator;
     internal IReconciliationRetryPolicy RetryPolicy => _retryPolicy;
+    internal ICoordinatedActiveStateTransitionDriver? TransitionDriver => _transitionDriver;
+
+    internal (CleanupMiddleware Cleanup, HealthAndMetricsMiddleware Events) CoordinatedCompletion(PackageStoreOperationOwner owner)
+    {
+        var registry = CoordinatedReconciliationAdapters.BindStoreRegistry(StoreRegistry, owner);
+        var dispatcher = CoordinatedReconciliationAdapters.BindObserverEventDispatcher(ObserverEventDispatcher, owner);
+        return (new(_desiredActualDiffEngine, registry, PackageCleanupService, _cleanupPolicyOptions, _metrics),
+            CreateHealthAndMetricsMiddleware(dispatcher));
+    }
 
     internal ReconciliationPipeline Create(
         PackageStoreOperationOwner? owner,
@@ -747,9 +826,12 @@ internal sealed class ReconciliationPipelineDefinition
             _transitionDriver));
         pipeline.Use(new CleanupMiddleware(_desiredActualDiffEngine, registry, PackageCleanupService,
             _cleanupPolicyOptions, _metrics, _transitionDriver, owner is null ? _ordinaryLoadingActivation : null));
-        healthAndMetricsMiddleware = new HealthAndMetricsMiddleware(_healthEvaluator, dispatcher, _logger, _metrics,
-            _feedResolutionOptions, _observationDegradationTracker, CycleFailureContributor, _startupRecoveryState);
+        healthAndMetricsMiddleware = CreateHealthAndMetricsMiddleware(dispatcher);
         pipeline.Use(healthAndMetricsMiddleware);
         return pipeline;
     }
+
+    private HealthAndMetricsMiddleware CreateHealthAndMetricsMiddleware(IObserverEventDispatcher dispatcher)
+        => new(_healthEvaluator, dispatcher, _logger, _metrics, _feedResolutionOptions,
+            _observationDegradationTracker, CycleFailureContributor, _startupRecoveryState);
 }
