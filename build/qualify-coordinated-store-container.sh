@@ -3,6 +3,7 @@ set -euo pipefail
 
 filesystem=${1:?Expected overlay, ext4, or xfs}
 results=${2:?Expected an owned results directory}
+sdk_version=$(python3 -c 'import json; print(json.load(open("global.json"))["sdk"]["version"])')
 mkdir -p "$results"
 results=$(cd "$results" && pwd)
 mount_args=()
@@ -37,7 +38,7 @@ docker run --rm \
   --env "TMPDIR=$container_root" \
   --env "NUPLANE_EXPECT_FILESYSTEM_MAGIC=$expected_magic" \
   --env NUPLANE_COORDINATED_CONTAINER_TEST=1 \
-  mcr.microsoft.com/dotnet/sdk:10.0 bash -c '
+  "mcr.microsoft.com/dotnet/sdk:$sdk_version" bash -c '
     set -euo pipefail
     mkdir -p /work "$TMPDIR"
     test "$(stat -f -c %t "$TMPDIR")" = "$NUPLANE_EXPECT_FILESYSTEM_MAGIC"

@@ -1494,6 +1494,11 @@ jobs:
       - name: Install the TRX verifier's Python
         run: apt-get update -qq && apt-get install -y -qq python3
 
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
       # The workspace is a bind mount from the runner; /var/tmp is the container's own overlayfs layer.
       - name: Qualify the reader on the container's writable layer
         shell: bash
