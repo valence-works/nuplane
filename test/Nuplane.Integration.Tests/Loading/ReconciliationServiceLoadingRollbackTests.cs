@@ -124,40 +124,47 @@ public sealed class ReconciliationServiceLoadingRollbackTests : IDisposable
     }
 
     [Fact]
-    public async Task TriggerAsync_RefusedGraph_PreservesDependencySessionAndPublishesIndependentUpdate()
+    public async Task TriggerAsync_OneRootCannotLoad_PreservesWholeGraphUntilHealthyUpdate()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var cancellationToken = timeout.Token;
         var dependency = HostFreeRestoreTestSupport.WriteNupkgForId(FeedPath, $"{_packageId}.Dependency", InitialVersion);
-        var independentId = $"{_packageId}.Independent";
+        var additionalRootId = $"{_packageId}.AdditionalRoot";
         Publish(InitialVersion, dependency);
-        HostFreeRestoreTestSupport.WriteNupkgForId(FeedPath, independentId, InitialVersion);
-        using var host = BuildHost(additionalRoot: independentId);
+        HostFreeRestoreTestSupport.WriteNupkgForId(FeedPath, additionalRootId, InitialVersion);
+        using var host = BuildHost(additionalRoot: additionalRootId);
         await host.StartAsync(cancellationToken);
 
         try
         {
             var before = await NuplaneStore.ReadStateAsync(StatePath, cancellationToken);
             var previousGraph = AssertPersistedVersion(before, InitialVersion);
+            var previousAdditionalRootGraph = AssertPersistedVersion(before, InitialVersion, additionalRootId);
+            Assert.Equal(previousGraph.GraphId, previousAdditionalRootGraph.GraphId);
+            Assert.Equal(previousGraph.GenerationId, previousAdditionalRootGraph.GenerationId);
             var previousDependency = before.ActivePackageDescriptorsByIdNormalized[dependency.PackageId];
             Assert.Equal(previousGraph.GraphId, previousDependency.GraphId);
             Assert.Equal(previousGraph.GenerationId, previousDependency.GraphGenerationId);
             var previousRootAssembly = await AssertLoadedVersionAsync(host, InitialVersion, cancellationToken);
+            var previousAdditionalAssembly = await AssertLoadedVersionAsync(
+                host, InitialVersion, cancellationToken, additionalRootId);
             var loader = host.Services.GetRequiredService<PackageLoader>();
             Assert.True(loader.TryGetContext(dependency.PackageId, InitialVersion, out var previousDependencyContext));
             Assert.NotNull(previousDependencyContext);
 
             Publish(RefusedVersion, dependency);
-            HostFreeRestoreTestSupport.WriteNupkgForId(FeedPath, independentId, HealthyUpdateVersion);
+            HostFreeRestoreTestSupport.WriteNupkgForId(FeedPath, additionalRootId, HealthyUpdateVersion);
             var result = await TriggerAsync(host, cancellationToken);
 
             Assert.True(result.IsDegraded);
             Assert.Contains(_packageId, result.FailedPackages);
-            Assert.DoesNotContain(independentId, result.FailedPackages);
             var after = await NuplaneStore.ReadStateAsync(StatePath, cancellationToken);
             var retainedGraph = AssertPersistedVersion(after, InitialVersion);
             Assert.Equal(previousGraph.GraphId, retainedGraph.GraphId);
             Assert.Equal(previousGraph.GenerationId, retainedGraph.GenerationId);
+            var retainedAdditionalRootGraph = AssertPersistedVersion(after, InitialVersion, additionalRootId);
+            Assert.Equal(retainedGraph.GraphId, retainedAdditionalRootGraph.GraphId);
+            Assert.Equal(retainedGraph.GenerationId, retainedAdditionalRootGraph.GenerationId);
             Assert.Equal(InitialVersion, after.LastKnownGoodById[dependency.PackageId]);
             Assert.Equal(InitialVersion, after.ActiveVersionById[dependency.PackageId]);
             var retainedDependency = after.ActivePackageDescriptorsByIdNormalized[dependency.PackageId];
@@ -165,12 +172,25 @@ public sealed class ReconciliationServiceLoadingRollbackTests : IDisposable
             Assert.Equal(previousDependency.GraphId, retainedDependency.GraphId);
             Assert.Equal(previousDependency.GraphGenerationId, retainedDependency.GraphGenerationId);
             Assert.Same(previousRootAssembly, await AssertLoadedVersionAsync(host, InitialVersion, cancellationToken));
+            Assert.Same(previousAdditionalAssembly, await AssertLoadedVersionAsync(
+                host, InitialVersion, cancellationToken, additionalRootId));
             Assert.True(loader.TryGetContext(dependency.PackageId, InitialVersion, out var retainedDependencyContext));
             Assert.NotNull(retainedDependencyContext);
             Assert.Same(previousDependencyContext.Context, retainedDependencyContext.Context);
 
-            AssertPersistedVersion(after, HealthyUpdateVersion, independentId);
-            await AssertLoadedVersionAsync(host, HealthyUpdateVersion, cancellationToken, independentId);
+            File.Delete(Path.Combine(FeedPath, $"{_packageId}.{RefusedVersion}.nupkg"));
+            var healthyUpdate = await TriggerAsync(host, cancellationToken);
+
+            Assert.False(healthyUpdate.IsDegraded);
+            var updated = Assert.Single(healthyUpdate.ChangeSet.Updated);
+            Assert.Equal(additionalRootId, updated.Id);
+            Assert.Equal(HealthyUpdateVersion, updated.Version);
+            var afterUpdate = await NuplaneStore.ReadStateAsync(StatePath, cancellationToken);
+            var updatedGraph = AssertPersistedVersion(afterUpdate, HealthyUpdateVersion, additionalRootId);
+            var unchangedRootGraph = AssertPersistedVersion(afterUpdate, InitialVersion);
+            Assert.Equal(updatedGraph.GenerationId, unchangedRootGraph.GenerationId);
+            Assert.NotEqual(previousGraph.GenerationId, updatedGraph.GenerationId);
+            await AssertLoadedVersionAsync(host, HealthyUpdateVersion, cancellationToken, additionalRootId);
         }
         finally
         {
