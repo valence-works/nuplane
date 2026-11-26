@@ -123,7 +123,7 @@ public sealed class DesiredStateReadMiddlewareTests
 
         Assert.Equal(["Alpha", "Beta"], afterRestart.DesiredRequests.Select(request => request.Id));
         Assert.Equal(["directory:first", "directory:second"], recorder.Identifiers);
-        Assert.Equal(recorder.Identifiers, directAggregate.SourceErrors.Keys);
+        Assert.Equal(recorder.Identifiers, directAggregate.SourceErrors.Keys.Order(StringComparer.Ordinal));
         Assert.Equal(2, afterRestart.SourceOutageCount);
     }
 
