@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Nuplane.Abstractions.PackageStoreProtection;
+using Nuplane.Feeds;
 using Nuplane.Store.Coordination.MembershipRecords;
 using Nuplane.Store.Coordination.PhysicalFiles;
 using Nuplane.Store.State;
@@ -730,7 +731,7 @@ internal sealed partial class RootMembershipRegistry
                 transaction, root, currentScope, currentLocations, expectedRoot, expectedEnrollmentEpoch, policy, token),
             (currentScope, currentLocations, memberId, priorState, nextState, token) => VerifyCoordinatedCandidateAsync(
                 transaction, root, currentScope, currentLocations, memberId, priorState, nextState,
-                expectedRoot, expectedEnrollmentEpoch, policy, token),
+                expectedRoot, expectedEnrollmentEpoch, policy, migrationSources, token),
             catalogSession,
             afterOwnedPublication,
             revalidateProjectionRoot,
@@ -900,12 +901,14 @@ internal sealed partial class RootMembershipRegistry
         PhysicalRootIdentity expectedRoot,
         long expectedEnrollmentEpoch,
         LocatorReplayBindingPolicy policy,
+        MigrationSourceLocations? migrationSources,
         CancellationToken cancellationToken)
     {
         if (policy == LocatorReplayBindingPolicy.Enrollment)
         {
             await VerifyEnrollmentCandidateAsync(transaction, root, scope, locations, memberId,
-                priorState, nextState, expectedRoot, expectedEnrollmentEpoch, cancellationToken).ConfigureAwait(false);
+                priorState, nextState, expectedRoot, expectedEnrollmentEpoch, migrationSources, cancellationToken)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -939,6 +942,7 @@ internal sealed partial class RootMembershipRegistry
         }
 
         var graphs = PersistedStoreStateGraphVerifier.Verify(nextState);
+        VerifyArchiveHashTransition(currentPrior, nextState, expectedRoot);
         var candidateScope = new MemberLocatorReplayScope(ledger);
         var observations = new List<IDisposable>();
         var revalidations = new List<Action>();
@@ -966,6 +970,54 @@ internal sealed partial class RootMembershipRegistry
         }
     }
 
+    private static void VerifyArchiveHashTransition(
+        StoreStateRecord? priorState,
+        StoreStateRecord nextState,
+        PhysicalRootIdentity expectedRoot)
+    {
+        Dictionary<string, string> priorHashes;
+        Dictionary<string, string> nextHashes;
+        try
+        {
+            priorHashes = StoreStateRecord.IndexArchiveHashes(priorState?.ArchiveHashesByPackage);
+            nextHashes = StoreStateRecord.IndexArchiveHashes(nextState.ArchiveHashesByPackage);
+        }
+        catch (InvalidDataException exception)
+        {
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                "The coordinated member state has conflicting archive hash records.", expectedRoot, exception);
+        }
+
+        foreach (var (key, priorHash) in priorHashes)
+        {
+            if (!nextHashes.TryGetValue(key, out var nextHash) ||
+                !string.Equals(priorHash, nextHash, StringComparison.Ordinal))
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                    $"The coordinated candidate removed or replaced the recorded archive hash for '{key}'.", expectedRoot);
+        }
+
+        var newKeysWithoutActiveDescriptors = new HashSet<string>(
+            nextHashes.Keys.Where(key => !priorHashes.ContainsKey(key)), StringComparer.Ordinal);
+        foreach (var descriptor in nextState.ActivePackageDescriptorsByIdNormalized.Values)
+        {
+            var key = StoreStateRecord.ArchiveHashKey(descriptor.PackageId, descriptor.Version);
+            if (!string.Equals(descriptor.ArchiveHash, nextHashes.GetValueOrDefault(key), StringComparison.Ordinal))
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                    $"The coordinated candidate's active descriptor for '{key}' disagrees with its recorded archive hash.",
+                    expectedRoot);
+
+            if (newKeysWithoutActiveDescriptors.Remove(key) &&
+                (descriptor.ArchiveHash is not { } hash || PackageInstallStore.ParseCanonicalContentHash(hash) is null))
+                throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                    $"The coordinated candidate's new archive hash for '{key}' is not canonical sha512.", expectedRoot);
+        }
+
+        if (newKeysWithoutActiveDescriptors.FirstOrDefault() is { } unclaimedKey)
+            throw new PackageStoreAdmissionException(PackageStoreAdmissionReason.StateMismatch,
+                $"The coordinated candidate recorded a new archive hash for '{unclaimedKey}' without an active descriptor.",
+                expectedRoot);
+    }
+
     private async Task VerifyEnrollmentCandidateAsync(
         Transaction transaction,
         PhysicalStoreDirectoryHandle root,
@@ -976,6 +1028,7 @@ internal sealed partial class RootMembershipRegistry
         StoreStateRecord nextState,
         PhysicalRootIdentity expectedRoot,
         long expectedEnrollmentEpoch,
+        MigrationSourceLocations? migrationSources,
         CancellationToken cancellationToken)
     {
         var ledger = transaction.ReadCurrent();
@@ -1026,6 +1079,14 @@ internal sealed partial class RootMembershipRegistry
             throw Refused("An enrollment candidate must bind the exact root, epoch, member and next protection revision.");
 
         var graphs = PersistedStoreStateGraphVerifier.Verify(nextState);
+        var archiveHistorySource = currentPrior;
+        if (migrationSources is not null && migrationSources.Locations.ContainsKey(memberId))
+        {
+            archiveHistorySource = await ReadMigrationSourceStateAsync(transaction, migrationSources.PriorLedger,
+                migrationSources.Locations, memberId, cancellationToken).ConfigureAwait(false)
+                ?? throw Refused("A moved member lost its archived hash history source.");
+        }
+        VerifyArchiveHashTransition(archiveHistorySource, nextState, expectedRoot);
         var candidateScope = new MemberLocatorReplayScope(ledger);
         var observations = new List<IDisposable>();
         var revalidations = new List<Action>();

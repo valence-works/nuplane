@@ -52,6 +52,12 @@ public sealed record ActivePackageDescriptor(
     public IReadOnlyList<string> DependencyOfPackageIds { get; init; } = DependencyOfPackageIds ?? [];
 
     /// <summary>
+    /// Gets the sha512 of the exact <c>.nupkg</c> acquired for this package, <c>sha512:&lt;base64&gt;</c>,
+    /// recorded when the package was activated. <see langword="null"/> when it was not recorded.
+    /// </summary>
+    public string? ArchiveHash { get; init; }
+
+    /// <summary>
     /// Converts this legacy active-package descriptor to the canonical <see cref="ActivePackage"/> model.
     /// </summary>
     public ActivePackage ToActivePackage() =>
@@ -68,7 +74,10 @@ public sealed record ActivePackageDescriptor(
             PackageRole,
             RootPackageIds,
             DependencyOfPackageIds,
-            Discoverable);
+            Discoverable)
+        {
+            ArchiveHash = ArchiveHash
+        };
 
     /// <summary>
     /// Creates a legacy active-package descriptor from the canonical <see cref="ActivePackage"/> model.
@@ -90,6 +99,9 @@ public sealed record ActivePackageDescriptor(
             package.PackageRole,
             package.RootPackageIds,
             package.DependencyOfPackageIds,
-            package.Discoverable);
+            package.Discoverable)
+        {
+            ArchiveHash = package.ArchiveHash
+        };
     }
 }

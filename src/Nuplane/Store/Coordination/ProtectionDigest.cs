@@ -43,6 +43,9 @@ internal static partial class ProtectionDigest
             writer.Field(5, EncodeTimestamp(normalized.UpdatedAt));
             writer.Field(6, EncodeMap(normalized.ActivePackageDescriptorsByIdNormalized, EncodeDescriptor));
             writer.Field(7, EncodeMap(normalized.ActiveGraphsByIdNormalized, EncodeActivationGraph));
+            // Optional so state bodies without recorded archive hashes keep their existing digest.
+            if (normalized.ArchiveHashesByPackage is { Count: > 0 } archiveHashes)
+                writer.Field(8, EncodeExactKeyMap(archiveHashes, EncodeString));
         });
     }
 
@@ -396,6 +399,25 @@ internal static partial class ProtectionDigest
         return writer.ToArray();
     }
 
+    /// <summary>Encodes a map whose keys are exact strings, such as package record keys, in ordinal key order.</summary>
+    private static byte[] EncodeExactKeyMap<TValue>(IReadOnlyDictionary<string, TValue> map, Func<TValue, byte[]> valueEncoder)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(valueEncoder);
+        var entries = map.OrderBy(static pair => pair.Key, StringComparer.Ordinal).ToArray();
+        using var writer = new CanonicalWriter();
+        writer.Count(entries.Length);
+        foreach (var (key, value) in entries)
+        {
+            using var encodedEntry = new CanonicalWriter();
+            encodedEntry.String(key);
+            encodedEntry.LengthPrefixed(valueEncoder(value));
+            writer.LengthPrefixed(encodedEntry.ToArray());
+        }
+
+        return writer.ToArray();
+    }
+
     private static byte[] EncodeSequence<TValue>(IEnumerable<TValue> values, Func<TValue, byte[]> valueEncoder)
     {
         ArgumentNullException.ThrowIfNull(values);
@@ -482,6 +504,9 @@ internal static partial class ProtectionDigest
             writer.Field(11, EncodeSequence(value.RootPackageIds, item => EncodeString(FoldIdentifier(item))));
             writer.Field(12, EncodeSequence(value.DependencyOfPackageIds, item => EncodeString(FoldIdentifier(item))));
             writer.Field(13, EncodeBoolean(value.Discoverable));
+            // Optional so state bodies without an archive hash keep their existing digest.
+            if (value.ArchiveHash is not null)
+                writer.Field(14, EncodeString(value.ArchiveHash));
         });
     }
 

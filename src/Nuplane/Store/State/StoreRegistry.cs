@@ -114,6 +114,7 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
                 new(_currentState.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase),
                 new(_currentState.ActiveGraphsByIdNormalized, StringComparer.OrdinalIgnoreCase))
             {
+                ArchiveHashesByPackage = _currentState.CopyArchiveHashes(),
                 ProtectionRecord = _currentState.ProtectionRecord,
                 ProtectionBundle = _currentState.ProtectionBundle?.Copy()
             };
@@ -229,13 +230,17 @@ public sealed partial class StoreRegistry : ICoordinatedStoreRegistry, IStoreSta
                 }
             }
 
+            // The state reloaded under the lock may hold records another writer added during this cycle; the
+            // record wins over any hash this cycle derived.
+            var nextRecords = currentState.NextArchiveHashes(nextDescriptors.Values);
             var nextState = currentState with
             {
                 ActiveVersionById = nextActive,
                 LastKnownGoodById = nextLkg,
                 UpdatedAt = now,
-                ActivePackageDescriptorsById = nextDescriptors,
-                ActiveGraphsById = nextGraphs
+                ActivePackageDescriptorsById = StoreStateRecord.WithRecordedArchiveHashes(nextDescriptors, nextRecords),
+                ActiveGraphsById = nextGraphs,
+                ArchiveHashesByPackage = nextRecords
             };
 
             await CommitStateUnderLockAsync(nextState, currentState, cancellationToken);

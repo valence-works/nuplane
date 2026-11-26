@@ -14,6 +14,7 @@ using Nuplane.Feeds;
 using Nuplane.Feeds.Configuration;
 using Nuplane.Feeds.Credentials;
 using Nuplane.Loading;
+using Nuplane.PackageArchives;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.LockFile;
 using Nuplane.Reconciliation.Models;
@@ -100,6 +101,15 @@ public sealed partial class OverlappingPackageGraphProtectionTests
                 Assert.True(PackageInstallStore.IsInstalled(installPath, borrow));
                 Assert.Equal(expectedHash,
                     await PackageInstallStore.ReadContentHashAsync(installPath, borrow, CancellationToken.None));
+
+                // The protected state records the archive hash for the active install and per package,
+                // and the archive reader serves the coordinated install from its kept archive.
+                var descriptor = state.ActivePackageDescriptorsByIdNormalized["Root.Second"];
+                Assert.Equal(expectedHash, descriptor.ArchiveHash);
+                Assert.Equal(expectedHash, state.ArchiveHashesByPackage![StoreStateRecord.ArchiveHashKey("Root.Second", "3.0.0")]);
+                var archive = await provider.GetRequiredService<IPackageArchiveReader>()
+                    .OpenAsync(descriptor.ToActivePackage());
+                Assert.NotNull(archive.GetEntry("lib/net10.0/Root.Second.dll"));
 
                 var activeRecord = Assert.Single(state.ActiveGraphsByIdNormalized.Values);
                 Assert.Equal(GraphActivationStatus.Active, activeRecord.Status);

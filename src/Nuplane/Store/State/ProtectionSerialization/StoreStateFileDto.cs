@@ -31,6 +31,8 @@ internal sealed class StoreStateFileDto
 
     public Dictionary<string, GraphActivationRecord>? ActiveGraphsById { get; set; }
 
+    public Dictionary<string, string>? ArchiveHashesByPackage { get; set; }
+
     [JsonPropertyName("protection")]
     public PackageProtectionRecord? ProtectionRecord
     {
@@ -82,6 +84,9 @@ internal sealed class StoreStateFileDto
             ActivePackageDescriptorsById,
             ActiveGraphsById)
         {
+            ArchiveHashesByPackage = ArchiveHashesByPackage is null
+                ? null
+                : new Dictionary<string, string>(ArchiveHashesByPackage, StringComparer.Ordinal),
             ProtectionRecord = ProtectionRecord,
             ProtectionBundle = ProtectionBundle
         };
@@ -109,6 +114,7 @@ internal sealed class StoreStateFileDto
             UpdatedAt = state.UpdatedAt,
             ActivePackageDescriptorsById = state.ActivePackageDescriptorsByIdNormalized,
             ActiveGraphsById = state.ActiveGraphsByIdNormalized,
+            ArchiveHashesByPackage = state.CopyArchiveHashes(),
             ProtectionRecord = state.ProtectionRecord,
             ProtectionBundle = state.ProtectionBundle?.Copy()
         };

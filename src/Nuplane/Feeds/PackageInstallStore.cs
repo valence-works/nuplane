@@ -36,6 +36,16 @@ internal static class PackageInstallStore
     public const string ContentHashFileName = ".nuplane-content-hash";
 
     /// <summary>
+    /// The exact acquired <c>.nupkg</c>, kept inside the install directory so it shares the install's
+    /// publication, protection and pruning lifetime. <see cref="PackageArchives.IPackageArchiveReader"/> serves content from it.
+    /// </summary>
+    public const string ArchiveFileName = ".nuplane-archive";
+
+    /// <summary>Gets the path of the archive kept for an install directory.</summary>
+    /// <param name="installDirectory">The package install directory.</param>
+    internal static string GetArchivePath(string installDirectory) => Path.Combine(installDirectory, ArchiveFileName);
+
+    /// <summary>
     /// Resolves the writable root that all package extractions land under.
     /// </summary>
     /// <param name="options">The feed resolution options carrying the configured root.</param>
@@ -147,16 +157,36 @@ internal static class PackageInstallStore
 
         try
         {
-            await using var packageStream = File.OpenRead(nupkgPath);
-            var hash = await SHA512.HashDataAsync(packageStream, cancellationToken);
-            var contentHash = "sha512:" + Convert.ToBase64String(hash);
-            packageStream.Position = 0;
-
             Directory.CreateDirectory(stagingDirectory);
-            using (var archive = new ZipArchive(packageStream, ZipArchiveMode.Read, leaveOpen: true))
+            var archivePath = GetArchivePath(stagingDirectory);
+
+            // Keep the archive first, then hash and extract that kept copy, so the recorded hash, the
+            // extracted files and the archive the reader later verifies all come from the same bytes.
+            await using (var source = File.OpenRead(nupkgPath))
+            await using (var kept = new FileStream(archivePath, FileMode.CreateNew, FileAccess.Write,
+                             FileShare.None, 81920, useAsync: true))
             {
+                await source.CopyToAsync(kept, cancellationToken);
+            }
+
+            string contentHash;
+            await using (var packageStream = File.OpenRead(archivePath))
+            {
+                var hash = await SHA512.HashDataAsync(packageStream, cancellationToken);
+                contentHash = "sha512:" + Convert.ToBase64String(hash);
+                packageStream.Position = 0;
+
+                using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read, leaveOpen: true);
+                foreach (var entry in archive.Entries)
+                {
+                    if (ExtractsOntoKeptArchive(stagingDirectory, archivePath, entry.FullName))
+                        throw new InvalidDataException(
+                            $"The package archive contains the reserved install entry '{entry.FullName}'.");
+                }
+
                 archive.ExtractToDirectory(stagingDirectory, overwriteFiles: true);
             }
+
             await File.WriteAllTextAsync(
                 Path.Combine(stagingDirectory, ContentHashFileName),
                 contentHash,
@@ -343,7 +373,7 @@ internal static class PackageInstallStore
         return result;
     }
 
-    private static string? ParseCanonicalContentHash(string contentHash)
+    internal static string? ParseCanonicalContentHash(string contentHash)
     {
         const string prefix = "sha512:";
         if (contentHash.Length != prefix.Length + 88 || !contentHash.StartsWith(prefix, StringComparison.Ordinal))
@@ -543,6 +573,45 @@ internal static class PackageInstallStore
     private static PackageStoreAdmissionException Refuse(string message, PhysicalRootIdentity? root = null)
         => new(PackageStoreAdmissionReason.UnknownAuthority, message, root);
 
+    // The marker and hash files are written after extraction and overwrite package entries of the same
+    // name (released behavior). The kept archive is written before extraction, so any entry that would
+    // extract onto it is refused. The target is resolved the way extraction resolves it.
+    private static bool ExtractsOntoKeptArchive(string stagingDirectory, string archivePath, string entryName)
+    {
+        string target;
+        try
+        {
+            target = Path.TrimEndingDirectorySeparator(Path.GetFullPath(
+                Path.Combine(stagingDirectory, SanitizeLikeExtraction(entryName))));
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            // A name that still cannot be resolved cannot be proven to stay away from the kept archive.
+            return true;
+        }
+
+        // Case-insensitive on every OS: a Linux directory can be case-insensitive too (casefold, vfat).
+        const StringComparison comparison = StringComparison.OrdinalIgnoreCase;
+        var kept = Path.GetFullPath(archivePath);
+        return string.Equals(target, kept, comparison) ||
+               target.StartsWith(kept + Path.DirectorySeparatorChar, comparison);
+    }
+
+    // ZipArchive extraction replaces NUL (and on Windows the other characters a file name cannot hold) with '_'.
+    private static string SanitizeLikeExtraction(string entryName)
+    {
+        var characters = entryName.ToCharArray();
+        for (var index = 0; index < characters.Length; index++)
+        {
+            var character = characters[index];
+            if (character == '\0' ||
+                (OperatingSystem.IsWindows() && (character < 32 || "\"*:<>?|".Contains(character))))
+                characters[index] = '_';
+        }
+
+        return new string(characters);
+    }
+
     /// <summary>
     /// Renames a completed staging directory onto the final install path.
     /// Returns <see langword="false"/> when a concurrent writer already published a complete extraction
@@ -590,7 +659,7 @@ internal static class PackageInstallStore
     /// also neutralizes directory separators and relative segments so that a hostile package
     /// identifier, feed name, or version cannot escape the install root.
     /// </summary>
-    private static string SanitizePathSegment(string value)
+    internal static string SanitizePathSegment(string value)
     {
         var invalidCharacters = Path.GetInvalidFileNameChars();
         var buffer = value

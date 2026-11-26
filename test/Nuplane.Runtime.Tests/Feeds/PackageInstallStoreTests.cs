@@ -84,4 +84,64 @@ public sealed class PackageInstallStoreTests
 
         Assert.Equal(expectedHash, await File.ReadAllTextAsync(Path.Combine(installDirectory, ".nuplane-content-hash")));
     }
+
+    [Fact]
+    public async Task InstallAsync_ArchiveBytes_KeepsTheExactArchiveInsideTheInstall()
+    {
+        using var packages = new TempDirectory();
+        using var installRoot = new TempDirectory();
+        var archivePath = NupkgTestBuilder.Create("Plugin", "1.0.0").BuildTo(packages.Path);
+        var installDirectory = Path.Combine(installRoot.Path, "installed");
+
+        await PackageInstallStore.InstallAsync(installRoot.Path, installDirectory, archivePath, CancellationToken.None);
+
+        var kept = await File.ReadAllBytesAsync(Path.Combine(installDirectory, PackageInstallStore.ArchiveFileName));
+        Assert.Equal(await File.ReadAllBytesAsync(archivePath), kept);
+        Assert.Equal("sha512:" + Convert.ToBase64String(SHA512.HashData(kept)),
+            await File.ReadAllTextAsync(Path.Combine(installDirectory, PackageInstallStore.ContentHashFileName)));
+    }
+
+    [Fact]
+    public async Task InstallAsync_ArchiveEntryNameWithNul_ExtractsLikeTheReleasedInstaller()
+    {
+        using var packages = new TempDirectory();
+        using var installRoot = new TempDirectory();
+        var archivePath = NupkgTestBuilder.Create("Plugin", "1.0.0").BuildTo(packages.Path);
+        using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Update))
+        {
+            using var writer = new StreamWriter(archive.CreateEntry("content/a\0b.txt").Open());
+            await writer.WriteAsync("kept");
+        }
+        var installDirectory = Path.Combine(installRoot.Path, "installed");
+
+        await PackageInstallStore.InstallAsync(installRoot.Path, installDirectory, archivePath, CancellationToken.None);
+
+        Assert.Equal("kept", await File.ReadAllTextAsync(Path.Combine(installDirectory, "content", "a_b.txt")));
+    }
+
+    [Theory]
+    [InlineData(".nuplane-archive")]
+    [InlineData("./.nuplane-archive")]
+    [InlineData("lib/../.nuplane-archive")]
+    [InlineData(".nuplane-archive/nested.txt")]
+    [InlineData(".NUPLANE-ARCHIVE")]
+    [InlineData("x\0/../.nuplane-archive")]
+    public async Task InstallAsync_ArchiveEntryExtractsOntoTheKeptArchive_RefusesWithoutPublishing(string entryName)
+    {
+        using var packages = new TempDirectory();
+        using var installRoot = new TempDirectory();
+        var archivePath = NupkgTestBuilder.Create("Plugin", "1.0.0").BuildTo(packages.Path);
+        using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Update))
+        {
+            using var writer = new StreamWriter(archive.CreateEntry(entryName).Open());
+            await writer.WriteAsync("forged");
+        }
+        var installDirectory = Path.Combine(installRoot.Path, "installed");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            PackageInstallStore.InstallAsync(installRoot.Path, installDirectory, archivePath, CancellationToken.None));
+
+        Assert.False(Directory.Exists(installDirectory));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(installRoot.Path, ".tmp")));
+    }
 }

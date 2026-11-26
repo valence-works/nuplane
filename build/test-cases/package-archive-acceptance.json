@@ -1,0 +1,16 @@
+[
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_FeedRenamedToAnEquivalentSpelling_NeverServesAForgedArchive(before: \"Addons\", after: \"addons\")",
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_FeedRenamedToAnEquivalentSpelling_NeverServesAForgedArchive(before: \"addons\", after: \"addons.\")",
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_FeedRenamedToAnEquivalentSpelling_NeverServesAForgedArchive(before: \"addons\", after: \"addon\u017f\")",
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_FeedRenamedToAnEquivalentSpelling_NeverServesAForgedArchive(before: \"caf\u00e9\", after: \"cafe\u0301\")",
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_FeedRenamedToAnEquivalentSpelling_NeverServesAForgedArchive(before: \"office\", after: \"o\ufb03ce\")",
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_FeedRenamedToAnEquivalentSpelling_NeverServesAForgedArchive(before: \"strasse\", after: \"stra\u00dfe\")",
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_ForgedInstallReachedThroughAnotherRootSpelling_RefusesWithTheRecordedHash",
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_ForgedInstallSharedByARenamedFeed_RefusesWithTheRecordedHash",
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_RollbackThroughAnotherFeedOverAForgedInstall_RefusesWithTheRecordedHash",
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_RollbackToForgedRetainedInstall_RefusesWithTheHashRecordedAtFirstActivation",
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_StateWithoutRecordedHashes_RefusesUntilTheNextReconciliationRecordsThem",
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_UnenrolledHost_RefusesModifiedReplacedOrMissingArchive",
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_UnenrolledHost_ServesActivePackageContentFromVerifiedArchive",
+  "Nuplane.Integration.Tests.Content.PackageArchiveReaderAcceptanceTests.OpenAsync_VersionServedFromAnotherFeedOverAForgedInstall_RefusesWithTheRecordedHash"
+]

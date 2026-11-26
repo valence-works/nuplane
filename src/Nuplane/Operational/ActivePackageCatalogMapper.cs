@@ -389,6 +389,19 @@ internal static class ActivePackageCatalogMapper
             resolvedGraphs ?? [],
             selectedActiveGraphs);
 
+        // The state records a package version's archive hash the first time it becomes active and keeps it, also
+        // after deactivation. The record is keyed by package ID and version only, so no feed, install path or
+        // spelling can miss it. Re-resolution re-reads the hash file beside the archive; that value is used only
+        // for a package version the state has never recorded.
+        var recordedByPackage = StoreStateRecord.IndexArchiveHashes(currentState.ArchiveHashesByPackage);
+        string? ArchiveHashFor(ResolvedPackage package)
+        {
+            var key = StoreStateRecord.ArchiveHashKey(package.Id, package.Version);
+            return recordedByPackage.TryGetValue(key, out var recorded)
+                ? recorded
+                : package.PackageContentHash;
+        }
+
         foreach (var package in appliedPackages.OrderBy(pkg => pkg.Id, StringComparer.OrdinalIgnoreCase))
         {
             if (!nextActiveVersions.TryGetValue(package.Id, out var activeVersion) ||
@@ -405,12 +418,16 @@ internal static class ActivePackageCatalogMapper
                 package.InstallPath,
                 activatedAtUtc,
                 correlationId,
-                graphNodesByPackageId);
+                graphNodesByPackageId,
+                ArchiveHashFor(package));
 
             if (!changedPackageIds.Contains(package.Id) &&
                 descriptors.TryGetValue(package.Id, out var existing) &&
                 HasSameActivationShape(existing, nextDescriptor))
             {
+                // Filling in an acquisition hash during an upgrade preserves the original activation.
+                if (existing.ArchiveHash != nextDescriptor.ArchiveHash)
+                    descriptors[package.Id] = existing with { ArchiveHash = nextDescriptor.ArchiveHash };
                 continue;
             }
 
@@ -430,7 +447,8 @@ internal static class ActivePackageCatalogMapper
                     package.InstallPath,
                     activatedAtUtc,
                     correlationId,
-                    graphNodesByPackageId);
+                    graphNodesByPackageId,
+                    ArchiveHashFor(package));
             }
         }
 
@@ -810,7 +828,11 @@ internal static class ActivePackageCatalogMapper
     {
         ArgumentNullException.ThrowIfNull(state);
 
-        return state.ActivePackageDescriptorsByIdNormalized.Values
+        var descriptors = state.ActivePackageDescriptorsByIdNormalized;
+        if (state.ArchiveHashesByPackage is { Count: > 0 } recorded)
+            descriptors = StoreStateRecord.WithRecordedArchiveHashes(descriptors, recorded);
+
+        return descriptors.Values
             .Where(package => state.ActiveVersionById.TryGetValue(package.PackageId, out var version)
                 && string.Equals(version, package.Version, StringComparison.OrdinalIgnoreCase))
             .OrderBy(package => package.PackageId, StringComparer.OrdinalIgnoreCase)
@@ -829,7 +851,8 @@ internal static class ActivePackageCatalogMapper
         string installPath,
         DateTimeOffset activatedAtUtc,
         string correlationId,
-        IReadOnlyDictionary<string, GraphNodeProjection> graphNodesByPackageId)
+        IReadOnlyDictionary<string, GraphNodeProjection> graphNodesByPackageId,
+        string? archiveHash)
     {
         if (!graphNodesByPackageId.TryGetValue(packageId, out var graphNode))
         {
@@ -840,7 +863,10 @@ internal static class ActivePackageCatalogMapper
                 sourceName,
                 installPath,
                 activatedAtUtc,
-                correlationId);
+                correlationId)
+            {
+                ArchiveHash = archiveHash
+            };
         }
 
         return new ActivePackageDescriptor(
@@ -856,7 +882,10 @@ internal static class ActivePackageCatalogMapper
             graphNode.Role,
             graphNode.RootPackageIds,
             graphNode.DependencyOfPackageIds,
-            Discoverable: graphNode.Role is not ActivePackageRole.Dependency);
+            Discoverable: graphNode.Role is not ActivePackageRole.Dependency)
+        {
+            ArchiveHash = archiveHash
+        };
     }
 
     private static IReadOnlyDictionary<string, GraphNodeProjection> BuildGraphNodesByPackageId(IReadOnlyList<ResolvedPackageGraph> graphs)

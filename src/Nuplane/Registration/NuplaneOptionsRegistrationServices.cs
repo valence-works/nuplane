@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Nuplane.Capabilities;
 using Nuplane.Feeds.Configuration;
+using Nuplane.PackageArchives;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Reconciliation.Convergence;
 using Nuplane.Reconciliation.LockFile;
@@ -42,6 +43,7 @@ internal static class NuplaneOptionsRegistrationServices
         static (services, configuration) => ConfigureBoundOptions<ConvergenceOptions>(services, configuration, ConvergenceSectionName),
         static (services, configuration) => ConfigureBoundOptions<DesiredStateOptions>(services, configuration, DesiredStateSectionName),
         static (services, configuration) => ConfigureBoundOptions<StoreRegistryOptions>(services, configuration, StoreRegistrySectionName),
+        static (services, configuration) => ConfigureBoundOptions<PackageArchiveReaderOptions>(services, configuration, PackageArchiveReaderOptions.SectionName),
         static (services, configuration) => ConfigureCapabilityOptions(services, configuration),
         static (services, configuration) => ConfigureHostProvidedPackagesOptions(services, configuration)
     ];
@@ -58,6 +60,7 @@ internal static class NuplaneOptionsRegistrationServices
         services.AddSingleton<IValidateOptions<StoreRegistryOptions>, StoreRegistryOptionsValidator>();
         services.AddSingleton<IValidateOptions<CapabilityOptions>, CapabilityOptionsValidator>();
         services.AddSingleton<IValidateOptions<HostProvidedPackagesOptions>, HostProvidedPackagesOptionsValidator>();
+        services.AddSingleton<IValidateOptions<PackageArchiveReaderOptions>, PackageArchiveReaderOptionsValidator>();
     }
 
     internal static void RegisterOptions(this IServiceCollection services)
@@ -72,6 +75,7 @@ internal static class NuplaneOptionsRegistrationServices
         services.AddOptions<StoreRegistryOptions>().ValidateOnStart();
         services.AddOptions<CapabilityOptions>().ValidateOnStart();
         services.AddOptions<HostProvidedPackagesOptions>().ValidateOnStart();
+        services.AddOptions<PackageArchiveReaderOptions>().ValidateOnStart();
     }
 
     internal static void BindConfiguredOptions(IServiceCollection services, IConfiguration configuration)

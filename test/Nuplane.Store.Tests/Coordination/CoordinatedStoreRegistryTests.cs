@@ -170,6 +170,80 @@ public sealed class CoordinatedStoreRegistryTests
     }
 
     [SupportedPhysicalStoreFact]
+    public async Task PersistCoordinatedActiveStateAsync_InconsistentArchiveHashes_RefusesBeforePublication()
+    {
+        await using var context = await CoordinatedContext.CreateAsync();
+        var path = context.StoreContext.StatePaths["second"];
+        var registry = new StoreRegistry(context.Serializer, path);
+        using var borrow = context.Admission.Owner!.Borrow();
+        var prior = await registry.ReadCoordinatedStateAsync(borrow, CancellationToken.None);
+        var descriptor = prior.ActivePackageDescriptorsByIdNormalized["Root.Second"];
+        var key = StoreStateRecord.ArchiveHashKey(descriptor.PackageId, descriptor.Version);
+        var originalHash = "sha512:" + Convert.ToBase64String(SHA512.HashData("original"u8));
+        var otherHash = "sha512:" + Convert.ToBase64String(SHA512.HashData("other"u8));
+        var descriptors = new Dictionary<string, ActivePackageDescriptor>(
+            prior.ActivePackageDescriptorsByIdNormalized, StringComparer.OrdinalIgnoreCase)
+        {
+            [descriptor.PackageId] = descriptor with { ArchiveHash = originalHash }
+        };
+        const string malformedHash = "sha512:incomplete";
+        await AssertRefusesAsync(prior with
+        {
+            ActivePackageDescriptorsById = new(descriptors) { [descriptor.PackageId] = descriptor with { ArchiveHash = malformedHash } },
+            ArchiveHashesByPackage = new(StringComparer.Ordinal) { [key] = malformedHash }
+        }, "canonical sha512");
+        var recorded = StoreRegistry.ProtectRegistryMutation(prior with
+        {
+            ActivePackageDescriptorsById = descriptors,
+            ArchiveHashesByPackage = new(StringComparer.Ordinal) { [key] = originalHash }
+        });
+        await registry.PersistCoordinatedActiveStateAsync(borrow, recorded, CancellationToken.None);
+
+        var inconsistentDescriptors = new Dictionary<string, ActivePackageDescriptor>(descriptors, StringComparer.OrdinalIgnoreCase)
+        {
+            [descriptor.PackageId] = descriptor with { ArchiveHash = otherHash }
+        };
+        await AssertRefusesAsync(recorded with { ActivePackageDescriptorsById = inconsistentDescriptors },
+            "disagrees with its recorded archive hash");
+        await AssertRefusesAsync(recorded with
+        {
+            ArchiveHashesByPackage = new(StringComparer.Ordinal)
+            {
+                [key] = originalHash,
+                [StoreStateRecord.ArchiveHashKey(descriptor.PackageId, "0.9.0")] = otherHash
+            }
+        }, "without an active descriptor");
+
+        var upgraded = await context.StoreContext.BuildStateAsync("second", "Root.Second", "1.1.0", borrow);
+        upgraded = context.StoreContext.Reprotect(upgraded with
+        {
+            ArchiveHashesByPackage = recorded.CopyArchiveHashes()
+        }, legacyUnknown: false, revision: checked(recorded.ProtectionRecord!.Revision + 1));
+        await registry.PersistCoordinatedActiveStateAsync(borrow, upgraded, CancellationToken.None);
+
+        // The retained hash belongs to an inactive package version, so the active descriptors still agree.
+        await AssertRefusesAsync(upgraded with { ArchiveHashesByPackage = null }, "removed or replaced");
+        await AssertRefusesAsync(upgraded with { ArchiveHashesByPackage = new(StringComparer.Ordinal) { [key] = otherHash } },
+            "removed or replaced");
+
+        async Task AssertRefusesAsync(StoreStateRecord inconsistent, string detail)
+        {
+            var candidate = StoreRegistry.ProtectRegistryMutation(inconsistent);
+            var priorBytes = await File.ReadAllBytesAsync(path);
+            var members = PackageStoreOperationAccess.GetLockedMemberLocations(borrow);
+            var priorLedgerDigest = members.Ledger.LedgerDigest;
+
+            var error = await Assert.ThrowsAsync<PackageStoreAdmissionException>(() =>
+                registry.PersistCoordinatedActiveStateAsync(borrow, candidate, CancellationToken.None));
+
+            Assert.Equal(PackageStoreAdmissionReason.StateMismatch, error.Reason);
+            Assert.Contains(detail, error.Message, StringComparison.Ordinal);
+            Assert.Equal(priorLedgerDigest, members.Ledger.LedgerDigest);
+            Assert.Equal(priorBytes, await File.ReadAllBytesAsync(path));
+        }
+    }
+
+    [SupportedPhysicalStoreFact]
     public async Task IncoherentCurrentMemberRefusesBeforeAnyPublication()
     {
         await using var context = await CoordinatedContext.CreateAsync();

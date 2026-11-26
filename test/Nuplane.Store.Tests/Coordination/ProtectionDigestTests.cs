@@ -75,6 +75,46 @@ public sealed class ProtectionDigestTests
     }
 
     [Fact]
+    public void StateBody_ArchiveHashes_AreBoundWhenRecordedAndLeaveUnrecordedDigestsUnchanged()
+    {
+        var withoutHash = StateWithDescriptor(Descriptor());
+        var withHash = StateWithDescriptor(Descriptor() with { ArchiveHash = "sha512:" + Convert.ToBase64String(new byte[64]) });
+        var withOtherHash = StateWithDescriptor(Descriptor() with
+        {
+            ArchiveHash = "sha512:" + Convert.ToBase64String(Enumerable.Repeat((byte)1, 64).ToArray())
+        });
+
+        // Computed by the encoder before ArchiveHash existed: a state without a recorded hash keeps its digest.
+        Assert.Equal("b9c065e4f6256960f280bf095e8f5290498170eecb85eaf02de3abf611e964c6", ProtectionDigest.StateBody(withoutHash));
+        Assert.NotEqual(ProtectionDigest.StateBody(withoutHash), ProtectionDigest.StateBody(withHash));
+        Assert.NotEqual(ProtectionDigest.StateBody(withHash), ProtectionDigest.StateBody(withOtherHash));
+
+        var recorded = withoutHash with
+        {
+            ArchiveHashesByPackage = new(StringComparer.Ordinal) { ["module/0.9.0"] = withHash.ActivePackageDescriptorsById!["Module"].ArchiveHash! }
+        };
+        var emptyRecord = withoutHash with { ArchiveHashesByPackage = new(StringComparer.Ordinal) };
+        var otherRecordedValue = withoutHash with
+        {
+            ArchiveHashesByPackage = new(StringComparer.Ordinal) { ["module/0.9.0"] = withOtherHash.ActivePackageDescriptorsById!["Module"].ArchiveHash! }
+        };
+        // Keys are exact strings, so a key without an invariant-uppercase form encodes instead of throwing.
+        var unfoldableKey = withoutHash with
+        {
+            ArchiveHashesByPackage = new(StringComparer.Ordinal) { ["\u017Fhop/1.0.0"] = withHash.ActivePackageDescriptorsById!["Module"].ArchiveHash! }
+        };
+        Assert.NotEqual(ProtectionDigest.StateBody(recorded), ProtectionDigest.StateBody(unfoldableKey));
+        Assert.NotEqual(ProtectionDigest.StateBody(withoutHash), ProtectionDigest.StateBody(recorded));
+        Assert.NotEqual(ProtectionDigest.StateBody(recorded), ProtectionDigest.StateBody(otherRecordedValue));
+        Assert.Equal(ProtectionDigest.StateBody(withoutHash), ProtectionDigest.StateBody(emptyRecord));
+
+        static StoreStateRecord StateWithDescriptor(ActivePackageDescriptor descriptor) => EmptyState() with
+        {
+            ActivePackageDescriptorsById = new(StringComparer.OrdinalIgnoreCase) { ["Module"] = descriptor }
+        };
+    }
+
+    [Fact]
     public void CanonicalDigest_EnumValuesAreStableWireValues()
     {
         AssertEnumValues<PackageProtectionClosureKnowledge>("Unknown=0", "Known=1");

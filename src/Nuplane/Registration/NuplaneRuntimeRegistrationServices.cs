@@ -10,6 +10,7 @@ using Nuplane.Health;
 using Nuplane.Hosting;
 using Nuplane.Observability;
 using Nuplane.Operational;
+using Nuplane.PackageArchives;
 using Nuplane.Reconciliation;
 using Nuplane.Reconciliation.Configuration;
 using Nuplane.Sources;
@@ -141,6 +142,8 @@ public static class NuplaneRuntimeRegistrationServices
                 : new ActivePackageCatalog(storeRegistry, logger, metrics);
         });
         services.AddSingleton<IActivePackageCatalog>(sp => sp.GetRequiredService<ActivePackageCatalog>());
+        services.TryAddSingleton<PackageArchiveReader>();
+        services.TryAddSingleton<IPackageArchiveReader>(sp => sp.GetRequiredService<PackageArchiveReader>());
         services.TryAddSingleton<NuplaneStoreSnapshotAccess>(sp =>
         {
             var composition = sp.GetRequiredService<PackageStoreCompositionSnapshot>();

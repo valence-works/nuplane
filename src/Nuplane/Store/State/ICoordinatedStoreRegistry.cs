@@ -45,7 +45,11 @@ public interface ICoordinatedStoreRegistry : IStoreRegistry
         CancellationToken cancellationToken);
 
     /// <summary>Publishes a caller-supplied complete active state through the existing owner.</summary>
-    /// <remarks>The candidate must declare the exact member identity and next protection revision.</remarks>
+    /// <remarks>
+    /// The candidate must declare the exact member identity and next protection revision and preserve previously
+    /// recorded archive hashes. When recording a hash for the first time, supply the active install's canonical
+    /// <c>sha512:&lt;base64&gt;</c> acquisition hash in both its active descriptor and the archive history.
+    /// </remarks>
     /// <param name="borrow">The live operation borrow for the enrolled root.</param>
     /// <param name="completeNextState">The complete next active state and protection closure.</param>
     /// <param name="cancellationToken">A token that cancels the publication.</param>

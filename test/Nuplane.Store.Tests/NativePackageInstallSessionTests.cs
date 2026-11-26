@@ -1,7 +1,11 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Nuplane.Abstractions;
 using Nuplane.Abstractions.PackageStoreProtection;
 using Nuplane.Feeds;
+using Nuplane.PackageArchives;
 using Nuplane.Store.Coordination;
 using Nuplane.Store.Coordination.PhysicalFiles;
 using Nuplane.Store.Tests.Coordination;
@@ -42,6 +46,37 @@ public sealed class NativePackageInstallSessionTests
             await PackageInstallStore.ReadContentHashAsync(destination, borrow, CancellationToken.None));
         Assert.Equal(payload, await File.ReadAllBytesAsync(Path.Combine(destination, "lib", "net10.0", "Native.Package.dll")));
         Assert.Empty(await File.ReadAllBytesAsync(Path.Combine(destination, PackageInstallStore.CompletionMarkerFileName)));
+        Assert.Equal(archiveBytes, await File.ReadAllBytesAsync(Path.Combine(destination, PackageInstallStore.ArchiveFileName)));
+
+        // The coordinated install's kept archive is what the archive reader serves.
+        var reader = new PackageArchiveReader(Options.Create(new PackageArchiveReaderOptions()),
+            NullLogger<PackageArchiveReader>.Instance);
+        var archive = await reader.OpenAsync(new ActivePackage("Native.Package", "1.0.0", "feed", "source",
+            installed, DateTimeOffset.UtcNow, "correlation")
+        {
+            ArchiveHash = await PackageInstallStore.ReadContentHashAsync(destination, borrow, CancellationToken.None)
+        });
+        Assert.Equal(payload, archive.GetEntry("lib/net10.0/Native.Package.dll")!.ReadAllBytes());
+    }
+
+    [SupportedPhysicalStoreFact]
+    public async Task AcquireAsync_RejectsPackageEntryNamedLikeTheKeptArchive()
+    {
+        using var context = await RootMembershipProtectionVerificationTests.Context.CreateCompleteAsync();
+        await using var admission = await CreateAdmission(context)
+            .AcquireConfiguredRootOperationAsync(PackageStoreAdmissionKind.Installation);
+        using var borrow = Assert.IsType<PackageStoreOperationOwner>(admission.Owner).Borrow();
+        var destination = InstallPath(context, "Reserved.Kept.Archive");
+        var archiveBytes = CreateArchive((PackageInstallStore.ArchiveFileName, "forged"u8.ToArray()));
+
+        var error = await Assert.ThrowsAsync<PackageStoreAdmissionException>(() => NativePackageInstallSession.AcquireAsync(
+            context.Fixture.PackageInstallRoot, destination, borrow,
+            async (stream, token) => await stream.WriteAsync(archiveBytes, token), CancellationToken.None));
+
+        // Refused during entry planning, before extraction could reach the kept-archive write.
+        Assert.Contains("reserved completion-metadata path", error.Message, StringComparison.Ordinal);
+
+        Assert.False(Directory.Exists(destination));
     }
 
     [SupportedPhysicalStoreFact]

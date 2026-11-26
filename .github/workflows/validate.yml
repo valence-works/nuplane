@@ -43,7 +43,7 @@ jobs:
   state-persistence-platform:
     name: State persistence (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ matrix.os == 'windows-latest' && 60 || matrix.os == 'macos-15-intel' && 45 || 20 }}
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 60 || matrix.os == 'macos-15-intel' && 50 || matrix.os == 'macos-latest' && 30 || 20 }}
     strategy:
       fail-fast: false
       matrix:
@@ -220,7 +220,7 @@ jobs:
           legacy_classes = {
               'Nuplane.Store.Tests.State.ProtectionStateSerializationTests': 29,
               'Nuplane.Store.Tests.State.ProtectionStatePayloadSerializerTests': 7,
-              'Nuplane.Store.Tests.Coordination.ProtectionDigestTests': 28,
+              'Nuplane.Store.Tests.Coordination.ProtectionDigestTests': 29,
               'Nuplane.Store.Tests.Coordination.RootMembershipPayloadSerializerTests': 28,
               'Nuplane.Store.Tests.Coordination.PersistedStoreStateGraphVerifierTests': 10,
           }
@@ -241,9 +241,9 @@ jobs:
               expected = 'Nuplane.Store.Tests.Coordination.RootMembershipPayloadSerializerTests.' + name
               if sum(row.attrib['testName'] == expected for row in rows) != 1:
                   raise SystemExit('Missing required group membership scenario: ' + name)
-          if len(rows) != 128 or any(row.attrib.get('outcome') != 'Passed' for row in rows):
-              raise SystemExit('All 26 graph-use codec, 97 existing and five group membership cases must pass without skips.')
-          print('Qualified all 128 serialization/digest cases with no skips.')
+          if len(rows) != 129 or any(row.attrib.get('outcome') != 'Passed' for row in rows):
+              raise SystemExit('All 26 graph-use codec, 98 existing and five group membership cases must pass without skips.')
+          print('Qualified all 129 serialization/digest cases with no skips.')
           GRAPHUSE
           done
 
@@ -442,9 +442,9 @@ jobs:
           import sys
           import xml.etree.ElementTree as ET
           rows = ET.parse(sys.argv[1]).findall('.//{*}UnitTestResult')
-          required = ['Observe_UsesHeldNativeDirectoriesAndEmptySingleLinkMarkerWithoutContentOrMutationIO', 'Observe_RejectsMissingNonemptyAndHardLinkedCompletionMarkers', 'Observe_RejectsLinkedDirectoryComponentsAndLinkedCompletionMarker', 'Observe_RejectsWrongRootAndForeignFilesystemHandles', 'Observe_RejectsRootLevelControlAndStagingDirectories', 'Observe_RefusesAnUnknownNativeNameProfile', 'WithQuiescentIncompleteMemberLocationsAsync_ReplaysExternalAndSameRootProspectiveSlotsWithoutPayloadReads', 'WithCompleteMemberLocationsAsync_ReplaysParentAliasAndUsesOnlyExistingBoundLocks', 'WithCompleteMemberLocationsAsync_RefusesFinalFileLinksAndHardlinksBeforeCallback', 'WithCompleteMemberLocationsAsync_ChangedLedgerAndStateSlotRefuseBeforeCallback', 'WithQuiescentIncompleteMemberLocationsAsync_RequiresQuiescenceAndAbsoluteHints', 'Revalidate_ExternalMemberLocatorRejectsLedgerChangedInsideCallback', 'WithCompleteMemberLocationsAsync_MissingBoundLockIsRefusedWithoutRecreation', 'WithQuiescentIncompleteMemberLocationsAsync_DuplicateNativeSlotsRefuseBeforeMemberLockProvisioning', 'WithCompleteMemberLocationsAsync_ParentAliasThroughDifferentAuthorityRefusesBeforeCallback', 'CreateCandidate_ActualDependencyGraphAndNativeInstallsSurvivePayloadRoundTrip', 'WithQuiescentIncompleteMemberLocationsAsync_DeclaredMemberStateReadRefusesBeforePayloadRead', 'WithCompleteMemberLocationsAsync_ReadsExactBoundStateOnlyInsideTheCallback', 'CompleteEnrollment_ActualTwoStateGraphsPublishAndReopenBeforeComplete', 'CompleteEnrollment_RejectsChangedNativeInstallWrongDescriptorAndUnknownLegacyRecovery', 'CompleteEnrollment_RejectsDigestValidStateWithUnselectedGraphVersions', 'CompleteEnrollment_RequiresQuiescenceAndEveryActualAcknowledgedState', 'ConfiguredRootAdmissionRetainsVerifiedLocksUntilBorrowDrains', 'MultiPathAdmissionDeduplicatesRootAliasesAndRestrictsEachBorrowToItsExactPath', 'MultiRootAdmissionHoldsEveryVerifiedMemberSetAndDrainsBeforeUnlock', 'MultiRootRefusalUnwindsEarlierRootWhenLaterSortedRootIsBusy', 'ArchivePathsRequireSingleNativeFileIdentityWithoutArchivePayloadReads', 'PostResolutionTargetInspectionFaultClosesTheUntransferredNativeResolution', 'PartialMultiRootUnwindReportsBothAdmissionAndNativeReleaseFailures', 'FailedNativeOwnerReleaseRemainsVisibleOnRepeatedDisposal', 'UnenrolledConfiguredRootIsOnlyReturnedAfterPositiveNativeAbsenceObservation', 'IncompleteEnrollmentRefusesRootAndPathAdmission', 'BothAdmissionPathsRefuseDigestValidSemanticallyInvalidCompleteStateAndUnwind', 'BothAdmissionPathsRefuseReplacedNativeCompletionMarkerIdentityAndUnwind', 'BothAdmissionPathsRefuseReplacedNativeInstallDirectoryIdentityAndUnwind', 'MultiRootAdmissionHoldsEveryRootAndMemberLockBeforeFirstMemberPayloadRead', 'CancellationWhileAcquiringLaterRootReleasesEarlierRootAndMemberLocks', 'CoordinatedStateReadAndThreePublicationsUseOneExistingOwnerAcrossTwoMembers', 'UnlistedConfiguredSlotRefusesBeforeAnyMemberPayloadReadOrWrite', 'DifferentEligibleSerializerRefusesBeforeAnyMemberPayloadReadOrWrite', 'UnknownCompleteCandidateRefusesBeforePublication', 'IncoherentCurrentMemberRefusesBeforeAnyPublication', 'ExpiredBorrowAndUnsupportedSerializerRefuseBeforePayloadRead', 'CoordinatedStateReadAndPublicationsRemainAvailableWithRetainedMultiPathAdmission', 'ConfiguredRootAdmissionAcceptsOnlyAnAbsentOrdinaryUnenrolledSuffix', 'ConfiguredRootAdmissionRefusesMissingSuffixBeneathObservedCompleteAuthority', 'ConfiguredRootAdmissionRefusesReservedControlNameAsFirstMissingEdge', 'ConfiguredRootAdmissionRefusesReservedControlNameLaterInMissingSuffix', 'ConfiguredRootAdmissionUsesObservedNameProfileForReservedNameAlias', 'ConfiguredRootAdmissionDoesNotBroadenTheReservedNameMatchToPrefixes', 'ConfiguredRootAdmissionRefusesUnknownNativeNameProfileForMissingSuffix', 'ConfiguredRootAdmissionDoesNotGuessUnicodeReservedNameEquivalence', 'ConfiguredRootAdmissionRefusesNonAsciiLaterSuffixWithoutItsNativeProfile', 'ConfiguredRootAdmissionRefusesAliasEscapeFromCompleteAuthorityBeforeMissingSuffix', 'ConfiguredRootAdmissionRefusesMissingTargetInsideAnUnresolvedAliasExpansion', 'ConfiguredRootAdmissionRevalidatesMissingEdgeDuringInitialResolutionReplay', 'ConfiguredRootAdmissionRevalidatesMissingEdgeBeforeAdmissionReturns', 'MultiRootAdmissionAcquiresEveryRootBeforeFirstMemberAndIgnoresRequestOrder', 'MultiRootAdmission_LateMemberContentionUnwindsEveryAcquiredLock', 'MultiRootAdmission_LedgerMutationAfterAllRootsRefusesBeforeMemberLocks', 'MultiRootAdmission_PartialLocatorReplayFailureReleasesTheWholeLockUnion', 'MultiRootAdmission_ProfileMutationAfterAllRootsRefusesBeforeMemberLocks', 'MultiRootAdmission_SecondRootBusyUnwindsEarlierRootLock', 'MultiRootPathAdmissionRestrictsBorrowsAndRetainsUnionUntilDrainWithUnenrolledPath', 'PhysicalLockUnion_EqualStateSlotRetainsBothRootLocalMemberLocks', 'PhysicalLockUnion_RetainsLocksUntilEveryCountedRootOwnerDrains']
-          if len(rows) != 80:
-              raise SystemExit('All 80 member-location/install/producer/completion/admission scenarios must be discovered.')
+          required = ['Observe_UsesHeldNativeDirectoriesAndEmptySingleLinkMarkerWithoutContentOrMutationIO', 'Observe_RejectsMissingNonemptyAndHardLinkedCompletionMarkers', 'Observe_RejectsLinkedDirectoryComponentsAndLinkedCompletionMarker', 'Observe_RejectsWrongRootAndForeignFilesystemHandles', 'Observe_RejectsRootLevelControlAndStagingDirectories', 'Observe_RefusesAnUnknownNativeNameProfile', 'WithQuiescentIncompleteMemberLocationsAsync_ReplaysExternalAndSameRootProspectiveSlotsWithoutPayloadReads', 'WithCompleteMemberLocationsAsync_ReplaysParentAliasAndUsesOnlyExistingBoundLocks', 'WithCompleteMemberLocationsAsync_RefusesFinalFileLinksAndHardlinksBeforeCallback', 'WithCompleteMemberLocationsAsync_ChangedLedgerAndStateSlotRefuseBeforeCallback', 'WithQuiescentIncompleteMemberLocationsAsync_RequiresQuiescenceAndAbsoluteHints', 'Revalidate_ExternalMemberLocatorRejectsLedgerChangedInsideCallback', 'WithCompleteMemberLocationsAsync_MissingBoundLockIsRefusedWithoutRecreation', 'WithQuiescentIncompleteMemberLocationsAsync_DuplicateNativeSlotsRefuseBeforeMemberLockProvisioning', 'WithCompleteMemberLocationsAsync_ParentAliasThroughDifferentAuthorityRefusesBeforeCallback', 'CreateCandidate_ActualDependencyGraphAndNativeInstallsSurvivePayloadRoundTrip', 'WithQuiescentIncompleteMemberLocationsAsync_DeclaredMemberStateReadRefusesBeforePayloadRead', 'WithCompleteMemberLocationsAsync_ReadsExactBoundStateOnlyInsideTheCallback', 'CompleteEnrollment_ActualTwoStateGraphsPublishAndReopenBeforeComplete', 'CompleteEnrollment_RejectsChangedNativeInstallWrongDescriptorAndUnknownLegacyRecovery', 'CompleteEnrollment_RejectsDigestValidStateWithUnselectedGraphVersions', 'CompleteEnrollment_RequiresQuiescenceAndEveryActualAcknowledgedState', 'ConfiguredRootAdmissionRetainsVerifiedLocksUntilBorrowDrains', 'MultiPathAdmissionDeduplicatesRootAliasesAndRestrictsEachBorrowToItsExactPath', 'MultiRootAdmissionHoldsEveryVerifiedMemberSetAndDrainsBeforeUnlock', 'MultiRootRefusalUnwindsEarlierRootWhenLaterSortedRootIsBusy', 'ArchivePathsRequireSingleNativeFileIdentityWithoutArchivePayloadReads', 'PostResolutionTargetInspectionFaultClosesTheUntransferredNativeResolution', 'PartialMultiRootUnwindReportsBothAdmissionAndNativeReleaseFailures', 'FailedNativeOwnerReleaseRemainsVisibleOnRepeatedDisposal', 'UnenrolledConfiguredRootIsOnlyReturnedAfterPositiveNativeAbsenceObservation', 'IncompleteEnrollmentRefusesRootAndPathAdmission', 'BothAdmissionPathsRefuseDigestValidSemanticallyInvalidCompleteStateAndUnwind', 'BothAdmissionPathsRefuseReplacedNativeCompletionMarkerIdentityAndUnwind', 'BothAdmissionPathsRefuseReplacedNativeInstallDirectoryIdentityAndUnwind', 'MultiRootAdmissionHoldsEveryRootAndMemberLockBeforeFirstMemberPayloadRead', 'CancellationWhileAcquiringLaterRootReleasesEarlierRootAndMemberLocks', 'CoordinatedStateReadAndThreePublicationsUseOneExistingOwnerAcrossTwoMembers', 'PersistCoordinatedActiveStateAsync_InconsistentArchiveHashes_RefusesBeforePublication', 'UnlistedConfiguredSlotRefusesBeforeAnyMemberPayloadReadOrWrite', 'DifferentEligibleSerializerRefusesBeforeAnyMemberPayloadReadOrWrite', 'UnknownCompleteCandidateRefusesBeforePublication', 'IncoherentCurrentMemberRefusesBeforeAnyPublication', 'ExpiredBorrowAndUnsupportedSerializerRefuseBeforePayloadRead', 'CoordinatedStateReadAndPublicationsRemainAvailableWithRetainedMultiPathAdmission', 'ConfiguredRootAdmissionAcceptsOnlyAnAbsentOrdinaryUnenrolledSuffix', 'ConfiguredRootAdmissionRefusesMissingSuffixBeneathObservedCompleteAuthority', 'ConfiguredRootAdmissionRefusesReservedControlNameAsFirstMissingEdge', 'ConfiguredRootAdmissionRefusesReservedControlNameLaterInMissingSuffix', 'ConfiguredRootAdmissionUsesObservedNameProfileForReservedNameAlias', 'ConfiguredRootAdmissionDoesNotBroadenTheReservedNameMatchToPrefixes', 'ConfiguredRootAdmissionRefusesUnknownNativeNameProfileForMissingSuffix', 'ConfiguredRootAdmissionDoesNotGuessUnicodeReservedNameEquivalence', 'ConfiguredRootAdmissionRefusesNonAsciiLaterSuffixWithoutItsNativeProfile', 'ConfiguredRootAdmissionRefusesAliasEscapeFromCompleteAuthorityBeforeMissingSuffix', 'ConfiguredRootAdmissionRefusesMissingTargetInsideAnUnresolvedAliasExpansion', 'ConfiguredRootAdmissionRevalidatesMissingEdgeDuringInitialResolutionReplay', 'ConfiguredRootAdmissionRevalidatesMissingEdgeBeforeAdmissionReturns', 'MultiRootAdmissionAcquiresEveryRootBeforeFirstMemberAndIgnoresRequestOrder', 'MultiRootAdmission_LateMemberContentionUnwindsEveryAcquiredLock', 'MultiRootAdmission_LedgerMutationAfterAllRootsRefusesBeforeMemberLocks', 'MultiRootAdmission_PartialLocatorReplayFailureReleasesTheWholeLockUnion', 'MultiRootAdmission_ProfileMutationAfterAllRootsRefusesBeforeMemberLocks', 'MultiRootAdmission_SecondRootBusyUnwindsEarlierRootLock', 'MultiRootPathAdmissionRestrictsBorrowsAndRetainsUnionUntilDrainWithUnenrolledPath', 'PhysicalLockUnion_EqualStateSlotRetainsBothRootLocalMemberLocks', 'PhysicalLockUnion_RetainsLocksUntilEveryCountedRootOwnerDrains']
+          if len(rows) != 81:
+              raise SystemExit('All 81 member-location/install/producer/completion/admission scenarios must be discovered.')
           for name in required:
               matching = [row for row in rows if row.get('testName', '').endswith('.' + name)]
               if len(matching) != 1 or matching[0].get('outcome') != 'Passed':
@@ -864,6 +864,10 @@ jobs:
             --results-directory "$RUNNER_TEMP/package-content-runtime"
           python3 build/verify-required-trx.py "$RUNNER_TEMP/package-content-runtime/package-content-runtime.trx" \
             build/test-cases/package-content-runtime.json
+
+      - name: Qualify archive-backed package content without an enrolled store
+        shell: bash
+        run: bash build/qualify-package-archives.sh "$RUNNER_TEMP/package-archives"
 
       - name: Qualify package-content admission and held native replay
         shell: bash
@@ -1459,6 +1463,123 @@ jobs:
           path: ${{ runner.temp }}/retained-loading/
           if-no-files-found: ignore
           retention-days: 7
+
+  package-archive-container:
+    name: Archive-backed package content (Linux container, overlayfs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: mcr.microsoft.com/dotnet/sdk:10.0
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Install the TRX verifier's Python
+        run: apt-get update -qq && apt-get install -y -qq python3
+
+      # The workspace is a bind mount from the runner; /var/tmp is the container's own overlayfs layer.
+      - name: Qualify the reader on the container's writable layer
+        shell: bash
+        env:
+          NUPLANE_ARCHIVE_TEST_ROOT: /var/tmp/nuplane-archives
+          NUPLANE_EXPECT_FILESYSTEM: overlay
+        run: |
+          set -euo pipefail
+          mkdir -p "$NUPLANE_ARCHIVE_TEST_ROOT"
+          bash build/qualify-package-archives.sh "$RUNNER_TEMP/package-archives-overlay"
+
+  package-archive-filesystems:
+    name: Archive-backed package content (Linux ${{ matrix.filesystem }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        filesystem: [xfs, btrfs, tmpfs, ext4]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Mount an owned ${{ matrix.filesystem }} test root
+        shell: bash
+        run: |
+          set -euo pipefail
+          mount_point="$RUNNER_TEMP/archive-root"
+          mkdir -p "$mount_point"
+          case "${{ matrix.filesystem }}" in
+            tmpfs) sudo mount -t tmpfs -o size=512m tmpfs "$mount_point" ;;
+            *)
+              if [[ "${{ matrix.filesystem }}" != ext4 ]]; then
+                sudo apt-get update -qq
+                sudo apt-get install -y -qq xfsprogs btrfs-progs
+              fi
+              image="$RUNNER_TEMP/archive-root.img"
+              truncate -s 512M "$image"
+              sudo "mkfs.${{ matrix.filesystem }}" -q "$image" 2>/dev/null || sudo "mkfs.${{ matrix.filesystem }}" "$image"
+              sudo mount -o loop "$image" "$mount_point"
+              ;;
+          esac
+          sudo chown "$(id -u):$(id -g)" "$mount_point"
+          echo "NUPLANE_ARCHIVE_TEST_ROOT=$mount_point" >> "$GITHUB_ENV"
+          echo "NUPLANE_EXPECT_FILESYSTEM=${{ matrix.filesystem }}" >> "$GITHUB_ENV"
+
+      - name: Qualify the reader on ${{ matrix.filesystem }}
+        shell: bash
+        run: bash build/qualify-package-archives.sh "$RUNNER_TEMP/package-archives-${{ matrix.filesystem }}"
+
+  package-archive-windows-arm64:
+    name: Archive-backed package content (Windows arm64)
+    runs-on: windows-11-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Setup Python for the TRX verifier
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Qualify the reader on Windows arm64
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! dotnet --info | tr -d '\r' | grep -Eq '^ *RID: *win-arm64$'; then
+            echo "The Windows arm64 lane must run a native win-arm64 SDK."
+            exit 1
+          fi
+          bash build/qualify-package-archives.sh "$RUNNER_TEMP/package-archives-arm64"
 
   build-test:
     needs:

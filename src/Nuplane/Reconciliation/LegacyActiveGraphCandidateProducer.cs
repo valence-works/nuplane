@@ -189,14 +189,18 @@ internal static class LegacyActiveGraphCandidateProducer
                 records);
 
             var closure = new PackageProtectionClosure(PackageProtectionClosureKnowledge.Known, null, [snapshot]);
+            var nextRecords = legacyState.NextArchiveHashes(descriptorsNext.Values);
             var next = new StoreStateRecord(
                 new Dictionary<string, string>(shape.ActiveVersions, StringComparer.OrdinalIgnoreCase),
                 new Dictionary<string, string>(legacyState.LastKnownGoodById, StringComparer.OrdinalIgnoreCase),
                 new Dictionary<string, FailureRecord>(legacyState.LastFailureById, StringComparer.OrdinalIgnoreCase),
                 CopySourceSnapshots(legacyState.LastSuccessfulSourceSnapshots),
                 activatedAt,
-                new Dictionary<string, ActivePackageDescriptor>(descriptorsNext, StringComparer.OrdinalIgnoreCase),
-                new Dictionary<string, GraphActivationRecord>(records, StringComparer.OrdinalIgnoreCase));
+                StoreStateRecord.WithRecordedArchiveHashes(descriptorsNext, nextRecords),
+                new Dictionary<string, GraphActivationRecord>(records, StringComparer.OrdinalIgnoreCase))
+            {
+                ArchiveHashesByPackage = nextRecords
+            };
             next = WithInitialProtection(next, ledger.RootIdentity, ledger.EnrollmentEpoch, memberId, closure);
             next = await RoundTripAsync(serializer, next, cancellationToken).ConfigureAwait(false);
             _ = PersistedStoreStateGraphVerifier.Verify(next);
