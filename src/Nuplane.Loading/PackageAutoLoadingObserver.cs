@@ -140,7 +140,8 @@ internal sealed class PackageAutoLoadingObserver :
         var currentSessions = new HashSet<PackageLoadSession>(loader.Sessions.Values, ReferenceEqualityComparer.Instance);
         RecordLoadAttempts(graphs.Sum(static graph => graph.Count));
 
-        var batch = await loader.StageOrdinaryGraphsAsync(graphs, CreateSharedPolicy(), cancellationToken);
+        var batch = await loader.StageOrdinaryGraphsAsync(
+            graphs, candidate.ActiveVersionById, CreateSharedPolicy(), cancellationToken).ConfigureAwait(false);
         return CreatePreparation(loader, batch, currentSessions, inertCount, correlationId);
     }
 
@@ -162,7 +163,8 @@ internal sealed class PackageAutoLoadingObserver :
         var graphs = handoff.GraphSelections.Select(static selection => new ScopedResolvedPackageGraph(
             selection.Graph, selection.Packages, selection.RootRequests, selection.LeaseOwner)).ToArray();
         RecordLoadAttempts(graphs.Sum(static graph => graph.Packages.Count));
-        var batch = await loader.StageLeasedGraphsAsync(graphs, CreateSharedPolicy(), cancellationToken).ConfigureAwait(false);
+        var batch = await loader.StageLeasedGraphsAsync(
+            graphs, prospectiveActiveVersions, CreateSharedPolicy(), cancellationToken).ConfigureAwait(false);
         return CreatePreparation(loader, batch, currentSessions, inertCount: 0, handoff.ChangeSet.CorrelationId);
     }
 

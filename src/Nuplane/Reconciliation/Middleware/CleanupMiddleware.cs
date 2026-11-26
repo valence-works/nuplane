@@ -184,13 +184,15 @@ internal sealed class CleanupMiddleware(
         IEnumerable<string> failedIds, StoreStateRecord previous, StoreStateRecord candidate)
     {
         var rejected = failedIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var priorGraphs = previous.ActiveGraphsByIdNormalized.Values;
-        if (priorGraphs.Count == 0 && rejected.Overlaps(previous.ActiveVersionById.Keys))
+        var priorGraphs = previous.ActiveGraphsByIdNormalized.Values
+            .Where(static graph => graph.Status == GraphActivationStatus.Active).ToArray();
+        if (priorGraphs.Length == 0 && rejected.Overlaps(previous.ActiveVersionById.Keys))
             rejected.UnionWith(previous.ActiveVersionById.Keys);
 
         // Old and new graph memberships can overlap differently. Keep the whole affected
         // component intact while letting independent graphs commit.
-        var groups = priorGraphs.Concat(candidate.ActiveGraphsByIdNormalized.Values)
+        var groups = priorGraphs.Concat(candidate.ActiveGraphsByIdNormalized.Values
+                .Where(static graph => graph.Status == GraphActivationStatus.Active))
             .Select(static graph => graph.NodePackageIds).ToArray();
         int previousCount;
         do

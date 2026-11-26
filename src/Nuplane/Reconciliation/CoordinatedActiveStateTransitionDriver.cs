@@ -68,7 +68,7 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
     }
 
     public async Task<StoreStateRecord> CreateCandidateForPublicationAsync(
-        PackageStoreOperationOwner owner, ReconciliationCycleContext context)
+        PackageStoreOperationOwner owner, ReconciliationCycleContext context, IReadOnlyDictionary<string, string> loadingFailures)
     {
         var resolution = context.ResolutionResult!;
         var applied = context.ApplyResult!;
@@ -84,7 +84,8 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
             BuildDesiredRootIds(context.DesiredRequests, resolution.ResolvedGraphs, resolution.GraphSelections),
             failedIds,
             context.CorrelationId,
-            context.CancellationToken).ConfigureAwait(false);
+            context.CancellationToken,
+            loadingFailures).ConfigureAwait(false);
     }
 
     public async Task PersistCandidateAsync(
@@ -123,7 +124,8 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
         IReadOnlySet<string> desiredRootPackageIds,
         IReadOnlySet<string> failedPackageIds,
         string correlationId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? loadingFailures = null)
         => CoordinatedActiveStateTransitionProducer.CreateCandidateAsync(
             _files,
             _membershipRegistry,
@@ -137,5 +139,6 @@ internal sealed class CoordinatedActiveStateTransitionDriver(
             failedPackageIds,
             correlationId,
             DateTimeOffset.UtcNow,
-            cancellationToken);
+            cancellationToken,
+            loadingFailures);
 }

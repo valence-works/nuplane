@@ -595,7 +595,7 @@ internal sealed class ReconciliationService : IReconciliationService
         while (true)
         {
             await cycle.ApplyFailuresAsync(owner, driver, context, preparation.Failures, cancellationToken).ConfigureAwait(false);
-            candidate = await driver.CreateCandidateForPublicationAsync(owner, context).ConfigureAwait(false);
+            candidate = await driver.CreateCandidateForPublicationAsync(owner, context, preparation.Failures).ConfigureAwait(false);
             cycle.ValidatePreparedInstalls(candidate, context.ApplyResult!.SuccessfulGraphSelections);
             var newFailures = preparation.ValidateForCommit(
                 candidate.ActivePackageDescriptorsByIdNormalized.Values.ToArray(), context.LoadingRejectedPackageIds);
@@ -604,15 +604,6 @@ internal sealed class ReconciliationService : IReconciliationService
         }
         await driver.PersistCandidateAsync(owner, candidate, cancellationToken).ConfigureAwait(false);
         preparation.Commit();
-
-        using (var borrow = owner.Borrow())
-        {
-            foreach (var (packageId, reason) in preparation.Failures)
-            {
-                await registry.PersistCoordinatedFailureAsync(
-                    borrow, packageId, "load", reason, context.CorrelationId, cancellationToken).ConfigureAwait(false);
-            }
-        }
 
         var (cleanup, events) = _pipelineDefinition.CoordinatedCompletion(owner);
         await cleanup.CleanupCommittedAsync(context).ConfigureAwait(false);

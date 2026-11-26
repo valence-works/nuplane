@@ -28,7 +28,7 @@ internal interface ICoordinatedActiveStateTransitionDriver
         CancellationToken cancellationToken);
 
     Task<StoreStateRecord> CreateCandidateForPublicationAsync(
-        PackageStoreOperationOwner owner, ReconciliationCycleContext context);
+        PackageStoreOperationOwner owner, ReconciliationCycleContext context, IReadOnlyDictionary<string, string> loadingFailures);
 
     Task PersistCandidateAsync(
         PackageStoreOperationOwner owner, StoreStateRecord candidate, CancellationToken cancellationToken);

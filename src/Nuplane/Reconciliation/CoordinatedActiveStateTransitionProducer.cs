@@ -36,7 +36,8 @@ internal static class CoordinatedActiveStateTransitionProducer
         IReadOnlySet<string> failedPackageIds,
         string correlationId,
         DateTimeOffset activatedAtUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? loadingFailures = null)
     {
         ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(membershipRegistry);
@@ -190,11 +191,18 @@ internal static class CoordinatedActiveStateTransitionProducer
                 foreach (var (packageId, version) in appliedVersions)
                     lastKnownGood[packageId] = version;
 
+                var failures = new Dictionary<string, FailureRecord>(current.LastFailureById, StringComparer.OrdinalIgnoreCase);
+                if (loadingFailures is not null)
+                {
+                    foreach (var (id, reason) in loadingFailures)
+                        failures[id] = new(id, "load", reason, activatedAtUtc, correlationId);
+                }
+
                 var nextRecords = current.NextArchiveHashes(descriptors.Values);
                 var next = new StoreStateRecord(
                     new Dictionary<string, string>(nextActive, StringComparer.OrdinalIgnoreCase),
                     lastKnownGood,
-                    new Dictionary<string, FailureRecord>(current.LastFailureById, StringComparer.OrdinalIgnoreCase),
+                    failures,
                     new Dictionary<string, SourceSnapshotRef>(current.LastSuccessfulSourceSnapshots, StringComparer.OrdinalIgnoreCase),
                     activatedAtUtc,
                     StoreStateRecord.WithRecordedArchiveHashes(descriptors, nextRecords),
